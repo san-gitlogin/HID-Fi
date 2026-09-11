@@ -1,0 +1,27 @@
+<!--
+  HID-Fi mark.
+
+  The name is a pun on Hi-Fi, so the mark comes from audio hardware rather than a
+  WiFi glyph: a control dial with the pointer breaking out through its gap. The
+  opening is placed where the cursor's tail exits, so the two forms interlock
+  instead of being stacked on top of one another.
+
+  The geometry is NOT centred on the 24x24 box. Its bounding box is symmetric,
+  but its centre of mass is not: the dial covers three quadrants as a thin stroke
+  while the solid cursor fills the fourth, which drags the visual weight up and
+  left by about 1.0 unit. Roughly 60% of that is corrected here -- a full
+  correction over-shoots, because a solid form reads heavier to the eye than its
+  area alone suggests.
+
+  Monochrome and driven by currentColor, so it inherits the surrounding text
+  colour and stays legible on light and dark backgrounds alike. The arrow is
+  filled rather than outlined so the mark still holds together at 16px, where a
+  hairline outline would break up.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="none" stroke="currentColor" stroke-width="2.2"
+     stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="HID-Fi">
+  <path d="M11.67 21.45A8.9 8.9 0 1 1 21.45 11.67"/>
+  <path d="M8.64 8.64 14.96 20.66 15.7 15.7 20.66 14.96Z"
+        fill="currentColor" stroke-width="1.5"/>
+</svg>

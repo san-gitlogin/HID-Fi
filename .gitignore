@@ -1,0 +1,33 @@
+# Build output
+hid_fi/build/
+*.bin
+*.elf
+*.map
+
+# Local config that should never be shared
+config.ini
+secrets.json
+*.local.*
+
+# Scratch files from debugging sessions
+_*.py
+_*.html
+_*.js
+flashout.txt
+compile.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

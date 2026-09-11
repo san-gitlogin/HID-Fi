@@ -1,0 +1,22 @@
+<!--
+  HID-Fi app tile. The gradient sits on the mark's own accent colours, which are
+  mid-tone enough to hold contrast against both white and near-black surfaces,
+  so one tile serves every context instead of needing a light and dark variant.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-label="HID-Fi">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00d2ff"/>
+      <stop offset="1" stop-color="#3a7bd5"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#tile)"/>
+  <g transform="translate(102.4 102.4) scale(12.8)"
+     fill="none" stroke="#04121a" stroke-width="2.2"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11.67 21.45A8.9 8.9 0 1 1 21.45 11.67"/>
+    <path d="M8.64 8.64 14.96 20.66 15.7 15.7 20.66 14.96Z"
+          fill="#04121a" stroke-width="1.5"/>
+  </g>
+</svg>
