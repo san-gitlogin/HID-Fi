@@ -1,6 +1,6 @@
 # Flashing the ESP32-S3 USB-HID firmware
 
-Firmware **hid_fi_v3.4** — USB HID keyboard, trackpad mouse, media and system
+Firmware **hid_fi_v3.5** — USB HID keyboard, trackpad mouse, media and system
 control, gamepad, and a WiFi dashboard served off the board itself.
 
 **ESP32-S3 only, and tested on one board: the ESP32-S3 N16R8.** The firmware needs the S3's native USB peripheral to be a
@@ -26,7 +26,7 @@ firmware, then asks the board what it is running and prints the answer. Expect:
 == Flashing COM13
    Flashed COM13
 == Verifying COM13
-   Running hid_fi_v3.4, USB HID ready
+   Running hid_fi_v3.5, USB HID ready
    Dashboard: connect to WiFi 'ESP32-HID-09F7C8' (password hid12345) then open http://192.168.4.1/
    Done.
 ```

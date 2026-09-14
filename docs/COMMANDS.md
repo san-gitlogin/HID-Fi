@@ -269,7 +269,7 @@ carries `"busy":true` rather than disturbing the association.
 
 ```json
 {
-  "firmware": "hid_fi_v3.4",
+  "firmware": "hid_fi_v3.5",
   "uptime_sec": 412,
   "free_heap": 200932,
   "heap_floor": 188104,

@@ -3,7 +3,153 @@
 All notable changes to this project.
 
 The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
-`hid_fi_v3.4`.
+`hid_fi_v3.5`.
+
+---
+
+## v3.5
+
+The release that made the trackpad behave like a trackpad. Every entry under
+Fixed came from using the board rather than from reading the code, and each one
+is covered by a test that fails without the fix.
+
+### Added
+
+- **A real scroll wheel in the mouse view.** The middle button was a button you
+  tapped. It is now a ridged wheel you drag: 16 px of travel is one detent, each
+  detent sends one scroll notch with a haptic tick, and it follows the Natural /
+  Classic setting. A tap that never moved still middle clicks, so nothing was
+  taken away.
+- **A keyboard on the trackpad card.** The corner toggle flips the same card
+  between the pad and a compact keyboard with its own type-and-send field, so a
+  click and the typing that follows it no longer cost a trip across the app. Both
+  faces are locked to one height, so flipping never moves the page under your
+  thumb. The dedicated Type tab is unchanged and still carries the full keyboard.
+  The two keyboards share one host state: a modifier latched on either lights up
+  on both, and a key held on one can be struck from the other.
+- **Swipe sideways to change tabs.** Deliberately hard to trigger: it is refused
+  on the trackpad, on any key or control, on a second finger, after a pause that
+  looks like a hold, on anything slower or shorter than a flick, on a diagonal, on
+  a mouse, in fullscreen, and while a button or key is being held. The listeners
+  are passive, so the gesture can never swallow a scroll.
+- Flipping the card releases whatever the other face was holding - a grabbed
+  mouse button on the way in, a held key on the way out - so neither half can
+  strand something down on the PC.
+- **A live three-finger app switch.** Sliding three fingers sideways now opens the
+  switcher while your fingers are still down and steps window by window as you
+  move, committing when you lift - the way a Windows touchpad does it. It used to
+  decide only once you let go, which meant choosing blind. Turn off *Three finger
+  app switch* in Feel and the old virtual-desktop swipe comes back, which is what
+  macOS does.
+- **Scroll inertia.** A flicked two-finger scroll coasts and slows, on the scroll
+  axis only.
+- **Both MAC addresses** on the network panel. `mac` is the station side, the one
+  your router's DHCP table and MAC filters see; `ap_mac` is what a phone sees when
+  it joins the board. They are different addresses on the same radio.
+- **`{"cmd":"storage_info"}` and a Settings panel showing it** — how much of the
+  board's permanent memory is in use, and what is actually kept there. Passwords
+  and PINs are reported as `..._set: true/false`; the values themselves never
+  leave the board.
+- **`{"cmd":"clients"}` and a Device panel listing them** — every station on the
+  access point, with MAC, IP, signal quality, and whether it currently has the
+  dashboard open. Device names are deliberately absent: a WiFi client is never
+  obliged to give one, and phones randomise their MAC as well. The panel says so
+  rather than leaving it a mystery.
+- **A "Scan again" button** on the network list, with a count. A scan is a
+  snapshot, and the network you are waiting for may not have been up yet.
+- **Scaling for very large displays.** The root scales in steps from 2560px
+  upward, reaching 3.5x at 8K.
+- **A colophon** in Settings, and `-Force` on the flasher for scripted erases.
+
+### Fixed
+
+- **A two-finger scroll could throw the cursor across the screen.** Two fingers
+  never leave the glass at the same instant, and the moment one lifted the other
+  was handed the pointer - so the tail of every scroll became a fast pointer move,
+  which on a desktop can land on a window control. Pointing is now gated on the
+  contact count the way a real trackpad does it: once two fingers have been down
+  the gesture owns that contact until every finger lifts, and you touch again to
+  point. A regression test drives the exact motion and measures 0px of cursor
+  travel; with the fix removed the same test measures 257px.
+- **Lifting two fingers flung the pointer.** Scroll had no velocity of its own and
+  borrowed the pointer's, which is only ever written by one-finger moves, so a
+  scroll ended by replaying whatever the last drag had left behind. Scroll now
+  carries its own velocity and can no longer move the cursor at all.
+- **A three-finger swipe straight up could be read as a sideways one.** The
+  direction was measured from the last finger to lift back to the *first*
+  finger's starting point - two different contacts, sitting about 80px apart - so
+  the gap between your fingers counted as travel. Each finger is now measured
+  against where it personally started.
+- **A three-finger contact could turn into a scroll** as the fingers came off one
+  at a time, for the same reason a two-finger one could turn into a pointer move.
+  Both are gated on the peak contact count now.
+- **The mode label kept saying "grab" after grab was switched off**, until you
+  happened to touch the pad. It was only refreshed from pointer events, so the
+  button changed the state without changing the label.
+- **The dashboard could be pinch-zoomed and was hard to get back from.** Double
+  tap no longer zooms, pinch is refused as it happens rather than only at the
+  start, and if the page ends up zoomed regardless a bar offers to reset it.
+- **The board ignored everything for 15 seconds after every power on, if a saved
+  network no longer answered.** Boot started the access point and both servers,
+  then sat in a busy-wait until the home-network join resolved. A join that fails
+  takes the full timeout, and for all of it the dashboard would not load and the
+  serial console would not answer either — exactly when someone had just plugged
+  the board in and was trying to use it. The join now runs through the same state
+  machine as every other join, and `loop()` is never held up.
+- **The network scan was the one endpoint with no access control.** `/api/scan` is
+  a plain GET and never passed through the gate that protects every command, so
+  any device on your home network could list the networks around you without a
+  PIN. It now answers to the same rules, with the PIN sent in a header rather than
+  a query string so it stays out of history and logs.
+- **iOS rewrote the access point name and password by itself.** A text field
+  followed by a password field reads to Safari as a login form, so tapping
+  AutoFill while joining a network silently refilled the access point's own
+  credentials — and `autocomplete="off"` does not stop it. Those two fields now
+  start read-only and release on first touch, which password managers skip.
+- The join password field has a **Show** toggle, so a wrong autofilled password
+  is visible before you send it rather than after it fails.
+- **`ap_configure` silently removed the access point password when none was
+  given.** The dashboard field said "leave blank to keep the current password"
+  while the hint above it said blank meant open — and blank really did drop
+  security. Removing the password is now an explicit `"open":true`, backed by its
+  own checkbox; an omitted password keeps the existing one.
+- **Access point changes never survived a reboot.** Boot read `ap_ssid` and
+  `ap_pass` back out of NVS, but nothing ever wrote them, so a rename lasted only
+  until the next power cycle. `ap_configure` now saves both.
+- **An open access point came back locked.** An empty stored password cannot be
+  told apart from "never configured", so a deliberately open network reverted to
+  the built-in default on boot and phones could no longer join it. The choice is
+  now recorded as its own `ap_open` flag.
+- **Haptics silently did nothing on iPhone.** iOS Safari has never implemented the
+  web vibration API. The Feel panel now says so rather than showing a switch that
+  cannot work, and uses the one haptic iOS does give a web page.
+- **The app was unreadable on a 4K display at 100% scaling.** A 3840 pixel wide
+  screen reports 3840 CSS pixels, so every size in the sheet was drawn at its
+  literal value and the interface read like a stamp.
+- **The fullscreen pad overhung a scaled display.** It was sized with `100vw` and
+  `100vh`, and viewport units do not follow root zoom. `inset:0` does.
+- **The logo appeared twice once the window was wide enough for the sidebar.** The
+  top bar carries a mark for the phone layout, where no sidebar exists to carry
+  one, but it was never switched off when the sidebar came back.
+- **Long key labels were clipped on phones.** "Caps" and "?123" needed one pixel
+  more than their column allowed at 430px and under, so both rendered as "C...".
+  Caps is now the standard glyph, matching the arrow already used for Shift.
+- **Cards were wider than the screen below about 310px.** A grid item will not go
+  under its own content width, and one stubborn slider row set the width for every
+  card in the row.
+- **A full erase now asks first.** Nothing it removes can be backed up, because
+  the board never returns a password or a PIN to any command, so `-Erase` makes
+  you type ERASE before it runs. `-Force` skips the question for scripts.
+- **The flasher stopped claiming the default access point password** after one had
+  been set. It says so only while the network still carries its factory name.
+
+### Verified
+
+- Flashing onto a chip erased of all 16 MB: the board boot-loops on
+  `invalid header: 0xffffffff`, and a plain `.\flash_esp.ps1` brings it back.
+- 67 viewports from 280x653 to 8192x4320, every aspect ratio from 0.15 to 6.67.
+- 26 gesture cases, 24 feature checks, 34 power and health checks, 23 inventory
+  checks, all on hardware.
 
 ---
 
@@ -47,89 +193,9 @@ The release that made the cursor usable and turned the dashboard into a product.
   limit, since one emoji uses four. The dashboard shows a live byte count.
 - Enter with an empty type box now sends a bare Return instead of refusing, and
   the phone's own Go key submits.
-- **A real scroll wheel in the mouse view.** The middle button was a button you
-  tapped. It is now a ridged wheel you drag: 16 px of travel is one detent, each
-  detent sends one scroll notch with a haptic tick, and it follows the Natural /
-  Classic setting. A tap that never moved still middle clicks, so nothing was
-  taken away.
-- **A keyboard on the trackpad card.** The corner toggle flips the same card
-  between the pad and a compact keyboard with its own type-and-send field, so a
-  click and the typing that follows it no longer cost a trip across the app. Both
-  faces are locked to one height, so flipping never moves the page under your
-  thumb. The dedicated Type tab is unchanged and still carries the full keyboard.
-  The two keyboards share one host state: a modifier latched on either lights up
-  on both, and a key held on one can be struck from the other.
-- **Swipe sideways to change tabs.** Deliberately hard to trigger: it is refused
-  on the trackpad, on any key or control, on a second finger, after a pause that
-  looks like a hold, on anything slower or shorter than a flick, on a diagonal, on
-  a mouse, in fullscreen, and while a button or key is being held. The listeners
-  are passive, so the gesture can never swallow a scroll.
-- Flipping the card releases whatever the other face was holding - a grabbed
-  mouse button on the way in, a held key on the way out - so neither half can
-  strand something down on the PC.
-- **Both MAC addresses** on the network panel. `mac` is the station side, the one
-  your router's DHCP table and MAC filters see; `ap_mac` is what a phone sees when
-  it joins the board. They are different addresses on the same radio.
-- **`{"cmd":"storage_info"}` and a Settings panel showing it** — how much of the
-  board's permanent memory is in use, and what is actually kept there. Passwords
-  and PINs are reported as `..._set: true/false`; the values themselves never
-  leave the board.
-- **`{"cmd":"clients"}` and a Device panel listing them** — every station on the
-  access point, with MAC, IP, signal quality, and whether it currently has the
-  dashboard open. Device names are deliberately absent: a WiFi client is never
-  obliged to give one, and phones randomise their MAC as well. The panel says so
-  rather than leaving it a mystery.
 
 ### Fixed
 
-- **The board ignored everything for 15 seconds after every power on, if a saved
-  network no longer answered.** Boot started the access point and both servers,
-  then sat in a busy-wait until the home-network join resolved. A join that fails
-  takes the full timeout, and for all of it the dashboard would not load and the
-  serial console would not answer either — exactly when someone had just plugged
-  the board in and was trying to use it. The join now runs through the same state
-  machine as every other join, and `loop()` is never held up.
-- **iOS rewrote the access point name and password by itself.** A text field
-  followed by a password field reads to Safari as a login form, so tapping
-  AutoFill while joining a network silently refilled the access point's own
-  credentials — and `autocomplete="off"` does not stop it. Those two fields now
-  start read-only and release on first touch, which password managers skip.
-- The join password field has a **Show** toggle, so a wrong autofilled password
-  is visible before you send it rather than after it fails.
-- **Long key labels were clipped on phones.** "Caps" and "?123" needed one pixel
-  more than their column allowed at 430px and under, so both rendered as "C...".
-  Caps is now the standard glyph, matching the arrow already used for Shift.
-- **Cards were wider than the screen below about 310px.** A grid item will not go
-  under its own content width, and one stubborn slider row set the width for every
-  card in the row.
-- **The app was unreadable on a 4K display at 100% scaling.** A 3840 pixel wide
-  screen reports 3840 CSS pixels, so every size in the sheet was drawn at its
-  literal value and the interface read like a stamp. The root now scales in steps
-  from 2560px upward, reaching 3.5x at 8K, which enlarges type, icons, borders and
-  hit targets together. Every step tests height as well as width, so a wide but
-  short ultrawide is not over-scaled into having no vertical room.
-- **The fullscreen pad overhung a scaled display.** It was sized with `100vw` and
-  `100vh`, and viewport units do not follow root zoom. `inset:0` does.
-- **The logo appeared twice once the window was wide enough for the sidebar.** The
-  top bar carries a mark for the phone layout, where no sidebar exists to carry
-  one, but it was never switched off when the sidebar came back.
-- **A full erase now asks first.** Nothing it removes can be backed up, because
-  the board never returns a password or a PIN to any command, so `-Erase` makes
-  you type ERASE before it runs. `-Force` skips the question for scripts.
-- **The flasher stopped claiming the default access point password** after one had
-  been set. It says so only while the network still carries its factory name.
-- **`ap_configure` silently removed the access point password when none was
-  given.** The dashboard field said "leave blank to keep the current password"
-  while the hint above it said blank meant open — and blank really did drop
-  security. Removing the password is now an explicit `"open":true`, backed by its
-  own checkbox; an omitted password keeps the existing one.
-- **Access point changes never survived a reboot.** Boot read `ap_ssid` and
-  `ap_pass` back out of NVS, but nothing ever wrote them, so a rename lasted only
-  until the next power cycle. `ap_configure` now saves both.
-- **An open access point came back locked.** An empty stored password cannot be
-  told apart from "never configured", so a deliberately open network reverted to
-  the built-in default on boot and phones could no longer join it. The choice is
-  now recorded as its own `ap_open` flag.
 - **The fullscreen trackpad could not be exited.** The only way out sat at the
   bottom of the screen, underneath Safari's own toolbar, which
   `env(safe-area-inset-bottom)` does not report. There is now a labelled exit at

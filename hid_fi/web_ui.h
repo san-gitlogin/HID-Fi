@@ -1,5 +1,5 @@
 // ============================================================================
-//  web_ui.h - dashboard served at http://<ip>/  (firmware v3.4)
+//  web_ui.h - dashboard served at http://<ip>/  (firmware v3.5)
 //
 //  Split out of hid_fi.ino so the sketch stays readable.
 //
@@ -56,6 +56,9 @@ html{-webkit-text-size-adjust:100%;height:100%}
 body{
   height:100%;font:400 15px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   color:var(--fg);background:var(--bg);overflow:hidden;overscroll-behavior:none;
+  /* manipulation drops the double-tap-to-zoom delay, and with it the double tap
+     itself - the single most likely way to zoom a page you are tapping quickly. */
+  touch-action:manipulation;
   /* Every hold in this UI means something - grab, latch a modifier, open an
      editor, raise the app switcher. Without this the phone starts selecting the
      button's own label instead, and pops up its copy bar over the control. */
@@ -277,6 +280,13 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
 .chip{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0 13px;border-radius:999px;
   background:var(--surface2);border:1px solid var(--line);font-size:12.5px;color:var(--fg2);transition:.16s}
 .chip.on{background:rgba(0,210,255,.2);border-color:var(--acc);color:var(--fg)}
+.chip.off{opacity:.45}
+.scanfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.scanfoot span{font-size:11.5px;color:var(--fg3)}
+.zoomout{position:fixed;left:50%;transform:translateX(-50%);z-index:900;
+  top:calc(8px + var(--sat));height:34px;padding:0 15px;border-radius:999px;
+  font-size:12.5px;font-weight:600;color:#04121a;background:var(--acc);
+  box-shadow:0 6px 20px rgba(0,0,0,.45);border:none}
 .chip:active{transform:scale(.95)}
 
 /* ---------------- trackpad ---------------- */
@@ -1056,9 +1066,11 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
           <div class="chips" style="margin-top:12px">
             <button class="chip" id="tTap"><svg class="ic ic-sm"><use href="#i-click"/></svg>Tap to click</button>
             <button class="chip" id="t3D"><svg class="ic ic-sm"><use href="#i-hand"/></svg>Three finger drag</button>
+            <button class="chip" id="t3A"><svg class="ic ic-sm"><use href="#i-appswitch"/></svg>Three finger app switch</button>
             <button class="chip" id="tHap"><svg class="ic ic-sm"><use href="#i-bolt"/></svg>Haptics</button>
           </div>
-          <p class="hint" style="margin-top:10px">Glide 0 stops the cursor dead when you lift off. Three finger drag replaces the three finger swipes with a drag, which never sends a click first.</p>
+          <p class="hint" style="margin-top:10px">Glide 0 stops the cursor dead when you lift off. Three finger drag replaces the three finger swipes with a drag, which never sends a click first. Turn off Three finger app switch and a sideways three finger swipe changes virtual desktop instead, which is what macOS does.</p>
+          <p class="hint" id="hapNote" style="margin-top:8px;display:none"></p>
         </div>
       </div>
     </section>
@@ -1424,6 +1436,13 @@ const bPing=new DataView(new ArrayBuffer(5));
 const bGp=new DataView(new ArrayBuffer(10));
 const bCon=new DataView(new ArrayBuffer(3));
 const waiters=[];
+// The scan is a plain GET rather than a socket command, so it has to carry the
+// PIN itself. A header, not a query string, so it stays out of browser history
+// and any log the request passes through.
+function pinHeader(){
+  try{const p=sessionStorage.getItem('pin');if(p)return{'X-Auth':p};}catch(e){}
+  return {};
+}
 
 function connect(){
   try{ws=new WebSocket('ws://'+location.hostname+':81/');}catch(e){link(false);return setTimeout(connect,1500);}
@@ -1561,7 +1580,33 @@ function guardAutofill(el){
   ['focus','pointerdown','touchstart'].forEach(ev=>el.addEventListener(ev,free));
 }
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
-function buzz(ms){if(S.hap&&navigator.vibrate)try{navigator.vibrate(ms);}catch(e){}}
+// Android and desktop Chrome have the Vibration API. Safari never implemented it
+// on iOS, so there are no haptics there at all through a web page - iOS 17.4 will
+// play a system tick when a switch control is toggled, and that is the only hook
+// a browser page is given. Best effort, and the Feel panel says which one is live.
+let hapticEl=null;
+const HAPTIC=(()=>{
+  if(navigator.vibrate)return 'vibrate';
+  try{
+    const i=document.createElement('input');
+    if(!('switch' in i))return null;
+    i.type='checkbox';i.setAttribute('switch','');
+    i.setAttribute('aria-hidden','true');i.tabIndex=-1;
+    i.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(i));
+    if(document.body)document.body.appendChild(i);
+    hapticEl=i;
+    return 'switch';
+  }catch(e){}
+  return null;
+})();
+function buzz(ms){
+  if(!S.hap||!HAPTIC)return;
+  try{
+    if(HAPTIC==='vibrate'){navigator.vibrate(ms);return;}
+    if(hapticEl){hapticEl.checked=!hapticEl.checked;hapticEl.dispatchEvent(new Event('change',{bubbles:true}));}
+  }catch(e){}
+}
 function toast(msg,kind){
   const t=document.createElement('div');t.className='toast'+(kind?' '+kind:'');
   t.innerHTML=ico(kind==='bad'?'x':'check','ic-sm')+'<span>'+esc(msg)+'</span>';
@@ -1719,7 +1764,7 @@ $('sheet').addEventListener('click',e=>{if(e.target===$('sheet'))closeSheet();})
 // =====================================================================
 //  settings (local feel) + layout config (on the board)
 // =====================================================================
-const S={sens:2.2,acc:1.2,scr:1.5,mom:.9,nat:false,tap:true,hap:true,f3drag:false};
+const S={sens:2.2,acc:1.2,scr:1.5,mom:.9,nat:false,tap:true,hap:true,f3drag:false,f3app:true};
 try{Object.assign(S,JSON.parse(localStorage.getItem('feel')||'{}'));}catch(e){}
 const saveFeel=()=>{try{localStorage.setItem('feel',JSON.stringify(S));}catch(e){}};
 
@@ -1878,6 +1923,13 @@ const pad=$('pad'),padwrap=$('padwrap');
 const pts=new Map();
 let accX=0,accY=0,scrollPx=0,panPx=0;
 let vx=0,vy=0,lastT=0,momRAF=0;
+// Scroll carries its own velocity. It used to borrow the pointer's, which is only
+// ever written by one-finger moves, so lifting two fingers flung the cursor using
+// whatever the last single-finger drag had left behind.
+let svx=0,svy=0,scrollRAF=0;
+// Where the three-finger slide last stepped the app switcher from.
+let aswBaseX=0,aswBaseY=0;
+const ASW_STEP=56;
 let mode=0,maxPts=0,startX=0,startY=0,fired=false;
 let pinchBase=0,pinchAcc=0;
 let dragging=false,grabLock=false,lastTapAt=0,holdTimer=0,downPt=null,primaryId=-1,dtapArmed=false;
@@ -1909,6 +1961,7 @@ function setGrab(on){
   pad.classList.toggle('grab',on);
   ['btnGrab','btnGrab2','btnGrab3','btnGrab4'].forEach(id=>{const b=$(id);if(b)b.classList.toggle('on',on);});
   buzz(on?18:8);
+  badge();   // the label is state, not something only a touch may refresh
 }
 // nudge: Windows fuses a click and an immediately following press into a double
 // click when both land within SM_CXDOUBLECLK (4 px). On a title bar that arrives
@@ -1941,7 +1994,7 @@ pad.addEventListener('pointerdown',e=>{
   if(pts.size>maxPts)maxPts=pts.size;
 
   if(pts.size===1){
-    stopMomentum();maxPts=1;fired=false;mode=1;primaryId=e.pointerId;
+    stopMomentum();stopScrollMomentum();maxPts=1;fired=false;mode=1;primaryId=e.pointerId;
     startX=p.x;startY=p.y;lastT=performance.now();vx=vy=0;downPt=p;
     // A second contact soon after a tap is ambiguous: lift quickly and it is a
     // double click, move or keep holding and it is a drag. Wait and see, the way
@@ -1956,6 +2009,8 @@ pad.addEventListener('pointerdown',e=>{
     else startHold(p.x,p.y);
   }else{
     cancelHold();dtapArmed=false;
+    // A gesture is starting, so nothing the pointer was doing may continue.
+    stopMomentum();stopScrollMomentum();
     if(pts.size===2){mode=2;pinchBase=spread();pinchAcc=0;}
     else{
       mode=3;
@@ -1971,7 +2026,12 @@ function onMove(e){
   p.x=l.x;p.y=l.y;blip(e.pointerId,l.x,l.y);
   const now=performance.now(),dt=Math.max(1,now-lastT);lastT=now;
 
-  if(mode===1&&pts.size===1){
+  // maxPts, not pts.size: once two fingers have been down this contact belongs to
+  // a gesture, and lifting one of them must not hand the last finger the pointer.
+  // Real trackpads gate on contact count the same way - you take your hand off and
+  // touch again to point. Without this, the tail of a two-finger scroll flicks the
+  // cursor across the screen because the fingers never leave at the same instant.
+  if(mode===1&&pts.size===1&&maxPts===1){
     if(Math.hypot(l.x-startX,l.y-startY)>HOLD_PX)cancelHold();
     // moving after the second tap settles it: this is a drag, not a double click
     if(dtapArmed&&Math.hypot(l.x-startX,l.y-startY)>DRAG_PX){
@@ -1986,14 +2046,30 @@ function onMove(e){
       const g=S.sens*(1+S.acc*Math.min(Math.hypot(dx,dy)/dt,4));
       accX+=dx*g;accY+=dy*g;
     }
-  }else if(mode===2&&pts.size===2){
+  }else if(mode===3&&S.f3app){
+    // Windows draws the switcher while your fingers are still down and commits
+    // when you lift. Deciding only on lift meant choosing a window blind.
+    if(e.pointerId===primaryId){
+      const sx=l.x-startX, sy=l.y-startY;
+      if(!ASW.open&&Math.abs(sx)>44&&Math.abs(sx)>Math.abs(sy)){
+        aswOpen();aswBaseX=l.x;aswBaseY=l.y;
+      }
+      if(ASW.open){
+        while(l.x-aswBaseX>=ASW_STEP){aswBaseX+=ASW_STEP;aswStep(1);}
+        while(aswBaseX-l.x>=ASW_STEP){aswBaseX-=ASW_STEP;aswStep(-1);}
+        while(l.y-aswBaseY>=ASW_STEP){aswBaseY+=ASW_STEP;aswArrow('DOWN');}
+        while(aswBaseY-l.y>=ASW_STEP){aswBaseY-=ASW_STEP;aswArrow('UP');}
+      }
+    }
+  }else if(mode===2&&pts.size===2&&maxPts===2){
     const sp=spread();
     if(pinchBase>0&&Math.abs(sp-pinchBase)>26){
       pinchAcc+=sp-pinchBase;pinchBase=sp;
       if(Math.abs(pinchAcc)>32){send({cmd:'gesture',name:pinchAcc>0?'zoom_in':'zoom_out'});pinchAcc=0;buzz(6);}
     }else{
-      scrollPx+=dy*S.scr*(S.nat?1:-1);
-      panPx+=dx*S.scr*(S.nat?-1:1);
+      const sy=dy*S.scr*(S.nat?1:-1), sx=dx*S.scr*(S.nat?-1:1);
+      scrollPx+=sy;panPx+=sx;
+      svy=sy/dt;svx=sx/dt;
     }
   }
   e.preventDefault();
@@ -2011,16 +2087,23 @@ function onUp(e){
   if(pts.size===0&&p&&!fired){
     const dt=performance.now()-p.t0, moved=Math.hypot(p.x-p.x0,p.y-p.y0);
     if(maxPts===3){
-      const sx=p.x-startX, sy=p.y-startY;
-      if(Math.hypot(sx,sy)>52){
-        fired=true;
-        send({cmd:'gesture',name:Math.abs(sx)>Math.abs(sy)?(sx>0?'desktop_right':'desktop_left'):(sy<0?'task_view':'show_desktop')});
-        buzz(14);
-      }else if(dt<TAP_MS&&moved<14){fired=true;txBtn(4,2,1);}
+      // The switcher was already open and tracking, so lifting is the choice.
+      if(ASW.open){fired=true;aswClose(true);}
+      else{
+        // This finger's own travel. Measuring the last finger to lift against the
+        // first finger's starting point mixed two contacts that sit 80px apart,
+        // so a straight three-finger swipe up came out as a sideways one.
+        const sx=p.x-p.x0, sy=p.y-p.y0;
+        if(Math.hypot(sx,sy)>52){
+          fired=true;
+          send({cmd:'gesture',name:Math.abs(sx)>Math.abs(sy)?(sx>0?'desktop_right':'desktop_left'):(sy<0?'task_view':'show_desktop')});
+          buzz(14);
+        }else if(dt<TAP_MS&&moved<14){fired=true;txBtn(4,2,1);}
+      }
     }
     else if(maxPts===2){
       if(dt<300&&moved<14){fired=true;txBtn(2,2,1);buzz(10);}
-      else glide();
+      else scrollGlide();          // coast the scroll, never the pointer
     }
     else if(maxPts===1){
       // lifted quickly after a second tap and never moved: that is a double click
@@ -2030,6 +2113,9 @@ function onUp(e){
     }
   }
   dtapArmed=false;
+  // Alt is held while the switcher is up. If the last finger has gone and nothing
+  // above committed it, close it here rather than leave the PC with Alt down.
+  if(pts.size===0&&ASW.open)aswClose(true);
 
   if(pts.size===0){maxPts=0;mode=0;pad.classList.remove('live');}
   else if(dragging&&S.f3drag){
@@ -2050,6 +2136,7 @@ function badge(){
 }
 function glide(){
   if(S.mom<=0||dragging||grabLock)return;
+  if(maxPts!==1)return;            // never fling the pointer after a gesture
   if(Math.hypot(vx,vy)<.35)return;
   cancelAnimationFrame(momRAF);
   const step=()=>{
@@ -2061,6 +2148,20 @@ function glide(){
   momRAF=requestAnimationFrame(step);
 }
 function stopMomentum(){if(momRAF){cancelAnimationFrame(momRAF);momRAF=0;}vx=vy=0;}
+// The same coasting a real trackpad gives a flicked scroll, on the scroll axis.
+function scrollGlide(){
+  if(S.mom<=0)return;
+  if(Math.hypot(svx,svy)<.35)return;
+  cancelAnimationFrame(scrollRAF);
+  const step=()=>{
+    svx*=S.mom;svy*=S.mom;
+    if(Math.hypot(svx,svy)<.06){scrollRAF=0;return;}
+    scrollPx+=svy*16;panPx+=svx*16;
+    scrollRAF=requestAnimationFrame(step);
+  };
+  scrollRAF=requestAnimationFrame(step);
+}
+function stopScrollMomentum(){if(scrollRAF){cancelAnimationFrame(scrollRAF);scrollRAF=0;}svx=svy=0;}
 
 // one socket write per frame, worst case
 function flush(){
@@ -3107,7 +3208,7 @@ const HELP={
   ['drag','Tap, then press again','Lift straight away and it is a double click. Move or keep holding and it becomes a drag instead.'],
   ['scroll','Two fingers','Scroll vertically and horizontally. Pinch to zoom.'],
   ['click','Two finger tap','Right click.'],
-  ['layers','Three fingers','Swipe for desktops and task view. Tap for middle click.'],
+  ['layers','Three fingers','Slide sideways and the app switcher opens while your fingers are still down, stepping window by window - lift when the one you want is highlighted, exactly like a Windows touchpad. Up is task view, down shows the desktop. Tap for middle click.'],
   ['appswitch','Hold Switch app','Holds Alt down so the host keeps its switcher open. Slide to pick a window, let go to raise it.'],
   ['keyboard','Keyboard button','Flips this card between the trackpad and a keyboard, so you can click and then type without leaving the page. Grab is released for you on the way in, and any held key on the way out.'],
   ['layers','Swipe sideways','A quick flick across empty space moves to the next or previous tab. It is ignored on the pad, on a key, during a hold, and on anything slower than a flick.']
@@ -3163,6 +3264,7 @@ const HELP={
   ['shield','Access PIN','Four digits, gating wireless clients only. USB serial is never gated, so you can always recover over the cable.'],
   ['lock','On a home network','Radio range is a limit. A network is not. Once the board joins one, every device on that network can reach it, so wireless control is refused until a PIN is set.'],
   ['lock','Wrong PINs','The board locks out for longer after each wrong guess, up to five minutes a try, so 10,000 combinations cannot be walked through.'],
+  ['shield','Where your WiFi password goes','Type it while you are on the board\'s own access point and WPA2 covers it the whole way - nothing else is in between. There is no HTTPS here, because a board this size cannot hold a certificate anyone could trust, so over your home network the same form travels in the clear and anyone able to watch that network could read it. Join from the access point.'],
   ['bolt','Power','The radio is where the power goes, and keeping it awake is what makes the pointer feel instant. Balanced keeps it awake while you are connected and lets it sleep when you are not.'],
   ['cursor','Pointer mode','Relative moves by deltas like a mouse. Absolute jumps to a coordinate. Switching re-enumerates USB, so the board reboots.'],
   ['cpu','Test HID','Types HID_OK on the PC, which proves the USB keyboard is alive.']
@@ -3374,10 +3476,22 @@ function bindAll(){
   bind('sAcc','vAcc','acc',v=>v.toFixed(1));
   bind('sScr','vScr','scr',v=>v.toFixed(1));
   bind('sMom','vMom','mom',v=>v<=0?'off':v.toFixed(2));
-  [['tTap','tap'],['t3D','f3drag'],['tHap','hap']].forEach(([id,k])=>{
+  [['tTap','tap'],['t3D','f3drag'],['t3A','f3app'],['tHap','hap']].forEach(([id,k])=>{
     const el=$(id);el.classList.toggle('on',!!S[k]);
-    el.onclick=()=>{S[k]=!S[k];el.classList.toggle('on',S[k]);saveFeel();};
+    el.onclick=()=>{S[k]=!S[k];el.classList.toggle('on',S[k]);saveFeel();if(k==='hap'&&S[k])buzz(18);};
   });
+  // Saying nothing would look like a broken switch on every iPhone.
+  if(!HAPTIC){
+    $('tHap').classList.add('off');
+    $('hapNote').style.display='';
+    $('hapNote').textContent='Haptics are not available in this browser. iOS Safari has never '
+      +'supported the web vibration API, so no page served from the board can buzz your phone. '
+      +'Android Chrome and Firefox can. Everything else works exactly the same either way.';
+  }else if(HAPTIC==='switch'){
+    $('hapNote').style.display='';
+    $('hapNote').textContent='Haptics here use the system tick iOS plays for a switch control, '
+      +'which is the only one a web page is allowed. It is lighter than the buzz on Android.';
+  }
   syncScroll();
 }
 function syncScroll(){
@@ -3491,22 +3605,33 @@ function scanWifi(){
   const l=$('wifiList');
   l.innerHTML='<p class="hint">Looking for networks nearby...</p>';
   let tries=0;
+  // A scan is a snapshot. Networks come and go, and the one you are waiting for
+  // may simply not have been up yet, so the result always carries a way to ask
+  // again rather than making you hunt back up the page for the button.
+  const again=n=>'<div class="scanfoot">'
+    +'<span>'+(n===null?'':n+(n===1?' network':' networks')+' &middot; ')+'just now</span>'
+    +'<button class="btn sm" id="btnRescan">Scan again</button></div>';
+  const wire=()=>{const b=$('btnRescan');if(b)b.onclick=()=>{buzz(8);scanWifi();};};
   const paint=d=>{
-    if(!d.networks||!d.networks.length){l.innerHTML='<p class="hint">No networks found. Only 2.4 GHz networks can be seen by this board.</p>';return;}
+    if(!d.networks||!d.networks.length){
+      l.innerHTML='<p class="hint">No networks found. Only 2.4 GHz networks can be seen by this board, and a hidden network never appears in a scan - it still joins if you know its name.</p>'+again(0);
+      return wire();
+    }
     l.innerHTML=d.networks.map(n=>
       '<button class="item" data-ssid="'+esc(n.ssid)+'">'+ico('wifi')+
       '<div class="tx"><b>'+esc(n.ssid)+'</b><span>'+esc(n.quality||'')+' &middot; '+esc(n.encryption)+' &middot; ch '+n.channel+'</span></div>'+
-      ico('right','ic-sm')+'</button>').join('');
+      ico('right','ic-sm')+'</button>').join('')+again(d.networks.length);
     l.querySelectorAll('[data-ssid]').forEach(b=>b.onclick=()=>joinWifi(b.dataset.ssid));
+    wire();
   };
-  const poll=()=>fetch('/api/scan').then(r=>r.json()).then(d=>{
-    if(d.busy){l.innerHTML='<p class="hint">'+esc(d.message||'The board is busy.')+'</p>';return;}
+  const poll=()=>fetch('/api/scan',{headers:pinHeader()}).then(r=>r.json()).then(d=>{
+    if(d.busy){l.innerHTML='<p class="hint">'+esc(d.message||'The board is busy.')+'</p>'+again(null);return wire();}
     if(d.scanning){
-      if(++tries>15){l.innerHTML='<p class="hint">The scan is taking longer than expected. Tap Scan to try again.</p>';return;}
+      if(++tries>15){l.innerHTML='<p class="hint">The scan is taking longer than expected.</p>'+again(null);return wire();}
       return setTimeout(poll,600);
     }
     paint(d);
-  }).catch(()=>{l.innerHTML='<p class="hint">Scan failed. Check you are still connected to the board.</p>';});
+  }).catch(()=>{l.innerHTML='<p class="hint">Scan failed. Check you are still connected to the board.</p>'+again(null);wire();});
   poll();
 }
 function joinWifi(ssid){
@@ -3517,6 +3642,9 @@ function joinWifi(ssid){
     (($('tStatic').classList.contains('on'))
       ? '<p class="hint">Requesting the fixed address you entered. If the router will not give it, the board falls back to DHCP and says so.</p>'
       : '<p class="hint">The router will assign an address. Turn on <b>Use a fixed IP</b> first if you want a specific one.</p>')+
+    '<p class="hint">'+(location.hostname==='192.168.4.1'
+      ? 'You are on the board\'s own access point, so WPA2 covers this password the whole way to it.'
+      : 'You are not on the board\'s access point. There is no HTTPS here, so this password will cross your network in the clear - join from the access point instead if that network is shared.')+'</p>'+
     '<button class="btn ok blk" id="w_go" style="margin-top:12px">Connect</button>',
     ()=>{
     guardAutofill($('w_p'));
@@ -3607,7 +3735,44 @@ renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();
 go(VIEWS.some(v=>v.id===location.hash.replace('#',''))?location.hash.replace('#',''):'pad');
 connect();
 setInterval(()=>{if(wsUp&&!document.hidden)send({cmd:'status'});},8000);
-document.addEventListener('gesturestart',e=>e.preventDefault());
+// iOS Safari ignores user-scalable=no, so pinch has to be refused as it happens.
+// All three events matter: blocking only the first still lets a pinch already in
+// flight carry on.
+['gesturestart','gesturechange','gestureend'].forEach(ev=>
+  document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+
+// And if the page ends up zoomed anyway, say so and offer the way out, rather
+// than leaving someone hunting for a piece of text to pinch back from.
+const ZOOM={el:null};
+function zoomWatch(){
+  const vv=window.visualViewport;
+  if(!vv)return;
+  const check=()=>{
+    const zoomed=vv.scale>1.05;
+    if(zoomed&&!ZOOM.el){
+      const b=document.createElement('button');
+      b.className='zoomout';
+      b.textContent='Zoomed in - tap to reset';
+      b.onclick=()=>{
+        // Rewriting the tag is the only lever a page has over the visual
+        // viewport, and Safari only acts on a change, so it goes out and back.
+        const m=document.querySelector('meta[name=viewport]');
+        const keep=m.content;
+        m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+        setTimeout(()=>{m.content=keep;},60);
+        buzz(8);
+      };
+      document.body.appendChild(b);
+      ZOOM.el=b;
+    }else if(!zoomed&&ZOOM.el){
+      ZOOM.el.remove();ZOOM.el=null;
+    }
+  };
+  vv.addEventListener('resize',check);
+  vv.addEventListener('scroll',check);
+  check();
+}
+zoomWatch();
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)aswClose(true);   // never leave the PC with Alt stuck down
   else refresh();

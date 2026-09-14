@@ -279,7 +279,7 @@ result.
 
 [tests/test_v34_features.py](tests/test_v34_features.py) checks that:
 
-- the firmware identifies as v3.4 and HID is ready;
+- the firmware identifies as v3.5 and HID is ready;
 - large movement is accepted and can be reversed;
 - horizontal pan works;
 - volume down and volume up form a reversible pair;
@@ -293,7 +293,7 @@ result.
 state sequence: unknown, lock, idempotent second lock, unlock, idempotent second
 unlock, and explicit state correction.
 
-These tests are intentionally careful about side effects. The v3.4 test uses
+These tests are intentionally careful about side effects. The feature test uses
 large movement and then moves back, changes volume down and then up, and avoids
 clicking or typing into the currently focused PC window.
 

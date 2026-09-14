@@ -1,6 +1,6 @@
 /*
   ============================================================================
-  HID-Fi v3.4 — USB HID trackpad + remote + WiFi dashboard
+  HID-Fi v3.5 — USB HID trackpad + remote + WiFi dashboard
 
   Board:  ESP32-S3-N16R8 (YD-ESP32-S3, 16MB Flash, 8MB PSRAM)
 
@@ -239,6 +239,9 @@ bool heapWarned = false;
 // much larger is a bug or an attempt to exhaust the heap.
 #define  WS_TEXT_MAX  2048
 #define  SERIAL_LINE_MAX 2048
+// One definition. The boot event and the status reply both send it, and two
+// literals would eventually disagree about what is running.
+#define  FW_VERSION "hid_fi_v3.5"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -415,7 +418,7 @@ void setup() {
     
     COM_SERIAL.println();
     COM_SERIAL.println("========================================");
-    COM_SERIAL.println("HID-Fi v3.4 — ESP32-S3 USB HID + WiFi");
+    COM_SERIAL.println("HID-Fi v3.5 — ESP32-S3 USB HID + WiFi");
     COM_SERIAL.println("========================================");
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = false;
@@ -462,7 +465,7 @@ void setup() {
     StaticJsonDocument<384> doc;
     doc["event"] = "boot";
     doc["chip"] = "ESP32-S3";
-    doc["firmware"] = "hid_fi_v3.4";
+    doc["firmware"] = FW_VERSION;
     doc["hid_ready"] = hidReady;
     doc["wifi_connected"] = wifiConnected;
     if (wifiConnected) doc["wifi_ip"] = wifiIP;
@@ -938,7 +941,24 @@ void checkWifiConnection() {
 }
 
 // ==================== WEB ROUTES ====================
+// /api/scan is a plain GET, so it never reached the gate in processCommand and
+// any device on the home network could list the networks around you without a
+// PIN. It answers to the same rules as everything else now: on the board's own
+// access point radio range is the limit, on a LAN a PIN is required, and the
+// dashboard sends it in a header rather than the URL so it stays out of logs.
+bool scanAllowed() {
+    if (clientIsAp(webServer.client().remoteIP())) return true;
+    if (authToken.length()) {
+        String tok = webServer.header("X-Auth");
+        return tok.length() && !pinLocked() && pinCheck(tok.c_str());
+    }
+    return !wifiConnected;   // not on a network at all, so nothing to expose it to
+}
+
 void setupWebRoutes() {
+    // WebServer discards every header it was not told to keep.
+    static const char* keepHeaders[] = { "X-Auth" };
+    webServer.collectHeaders(keepHeaders, 1);
     // Serve dashboard at root
     webServer.on("/", HTTP_GET, []() {
         webServer.send_P(200, "text/html", WEB_INTERFACE);
@@ -967,9 +987,15 @@ void setupWebRoutes() {
         webServer.send(200, "application/json", resp);
     });
     
-    // GET /api/scan — scan WiFi networks
+    // GET /api/scan - scan WiFi networks
     webServer.on("/api/scan", HTTP_GET, []() {
-        if (verboseLog) COM_SERIAL.println("[HTTP] GET /api/scan — scanning networks...");
+        if (!scanAllowed()) {
+            webServer.send(403, "application/json",
+                "{\"status\":\"error\",\"reply\":\"lan_locked\",\"message\":\""
+                "Set an access PIN before scanning over your home network.\"}");
+            return;
+        }
+        if (verboseLog) COM_SERIAL.println("[HTTP] GET /api/scan - scanning networks...");
         handleWifiScan();
     });
     
@@ -1723,7 +1749,7 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["status"] = "ok";
     doc["reply"] = "status";
     doc["chip"] = "ESP32-S3";
-    doc["firmware"] = "hid_fi_v3.4";
+    doc["firmware"] = FW_VERSION;
     doc["uptime_sec"] = millis() / 1000;
     doc["free_heap"] = ESP.getFreeHeap();
     doc["heap_floor"] = ESP.getMinFreeHeap();
