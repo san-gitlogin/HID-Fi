@@ -491,6 +491,13 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .knob:hover .edit,.knob:focus-within .edit{opacity:1}
 @media(hover:none){.knob .edit{opacity:.55}}
 
+/* ---------------- beta badge ---------------- */
+.beta{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;font-size:9px;
+  font-weight:700;letter-spacing:.5px;text-transform:uppercase;vertical-align:middle;
+  color:#ffcf6b;background:rgba(255,180,60,.14);border:1px solid rgba(255,180,60,.5)}
+.navbtn .beta{font-size:8px;padding:0 4px;margin-left:5px}
+.tabbar .hasbeta i::after{content:"\2022";color:#ffcf6b;margin-left:3px;font-size:11px}
+
 /* ---------------- gamepad ---------------- */
 /* always three across, whatever the width - a controller that stacks vertically
    on a phone is unusable, so the parts scale instead of wrapping */
@@ -1159,7 +1166,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
     <section class="view" id="v-game">
       <div class="grid">
         <div class="card span" id="gpCard">
-          <div class="ch"><svg class="ic"><use href="#i-gamepad"/></svg><h2>Controller</h2>
+          <div class="ch"><svg class="ic"><use href="#i-gamepad"/></svg><h2>Controller <span class="beta">Beta</span></h2>
             <button class="iconbtn" id="btnGpToggle" aria-label="Toggle gamepad"><svg class="ic"><use href="#i-power"/></svg></button>
           </div>
           <div id="gpWrap">
@@ -1845,7 +1852,7 @@ const VIEWS=[
   {id:'keys', t:'Keyboard',  s:'Type',  i:'keyboard'},
   {id:'short',t:'Shortcuts', s:'Keys',  i:'keycap'},
   {id:'media',t:'Media',     s:'Media', i:'media'},
-  {id:'game', t:'Gamepad',   s:'Game',  i:'gamepad'},
+  {id:'game', t:'Gamepad',   s:'Game',  i:'gamepad', beta:1},
   {id:'power',t:'Session',   s:'Power', i:'power'},
   {id:'setup',t:'Settings',  s:'Setup', i:'settings'}
 ];
@@ -1883,10 +1890,11 @@ const RAIL={
 };
 
 function buildNav(){
+  const beta=v=>v.beta?'<em class="beta">beta</em>':'';
   $('navlist').innerHTML=VIEWS.map(v=>
-    '<button class="navbtn" data-v="'+v.id+'">'+ico(v.i)+'<span>'+v.t+'</span></button>').join('');
+    '<button class="navbtn" data-v="'+v.id+'">'+ico(v.i)+'<span>'+v.t+beta(v)+'</span></button>').join('');
   $('tabbar').innerHTML=VIEWS.map(v=>
-    '<button data-v="'+v.id+'">'+ico(v.i)+'<i>'+(v.s||v.t)+'</i></button>').join('');
+    '<button data-v="'+v.id+'"'+(v.beta?' class="hasbeta"':'')+'>'+ico(v.i)+'<i>'+(v.s||v.t)+'</i></button>').join('');
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 }
 function go(id){
@@ -2626,7 +2634,7 @@ function gpSync(){
       // No wrapper div: .gpmsg is the flex column itself, so the icon, the text
       // and the button share one centre line.
       msg.innerHTML=ico('gamepad','ic-lg')+
-        '<p class="hint" style="margin:0;max-width:280px">The controller is a second USB device, off by default so it does not clutter the host. Turning it on reboots the board.</p>'+
+        '<p class="hint" style="margin:0;max-width:280px">The controller is a second USB device, off by default so it does not clutter the host. Turning it on reboots the board. <b>This tab is beta and not fully tested yet.</b></p>'+
         '<button class="btn pri" id="gpEnable">Enable controller</button>';
       c.appendChild(msg);
       msg.querySelector('#gpEnable').onclick=()=>{
