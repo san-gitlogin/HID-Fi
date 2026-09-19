@@ -54,8 +54,8 @@ Rules that keep it that way, and that new code must respect:
 
 | File | What it holds |
 |---|---|
-| `usb_hid_unlock/usb_hid_unlock.ino` | Everything: transports, dispatch, HID, NVS, WiFi |
-| `usb_hid_unlock/web_ui.h` | The entire dashboard as one PROGMEM raw string |
+| `hid_fi/hid_fi.ino` | Everything: transports, dispatch, HID, NVS, WiFi |
+| `hid_fi/web_ui.h` | The entire dashboard as one PROGMEM raw string |
 | `flash_esp.ps1` | Build, flash, verify |
 
 The dashboard is HTML, CSS, JavaScript and an SVG sprite inside a single C raw

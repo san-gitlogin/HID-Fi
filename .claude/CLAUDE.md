@@ -12,9 +12,9 @@ BIOS.
 
 ## Key files
 
-- `usb_hid_unlock/usb_hid_unlock.ino` — all firmware (~2,400 lines)
-- `usb_hid_unlock/web_ui.h` — the whole dashboard as one PROGMEM raw string
-  (~2,000 lines): HTML, CSS, JS and an SVG icon sprite
+- `hid_fi/hid_fi.ino` — all firmware (~3,600 lines)
+- `hid_fi/web_ui.h` — the whole dashboard as one PROGMEM raw string
+  (~3,900 lines): HTML, CSS, JS and an SVG icon sprite
 - `flash_esp.ps1` — build, flash, verify
 - `tests/test_v34_features.py` — 24-check regression suite, safe on a live desktop
 

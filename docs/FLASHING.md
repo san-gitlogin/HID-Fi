@@ -37,6 +37,16 @@ If PowerShell refuses to run the script, it is the execution policy, not you:
 powershell -ExecutionPolicy Bypass -File .\flash_esp.ps1
 ```
 
+**On macOS or Linux**, use the twin script instead — same behaviour, same
+guarantee about leaving NVS alone:
+
+```bash
+./flash_esp.sh          # or ./flash_esp.sh -c to rebuild first
+```
+
+macOS has a couple of one-time setup steps the first time the board is plugged in
+(the accessory prompt and the keyboard assistant); see [MACOS.md](MACOS.md).
+
 ---
 
 ## What you need
@@ -95,7 +105,7 @@ back. After a factory reset you retype the access point password, the home netwo
 the access PIN and any saved PC passwords by hand. The dashboard layout can be saved and
 restored through `ui_get` / `ui_save` if you take a copy first.
 
-> This is why the script does **not** flash `usb_hid_unlock.ino.merged.bin`. That file is a
+> This is why the script does **not** flash `hid_fi.ino.merged.bin`. That file is a
 > full 16 MB image, and writing it at `0x0` overwrites NVS along with everything else.
 
 ### A blank or unknown board
@@ -113,7 +123,7 @@ which the access point returns to its factory name, `ESP32-HID-XXXXXX` with the 
 
 ## Rebuilding from source
 
-Only needed if you changed `usb_hid_unlock.ino` or `web_ui.h`.
+Only needed if you changed `hid_fi.ino` or `web_ui.h`.
 
 One-time setup:
 
@@ -142,7 +152,7 @@ Two of those matter more than the rest:
 - `CDCOnBoot=default` is **USB CDC On Boot: Disabled**, because the firmware talks over
   UART0 through the CH343, not over the native USB.
 
-The sketch is **two files** — `usb_hid_unlock.ino` and `web_ui.h` (the dashboard). Both must
+The sketch is **two files** — `hid_fi.ino` and `web_ui.h` (the dashboard). Both must
 be in the sketch folder.
 
 ---
@@ -153,7 +163,7 @@ The script does this for you, but to do it by hand, send `{"cmd":"status"}` to t
 at 115200 baud with DTR and RTS **off** (otherwise opening the port reboots the board):
 
 ```powershell
-python usb_hid_unlock\test_v34_features.py
+python tests/test_v34_features.py
 ```
 
 That runs the full regression suite — 24 checks covering the pointer, media keys, macros,
@@ -194,10 +204,10 @@ runs. `<core>` is your ESP32 core folder, e.g.
 ```
 esptool --chip esp32s3 --port COM13 --baud 921600 write-flash \
   --flash-mode dio --flash-freq 80m --flash-size 16MB \
-  0x0     build/usb_hid_unlock.ino.bootloader.bin \
-  0x8000  build/usb_hid_unlock.ino.partitions.bin \
+  0x0     build/hid_fi.ino.bootloader.bin \
+  0x8000  build/hid_fi.ino.partitions.bin \
   0xe000  <core>/tools/partitions/boot_app0.bin \
-  0x10000 build/usb_hid_unlock.ino.bin
+  0x10000 build/hid_fi.ino.bin
 ```
 
 NVS sits at `0x9000`–`0xdfff`, between the partition table and `boot_app0`, which is why

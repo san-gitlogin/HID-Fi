@@ -7,6 +7,66 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+Making the board painless on a Mac, and honest about which computer it is on.
+
+> Verified on an ESP32-S3 N16R8 against a Mac: Num Lock detection resolves to
+> `mac` about 2.3 s after boot, the manual override persists across a reboot and
+> `auto` re-probes, the gesture/app-switcher/keyboard mappings switch correctly
+> both ways, and `lock` fires `Ctrl+Cmd+Q` on macOS. Still needs a confirming run
+> against a physical Windows PC. Detection is a brief transient: a lock issued in
+> the first few seconds after connecting, before the probe settles, falls back to
+> the PC shortcut — see [docs/MACOS.md](docs/MACOS.md).
+
+### Added
+
+- **Automatic Mac-vs-PC detection.** The board toggles Num Lock once and watches
+  for the host's LED reply — Windows and Linux echo it, macOS has none and stays
+  silent — and switches its behaviour to match. The probe is a non-blocking state
+  machine, runs once after the host settles, never while the host is asleep, and
+  taps Num Lock straight back so it leaves no toggle behind. Reported as `host_os`
+  / `host_os_source` in `status`, and pushed as a `host_os` event the moment it
+  settles.
+- **`set_host_os`** (`mac` | `windows` | `linux` | `auto`) pins the OS on the
+  board or re-arms the probe, with a **Computer** selector in Settings. A manual
+  choice always wins — needed because the probe cannot tell Linux from Windows.
+- **Mac-aware shortcuts.** Lock sends `Ctrl+Cmd+Q` instead of `Win+L`; the app
+  switcher holds **Command** instead of Alt; and the gestures (Mission Control,
+  Spaces, copy/paste/undo, tabs, back/forward, zoom) send their macOS combos. All
+  driven by the detected or pinned OS, on both the firmware and dashboard sides,
+  so the two never disagree.
+- **A Mac setup panel** in Settings, and [docs/MACOS.md](docs/MACOS.md). The
+  Keyboard Setup Assistant asks you to identify the *board's* keyboard, not your
+  laptop's; two buttons send exactly the keys it asks for (always Z and /, since
+  the board is US ANSI), so nobody has to hunt for key positions. The panel also
+  explains the "Allow accessory" prompt and that a first-ever plug-in must be
+  approved while the Mac is unlocked.
+- **`flash_esp.sh`** — the macOS/Linux twin of `flash_esp.ps1`. Same four-partition
+  write that leaves NVS alone, same flags and exit codes, auto-detects the bundled
+  esptool and boot_app0, and reads the board back to verify. It finds the CH343
+  port under every name macOS gives it — `cu.wchusbserial*` with WCH's driver and
+  `cu.usbmodem*` with the built-in one — so it works with no driver installed.
+
+### Changed
+
+- **The on-screen keyboard follows the computer.** Modifier caps relabel per OS
+  (Alt/Opt, Win/Cmd/Super). A real left **Shift** now flanks Z where Caps used to
+  sit, with Caps moved to the modifier row, so muscle memory works. The 10-column
+  grid, arrow alignment, two-finger chording and every responsive breakpoint are
+  unchanged.
+- The Shortcuts filter and the app-switcher modifier now follow the detected
+  computer OS by default instead of guessing from the phone's browser; tapping a
+  shortcut OS tab still pins your own choice.
+
+### Fixed
+
+- **Docs pointed at a folder that does not exist.** Every reference to
+  `usb_hid_unlock/` is now `hid_fi/`, the actual sketch folder, and the flashing
+  guide's test command points at `tests/` rather than the old path.
+
+---
+
 ## v3.5
 
 The release that made the trackpad behave like a trackpad. Every entry under

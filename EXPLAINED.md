@@ -37,7 +37,7 @@ native USB port.
 
 ## 2. What happens when the board starts
 
-The main firmware is [usb_hid_unlock.ino](usb_hid_unlock/usb_hid_unlock.ino).
+The main firmware is [hid_fi.ino](hid_fi/hid_fi.ino).
 Its `setup()` function does roughly this:
 
 1. Start the CH343 serial connection at 115200 baud.
@@ -175,7 +175,7 @@ than delivering every sample.
 ## 6. How the trackpad becomes gestures
 
 The dashboard is one HTML/CSS/JavaScript document stored in
-[web_ui.h](usb_hid_unlock/web_ui.h) as a C raw string in flash. The phone runs
+[web_ui.h](hid_fi/web_ui.h) as a C raw string in flash. The phone runs
 that JavaScript after the ESP32 serves it.
 
 The browser receives pointer events and keeps a small state machine:
@@ -331,9 +331,9 @@ For a fast trackpad movement, the path is shorter:
 - [docs/HARDWARE.md](docs/HARDWARE.md): board wiring and port details.
 - [docs/FLASHING.md](docs/FLASHING.md): build and flash process.
 - [SECURITY.md](SECURITY.md): threat model and security boundaries.
-- [usb_hid_unlock.ino](usb_hid_unlock/usb_hid_unlock.ino): firmware, dispatcher,
+- [hid_fi.ino](hid_fi/hid_fi.ino): firmware, dispatcher,
   HID output, WiFi, storage, and WebSocket handling.
-- [web_ui.h](usb_hid_unlock/web_ui.h): dashboard UI and browser input logic.
+- [web_ui.h](hid_fi/web_ui.h): dashboard UI and browser input logic.
 
 A good way to study the code is to follow one command end to end: start with
 `txMove()` or `send()` in `web_ui.h`, find the matching WebSocket or JSON branch

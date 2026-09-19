@@ -13,8 +13,8 @@ or software on the host.
 
 | Path | What |
 |---|---|
-| `usb_hid_unlock/usb_hid_unlock.ino` | All firmware — transports, command dispatch, HID, NVS |
-| `usb_hid_unlock/web_ui.h` | The **entire dashboard** as one PROGMEM raw string |
+| `hid_fi/hid_fi.ino` | All firmware — transports, command dispatch, HID, NVS |
+| `hid_fi/web_ui.h` | The **entire dashboard** as one PROGMEM raw string |
 | `flash_esp.ps1` | Build, flash and verify; auto-detects board and toolchain |
 | `tests/` | `test_v34_features.py` is the regression suite — run it after firmware changes |
 | `docs/` | Hardware, flashing, command reference, architecture |

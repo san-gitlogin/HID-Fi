@@ -88,6 +88,13 @@
 // Dashboard markup lives in web_ui.h (defines WEB_INTERFACE[] in PROGMEM).
 #include "web_ui.h"
 
+// Declared here, above everything, because arduino-cli hoists generated function
+// prototypes to the top of the file and several of them name this enum in their
+// signature (hostOs() returns it, hostOsName() takes it). An enum declared
+// mid-file is invisible to those prototypes -- the same reason WiggleMode and the
+// other enums exist where they do. See the HOST OS DETECTION block for the rest.
+enum HostOS : uint8_t { OS_UNKNOWN, OS_WINDOWS, OS_MAC, OS_LINUX };
+
 // TinyUSB is linked into the core, but the Arduino USB layer never exposes these
 // and never calls them. A suspended host ignores HID reports completely, so
 // without remote wakeup nothing we send can rouse a sleeping PC - not a key, not
@@ -286,6 +293,105 @@ const char* lockStateStr() {
     }
 }
 
+// ==================== HOST OS DETECTION ====================
+// HID is one way, but there is a single thing the host tells the keyboard back:
+// which of its lock-key LEDs to light. That is enough to tell a Mac from a PC.
+// Windows and Linux own a Num Lock and echo its LED the instant it is toggled;
+// macOS has no Num Lock and stays silent. So the board taps Num Lock once,
+// watches for the echo, and taps it straight back to undo the toggle:
+//   echo seen -> Windows or Linux   (the LED alone cannot tell those two apart)
+//   silence   -> macOS
+// The result only steers defaults - the lock shortcut, the gesture combos, the
+// app-switch modifier and the keyboard layout. A manual override always wins,
+// because a user on a Linux box the probe called "windows" must be able to say so.
+HostOS hostOsDetected = OS_UNKNOWN;   // what the Num Lock probe concluded
+HostOS hostOsManual   = OS_UNKNOWN;   // user override; OS_UNKNOWN = trust the probe
+
+const char* hostOsName(HostOS o) {
+    switch (o) {
+        case OS_WINDOWS: return "windows";
+        case OS_MAC:     return "mac";
+        case OS_LINUX:   return "linux";
+        default:         return "unknown";
+    }
+}
+// The OS the rest of the firmware actually acts on, and where it came from.
+HostOS      hostOs()       { return hostOsManual != OS_UNKNOWN ? hostOsManual : hostOsDetected; }
+const char* hostOsSource() {
+    if (hostOsManual   != OS_UNKNOWN) return "manual";
+    if (hostOsDetected != OS_UNKNOWN) return "auto";
+    return "pending";
+}
+// True when the effective OS is a Mac - the one branch nearly every mapping needs.
+inline bool hostIsMac() { return hostOs() == OS_MAC; }
+
+// Written only from the USB event task, read only from loop(); a plain volatile
+// is enough for that one-writer/one-reader hand-off.
+volatile uint32_t ledEventCount = 0;
+volatile uint8_t  ledStateBits  = 0;
+void keyboardLedCb(void* /*arg*/, esp_event_base_t /*base*/, int32_t /*id*/, void* data) {
+    arduino_usb_hid_keyboard_event_data_t* d = (arduino_usb_hid_keyboard_event_data_t*)data;
+    ledStateBits = d->leds;
+    ledEventCount++;
+}
+
+// The probe is a state machine ticked from loop() so nothing blocks. It runs
+// once after the host has mounted and settled; set_host_os with "auto" can rearm it.
+enum DetectPhase : uint8_t { DET_WAIT_MOUNT, DET_SETTLE, DET_PROBED, DET_DONE };
+DetectPhase detectPhase     = DET_WAIT_MOUNT;
+uint32_t    detectAt        = 0;    // millis() at the last phase change
+uint32_t    ledCountAtProbe = 0;    // LED events seen before the Num Lock tap
+#define DETECT_SETTLE_MS 1500       // after mount, let the host finish its own LED init
+#define DETECT_REPLY_MS   800       // how long to wait for the Num Lock echo
+
+void announceHostOs() {
+    StaticJsonDocument<160> doc;
+    doc["event"]          = "host_os";
+    doc["host_os"]        = hostOsName(hostOs());
+    doc["host_os_source"] = hostOsSource();
+    String out;
+    serializeJson(doc, out);
+    // Push it so an open dashboard reskins immediately rather than on its next poll.
+    if (wifiEnabled) webSocket.broadcastTXT(out);
+    COM_SERIAL.println(out);
+}
+
+void updateHostDetect() {
+    if (detectPhase == DET_DONE) return;
+    // A manual choice makes the probe pointless - record it as settled and stop.
+    if (hostOsManual != OS_UNKNOWN) { detectPhase = DET_DONE; return; }
+    if (!hidReady) return;
+    uint32_t now = millis();
+    switch (detectPhase) {
+        case DET_WAIT_MOUNT:
+            if (tud_mounted() && !tud_suspended()) { detectPhase = DET_SETTLE; detectAt = now; }
+            break;
+        case DET_SETTLE:
+            if (now - detectAt >= DETECT_SETTLE_MS) {
+                if (tud_suspended()) return;        // never type into a sleeping host
+                ledCountAtProbe = ledEventCount;
+                Keyboard.press(KEY_NUM_LOCK); delay(5); Keyboard.release(KEY_NUM_LOCK);
+                detectPhase = DET_PROBED; detectAt = now;
+            }
+            break;
+        case DET_PROBED:
+            if (ledEventCount > ledCountAtProbe) {
+                // The host toggled a Num Lock LED for us: it has one, so it is a PC.
+                hostOsDetected = OS_WINDOWS;
+                Keyboard.press(KEY_NUM_LOCK); delay(5); Keyboard.release(KEY_NUM_LOCK); // undo the toggle
+                detectPhase = DET_DONE;
+                announceHostOs();
+            } else if (now - detectAt >= DETECT_REPLY_MS) {
+                // No echo: no Num Lock, so a Mac.
+                hostOsDetected = OS_MAC;
+                detectPhase = DET_DONE;
+                announceHostOs();
+            }
+            break;
+        default: break;
+    }
+}
+
 // ==================== TIMING DEFAULTS (ms) ====================
 #define WAKE_DELAY      1500  // after pressing Esc, wait for password field
 #define CAD_DELAY       2000  // after Ctrl+Alt+Del, wait for password field
@@ -304,6 +410,7 @@ void handleType(const JsonDocument& inDoc);
 void handlePress(const JsonDocument& inDoc);
 void handleLock(const JsonDocument& inDoc);
 void handleSetLockState(const JsonDocument& inDoc);
+void handleSetHostOs(const JsonDocument& inDoc);
 void handleTestHid();
 void handlePing(bool fromWifi);
 void handleDeviceStatus(bool fromWifi);
@@ -430,13 +537,18 @@ void setup() {
     verboseLog     = preferences.getBool("verbose", false);
     powerMode      = (PowerMode)preferences.getUChar("pwr", PWR_BALANCED);
     apAutoOff      = preferences.getBool("apoff", false);
+    hostOsManual   = (HostOS)preferences.getUChar("os", OS_UNKNOWN);
     preferences.end();
     if (powerMode > PWR_SAVER) powerMode = PWR_BALANCED;   // guard against a bad stored value
+    if (hostOsManual > OS_LINUX) hostOsManual = OS_UNKNOWN;
 
     // Exactly one mouse object may exist -- see the note on the globals.
     COM_SERIAL.printf("[HID] Initializing USB HID (pointer=%s, gamepad=%s)...\n",
                       absoluteMode ? "absolute" : "relative", gamepadEnabled ? "on" : "off");
     Keyboard.begin();
+    // The host reports its lock-key LEDs here; that echo is how the board tells a
+    // Mac from a PC. Registered before USB.begin() so no early report is missed.
+    Keyboard.onEvent(ARDUINO_USB_HID_KEYBOARD_LED_EVENT, keyboardLedCb);
     if (absoluteMode) { mouseAbs = new USBHIDAbsoluteMouse(); mouseAbs->begin(); }
     else              { mouseRel = new USBHIDRelativeMouse(); mouseRel->begin(); }
     Consumer.begin();
@@ -473,6 +585,8 @@ void setup() {
     doc["ap_ip"] = apIP;
     doc["pc_state"] = lockStateStr();
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
+    doc["host_os"] = hostOsName(hostOs());
+    doc["host_os_source"] = hostOsSource();
     doc["uptime"] = 0;
     sendJson(doc);
 }
@@ -543,9 +657,10 @@ void loop() {
         lastButtonState = currentState;
     }
 
-    // Non-blocking background operations (mouse wiggle + LED blink)
+    // Non-blocking background operations (mouse wiggle + LED blink + OS probe)
     updateWiggle();
     updateLedBlink();
+    updateHostDetect();
 
     // The allocator's own low-water mark is exact. This tick only exists to say
     // something on the serial log the first time it goes low.
@@ -1218,6 +1333,9 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "set_lock_state") == 0) {
         handleSetLockState(inDoc);
     }
+    else if (strcmp(cmd, "set_host_os") == 0) {
+        handleSetHostOs(inDoc);
+    }
     else if (strcmp(cmd, "wiggle") == 0) {
         handleWiggle(inDoc);
     }
@@ -1398,15 +1516,30 @@ void handleUnlock(const JsonDocument& inDoc) {
     }
     
     bool useCtrlAltDel = inDoc["ctrl_alt_del"] | false;
-    int wakeDelay = inDoc["wake_delay"] | (useCtrlAltDel ? CAD_DELAY : WAKE_DELAY);
+    bool mac = hostIsMac();
+    // macOS is fussier than Windows here: pressing Esc at the login window collapses
+    // the password field, and the field can take longer to appear and take focus,
+    // so a Mac gets a gentler wake and a longer wait by default.
+    int defWake = useCtrlAltDel ? CAD_DELAY : (mac ? 2500 : WAKE_DELAY);
+    int wakeDelay = inDoc["wake_delay"] | defWake;
     int postTypeDelay = inDoc["post_type_delay"] | POST_TYPE_DELAY;
-    
-    COM_SERIAL.printf("[UNLOCK] Starting unlock sequence (prev_state=%s)...\n", lockStateStr());
-    
+
+    COM_SERIAL.printf("[UNLOCK] Starting unlock sequence (os=%s prev_state=%s)...\n",
+                      hostOsName(hostOs()), lockStateStr());
+
     // Step 1: Wake
     if (useCtrlAltDel) {
         COM_SERIAL.println("[UNLOCK] Step 1: Ctrl+Alt+Delete");
         pressKeyCombo("CTRL+ALT+DELETE");
+    } else if (mac) {
+        // Esc would dismiss the Mac login field. A net-zero mouse jiggle wakes the
+        // display without cancelling anything, then a Shift tap surfaces the
+        // password field and focuses it, ready for typing.
+        COM_SERIAL.println("[UNLOCK] Step 1: jiggle + Shift to wake the Mac login window");
+        usbWakeHost();
+        hidMouseMove(4, 0, 0, 0);  delay(60);
+        hidMouseMove(-4, 0, 0, 0); delay(60);
+        Keyboard.press(KEY_LEFT_SHIFT); delay(60); Keyboard.releaseAll();
     } else {
         COM_SERIAL.println("[UNLOCK] Step 1: Esc to wake/clear");
         Keyboard.press(KEY_ESC);
@@ -1657,22 +1790,20 @@ void handleLock(const JsonDocument& inDoc) {
         return;
     }
     
-    COM_SERIAL.printf("[LOCK] Sending Win+L (prev_state=%s)...\n", lockStateStr());
-    Keyboard.releaseAll();
-    delay(50);
-    Keyboard.press(KEY_LEFT_GUI);
-    delay(50);
-    Keyboard.press('l');
-    delay(150);
-    Keyboard.releaseAll();
-    delay(50);
-    
+    // Win+L locks Windows and most Linux desktops; macOS uses Control+Command+Q.
+    // Sent through pressKeyCombo so it also wakes a suspended bus first.
+    const char* combo = hostIsMac() ? "CTRL+GUI+Q" : "GUI+L";
+    COM_SERIAL.printf("[LOCK] Sending %s for %s (prev_state=%s)...\n",
+                      combo, hostOsName(hostOs()), lockStateStr());
+    pressKeyCombo(combo);
+
     pcLockState = PC_STATE_LOCKED;
-    
+
     StaticJsonDocument<192> doc;
     doc["status"] = "ok";
     doc["reply"] = "locked";
     doc["pc_state"] = "locked";
+    doc["combo"] = combo;
     sendJson(doc);
 }
 
@@ -1696,11 +1827,53 @@ void handleSetLockState(const JsonDocument& inDoc) {
     }
     
     COM_SERIAL.printf("[STATE] PC lock state manually set to: %s\n", lockStateStr());
-    
+
     StaticJsonDocument<192> doc;
     doc["status"] = "ok";
     doc["reply"] = "state_set";
     doc["pc_state"] = lockStateStr();
+    sendJson(doc);
+}
+
+// ==================== SET HOST OS ====================
+// "mac" / "windows" / "linux" pin the OS by hand and persist it; "auto" clears
+// the override and re-arms the Num Lock probe. The manual choice is what makes
+// the feature trustworthy: the probe cannot tell Linux from Windows, and a user
+// who knows better must always be able to correct it.
+void handleSetHostOs(const JsonDocument& inDoc) {
+    String os = String(inDoc["os"] | "");
+    os.toLowerCase();
+
+    if (os == "auto") {
+        hostOsManual = OS_UNKNOWN;
+        hostOsDetected = OS_UNKNOWN;
+        detectPhase = DET_WAIT_MOUNT;      // rerun the probe
+    } else if (os == "mac" || os == "macos") {
+        hostOsManual = OS_MAC;
+    } else if (os == "windows" || os == "win") {
+        hostOsManual = OS_WINDOWS;
+    } else if (os == "linux") {
+        hostOsManual = OS_LINUX;
+    } else {
+        StaticJsonDocument<192> doc;
+        doc["status"] = "error";
+        doc["message"] = "Invalid os. Use: mac, windows, linux, or auto";
+        doc["host_os"] = hostOsName(hostOs());
+        sendJson(doc);
+        return;
+    }
+
+    preferences.begin("hid_cfg", false);
+    preferences.putUChar("os", (uint8_t)hostOsManual);
+    preferences.end();
+
+    COM_SERIAL.printf("[OS] Host OS set to %s (source=%s)\n", hostOsName(hostOs()), hostOsSource());
+
+    StaticJsonDocument<192> doc;
+    doc["status"] = "ok";
+    doc["reply"] = "host_os_set";
+    doc["host_os"] = hostOsName(hostOs());
+    doc["host_os_source"] = hostOsSource();
     sendJson(doc);
 }
 
@@ -1799,6 +1972,10 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["ws_clients"] = webSocket.connectedClients();
     doc["mdns"] = mdnsName;
     doc["pc_state"] = lockStateStr();
+    // What the board believes it is plugged into, and whether that was probed or
+    // set by hand. The dashboard uses it to pick Mac vs PC shortcuts and layout.
+    doc["host_os"] = hostOsName(hostOs());
+    doc["host_os_source"] = hostOsSource();
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
     doc["gamepad"] = gamepadEnabled;
     doc["auth_set"] = (authToken.length() > 0);
@@ -2861,30 +3038,43 @@ void handleGesture(const JsonDocument& inDoc) {
     String n = String(inDoc["name"] | "");
     n.toLowerCase();
     const char* combo = nullptr;
+    // The same gesture is a different shortcut on macOS: Cmd where Windows uses
+    // Ctrl, and its own combos for Mission Control and Spaces. mac() picks the
+    // Mac string, everything else keeps the Windows/Linux one it always sent.
+    bool mac = hostIsMac();
+    #define GMAP(m,w) (mac ? (m) : (w))
 
-    if      (n == "switch_app")    combo = "ALT+TAB";
-    else if (n == "task_view")     combo = "GUI+TAB";
-    else if (n == "desktop_left")  combo = "CTRL+GUI+LEFT";
-    else if (n == "desktop_right") combo = "CTRL+GUI+RIGHT";
-    else if (n == "show_desktop")  combo = "GUI+D";
-    else if (n == "back")          combo = "ALT+LEFT";
-    else if (n == "forward")       combo = "ALT+RIGHT";
-    else if (n == "close_tab")     combo = "CTRL+W";
-    else if (n == "new_tab")       combo = "CTRL+T";
-    else if (n == "copy")          combo = "CTRL+C";
-    else if (n == "paste")         combo = "CTRL+V";
-    else if (n == "undo")          combo = "CTRL+Z";
+    if      (n == "switch_app")    combo = GMAP("GUI+TAB",   "ALT+TAB");
+    else if (n == "task_view")     combo = GMAP("CTRL+UP",   "GUI+TAB");        // Mission Control
+    else if (n == "desktop_left")  combo = GMAP("CTRL+LEFT", "CTRL+GUI+LEFT");
+    else if (n == "desktop_right") combo = GMAP("CTRL+RIGHT","CTRL+GUI+RIGHT");
+    else if (n == "show_desktop")  combo = GMAP("F11",       "GUI+D");
+    else if (n == "back")          combo = GMAP("GUI+LEFT",  "ALT+LEFT");
+    else if (n == "forward")       combo = GMAP("GUI+RIGHT", "ALT+RIGHT");
+    else if (n == "close_tab")     combo = GMAP("GUI+W",     "CTRL+W");
+    else if (n == "new_tab")       combo = GMAP("GUI+T",     "CTRL+T");
+    else if (n == "copy")          combo = GMAP("GUI+C",     "CTRL+C");
+    else if (n == "paste")         combo = GMAP("GUI+V",     "CTRL+V");
+    else if (n == "undo")          combo = GMAP("GUI+Z",     "CTRL+Z");
     else if (n == "zoom_in" || n == "zoom_out") {
-        Keyboard.press(KEY_LEFT_CTRL);
-        delay(25);
-        hidMouseMove(0, 0, (n == "zoom_in") ? 1 : -1, 0);
-        delay(25);
-        Keyboard.releaseAll();
+        // Windows and Linux zoom with Ctrl + wheel; on macOS that is an
+        // accessibility screen zoom that is off by default, so use the app-level
+        // Cmd +/- that every Mac app honours.
+        if (mac) {
+            pressKeyCombo((n == "zoom_in") ? "GUI+PLUS" : "GUI+MINUS");
+        } else {
+            Keyboard.press(KEY_LEFT_CTRL);
+            delay(25);
+            hidMouseMove(0, 0, (n == "zoom_in") ? 1 : -1, 0);
+            delay(25);
+            Keyboard.releaseAll();
+        }
         StaticJsonDocument<160> doc;
         doc["status"]="ok"; doc["reply"]="gesture_done"; doc["name"]=n;
         sendJson(doc);
         return;
     }
+    #undef GMAP
 
     if (!combo) {
         const char* keys = inDoc["keys"] | "";

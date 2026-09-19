@@ -26,9 +26,10 @@ Two things follow from that and shape every decision:
 ## Layout
 
 ```
-flash_esp.ps1                  build + flash + verify, auto-detects everything
-usb_hid_unlock/
-  usb_hid_unlock.ino           all firmware: transports, dispatch, HID, NVS
+flash_esp.ps1                  build + flash + verify (Windows), auto-detects everything
+flash_esp.sh                   the same for macOS / Linux
+hid_fi/
+  hid_fi.ino           all firmware: transports, dispatch, HID, NVS
   web_ui.h                     the entire dashboard as one PROGMEM string
   unlock_client.py             CLI for the board over serial or WiFi
 tests/
@@ -36,7 +37,7 @@ tests/
   test_lock_state.py           lock-state machine
   test_mouse_led.py            REQ/ACK protocol; sends REAL clicks without --skip-clicks
 docs/
-  HARDWARE.md  FLASHING.md  COMMANDS.md  ARCHITECTURE.md
+  HARDWARE.md  FLASHING.md  MACOS.md  COMMANDS.md  ARCHITECTURE.md
 ```
 
 **`web_ui.h` is the dashboard.** HTML, CSS, JavaScript and an SVG icon sprite, in
@@ -47,8 +48,8 @@ compiled into the firmware, so any UI change needs a reflash.
 
 ## Before you change code
 
-**Read the file first.** `usb_hid_unlock.ino` is ~2,400 lines and `web_ui.h` is
-~2,000. Both have real structure and repeated patterns. Grep for the handler or
+**Read the file first.** `hid_fi.ino` is ~3,600 lines and `web_ui.h` is
+~3,900. Both have real structure and repeated patterns. Grep for the handler or
 the CSS block, read the surrounding code, then edit. Do not infer a function's
 behaviour from its name.
 

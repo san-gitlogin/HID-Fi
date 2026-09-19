@@ -99,13 +99,13 @@ whatever is focused. Do not run it on a desktop you care about.
 
 ### Checking dashboard changes without flashing
 
-The whole dashboard is one PROGMEM string in `usb_hid_unlock/web_ui.h`. You can
+The whole dashboard is one PROGMEM string in `hid_fi/web_ui.h`. You can
 pull it out and open it in a browser, which is far faster than reflashing to find
 a typo:
 
 ```python
 import pathlib, re
-html = pathlib.Path("usb_hid_unlock/web_ui.h").read_text(encoding="utf-8")
+html = pathlib.Path("hid_fi/web_ui.h").read_text(encoding="utf-8")
 start = html.index('R"rawliteral(') + len('R"rawliteral(')
 page  = html[start:html.rindex(')rawliteral";')]
 pathlib.Path("_preview.html").write_text(page, encoding="utf-8")

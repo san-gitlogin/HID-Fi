@@ -61,6 +61,7 @@ no rights to install anything on.
 | **Media** | Volume knobs you turn with a finger, playback keys, brightness, and editable quick actions for mic-mute and call keys. |
 | **Gamepad** | Optional second USB device: two sticks, D-pad, twelve buttons. |
 | **Session** | Unlock a locked PC by typing its password, lock it again, sleep and wake, presenter controls, and a net-zero cursor jiggle to stay awake. |
+| **Knows the computer** | Detects whether it is plugged into a Mac or a PC by watching the Num Lock light, and switches the lock shortcut, gestures, app switcher and keyboard to match — or pin it by hand. See [docs/MACOS.md](docs/MACOS.md). |
 | **Knows itself** | Both MAC addresses, what is in the board's permanent memory, and every client on its access point — without ever handing back a password or PIN. |
 
 Flick sideways across empty space to move between tabs. It is deliberately fussy:
@@ -120,12 +121,18 @@ certainly still on the COM port. Full detail in
 **1. Flash it**, with the board on its **COM** port:
 
 ```powershell
-.\flash_esp.ps1 -Compile
+.\flash_esp.ps1 -Compile         # Windows
+```
+
+```bash
+./flash_esp.sh -c                # macOS / Linux
 ```
 
 The script finds the board, the toolchain and esptool by itself.
 [docs/FLASHING.md](docs/FLASHING.md) walks through it from nothing, including
-installing the ESP32 core.
+installing the ESP32 core. **On a Mac there are a couple of one-time setup
+steps** — the accessory prompt and the keyboard assistant — all covered in
+[docs/MACOS.md](docs/MACOS.md).
 
 **2. Plug the USB port** into the computer you want to control.
 
@@ -250,6 +257,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 |---|---|
 | [docs/HARDWARE.md](docs/HARDWARE.md) | The board, the two ports, cables, the RGB LED, power |
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
+| [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |
 | [SECURITY.md](SECURITY.md) | Threat model, and what is deliberately not protected |

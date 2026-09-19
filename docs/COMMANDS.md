@@ -129,7 +129,7 @@ Power the COM port separately if you need the dashboard to stay up.
 | Command | Parameters | Notes |
 |---|---|---|
 | `unlock` | `password` **or** `profile`, `ctrl_alt_del`, `force` | Types the password and presses Enter |
-| `lock` | `force` | Sends `GUI+L` |
+| `lock` | `force` | `Win+L` on a PC, `Ctrl+Cmd+Q` on a Mac (see `set_host_os`) |
 | `set_lock_state` | `state` | Tells the board what it should believe |
 | `wiggle` | `mode`, `amplitude`, `interval_ms` | Net-zero cursor jiggle |
 | `wiggle_stop` | — | |
@@ -146,6 +146,29 @@ Power the COM port separately if you need the dashboard to stay up.
 
 There is deliberately **no command that reads a password back**. `unlock` takes a
 slot number and the board does the lookup itself.
+
+### Host OS
+
+The board works out whether it is plugged into a Mac or a PC by toggling Num Lock
+and watching for the host's LED reply — Windows and Linux have a Num Lock and echo
+it, macOS does not. That result steers the lock shortcut, the gesture combos, the
+app-switcher modifier and the dashboard keyboard.
+
+| Command | Parameters | Notes |
+|---|---|---|
+| `set_host_os` | `os` — `mac` \| `windows` \| `linux` \| `auto` | Pins the OS (persisted) or, with `auto`, clears the override and re-runs the probe |
+
+`status` reports the current answer:
+
+```json
+{ "host_os": "mac", "host_os_source": "auto" }
+```
+
+`host_os_source` is `auto` (from the Num Lock probe), `manual` (pinned with
+`set_host_os`) or `pending` (not yet decided). The probe **cannot tell Linux from
+Windows** — both have a Num Lock — so a Linux host reads as `windows` until you
+pin it. A `host_os` event is also pushed to WebSocket clients the moment the probe
+settles, so the dashboard reskins without waiting for its next poll.
 
 ---
 
@@ -296,7 +319,9 @@ carries `"busy":true` rather than disturbing the association.
   "pointer_mode": "relative",
   "gamepad": false,
   "auth_set": true,
-  "pc_state": "unknown"
+  "pc_state": "unknown",
+  "host_os": "mac",
+  "host_os_source": "auto"
 }
 ```
 

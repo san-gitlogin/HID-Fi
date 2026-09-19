@@ -1276,6 +1276,29 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
     <section class="view" id="v-setup">
       <div class="grid">
         <div class="card">
+          <div class="ch"><svg class="ic"><use href="#i-cpu"/></svg><h2>Computer</h2></div>
+          <div class="item"><svg class="ic"><use href="#i-cpu"/></svg>
+            <div class="tx"><b id="osName">Detecting&hellip;</b><span id="osSub">Working out whether this is a Mac or a PC</span></div>
+          </div>
+          <div class="row" id="osSel" style="margin-top:12px">
+            <button class="btn sm" data-os-set="auto">Auto</button>
+            <button class="btn sm" data-os-set="mac">macOS</button>
+            <button class="btn sm" data-os-set="win">Windows</button>
+            <button class="btn sm" data-os-set="linux">Linux</button>
+          </div>
+          <p class="hint" style="margin-top:10px">The board works out whether it is plugged into a Mac or a PC by watching the Num Lock light, and picks the matching lock shortcut, gestures, app switcher and keyboard. Auto lets it decide; the others pin it &mdash; which you need if it called a Linux box Windows, because it cannot tell those two apart on its own.</p>
+
+          <div class="sep"></div>
+          <div class="ch"><svg class="ic"><use href="#i-keyboard"/></svg><h2>Mac setup</h2></div>
+          <p class="hint">First time on a Mac there are two one-off steps. macOS asks to allow the accessory &mdash; choose Allow while the Mac is <b>unlocked</b>, or it cannot connect. Then the Keyboard Setup Assistant asks the board to identify its keyboard. Tap these two, in order, when it asks, instead of hunting for keys on your own keyboard:</p>
+          <div class="row" style="margin-top:12px">
+            <button class="btn sm" id="btnIdZ">1&nbsp;&middot;&nbsp;Key by left Shift</button>
+            <button class="btn sm" id="btnIdSlash">2&nbsp;&middot;&nbsp;Key by right Shift</button>
+          </div>
+          <p class="hint" style="margin-top:10px">The board is a US keyboard, so the answer is always these same two keys. These send exactly what the assistant is waiting for.</p>
+        </div>
+
+        <div class="card">
           <div class="ch"><svg class="ic"><use href="#i-wifi"/></svg><h2>Network</h2></div>
           <dl class="kv2" id="netInfo"></dl>
           <div class="item" id="joinBox" style="display:none;margin-top:12px">
@@ -1462,6 +1485,7 @@ function connect(){
       return;
     }
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source);
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
     if(m.reply==='auth_required'){authOK=false;return askPin();}
     if(m.reply==='lan_locked')return lanLocked();
@@ -1768,25 +1792,44 @@ const S={sens:2.2,acc:1.2,scr:1.5,mom:.9,nat:false,tap:true,hap:true,f3drag:fals
 try{Object.assign(S,JSON.parse(localStorage.getItem('feel')||'{}'));}catch(e){}
 const saveFeel=()=>{try{localStorage.setItem('feel',JSON.stringify(S));}catch(e){}};
 
-const DEF_CFG={
-  quick:[
-    {n:'Mic mute',i:'micoff',t:'key',v:'CTRL+SHIFT+M',tog:1},
-    {n:'Answer',i:'phone',t:'key',v:'F10'},
-    {n:'Hang up',i:'phoneoff',t:'key',v:'F11'},
-    {n:'Display',i:'monitor',t:'key',v:'GUI+P'},
-    {n:'Lock PC',i:'lock',t:'cmd',v:'lock'},
-    {n:'Screenshot',i:'copy',t:'key',v:'GUI+SHIFT+S'}
-  ],
-  knobs:[{n:'Volume',i:'vol',t:'media',up:233,dn:234,step:14,mode:'endless'}]
-};
-let CFG=JSON.parse(JSON.stringify(DEF_CFG));
+// Host OS globals, declared here (not with the rest of the host-OS block lower
+// down) because defCfg() below reads OS the moment CFG is seeded. 'mac'|'win'|'linux'.
+let OS='win';               // the computer's OS
+let OS_SRC='pending';       // 'auto' | 'manual' | 'pending'
+let ASW_MOD='ALT';          // modifier the app switcher holds: ALT on PC, GUI on Mac
+let scOsManual=false;       // user tapped a shortcut OS tab, so stop following the host
+function osTok(s){return s==='mac'?'mac':s==='linux'?'linux':(s==='windows'||s==='win')?'win':'';}
+
+// The default quick actions differ by computer: a Mac mutes Teams with Cmd, grabs
+// a region shot with Cmd+Shift+4, and has Mission Control where Windows has the
+// projector menu. Knobs are media-usage codes, which are OS-neutral. These seed a
+// fresh board only; once you edit or the board has a saved set, that wins.
+function defCfg(){
+  const mac=OS==='mac';
+  return {
+    quick:[
+      {n:'Mic mute',i:'micoff',t:'key',v:mac?'GUI+SHIFT+M':'CTRL+SHIFT+M',tog:1},
+      {n:'Answer',i:'phone',t:'key',v:'F10'},
+      {n:'Hang up',i:'phoneoff',t:'key',v:'F11'},
+      mac?{n:'Mission Control',i:'layers',t:'gesture',v:'task_view'}
+         :{n:'Display',i:'monitor',t:'key',v:'GUI+P'},
+      {n:'Lock PC',i:'lock',t:'cmd',v:'lock'},
+      {n:'Screenshot',i:'copy',t:'key',v:mac?'GUI+SHIFT+4':'GUI+SHIFT+S'}
+    ],
+    knobs:[{n:'Volume',i:'vol',t:'media',up:233,dn:234,step:14,mode:'endless'}]
+  };
+}
+let cfgIsDefault=true;                 // false once the board has a saved set or the user edits
+let CFG=defCfg();
 function loadCfg(){
   send({cmd:'ui_get'},r=>{
-    if(r&&r.data){try{const p=JSON.parse(r.data);if(p&&p.quick&&p.knobs)CFG=p;}catch(e){}}
+    if(r&&r.data){try{const p=JSON.parse(r.data);if(p&&p.quick&&p.knobs){CFG=p;cfgIsDefault=false;}}catch(e){}}
+    if(cfgIsDefault)CFG=defCfg();       // no saved set: seed for whatever OS we know now
     renderQuick();renderKnobs();
   });
 }
 function saveCfg(){
+  cfgIsDefault=false;                   // this is the user's set now, not a per-OS default
   send({cmd:'ui_save',data:JSON.stringify(CFG)},r=>{
     if(r&&r.status==='ok')toast('Saved to board','ok');else toast('Save failed','bad');
   });
@@ -2401,10 +2444,10 @@ function knobEditor(idx){
       opt('media','Media key',k.t==='media')+opt('key','Keyboard combo',k.t==='key')+'</select></div>'+
     '<div class="fld"><label>Turn right</label><select id="kn_up_m">'+
       MEDIA_USAGES.map(m=>opt(m[1],m[0],m[1]==k.up)).join('')+'</select>'+
-      '<input id="kn_up_k" style="margin-top:8px" placeholder="e.g. CTRL+PLUS" value="'+(k.t==='key'?esc(k.up):'')+'"></div>'+
+      '<input id="kn_up_k" style="margin-top:8px" placeholder="e.g. '+(OS==='mac'?'GUI+PLUS':'CTRL+PLUS')+'" value="'+(k.t==='key'?esc(k.up):'')+'"></div>'+
     '<div class="fld"><label>Turn left</label><select id="kn_dn_m">'+
       MEDIA_USAGES.map(m=>opt(m[1],m[0],m[1]==k.dn)).join('')+'</select>'+
-      '<input id="kn_dn_k" style="margin-top:8px" placeholder="e.g. CTRL+MINUS" value="'+(k.t==='key'?esc(k.dn):'')+'"></div>'+
+      '<input id="kn_dn_k" style="margin-top:8px" placeholder="e.g. '+(OS==='mac'?'GUI+MINUS':'CTRL+MINUS')+'" value="'+(k.t==='key'?esc(k.dn):'')+'"></div>'+
     '<div class="fld"><label>Behaviour</label><select id="kn_m">'+
       opt('endless','Endless - like a keyboard volume knob',(k.mode||'endless')==='endless')+
       opt('ranged','Ranged 0 to 100 with end stops',k.mode==='ranged')+'</select>'+
@@ -2476,7 +2519,13 @@ function toggleMute(){
   document.querySelectorAll('[data-md="mute"]').forEach(b=>b.classList.toggle('act',muted));
   return muted;
 }
-const KEY_PRESETS=['CTRL+SHIFT+M','ALT+A','CTRL+D','F4','F7','F10','F11','GUI+P','GUI+SHIFT+S','GUI+L','CTRL+SHIFT+S','CTRL+SHIFT+H'];
+// Suggestions shown in the quick-action editor, tuned to the computer: a Mac gets
+// Cmd-based mute/screenshot/Spotlight, a PC gets the Windows set.
+function keyPresets(){
+  return OS==='mac'
+    ? ['GUI+SHIFT+M','GUI+SHIFT+4','GUI+SHIFT+5','GUI+SPACE','CTRL+UP','GUI+H','GUI+M','GUI+W','F10','F11','CTRL+GUI+Q','GUI+Q']
+    : ['CTRL+SHIFT+M','ALT+A','CTRL+D','F4','F7','F10','F11','GUI+P','GUI+SHIFT+S','GUI+L','CTRL+SHIFT+S','CTRL+SHIFT+H'];
+}
 function quickEditor(idx){
   const isNew=idx<0;
   const q=isNew?{n:'New action',i:'bolt',t:'key',v:'F1'}:CFG.quick[idx];
@@ -2488,8 +2537,10 @@ function quickEditor(idx){
       opt('key','Keyboard combo',q.t==='key')+opt('media','Media key',q.t==='media')+
       opt('gesture','Gesture',q.t==='gesture')+opt('cmd','Board command',q.t==='cmd')+'</select></div>'+
     '<div class="fld"><label>Value</label><input id="q_v" list="q_presets" value="'+esc(q.v)+'">'+
-      '<datalist id="q_presets">'+KEY_PRESETS.map(k=>'<option value="'+k+'">').join('')+'</datalist></div>'+
-    '<p class="hint">Mic mute and call keys vary by laptop and app. Teams uses CTRL+SHIFT+M, Zoom uses ALT+A, and many laptops map them to an F-key.</p>'+
+      '<datalist id="q_presets">'+keyPresets().map(k=>'<option value="'+k+'">').join('')+'</datalist></div>'+
+    '<p class="hint">Mic mute and call keys vary by laptop and app. '+(OS==='mac'
+      ?'Teams on a Mac uses Cmd+Shift+M, Zoom uses Cmd+Shift+A'
+      :'Teams uses CTRL+SHIFT+M, Zoom uses ALT+A')+', and many laptops map them to an F-key.</p>'+
     '<div class="row" style="margin-top:14px">'+
       (isNew?'':'<button class="btn sm bad" id="q_del">'+ico('trash','ic-sm')+'Delete</button>')+
       '<button class="btn sm" id="q_test">Test</button>'+
@@ -2610,9 +2661,11 @@ const KROWS_ABC=[
  {keys:[['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0']]},
  {keys:[['Q','q'],['W','w'],['E','e'],['R','r'],['T','t'],['Y','y'],['U','u'],['I','i'],['O','o'],['P','p']]},
  {keys:[['A','a'],['S','s'],['D','d'],['F','f'],['G','g'],['H','h'],['J','j'],['K','k'],['L','l'],[ico('enter','ic-sm'),'ENTER']]},
- {keys:[['\u21ea','CAPSLOCK','mod'],['Z','z'],['X','x'],['C','c'],['V','v'],['B','b'],['N','n'],['M','m'],
+ // Left Shift flanks Z, the way both a Mac and a PC keyboard place it, so muscle
+ // memory works. Caps moves down to the modifier row - it is far rarer than Shift.
+ {keys:[['\u21e7','#SHIFT','mod'],['Z','z'],['X','x'],['C','c'],['V','v'],['B','b'],['N','n'],['M','m'],
         [ico('up','ic-sm'),'UP'],[ico('bksp','ic-sm'),'BACKSPACE']]},
- {keys:[['123','@sym','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['\u21e7','#SHIFT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
+ {keys:[['123','@sym','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['\u21ea','CAPSLOCK','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
         [ico('left','ic-sm'),'LEFT'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
  {nav:1,keys:[['Tab','TAB'],['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN'],['Del','DELETE'],
         ['Ctrl+C','CTRL+C'],['Ctrl+V','CTRL+V'],['Ctrl+Z','CTRL+Z'],['Alt+Tab','ALT+TAB']]}
@@ -2629,6 +2682,7 @@ const KROWS_SYM=[
         [ico('up','ic-sm'),'UP'],[ico('bksp','ic-sm'),'BACKSPACE']]},
  {keys:[['ABC','@abc','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['\u21e7','#SHIFT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
         [ico('left','ic-sm'),'LEFT'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
+ // (symbol layer keeps Shift in the modifier row - its letter row is punctuation)
  {nav:1,keys:[['\\','\\'],['|','|'],['`','`'],['~','~'],['Tab','TAB'],['Enter','ENTER'],['Del','DELETE'],
         ['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN']]}
 ];
@@ -2663,7 +2717,10 @@ function buildKbdIn(hostId){
   // The double quote has to be escaped for the attribute itself, not just for
   // display, or data-k=""" truncates and that key silently stops working.
   host.innerHTML=rows.map(row=>'<div class="krow'+(row.fn?' fn':'')+(row.nav?' nav':'')+'">'+row.keys.map(k=>
-    '<button class="'+(k[2]||'')+'" data-k="'+esc(k[1]).replace(/"/g,'&quot;')+'">'+k[0]+'</button>').join('')+'</div>').join('');
+    // A modifier's cap is relabelled per computer OS - Alt/Opt, Win/Cmd/Super -
+    // so a Mac user is not hunting for a key called Win. Everything else keeps
+    // the label baked into the row.
+    '<button class="'+(k[2]||'')+'" data-k="'+esc(k[1]).replace(/"/g,'&quot;')+'">'+(modLabel(k[1])||k[0])+'</button>').join('')+'</div>').join('');
 
   // Real down/up per key rather than a click, so two fingers can chord: hold Alt
   // with one and strike Tab with another, exactly like a physical keyboard.
@@ -2870,11 +2927,83 @@ const SC_MOD={
 const SC_KEY={ENTER:'Enter',ESC:'Esc',TAB:'Tab',SPACE:'Space',BACKSPACE:'Backspace',DELETE:'Delete',
   HOME:'Home',END:'End',PAGEUP:'PgUp',PAGEDOWN:'PgDn',UP:'Up',DOWN:'Down',LEFT:'Left',RIGHT:'Right',
   PRINTSCREEN:'PrtSc',PAUSE:'Pause',MENU:'Menu',PLUS:'+',MINUS:'-',EQUALS:'='};
+// ---------------------------------------------------------------------
+//  host OS  (the computer, not the phone)
+// ---------------------------------------------------------------------
+// The board tells us what it is plugged into by watching the Num Lock LED, and
+// reports it as host_os in every status. That one fact drives three things on
+// this side: which modifier the app switcher holds, how the modifier keys are
+// labelled, and - unless you are browsing another - which shortcuts show. The
+// firmware owns the same value for the lock shortcut and the gestures, so the
+// two never disagree. SC_OS below is the *shortcuts* filter and defaults to OS;
+// tapping a shortcut OS tab pins it (scOsManual) so browsing is not fought.
+// (OS, OS_SRC, ASW_MOD, scOsManual and osTok are declared earlier, above defCfg,
+//  because defCfg() reads OS while seeding CFG near the top of the script.)
+// Short cap labels per computer OS. Unicode technical symbols like the ones
+// already used on the keyboard, never emoji (see AGENTS.md).
+const KB_MODLABEL={
+  '#CTRL' :{mac:'Ctrl',win:'Ctrl',linux:'Ctrl'},
+  '#ALT'  :{mac:'Opt', win:'Alt', linux:'Alt'},
+  '#GUI'  :{mac:'Cmd', win:'Win', linux:'Super'},
+  '#SHIFT':{mac:'⇧',win:'⇧',linux:'⇧'}
+};
+function modLabel(dataK){const m=KB_MODLABEL[dataK];return m?(m[OS]||m.win):null;}
+function applyHostOs(os,src){
+  if(src)OS_SRC=src;
+  const n=osTok(os);
+  if(!n||n===OS){paintOsUi();return;}   // 'unknown'/'pending' -> keep what we have
+  OS=n;
+  ASW_MOD=(n==='mac')?'GUI':'ALT';
+  if(!scOsManual){SC_OS=n;if(typeof renderSC==='function')renderSC();}
+  if(typeof buildKbd==='function')buildKbd();
+  // Re-seed the quick actions for the new OS, but only while they are still the
+  // untouched defaults - never overwrite a set the board saved or the user edited.
+  if(typeof cfgIsDefault!=='undefined'&&cfgIsDefault&&typeof defCfg==='function'){
+    CFG=defCfg(); if(typeof renderQuick==='function'){renderQuick();renderKnobs();}
+  }
+  paintGestureLabels();
+  paintOsUi();
+}
+// The trackpad gesture tiles carry the same command on every OS, but their names
+// do not: a Space is a Desktop on Windows, Mission Control is Task View. Relabel
+// them for the detected computer so the tile says what will actually happen.
+const GS_LABEL={
+  task_view:   {mac:'Mission Control',win:'Task view',   linux:'Activities'},
+  desktop_left:{mac:'Space left',      win:'Desktop left', linux:'Workspace left'},
+  desktop_right:{mac:'Space right',    win:'Desktop right',linux:'Workspace right'}
+};
+function paintGestureLabels(){
+  document.querySelectorAll('[data-gs]').forEach(b=>{
+    const m=GS_LABEL[b.dataset.gs]; if(!m)return;
+    const sp=b.querySelector('span'); if(sp)sp.textContent=m[OS]||m.win;
+  });
+}
+// Reflects the current OS and its source in the Settings selector. Safe to call
+// before the Settings markup exists, since an early status can arrive first.
+function paintOsUi(){
+  const sel=document.getElementById('osSel');
+  if(sel)sel.querySelectorAll('[data-os-set]').forEach(b=>
+    b.classList.toggle('on', b.dataset.osSet===(OS_SRC==='manual'?OS:'auto')));
+  const name={mac:'macOS',win:'Windows',linux:'Linux'}[OS]||'Unknown';
+  const nm=document.getElementById('osName');
+  if(nm)nm.textContent=OS_SRC==='pending'?'Detecting…':name;
+  // Ctrl+Alt+Del is Windows-only; on a Mac it does nothing and would break the
+  // unlock flow, so the option is hidden and cleared there.
+  const cad=document.getElementById('tCad');
+  if(cad){cad.style.display=(OS==='mac')?'none':'';if(OS==='mac')cad.classList.remove('on');}
+  const sub=document.getElementById('osSub');
+  if(sub)sub.textContent=OS_SRC==='manual'?'Set by hand'
+    :OS_SRC==='auto'?'Detected from the Num Lock light'
+    :'Working out whether this is a Mac or a PC';
+}
+
 let SC_OS='win';
 try{
   const saved=localStorage.getItem('scos');
-  if(saved&&SC_COL[saved])SC_OS=saved;
+  if(saved&&SC_COL[saved]){SC_OS=saved;scOsManual=true;}   // a pinned browse choice
   else{
+    // Only a first guess from the phone, until the board reports the real
+    // computer OS through host_os and applyHostOs() takes over.
     const ua=navigator.userAgent||'';
     SC_OS=/Mac|iPhone|iPad|iPod/.test(ua)?'mac'
          :(/Linux|X11/.test(ua)&&!/Android/.test(ua))?'linux':'win';
@@ -2953,7 +3082,7 @@ function aswTab(dir){
 function aswOpen(){
   if(ASW.open)return;
   ASW.open=true;ASW.step=1;
-  keyDown('ALT');
+  keyDown(ASW_MOD);          // Alt+Tab on a PC, Cmd+Tab on a Mac
   aswTab(1);
   $('aswN').textContent='1';
   $('asw').classList.add('on');
@@ -2980,7 +3109,7 @@ function aswClose(commit){
   if(!ASW.open)return;
   clearTimeout(ASW.idle);
   if(!commit){keyDown('ESC');keyUp('ESC');}
-  keyUp('TAB');keyUp('SHIFT');keyUp('ALT');
+  keyUp('TAB');keyUp('SHIFT');keyUp(ASW_MOD);keyUp('ALT');keyUp('GUI');
   ASW.open=false;
   $('asw').classList.remove('on');
   buzz(commit?14:6);
@@ -3139,6 +3268,7 @@ function refresh(){
 }
 function applyStatus(d){
   if(!d)return;
+  if(d.host_os)applyHostOs(d.host_os,d.host_os_source);
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
   if(d.auth_set!==undefined)$('authState').textContent=d.auth_set?'On':'Off';
   // Being reachable from a whole network instead of only from radio range is a
@@ -3248,7 +3378,7 @@ const HELP={
  power:['Session',[
   ['unlock','Unlock','Types your PC password as keystrokes. Nothing is typed until you ask for it.'],
   ['shield','Saved PCs','A password saved here lives on the board, so any phone can unlock that machine without retyping it. It is never sent back to this page.'],
-  ['lock','Lock','Sends Win+L. Lock then unlock does both, three seconds apart.'],
+  ['lock','Lock','Sends Win+L on a PC, Ctrl+Cmd+Q on a Mac. Lock then unlock does both, three seconds apart.'],
   ['present','Presenter','Arrow keys and F5, plus B and W for a black or white slide in PowerPoint.'],
   ['clock','Talk timer','Runs in this browser only. It never touches the PC.'],
   ['bolt','Stay awake','Nudges the cursor and puts it straight back, so the net movement is zero and nothing drifts across the screen.']
@@ -3298,9 +3428,21 @@ function bindAll(){
 
   document.querySelectorAll('[data-os]').forEach(b=>b.onclick=()=>{
     SC_OS=b.dataset.os;
+    scOsManual=true;                 // browsing another OS, so stop following the host
     try{localStorage.setItem('scos',SC_OS);}catch(e){}
     renderSC();buzz(8);toast(SC_NAME[SC_OS]+' shortcuts');
   });
+  // The computer's OS lives on the board, so this drives set_host_os and the
+  // reply (or the pushed host_os event) reskins everything through applyHostOs.
+  document.querySelectorAll('#osSel [data-os-set]').forEach(b=>b.onclick=()=>{
+    send({cmd:'set_host_os',os:b.dataset.osSet},r=>{if(r&&r.host_os)applyHostOs(r.host_os,r.host_os_source);});
+    buzz(8);
+    toast(b.dataset.osSet==='auto'?'Detecting the computer':SC_NAME[b.dataset.osSet]||'Set');
+  });
+  // The Keyboard Setup Assistant asks for the key beside each Shift; the board is
+  // a US keyboard so those are always Z and /. These answer it with one tap.
+  if($('btnIdZ'))$('btnIdZ').onclick=()=>{send({cmd:'press',keys:'z'});buzz(10);toast('Sent Z');};
+  if($('btnIdSlash'))$('btnIdSlash').onclick=()=>{send({cmd:'press',keys:'/'});buzz(10);toast('Sent /');};
   $('scq').oninput=renderSC;
   document.querySelectorAll('[data-md]').forEach(b=>b.onclick=()=>{
     if(b.dataset.md==='mute'){toggleMute();buzz(10);return;}
@@ -3373,8 +3515,17 @@ function bindAll(){
 
   $('btnUnlock').onclick=()=>{
     const pw=$('unlockPw').value;if(!pw)return toast('Enter the password','bad');
-    send({cmd:'unlock',password:pw,ctrl_alt_del:$('tCad').classList.contains('on')},r=>{
-      toast(r&&r.reply==='unlock_done'?'Unlock sent':'Already unlocked','ok');refresh();});
+    // The board cannot see the real lock state, so if it wrongly believes the PC
+    // is already unlocked it would refuse. A tap here is a deliberate ask, so on
+    // that reply we offer to type anyway rather than dead-end.
+    const go=force=>send({cmd:'unlock',password:pw,ctrl_alt_del:$('tCad').classList.contains('on'),force:!!force},r=>{
+      if(r&&r.reply==='already_unlocked'){
+        if(confirm('The board thinks this computer is already unlocked. Type the password anyway?'))go(true);
+        return;
+      }
+      toast(r&&r.reply==='unlock_done'?'Unlock sent':'Done','ok');refresh();
+    });
+    go(false);
   };
   $('btnLock').onclick=()=>send({cmd:'lock'},()=>{toast('Locked','ok');refresh();});
   $('btnLockUnlock').onclick=()=>{
@@ -3731,7 +3882,7 @@ document.querySelectorAll('[data-nofill]').forEach(guardAutofill);
 DECK.set((()=>{try{return localStorage.getItem('deck')==='1';}catch(e){return false;}})(),true);
 loadClients();loadStorage();
 bindStick($('stickL'),'l');bindStick($('stickR'),'r');
-renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();
+renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();paintOsUi();paintGestureLabels();
 go(VIEWS.some(v=>v.id===location.hash.replace('#',''))?location.hash.replace('#',''):'pad');
 connect();
 setInterval(()=>{if(wsUp&&!document.hidden)send({cmd:'status'});},8000);
