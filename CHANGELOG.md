@@ -3,21 +3,22 @@
 All notable changes to this project.
 
 The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
-`hid_fi_v3.5`.
+`hid_fi_v3.6`.
 
 ---
 
-## Unreleased
+## v3.6 - 2026-09-19
 
 Making the board painless on a Mac, and honest about which computer it is on.
 
 > Verified on an ESP32-S3 N16R8 against a Mac: Num Lock detection resolves to
 > `mac` about 2.3 s after boot, the manual override persists across a reboot and
 > `auto` re-probes, the gesture/app-switcher/keyboard mappings switch correctly
-> both ways, and `lock` fires `Ctrl+Cmd+Q` on macOS. Still needs a confirming run
-> against a physical Windows PC. Detection is a brief transient: a lock issued in
-> the first few seconds after connecting, before the probe settles, falls back to
-> the PC shortcut — see [docs/MACOS.md](docs/MACOS.md).
+> both ways, `lock` fires `Ctrl+Cmd+Q`, and unlock types the password at the
+> macOS login window. Still needs a confirming run against a physical Windows PC.
+> Detection is a brief transient: a lock issued in the first few seconds after
+> connecting, before the probe settles, falls back to the PC shortcut — see
+> [docs/MACOS.md](docs/MACOS.md).
 
 ### Added
 
@@ -48,19 +49,31 @@ Making the board painless on a Mac, and honest about which computer it is on.
   port under every name macOS gives it — `cu.wchusbserial*` with WCH's driver and
   `cu.usbmodem*` with the built-in one — so it works with no driver installed.
 
+- **OS-aware defaults across the dashboard.** The quick-action seeds, their
+  preset palette, and the trackpad gesture-tile labels all follow the detected
+  computer: a Mac gets Cmd-based mute, a `Cmd+Shift+4` screenshot and a Mission
+  Control tile where Windows has the projector menu, Task View and Desktop tiles.
+  A saved or edited set is never overwritten.
+
 ### Changed
 
-- **The on-screen keyboard follows the computer.** Modifier caps relabel per OS
-  (Alt/Opt, Win/Cmd/Super). A real left **Shift** now flanks Z where Caps used to
-  sit, with Caps moved to the modifier row, so muscle memory works. The 10-column
-  grid, arrow alignment, two-finger chording and every responsive breakpoint are
-  unchanged.
+- **A proper two-Shift keyboard.** Both Shifts now flank the letters — left
+  before Z, right after M — on both the Type tab and the trackpad deck, on both
+  layers. Caps moves to the navigation row and the arrows become one inline
+  cluster. Modifier caps use the platform glyphs on a Mac (⌘ ⌥ ⌃), which also
+  stops "Cmd" clipping to "C…" at phone width. The 10-column grid, two-finger
+  chording and every responsive breakpoint are unchanged.
 - The Shortcuts filter and the app-switcher modifier now follow the detected
   computer OS by default instead of guessing from the phone's browser; tapping a
   shortcut OS tab still pins your own choice.
 
 ### Fixed
 
+- **Unlock did nothing on a Mac.** The wake step pressed Esc, which collapses the
+  macOS login field, so the password typed into nothing. On a Mac it now wakes
+  with a mouse jiggle plus a Shift tap and waits longer for the login window; the
+  Unlock button also offers a forced retry instead of dead-ending on a stale
+  "already unlocked". Ctrl+Alt+Del, which is Windows-only, is hidden on a Mac.
 - **Docs pointed at a folder that does not exist.** Every reference to
   `usb_hid_unlock/` is now `hid_fi/`, the actual sketch folder, and the flashing
   guide's test command points at `tests/` rather than the old path.

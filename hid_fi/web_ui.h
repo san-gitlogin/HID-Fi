@@ -1,5 +1,5 @@
 // ============================================================================
-//  web_ui.h - dashboard served at http://<ip>/  (firmware v3.5)
+//  web_ui.h - dashboard served at http://<ip>/  (firmware v3.6)
 //
 //  Split out of hid_fi.ino so the sketch stays readable.
 //
@@ -894,7 +894,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7 11h3M8.5 9.5v3M15 11h.01M17.5 13h.01"/><path d="M17.4 6H6.6a4.6 4.6 0 0 0-4.5 3.7l-1 5A4.2 4.2 0 0 0 5.2 19c1.2 0 1.9-.6 2.6-1.4L9.2 16h5.6l1.4 1.6c.7.8 1.4 1.4 2.6 1.4a4.2 4.2 0 0 0 4.1-4.3l-1-5A4.6 4.6 0 0 0 17.4 6Z"/></symbol>
 <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></symbol>
 <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></symbol>
-<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.6"/></symbol>
 <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 7.5-1.9"/></symbol>
 <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></symbol>
 <symbol id="i-micoff" viewBox="0 0 24 24"><path d="M9 9v2.5a3 3 0 0 0 4.9 2.3M15 11.4V5.5a3 3 0 0 0-5.6-1.5"/><path d="M5.5 11a6.5 6.5 0 0 0 9.8 5.6M18.5 11v.6M12 17.5V21M8.5 21h7M3 3l18 18"/></symbol>
@@ -2661,13 +2661,16 @@ const KROWS_ABC=[
  {keys:[['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0']]},
  {keys:[['Q','q'],['W','w'],['E','e'],['R','r'],['T','t'],['Y','y'],['U','u'],['I','i'],['O','o'],['P','p']]},
  {keys:[['A','a'],['S','s'],['D','d'],['F','f'],['G','g'],['H','h'],['J','j'],['K','k'],['L','l'],[ico('enter','ic-sm'),'ENTER']]},
- // Left Shift flanks Z, the way both a Mac and a PC keyboard place it, so muscle
- // memory works. Caps moves down to the modifier row - it is far rarer than Shift.
+ // Both Shifts flank the letters, left before Z and right after M, the way every
+ // real keyboard places them. Backspace sits at the far right. The four arrows
+ // move down to the modifier row as one inline cluster; Caps, far rarer, goes to
+ // the navigation row. (Up no longer sits above Down - a right Shift is worth more
+ // on a keyboard than that alignment was.)
  {keys:[['\u21e7','#SHIFT','mod'],['Z','z'],['X','x'],['C','c'],['V','v'],['B','b'],['N','n'],['M','m'],
-        [ico('up','ic-sm'),'UP'],[ico('bksp','ic-sm'),'BACKSPACE']]},
- {keys:[['123','@sym','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['\u21ea','CAPSLOCK','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
-        [ico('left','ic-sm'),'LEFT'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
- {nav:1,keys:[['Tab','TAB'],['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN'],['Del','DELETE'],
+        ['\u21e7','#SHIFT','mod'],[ico('bksp','ic-sm'),'BACKSPACE']]},
+ {keys:[['123','@sym','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
+        [ico('left','ic-sm'),'LEFT'],[ico('up','ic-sm'),'UP'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
+ {nav:1,keys:[['\u21ea','CAPSLOCK'],['Tab','TAB'],['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN'],['Del','DELETE'],
         ['Ctrl+C','CTRL+C'],['Ctrl+V','CTRL+V'],['Ctrl+Z','CTRL+Z'],['Alt+Tab','ALT+TAB']]}
 ];
 // Every printable ASCII symbol is reachable here. Nothing outside ASCII is
@@ -2679,10 +2682,10 @@ const KROWS_SYM=[
  {keys:[['!','!'],['@','@'],['#','#'],['$','$'],['%','%'],['^','^'],['&amp;','&'],['*','*'],['(','('],[')',')']]},
  {keys:[['-','-'],['_','_'],['=','='],['+','+'],['[','['],[']',']'],['{','{'],['}','}'],['&lt;','<'],['&gt;','>']]},
  {keys:[[';',';'],[':',':'],['&#39;',"'"],['&quot;','"'],[',',','],['.','.'],['/','/'],['?','?'],
-        [ico('up','ic-sm'),'UP'],[ico('bksp','ic-sm'),'BACKSPACE']]},
- {keys:[['ABC','@abc','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['\u21e7','#SHIFT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
-        [ico('left','ic-sm'),'LEFT'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
- // (symbol layer keeps Shift in the modifier row - its letter row is punctuation)
+        ['\u21e7','#SHIFT','mod'],[ico('bksp','ic-sm'),'BACKSPACE']]},
+ {keys:[['ABC','@abc','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
+        [ico('left','ic-sm'),'LEFT'],[ico('up','ic-sm'),'UP'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
+ // Same shape as the letter layer: a Shift by the punctuation, arrows inline below.
  {nav:1,keys:[['\\','\\'],['|','|'],['`','`'],['~','~'],['Tab','TAB'],['Enter','ENTER'],['Del','DELETE'],
         ['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN']]}
 ];
@@ -2941,11 +2944,14 @@ const SC_KEY={ENTER:'Enter',ESC:'Esc',TAB:'Tab',SPACE:'Space',BACKSPACE:'Backspa
 //  because defCfg() reads OS while seeding CFG near the top of the script.)
 // Short cap labels per computer OS. Unicode technical symbols like the ones
 // already used on the keyboard, never emoji (see AGENTS.md).
+// Mac uses its own key glyphs, which is both what a Mac user reads and narrow
+// enough that a phone-width key never clips "Cmd" to "C...". PC labels stay as
+// short words; Super gets the diamond glyph so it fits like the rest.
 const KB_MODLABEL={
-  '#CTRL' :{mac:'Ctrl',win:'Ctrl',linux:'Ctrl'},
-  '#ALT'  :{mac:'Opt', win:'Alt', linux:'Alt'},
-  '#GUI'  :{mac:'Cmd', win:'Win', linux:'Super'},
-  '#SHIFT':{mac:'⇧',win:'⇧',linux:'⇧'}
+  '#CTRL' :{mac:'⌃',win:'Ctrl',linux:'Ctrl'},   // ⌃
+  '#ALT'  :{mac:'⌥',win:'Alt', linux:'Alt'},     // ⌥
+  '#GUI'  :{mac:'⌘',win:'Win', linux:'◆'},  // ⌘  /  ◆ (Super)
+  '#SHIFT':{mac:'⇧',win:'⇧',linux:'⇧'} // ⇧
 };
 function modLabel(dataK){const m=KB_MODLABEL[dataK];return m?(m[OS]||m.win):null;}
 function applyHostOs(os,src){

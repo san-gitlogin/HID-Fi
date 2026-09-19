@@ -279,7 +279,7 @@ result.
 
 [tests/test_v34_features.py](tests/test_v34_features.py) checks that:
 
-- the firmware identifies as v3.5 and HID is ready;
+- the firmware identifies as v3.6 and HID is ready;
 - large movement is accepted and can be reversed;
 - horizontal pan works;
 - volume down and volume up form a reversible pair;

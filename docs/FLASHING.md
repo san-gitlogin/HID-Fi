@@ -1,6 +1,6 @@
 # Flashing the ESP32-S3 USB-HID firmware
 
-Firmware **hid_fi_v3.5** — USB HID keyboard, trackpad mouse, media and system
+Firmware **hid_fi_v3.6** — USB HID keyboard, trackpad mouse, media and system
 control, gamepad, and a WiFi dashboard served off the board itself.
 
 **ESP32-S3 only, and tested on one board: the ESP32-S3 N16R8.** The firmware needs the S3's native USB peripheral to be a
@@ -26,7 +26,7 @@ firmware, then asks the board what it is running and prints the answer. Expect:
 == Flashing COM13
    Flashed COM13
 == Verifying COM13
-   Running hid_fi_v3.5, USB HID ready
+   Running hid_fi_v3.6, USB HID ready
    Dashboard: connect to WiFi 'ESP32-HID-09F7C8' (password hid12345) then open http://192.168.4.1/
    Done.
 ```
@@ -72,6 +72,106 @@ misbehaves, unplug **USB** and try again.
 
 > The **USB-OTG pads** on the underside of the board must be bridged with solder, or the
 > USB port will never enumerate as a keyboard. This is a one-time hardware step.
+
+---
+
+## Install the tools (first time only)
+
+Never flashed an ESP board before? This is everything, from nothing. You install
+these on the computer you flash **from** — it is a one-time setup, and then
+flashing is a single command forever after.
+
+### 1. Install `arduino-cli`
+
+This is the tool that builds and flashes the firmware.
+
+**macOS** (using [Homebrew](https://brew.sh)):
+
+```bash
+brew install arduino-cli
+```
+
+**Windows** (using winget, or download the installer from
+[arduino.github.io/arduino-cli](https://arduino.github.io/arduino-cli/latest/installation/)):
+
+```powershell
+winget install ArduinoSA.CLI
+```
+
+**Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+```
+
+Check it worked: `arduino-cli version` should print a version number.
+
+### 2. Install the ESP32 board support and two libraries
+
+```bash
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+arduino-cli lib install ArduinoJson
+arduino-cli lib install WebSockets
+```
+
+The first line downloads the list of boards; the second downloads the ESP32
+compiler and tools, which is about **1 GB and takes a few minutes** — this only
+happens once. `esptool`, the actual flashing program, comes inside that download,
+so there is nothing else to install.
+
+### 3. Install the USB-serial driver
+
+The board talks to your computer through a **CH343** serial chip. It needs a
+driver on Windows, and usually none elsewhere.
+
+| Platform | What to do | How the board then appears |
+|---|---|---|
+| **Windows** | Install the CH343 driver from [wch-ic.com](https://www.wch-ic.com/downloads/CH343SER_EXE.html), then replug | `USB-Enhanced-SERIAL CH343 (COMx)` |
+| **macOS** | Usually nothing. If no port appears, install [WCH's macOS driver](https://www.wch-ic.com/downloads/CH343SER_MAC_ZIP.html) | `/dev/cu.usbmodem…` or `/dev/cu.wchusbserial…` |
+| **Linux** | Built in. If you get a permission error, run `sudo usermod -aG dialout $USER` and log out and back in | `/dev/ttyUSB0` or `/dev/ttyACM0` |
+
+### 4. Get the code
+
+```bash
+git clone https://github.com/san-gitlogin/HID-Fi
+cd HID-Fi
+```
+
+### 5. Flash it
+
+Plug the cable into the board's **COM** port, then:
+
+```powershell
+.\flash_esp.ps1 -Compile      # Windows
+```
+
+```bash
+./flash_esp.sh -c             # macOS / Linux
+```
+
+`-Compile` / `-c` means "build from source first". After the first build you can
+drop it and just run `.\flash_esp.ps1` or `./flash_esp.sh` to reflash faster.
+
+**What you should see** — the script finds the board, writes four partitions, and
+reads the board back:
+
+```
+== Flashing COM13
+   Flashed COM13
+== Verifying COM13
+   Running hid_fi_v3.6, USB HID ready
+   Host OS: mac (auto)
+   Dashboard: join WiFi 'ESP32-HID-09F7C8' then open http://192.168.4.1/
+== Done.
+```
+
+If you see `Running hid_fi_v3.6, USB HID ready`, it worked. Now plug the **USB**
+port into the computer you want to control, connect your phone to the WiFi network
+it names, and open <http://192.168.4.1/>. On a Mac, do the
+[one-time setup steps](MACOS.md) the first time.
+
+If something goes wrong, jump to [When it goes wrong](#when-it-goes-wrong) below.
 
 ---
 

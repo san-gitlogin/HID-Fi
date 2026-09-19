@@ -82,12 +82,12 @@ def main():
             time.sleep(0.05)
 
     results = []
-    print(f"\nVerifying v3.5 on {port}\n" + "=" * 60)
+    print(f"\nVerifying v3.6 on {port}\n" + "=" * 60)
 
     print("\n-- identity --")
     st = send(ser, {"cmd": "status"})
-    results.append(check(ser, "status is v3.5", {"cmd": "status"},
-                         "status", {"firmware": "hid_fi_v3.5", "hid_ready": True}))
+    results.append(check(ser, "status is v3.6", {"cmd": "status"},
+                         "status", {"firmware": "hid_fi_v3.6", "hid_ready": True}))
     gamepad_on = bool(st and st.get("gamepad"))
     absolute = bool(st and st.get("pointer_mode") == "absolute")
     print(f"  (board state: gamepad={'on' if gamepad_on else 'off'}, "

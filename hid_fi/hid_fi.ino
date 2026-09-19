@@ -1,6 +1,6 @@
 /*
   ============================================================================
-  HID-Fi v3.5 — USB HID trackpad + remote + WiFi dashboard
+  HID-Fi v3.6 — USB HID trackpad + remote + WiFi dashboard
 
   Board:  ESP32-S3-N16R8 (YD-ESP32-S3, 16MB Flash, 8MB PSRAM)
 
@@ -248,7 +248,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v3.5"
+#define  FW_VERSION "hid_fi_v3.6"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -525,7 +525,7 @@ void setup() {
     
     COM_SERIAL.println();
     COM_SERIAL.println("========================================");
-    COM_SERIAL.println("HID-Fi v3.5 — ESP32-S3 USB HID + WiFi");
+    COM_SERIAL.println("HID-Fi v3.6 — ESP32-S3 USB HID + WiFi");
     COM_SERIAL.println("========================================");
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = false;

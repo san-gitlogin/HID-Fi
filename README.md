@@ -37,12 +37,14 @@ no rights to install anything on.
 ## Contents
 
 - [What it does](#what-it-does)
+- [The dashboard](#the-dashboard)
 - [What you need](#what-you-need)
 - [The two USB ports are not interchangeable](#the-two-usb-ports-are-not-interchangeable)
 - [Quick start](#quick-start)
 - [Change the password first](#change-the-password-first)
 - [How it works](#how-it-works)
 - [Documentation](#documentation)
+- [FAQ](#faq)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -70,6 +72,36 @@ than a flick.
 
 Everything you customise — knobs, quick actions, macros, saved PCs — is stored
 **on the board**, so every phone that opens the dashboard sees the same setup.
+
+---
+
+## The dashboard
+
+It runs in your phone's browser, served from the board itself — nothing to
+install. It adapts to the computer it is plugged into and works out which on its
+own: a Mac gets Mac keys, shortcuts and gestures, a PC gets Windows ones.
+
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/assets/screens/hero-keyboard.png" width="300" alt="On-screen keyboard with both Shift keys and Mac modifier glyphs, detected automatically"></td>
+<td width="50%" align="center"><img src="docs/assets/screens/hero-settings.png" width="300" alt="Automatic Mac or PC detection, and one-tap macOS keyboard setup"></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center" width="25%"><img src="docs/assets/screens/01-trackpad.png" width="180" alt="Trackpad"><br><b>Trackpad</b><br><sub>Move, tap, two-finger scroll, pinch, three-finger gestures</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/02-keyboard.png" width="180" alt="Keyboard"><br><b>Keyboard</b><br><sub>Full keyboard, both Shifts, Mac or PC keys</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/03-shortcuts.png" width="180" alt="Shortcuts"><br><b>Shortcuts</b><br><sub>Hundreds, filtered to your OS</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/04-media.png" width="180" alt="Media"><br><b>Media</b><br><sub>Volume knobs, playback, quick actions</sub></td>
+</tr>
+<tr>
+<td align="center" width="25%"><img src="docs/assets/screens/05-gamepad.png" width="180" alt="Gamepad"><br><b>Gamepad</b><br><sub>Two sticks, D-pad, twelve buttons</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/06-session.png" width="180" alt="Session"><br><b>Session</b><br><sub>Unlock, lock, sleep, wake, presenter</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/07-settings.png" width="180" alt="Settings"><br><b>Settings</b><br><sub>Auto-detects Mac/PC, network, access PIN</sub></td>
+<td align="center" width="25%"></td>
+</tr>
+</table>
 
 ---
 
@@ -117,6 +149,10 @@ certainly still on the COM port. Full detail in
 ---
 
 ## Quick start
+
+> **Never flashed an ESP board before?** [docs/FLASHING.md](docs/FLASHING.md#install-the-tools-first-time-only)
+> walks you through installing the tools from zero — `arduino-cli`, the ESP32
+> support, the USB driver — and cloning this repo, all step by step.
 
 **1. Flash it**, with the board on its **COM** port:
 
@@ -262,6 +298,53 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |
 | [SECURITY.md](SECURITY.md) | Threat model, and what is deliberately not protected |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing, and the constraints that will bite you |
+
+---
+
+## FAQ
+
+**Does the computer need any software, drivers or admin rights?**
+No. The board is a standard USB HID keyboard and mouse, so the host uses the
+drivers it already has. That is why it works on the lock screen, in the BIOS, and
+on machines you cannot install anything on.
+
+**Does it work with a Mac?**
+Yes. It detects a Mac automatically (by watching the Num Lock light) and switches
+the lock shortcut, gestures, app switcher and keyboard to match. There are two
+one-time Mac setup steps the first time you plug in — see [docs/MACOS.md](docs/MACOS.md).
+
+**Windows too?**
+Yes, and it is plug-and-play there. Everything that changes for a Mac stays as
+Windows expects when it detects a PC. You can also pin the OS by hand in
+**Settings → Computer**.
+
+**It flashed fine, but the computer never sees a keyboard.**
+You are almost certainly still on the **COM** port. Flash over COM, then plug the
+**USB** port into the computer you want to control. A charge-only cable does the
+same thing — use a data cable. See [the two USB ports](#the-two-usb-ports-are-not-interchangeable).
+
+**Can the board read my screen, or tell if the PC is locked?**
+No. HID is one-way: the board only sends input, it can never read the host back.
+Anything the dashboard shows about the computer — volume, mute, lock state — is
+what it *believes* it set, not what it observed.
+
+**Is it secure?**
+Out of the box, no — every board ships with the same access-point password.
+Change it and set a 4-digit PIN, both in Settings, before using it for anything
+that matters. See [SECURITY.md](SECURITY.md).
+
+**My keyboard isn't a US layout — will passwords type correctly?**
+Not yet. The board types US-layout ASCII, so symbols and passwords come out wrong
+on other layouts. This is the most valuable open problem in the project.
+
+**Will it work on an ESP32 board I already have?**
+Only the ESP32-S3 N16R8 has been tested. Being a keyboard needs the S3's native
+USB peripheral, which the original ESP32 and the C3/C6/H2 do not have. See
+[docs/HARDWARE.md](docs/HARDWARE.md).
+
+**Where are my settings kept, and do they survive a firmware upgrade?**
+On the board, in NVS. A normal flash writes only the firmware and leaves them
+alone; only a full erase clears them.
 
 ---
 
