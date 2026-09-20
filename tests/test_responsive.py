@@ -186,10 +186,57 @@ PROBE = r"""
     });
   };
 
+  // A keyboard that is on screen must be able to type. Not "nothing overflows" --
+  // actually reachable. A whole row once vanished because a :nth-child rule
+  // followed the row order rather than the row, and the digits row was hidden on
+  // short screens even on layouts that have no 123 layer to reach them from.
+  //
+  // Layer switches count: a key on the 123 layer is reachable. KLAYER is flipped
+  // directly rather than by clicking, because a click rebuilds every keyboard at
+  // once and the button to click back is gone by the time it is needed.
+  const BASIC = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('')
+      .concat(['ENTER','BACKSPACE','SPACE','TAB',
+               'UP','DOWN','LEFT','RIGHT','#SHIFT','#CTRL','#ALT','#GUI',
+               '-','=','[',']','\\',';',"'",',','.','/','`']);
+  // The deck is a companion inside the trackpad card and cannot afford the
+  // function row; Esc is one tap away on the Type tab, which must have it.
+  const NEEDS = {kbd: BASIC.concat(['ESC']), kbd2: BASIC};
+
+  const keysIn = k => {
+    const out = new Set();
+    k.querySelectorAll('button[data-k]').forEach(b => {
+      if (visible(b)) out.add(b.dataset.k);
+    });
+    return out;
+  };
+
+  const scanComplete = where => {
+    document.querySelectorAll('.kbd').forEach(k => {
+      if (!visible(k)) return;
+      const need = NEEDS[k.id];
+      if (!need) return;
+      const have = keysIn(k);
+      if (have.size < 5) return;                  // not a real keyboard
+      if (typeof KLAYER !== 'undefined' && typeof buildKbd === 'function') {
+        const was = KLAYER;
+        KLAYER = (was === 'abc') ? 'sym' : 'abc';
+        buildKbd();
+        keysIn(k).forEach(x => have.add(x));
+        KLAYER = was;
+        buildKbd();
+      }
+      const missing = need.filter(c => !have.has(c));
+      if (missing.length)
+        bad.push(where + ': keyboard #' + k.id + ' cannot reach ' +
+                 missing.join(' '));
+    });
+  };
+
   for (const v of views) {
     go(v);
     scanOverflow(v);
     scanClipped(v);
+    scanComplete(v);
   }
   go('pad');
 
@@ -229,6 +276,7 @@ PROBE = r"""
 
   scanOverflow('pad+deck');
   scanClipped('pad+deck');
+  scanComplete('pad+deck');
 
   // Short screens drop the digits row on purpose, so only measure what is shown.
   const keys = [...deck.querySelectorAll('.krow:not(.fn):not(.nav) button')]
@@ -283,6 +331,20 @@ FS_PROBE = r"""
     if (r.width > 0 && b.scrollWidth > r.width + 1)
       bad.push('fullscreen: key "' + b.dataset.k + '" clipped');
   });
+  // Fullscreen is the case with the most room, so a letter missing here is never
+  // a space problem -- it is a rule deleting the wrong row.
+  {
+    const have = new Set();
+    document.querySelectorAll('.padwrap .kbd button[data-k]').forEach(b => {
+      if (b.getBoundingClientRect().width > 0 && /^[a-z]$/.test(b.dataset.k))
+        have.add(b.dataset.k);
+    });
+    if (have.size) {
+      const missing = 'abcdefghijklmnopqrstuvwxyz'.split('').filter(c => !have.has(c));
+      if (missing.length)
+        bad.push('fullscreen: keyboard is missing letters ' + missing.join(''));
+    }
+  }
   document.getElementById('btnFsExitTop').click();
   if (getComputedStyle(deck).display !== 'none') btn.click();
   return bad;

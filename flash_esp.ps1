@@ -54,6 +54,26 @@ function Ok   ($m) { Write-Host "   $m" -ForegroundColor Green }
 function Warn ($m) { Write-Host "   $m" -ForegroundColor Yellow }
 function Bad  ($m) { Write-Host "   $m" -ForegroundColor Red }
 
+# Run a native tool, show its output, and return its exit code.
+#
+# esptool and arduino-cli both write progress to stderr. Merging that with 2>&1
+# while $ErrorActionPreference is 'Stop' makes PowerShell treat the first such
+# line as a *terminating* NativeCommandError - which killed the flash partway
+# through "Uploading stub flasher", after a successful build, with nothing
+# written to the board. Relax the preference around the call and judge the tool
+# by its exit code, which is the only thing that actually reports failure.
+function Invoke-Native {
+    param([string]$Exe, [string[]]$Arguments)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Exe @Arguments 2>&1 | Out-Host
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 # ---------------------------------------------------------------- tools
 # esptool ships inside the ESP32 core, so a fresh machine needs no pip install.
 function Find-Esptool {
@@ -121,8 +141,8 @@ function Invoke-Compile {
     }
     Step "Building firmware"
     Say  "   $cli"
-    & $cli compile --fqbn $fqbn --output-dir $build $sketch 2>&1 | Out-Host
-    if ($LASTEXITCODE -ne 0) {
+    $code = Invoke-Native $cli @('compile', '--fqbn', $fqbn, '--output-dir', $build, $sketch)
+    if ($code -ne 0) {
         Bad 'Compile failed. The output above says why.'
         Say '   Missing libraries? Run:'
         Say '     arduino-cli lib install ArduinoJson'
@@ -143,17 +163,17 @@ function Invoke-Flash([string]$p, $tool, [string]$bootApp0) {
     $args = @('--chip', 'esp32s3', '--port', $p, '--baud', '921600')
     if ($Erase) {
         Warn 'Erasing the whole chip - saved WiFi, PIN and custom controls will be lost.'
-        $eargs = $args + @('erase-flash')        # Out-Host, or esptool's stdout becomes part of this function's return value
-        if ($tool.Kind -eq 'exe') { & $tool.Path @eargs 2>&1 | Out-Host } else { & $tool.Path -m esptool @eargs 2>&1 | Out-Host }
-        if ($LASTEXITCODE -ne 0) { Bad "Erase failed on $p"; return $false }
+        $eargs = $args + @('erase-flash')
+        if ($tool.Kind -ne 'exe') { $eargs = @('-m', 'esptool') + $eargs }
+        if ((Invoke-Native $tool.Path $eargs) -ne 0) { Bad "Erase failed on $p"; return $false }
     }
 
     $args += @('write-flash', '--flash-mode', 'dio', '--flash-freq', '80m', '--flash-size', '16MB')
     foreach ($part in $parts) { $args += @($part.At, $part.File) }
+    if ($tool.Kind -ne 'exe') { $args = @('-m', 'esptool') + $args }
 
     Say "   writing 4 partitions to $p"
-    if ($tool.Kind -eq 'exe') { & $tool.Path @args 2>&1 | Out-Host } else { & $tool.Path -m esptool @args 2>&1 | Out-Host }
-    $code = $LASTEXITCODE
+    $code = Invoke-Native $tool.Path $args
 
     if ($code -ne 0) {
         Bad "Flash failed on $p."

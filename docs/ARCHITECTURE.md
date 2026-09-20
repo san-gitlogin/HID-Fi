@@ -97,6 +97,160 @@ New features should stay honest about this rather than inventing state.
 
 ---
 
+## Telling a Mac from a PC
+
+There is one exception to "HID is one way": during enumeration the host reads the
+device's descriptors and sends it a handful of control requests, and *how* it
+does that differs by operating system. That is read passively.
+
+| Signal | Windows | macOS | Linux |
+|---|---|---|---|
+| Re-reads a string descriptor index back to back | rarely — 2 of 11, measured | **as a habit** — the discriminator | rarely |
+| `SET_IDLE` | sends | **also sends** — does not discriminate | sends |
+| `SET_PROTOCOL` | sends | sends | sends |
+| Unsolicited LED report at enumeration | sends | only on a Caps Lock change | sends |
+
+**The discriminator is the shape of the host's string-descriptor reads.** macOS
+asks for a string twice — two bytes first to learn its length, then the whole
+thing — so the same index arrives back to back, for string after string. Windows
+does it occasionally: measured on Windows 11 against this board, 11 string
+requests of which 2 were repeats. So the verdict is a **ratio** — at least three
+repeats, and repeats being at least half the requests — not a count. This is the
+signal keyboardio's FingerprintUSBHost found and QMK's `os_detection` ships;
+there it is read off the setup packet's `wLength`, which the Arduino layer does
+not expose, so the back-to-back repeat stands in as the same evidence.
+
+Reading it means owning `tud_descriptor_string_cb()`. The core defines it
+`__attribute__((weak))` in `esp32-hal-tinyusb.c`, so the firmware's definition
+replaces it at link time and has to rebuild the descriptor itself — the core's
+string table is file-static. The strings come back out of the `USB` object, the
+same place the core got them, so the board enumerates byte for byte as before and
+the host does not see a new device.
+
+> An earlier build shipped assuming macOS does not send `SET_IDLE`. Measured on a real Mac,
+> it does, so every Mac was reported as Windows. `SET_IDLE` is still counted —
+> it is evidence a host is there — but it no longer decides anything.
+
+`SET_PROTOCOL` only means "a host is enumerating us" and opens a 3 s window.
+Both arrive as `ARDUINO_USB_HID_*` events from the core, counted in
+`usbHidCtrlCb()`.
+
+Three properties matter more than the mechanism:
+
+- **Nothing is typed.** The previous design tapped Num Lock and timed the LED
+  reply. It changed state on the user's computer, its macOS branch never undid
+  the toggle it had caused, and a host slower than the 800 ms window was both
+  misread as a Mac and left with Num Lock on.
+- **It re-arms when the bus drops**, so moving the board between computers is
+  picked up without a reboot. `hostOsDetected` is deliberately *not* cleared on
+  unmount — holding the last answer means a momentary glitch does not blank the
+  UI, while a real move replaces it seconds later.
+- **It can say "I do not know".** A host that enumerates but sends nothing
+  recognisable yields `undetermined`, and the dashboard asks the user to pick.
+  The old probe had no such state and would sit on "Detecting…" indefinitely.
+  This matters more than it sounds: Windows caches string descriptors per device,
+  so a PC that already knows this board may say almost nothing on a replug.
+  Guessing from silence is exactly what made the first attempt call every Mac a PC.
+
+A settled verdict is never revised by later traffic — only a new enumeration
+replaces it. A Caps Lock LED report or a Device Manager refresh is not a host
+changing its mind, and treating it as one would let a settled answer drift.
+
+`status` carries the raw counters (`usb_str_reqs`, `usb_str_rereads`,
+`usb_str_seq`, `usb_set_idle`, `usb_ctrl_reqs`, `usb_led_reports`,
+`detect_phase`) so a disagreement can be settled by reading numbers instead of
+re-arguing the design.
+
+**Linux is indistinguishable from Windows** this way, and reads as `windows`
+until pinned. `host_os_detected` is reported next to `host_os` so the dashboard
+can flag a manual pin that no longer matches the attached computer.
+
+> Do **not** switch this to the MS OS string descriptor at index `0xEE`. Only
+> Windows requests it, which looks ideal, but Windows caches the outcome per
+> VID/PID/bcdDevice under `HKLM\SYSTEM\CurrentControlSet\Control\usbflags` and
+> never asks again — verified on a development PC where this board was already
+> recorded `osvc=00 00`. It would work once per machine, then fail permanently.
+
+---
+
+## The keyboard grows by blocks
+
+A physical keyboard does not shrink its keys as the board gets smaller — it drops
+whole blocks. A 60% has no arrows, a 65% adds them, a 75% adds the function row,
+a TKL adds the navigation cluster and a full-size adds the numpad. The dashboard
+does the same, so a wide screen gets *more keys* rather than the same few keys
+stretched across it.
+
+| Tier | Container width | Blocks | Keys |
+|---|---|---|---|
+| `compact` | under 500px | main only, 12 columns, `123` symbol layer | 77 |
+| `ansi` | 500px+ | function row + main (ANSI) + nav and arrow cluster | 83 |
+| `tkl` | 1010px+ | + the full navigation cluster (PrtSc/ScrLk/Pause) | 87 |
+| `full` | 1300px+ | + numpad | 104 |
+
+The tier is chosen from the **keyboard's measured width**, not the window's,
+because the deck inside the trackpad card is far narrower than the page it sits
+on. `KB_TIERS` holds the thresholds.
+
+### Every tier keeps every key of the tier below it
+
+This is the rule that shapes the ladder, and it was learned by breaking it.
+Moving *up* a tier must never take a key away, because a wider screen offering
+fewer keys is indefensible.
+
+There used to be a separate `fn` tier that added the function row at 790px, which
+meant `Esc` and `F1`–`F12` existed on a phone, vanished between 500px and 790px,
+and came back on a laptop. The function row is now part of `ansi`, so it is
+present at every tier. For the same reason the 65% right-hand column carries
+`Del`/`Home`/`End` and `Ins`/`PgUp`/`PgDn` — the compact layout reaches those
+through its nav row, so the tier above it has to as well.
+
+A row may only be hidden for lack of space if the keys on it are reachable some
+other way. The compact layout can hide its digits row because the `123` layer
+still reaches the digits; the ANSI layouts cannot, because they have no `123`
+layer. `tests/test_responsive.py` enforces this directly: at every viewport it
+checks that a visible keyboard can actually reach the letters, the digits, the
+punctuation, the arrows and the modifiers, unioned across layers.
+
+### Blocks have to divide the same height the same way
+
+The blocks sit side by side in a flex row and each divides the deck's height
+among its own rows. If one block has six rows while another has five, their rows
+are different heights and the arrow cluster stops lining up with the main block.
+
+So every block carries the *same number of rows*, and the row that pairs with the
+function row is tagged `fn` in all of them — a spacer in the numpad and the nav
+cluster, the real thing in the main block. The deck hides `.krow.fn`, and because
+all three blocks lose exactly one row, they stay aligned.
+
+### Why 60 columns
+
+ANSI is exactly 15u wide, so a 60 column grid makes 1u four columns — and then
+every real key width is a whole number: 1.25u = 5, 1.5u = 6, 1.75u = 7, 2u = 8,
+2.25u = 9, 2.75u = 11, 6.25u = 25. Every ANSI row sums to exactly 60. That is
+what makes the rows authentic rather than approximated, and it is why key widths
+in the layout tables are written in quarter-units.
+
+The three blocks are flexed **15 : 3 : 4** — the real proportions of the main
+block, the nav cluster and the numpad — so one key is the same width in all
+three and they read as one keyboard.
+
+### Two things that bite
+
+- **A rebuild drops every listener.** The tier is re-evaluated on resize but the
+  keyboard is only rebuilt when it actually *changes*, and the latched modifiers
+  are re-lit afterwards.
+- **`ResizeObserver` fires a frame late.** Anything that reveals the keyboard —
+  opening the trackpad deck, entering or leaving fullscreen — must call
+  `buildKbdIn()` itself, or the first painted frame uses the previous tier. At a
+  narrow width that meant ANSI keys squeezed to 15px.
+
+The deck is capped at `ansi` while it lives in the trackpad card, because there
+it only gets that card's height. In fullscreen it has the whole screen and the
+cap is lifted, which is the case worth testing whenever this code changes.
+
+---
+
 ## Storage
 
 Settings live in ESP32 NVS across three namespaces:

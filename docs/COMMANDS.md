@@ -68,6 +68,12 @@ report unknown keys. `key_down` does validate and will return an error.
 | Function | `F1`–`F12` |
 | System | `PRINTSCREEN` (`PRTSC`) `MENU` (`APPS`) `PAUSE` `SCROLLLOCK` `NUMLOCK` |
 | Symbols | `PLUS` `MINUS` `EQUALS` |
+| Keypad | `KP0`–`KP9` `KPDOT` `KPPLUS` `KPMINUS` `KPSTAR` `KPSLASH` `KPENTER` |
+
+> The keypad names send the **keypad** HID usages, which are different keys from
+> the number row. Applications that tell them apart — spreadsheets, CAD, games
+> bound to keypad keys — see the difference. A single character like `"5"` always
+> means the top-row digit.
 
 > The board types **US-layout ASCII**. On other keyboard layouts symbols and
 > passwords will come out wrong. This is the most valuable open problem in the
@@ -140,35 +146,134 @@ Power the COM port separately if you need the dashboard to stay up.
 
 | Command | Parameters | Notes |
 |---|---|---|
-| `pc_save` | `name`, `password`, `slot` | **Refused unless an access PIN is set** |
-| `pc_list` | — | Returns **names only**, never passwords |
+| `pc_save` | `name`, `password`, `slot`, `os` | **Refused unless an access PIN is set** |
+| `pc_list` | — | Returns **names and OS only**, never passwords |
 | `pc_delete` | `slot` | |
 
 There is deliberately **no command that reads a password back**. `unlock` takes a
 slot number and the board does the lookup itself.
 
-### Host OS
+> A **macro is not a secret store.** `macro_get` returns every step verbatim so
+> the dashboard can edit them, and it is ungated over serial — a `type` step
+> holding your password is readable by anyone with the cable. Use a PC slot or
+> the password vault instead. See [SECURITY.md](../SECURITY.md).
 
-The board works out whether it is plugged into a Mac or a PC by toggling Num Lock
-and watching for the host's LED reply — Windows and Linux have a Num Lock and echo
-it, macOS does not. That result steers the lock shortcut, the gesture combos, the
-app-switcher modifier and the dashboard keyboard.
+Each slot carries the OS of **that** computer, which is not necessarily the one
+attached now — a Mac login window is woken with a jiggle and a Shift, a PC with
+Esc, and Esc on a Mac collapses the password field. `unlock` uses the slot's OS
+when one is stored and falls back to detection when it is not.
+
+- `os` is `mac` \| `windows` \| `linux` \| `auto`. Omit it on a new slot and the
+  board stores whatever it is currently plugged into; omit it when editing and
+  the stored value is kept. `auto` means "follow the attached computer".
+- Passing an occupied `slot` **edits** it. `password` may then be omitted, which
+  keeps the stored one — that is what lets the dashboard rename a PC or change
+  its OS without being able to show the password back.
+
+### Password vault
+
+Secrets the board types for you. Twelve slots, each holding a purpose, a kind
+(`password` or `pin`) and the secret itself — any length up to 128 characters, so
+a PIN is not assumed to be four digits or even digits.
 
 | Command | Parameters | Notes |
 |---|---|---|
-| `set_host_os` | `os` — `mac` \| `windows` \| `linux` \| `auto` | Pins the OS (persisted) or, with `auto`, clears the override and re-runs the probe |
+| `vault_list` | — | Purpose and kind only. Never the secret, and not its length |
+| `vault_save` | `label`, `type`, `secret`, `slot` | Creates or edits. Refused unless an access PIN is set |
+| `vault_get` | `slot`, **`pin`** | The one command that returns a secret |
+| `vault_type` | `slot`, **`pin`**, `enter` | Types it on the host |
+| `vault_delete` | `slot` | |
+| `vault_pin` | `pin` **or** `access`, `new_pin` | Sets, changes or resets the vault's own PIN |
+| `vault_wipe` | — | Destroys everything. **Not** gated |
+
+**The two commands in bold need the PIN in that request, on every transport
+including USB serial.** They are the only ways a secret leaves the board, and
+they are the single exception to serial being ungated: serial is open so the
+board can be recovered, not so it can be read. There is no session — typing a
+stored secret asks again every time, because the keystrokes *are* the secret and
+the board cannot see which window they land in.
+
+Saving, renaming and deleting are **not** gated by the vault PIN. None of them
+discloses anything, and asking for a PIN to store a password nobody can read
+back buys nothing. Tampering is the accepted price; disclosure is not.
+
+- The gate is the **vault PIN** when one is set, and the **access PIN**
+  otherwise. Wrong guesses share the same escalating lockout as the access PIN,
+  on their own counter, and it applies on serial too.
+- `vault_save` on an occupied slot edits it; omit `secret` to keep the stored
+  one. The dashboard is never given a secret to put back in the field. A
+  `type:"pin"` entry is refused if the secret is not all digits.
+- `vault_pin` takes **either** `pin` (the current vault PIN — changes it and
+  keeps the entries) **or** `access` (the access PIN — a *reset*, which **erases
+  the vault**). Without that second rule the access PIN would silently be a way
+  to read everything and the separate PIN would be decorative. `new_pin` is four
+  digits, or empty to go back to using the access PIN.
+- `vault_wipe` is deliberately ungated. Destroying a secret reveals nothing, and
+  it is the way back from a forgotten vault PIN.
+- **`set_auth` erases the vault** unless you prove you knew the old PIN by
+  passing `old`, or a separate vault PIN is in force. That is what stops ungated
+  serial `set_auth` from being a way in. The dashboard passes `old` for you, so
+  an ordinary PIN change keeps everything.
+
+```json
+{"cmd":"vault_get","slot":0,"pin":"1234"}
+{"status":"ok","reply":"vault_secret","slot":0,"label":"Netflix","type":"pin","secret":"…"}
+```
+
+Denials come back as `vault_denied` (wrong or missing PIN), `vault_locked` (no
+access PIN set, or too many wrong guesses — with `retry_in`).
+
+### Host OS
+
+The board works out whether it is plugged into a Mac or a PC by **watching how the
+host enumerates it**, without typing anything.
+
+> **Known limitation:** the current signal does not separate macOS from Windows,
+> so a Mac reports as `windows` and must be pinned with `set_host_os`. The
+> `usb_*` counters below are the raw evidence, reported so the discriminator can
+> be chosen from measurements.
+
+Detection re-runs every time the USB bus drops and comes back, so moving the
+board from a Mac to a PC is picked up without a reboot.
+
+| Command | Parameters | Notes |
+|---|---|---|
+| `set_host_os` | `os` — `mac` \| `windows` \| `linux` \| `auto` | Pins the OS (persisted) or, with `auto`, clears the override and re-arms detection |
 
 `status` reports the current answer:
 
 ```json
-{ "host_os": "mac", "host_os_source": "auto" }
+{ "host_os": "mac", "host_os_source": "auto", "host_os_detected": "mac",
+  "detect_phase": "settled", "usb_str_reqs": 9, "usb_str_rereads": 4,
+  "usb_str_seq": "0,0,1,1,2,2,3,3,4,0,0,0,0,0,0,0",
+  "usb_set_idle": 1, "usb_ctrl_reqs": 1, "usb_led_reports": 0 }
 ```
 
-`host_os_source` is `auto` (from the Num Lock probe), `manual` (pinned with
-`set_host_os`) or `pending` (not yet decided). The probe **cannot tell Linux from
-Windows** — both have a Num Lock — so a Linux host reads as `windows` until you
-pin it. A `host_os` event is also pushed to WebSocket clients the moment the probe
-settles, so the dashboard reskins without waiting for its next poll.
+`host_os_source` is one of:
+
+| Value | Meaning |
+|---|---|
+| `auto` | Decided from how the host enumerated the board |
+| `manual` | Pinned with `set_host_os` |
+| `pending` | A host is connected but the decision window has not closed yet |
+| `undetermined` | The host enumerated but sent nothing recognisable — pick an OS by hand |
+
+`host_os_detected` is what detection concluded **regardless of any manual pin**,
+so the dashboard can warn you that a pin left over from another computer no
+longer matches the one attached. The `usb_*` counters are the raw evidence behind
+the verdict, which is what makes a detection argument settleable instead of
+guesswork. `usb_str_rereads` is the discriminator: macOS reads each descriptor
+string twice, two bytes then the whole thing, so the same index arrives back to
+back, and at least half of its requests are repeats. Windows does it
+occasionally — measured on Windows 11, 11 requests of which 2 were repeats — so
+the verdict is the *ratio*, not the count. `usb_str_seq` is the raw sequence of
+indices the host asked for, oldest first, so a wrong verdict can be diagnosed
+from the phone.
+
+Detection **cannot tell Linux from Windows** — they enumerate identically — so a
+Linux host reads as `windows` until you pin it. A `host_os` event is also pushed
+to WebSocket clients the moment it settles, so the dashboard reskins without
+waiting for its next poll.
 
 ---
 

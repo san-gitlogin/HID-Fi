@@ -21,9 +21,21 @@ BIOS.
 ## Commands
 
 ```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force   # if scripts are blocked
 .\flash_esp.ps1 -Compile              # build and flash
+python tests\test_dashboard_static.py # no board needed, run before flashing
 python tests\test_v34_features.py     # expect 24/24
 ```
+
+## Serial access will reset the board — and can brick-look it
+
+DTR and RTS drive GPIO0 and EN, so `open()` reboots the ESP32. Always set
+`ser.dtr = False` and `ser.rts = False` **before** `ser.open()`, as every file in
+`tests/` does. Repeated rapid opens can latch the **ROM bootloader**: the HID
+interfaces disappear and `USB JTAG/serial debug unit` shows up instead, which
+looks exactly like the board looping. Recover with
+`esptool --port COMx --after hard_reset --no-stub flash_id` or a replug, and
+diagnose from the USB device list rather than from serial noise you are causing.
 
 ## Non-negotiables
 
@@ -37,13 +49,34 @@ python tests\test_v34_features.py     # expect 24/24
    syntax error means a blank white page diagnosable only by reflashing.
 5. **No emoji.** SVG sprite symbols only, 24×24, stroke 1.75. Judge new icons at
    16–24px, not at design size.
-6. **Hot paths stay clean** — binary WebSocket frames, no JSON, no logging, no
-   awaiting replies.
-7. **Anything held must be releasable.** A stuck Alt or mouse button makes the
+6. **The keyboard is tiered**, not one layout stretched: compact (<500px) →
+   ANSI (500px) → TKL nav cluster (1010px) → numpad (1300px, 104 keys). **Every
+   tier must expose every key the tier below it reaches** — never hide a row that
+   is the only way to reach its keys, and never let a wider screen offer fewer.
+   Every block carries the same row count or the blocks stop lining up. ANSI is a
+   60 column grid (1u = 4
+   columns, every row sums to 60). The static test checks the geometry *and* that
+   every key name resolves in `mapKeyName()`.
+7. **Hot paths stay clean** — binary WebSocket frames, no JSON, no logging, no
+   awaiting replies, and no `delay()` anywhere a pointer report can reach.
+8. **Anything held must be releasable.** A stuck Alt or mouse button makes the
    user's PC unusable.
-8. **`mapKeyName()` is the allowlist.** Combos missing from it fail silently.
-9. **Never expose a saved PC password.** `pc_list` returns names only.
-10. **Restore hardware state.** If a probe sets a PIN or saves a profile, undo it
+9. **`mapKeyName()` is the allowlist.** Combos missing from it fail silently.
+10. **Host OS detection stays passive.** Never reintroduce a probe that types
+    something, and do not use the `0xEE` MS OS descriptor — Windows caches that
+    answer and stops asking. `SET_IDLE` does *not* tell a Mac from a PC; that was
+    assumed in v3.7 and disproved on a real Mac. The discriminator is the host's
+    string-descriptor reads — macOS re-reads the same index, Windows and Linux do
+    not — which is why the firmware defines `tud_descriptor_string_cb()` itself.
+11. **Never expose a saved PC password.** `pc_list` returns names and OS only.
+    The vault's `vault_get` and `vault_type` are the only ways a secret leaves
+    the board, both PIN gated on every transport including serial, with no
+    session. Saving and deleting are not gated — they disclose nothing. A blind
+    access-PIN reset erases the vault, and so does resetting a forgotten vault
+    PIN. `macro_get` is ungated over serial, so a secret never goes in a macro.
+12. **The dashboard never relies on the Refresh button.** Every board write
+    calls `syncAll()`; `applyStatus()` rebuilds what the access PIN affects.
+12. **Restore hardware state.** If a probe sets a PIN or saves a profile, undo it
     and verify the undo. Delete throwaway scripts when done.
 
 ## Expected working style

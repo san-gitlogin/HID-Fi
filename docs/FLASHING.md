@@ -291,7 +291,88 @@ Expect four: HID Keyboard Device, HID-compliant mouse, consumer control, system 
 | Flash works, but nothing types | `USBMode` was not USB-OTG, or the **USB** cable is not connected, or the USB-OTG pads are not bridged. |
 | Serial connects but never answers | `CDCOnBoot` was enabled at build time, or DTR/RTS are being asserted and rebooting the board. |
 | `several boards, name one` | More than one is plugged in. Use `-Port COMx` or `-All`. The script will not guess. |
-| Script will not run at all | `powershell -ExecutionPolicy Bypass -File .\flash_esp.ps1` |
+| Script will not run at all | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force`, then run it again in the same shell. |
+| **The board keeps reappearing and vanishing, and HID stops working** | It is in the ROM bootloader, not your firmware. See below. |
+| **`Invalid head of packet (0x45)` while uploading the stub flasher** | The CH343 UART is carrying the running firmware's boot banner into the stub upload. Flash over the native USB-Serial-JTAG port instead — see below. |
+
+### `Invalid head of packet (0x45)` — flash over USB-Serial-JTAG
+
+`0x45` is ASCII `E`: the firmware's own boot output colliding with esptool's stub
+upload on the same UART. The board is fine and nothing has been written.
+
+The reliable way around it is the S3's **native USB-Serial-JTAG**, which has no
+auto-reset circuit to race. It only enumerates while the chip is in the
+bootloader, appearing as a second `USB Serial Device (COMx)` — `COM14` below.
+Run the three steps in order:
+
+```powershell
+$esp = "$env:LOCALAPPDATA\Arduino15\packages\esp32\tools\esptool_py\5.3.1\esptool.exe"
+$b   = "hid_fi\build"
+$boot0 = "$env:LOCALAPPDATA\Arduino15\packages\esp32\hardware\esp32\3.3.11\tools\partitions\boot_app0.bin"
+
+# 1. enter the bootloader and stay there -> COM14 appears
+& $esp --port COM13 --before default-reset --after no-reset --no-stub flash_id
+
+# 2. write the four partitions over USB-Serial-JTAG
+& $esp --chip esp32s3 --port COM14 --before no-reset --after no-reset `
+    write-flash --flash-mode dio --flash-freq 80m --flash-size 16MB `
+    0x0 "$b\hid_fi.ino.bootloader.bin" 0x8000 "$b\hid_fi.ino.partitions.bin" `
+    0xe000 $boot0 0x10000 "$b\hid_fi.ino.bin"
+
+# 3. hard reset through the CH343 so it runs the app
+& $esp --port COM13 --after hard-reset --no-stub flash_id
+```
+
+Step 3 matters: `--after hard-reset` on the JTAG port pulses an RTS line that
+path does not have, so the board would stay in the bootloader and no keyboard
+would appear. If step 2 fails with *Write timeout*, give COM14 a few more seconds
+to enumerate after step 1 and run it again.
+
+> This writes the same four partitions the script does. **Never write
+> `merged.bin` at `0x0`** — it wipes NVS and every saved setting.
+
+### Stuck in the ROM bootloader
+
+Opening the COM port resets the board — DTR and RTS drive GPIO0 and EN through
+the auto-reset circuit. That is normal. But opening and closing the port
+repeatedly in quick succession can land a reset with GPIO0 still low, which
+latches the **ROM bootloader**. The board then looks broken in a confusing way:
+it has power, the COM port is there, and nothing types.
+
+Diagnose it from the **USB device list**, not from serial output — if you have
+been opening the port, the resets you are seeing are your own:
+
+```powershell
+Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match 'VID_303A|VID_1A86' } |
+  Select-Object Status, Class, FriendlyName
+```
+
+| What you see | Meaning |
+|---|---|
+| Six entries incl. `HID Keyboard Device` | Healthy, firmware running |
+| `USB JTAG/serial debug unit` present | In the ROM bootloader |
+| HID entries gone, extra `USB Serial Device (COMx)` | Bootloader CDC, not your firmware |
+
+To get out of it:
+
+```powershell
+esptool --port COM13 --after hard_reset --no-stub flash_id
+```
+
+That performs the GPIO0-high / EN-pulse sequence properly. Unplugging and
+replugging the COM cable also works, because a real power-on reset always samples
+GPIO0 high.
+
+If you are writing your own script, open the port the way `tests/` does — set the
+lines **before** `open()`:
+
+```python
+ser = serial.Serial()
+ser.port, ser.baudrate, ser.timeout = port, 115200, 2
+ser.dtr = False
+ser.rts = False
+ser.open()
+```
 
 ---
 

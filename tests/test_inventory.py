@@ -43,7 +43,24 @@ def send(sp, obj, timeout=4.0):
     return None
 
 
-with serial.Serial(PORT, 115200, timeout=1) as sp:
+def open_board(port):
+    """Open without letting DTR/RTS drive the board's auto-reset circuit.
+
+    Every other suite here does this. The bare serial.Serial(port) constructor
+    asserts both lines on open, which on the CH343 boards resets the ESP32 and,
+    if it lands wrong, latches it into the ROM bootloader with GPIO0 low.
+    """
+    sp = serial.Serial()
+    sp.port = port
+    sp.baudrate = 115200
+    sp.timeout = 1
+    sp.dtr = False
+    sp.rts = False
+    sp.open()
+    return sp
+
+
+with open_board(PORT) as sp:
     time.sleep(2.0)
     # Reopening the CH343 straight after another suite closed it can leave the
     # first command unanswered, which failed this whole file for no real reason.

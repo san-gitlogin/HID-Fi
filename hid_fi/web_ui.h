@@ -329,10 +329,15 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
 /* The fullscreen button bar is Left/Right/Grab. It has to be beaten on
    specificity, not order: .padwrap.fs .fsbar{display:flex} is declared later. */
 .padwrap.kb .fsbar,.padwrap.fs.kb .fsbar{display:none}
-#padkbd .kbd{margin:0;flex:1 1 auto;min-height:0;justify-content:flex-end}
-/* The function and navigation rows do not fit in a card-sized deck, and squeezing
-   eight rows in makes every key too small to hit. They come back in fullscreen,
-   and the Type tab still carries the full keyboard. */
+/* In a card the deck is one block, but fullscreen gives it the whole screen and
+   it may grow a nav cluster and a numpad beside the letters. Stretch rather than
+   bottom align, because here the rows divide the available height instead of
+   being measured from the top. */
+#padkbd .kbd{margin:0;flex:1 1 auto;min-height:0;align-items:stretch}
+#padkbd .kblock{min-height:0;justify-content:flex-end}
+/* The function and navigation rows do not fit in a card-sized deck. They come
+   back in fullscreen, and the Type tab carries them at every size - so nothing
+   here is the only way to reach a key. */
 #padkbd .krow.fn,#padkbd .krow.nav{display:none}
 /* The rows divide whatever height the card has, rather than being computed from
    it. Working out key height by arithmetic meant every change to the padding or
@@ -341,23 +346,43 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
    stops keys becoming absurd on a tall display. */
 #padkbd .krow{flex:1 1 0;min-height:0;max-height:60px}
 #padkbd .krow button{min-height:0;height:100%}
+/* The numpad is a grid of fixed rows everywhere else; in the deck it has to
+   share the height like every other block or it overflows the screen. The cap
+   matters: deck rows stop growing at 92px, and without the same ceiling here the
+   numpad's five rows stretch past them and Num/ / / * stops sitting level with
+   the number row. */
+#padkbd .kpad{flex:1 1 auto;min-height:0;grid-auto-rows:minmax(0,1fr)}
+#padkbd .kpad button{min-height:0;height:auto}
+.padwrap.fs #padkbd .kpad{max-height:calc(92px * 5 + 6px * 4)}
 @media(max-height:700px){
   #padkbd{gap:6px;--dpad:7px}
   .pkrow input,.pkrow .btn{height:34px}
 }
-/* Short landscape: the digits row goes, because every digit is one tap away on
-   the 123 layer, and four usable rows beat five unusable ones. Shorter still and
-   the type field goes too - the Type tab has one, and keys people can hit matter
-   more here. Fullscreen is exempt; it has the whole screen to work with. */
-@media(max-height:430px){.padwrap:not(.fs) #padkbd .krow:nth-child(2){display:none}}
+/* Nothing is hidden for lack of height any more. The digits row used to go on a
+   short screen, which was survivable while the compact layout kept every digit
+   one tap away on the 123 layer - but the wider layouts have no 123 layer, so
+   hiding that row took the numbers away entirely with no way to reach them. The
+   rows share the card's height instead, which cannot overflow by construction.
+   Shorter still and the type field goes, because the Type tab has one and keys
+   people can hit matter more here. */
 @media(max-height:360px){.padwrap:not(.fs) .pkrow{display:none}}
 /* Below 310px the shared rule lets rows wrap onto a second line for readability.
-   The Type tab can grow to absorb that; a deck locked to the pad's height cannot,
-   and the keys would spill out of the card. It keeps the strict ten columns and
-   narrow keys, and the Type tab remains the place for comfortable typing here. */
+   The Type tab can grow to absorb that; a deck locked to the pad's height cannot
+   - letting it wrap was measured at 12.7px tall keys, which is not a key at all.
+   So the deck keeps its strict columns and shrinks its labels instead, since a
+   short label on a key you can hit beats a tidy one on a key you cannot. */
 @media(max-width:309px){
-  #padkbd .krow:not(.fn):not(.nav){grid-template-columns:repeat(10,1fr)}
-  #padkbd .krow button.s2{grid-column:span 2}
+  /* :not(.fn):not(.nav) is load bearing. This selector carries an id, so it
+     outranks the auto-fit rule those two rows rely on, and without the guard
+     "Ctrl+C" and "Alt+Tab" get a 23px column in fullscreen and are cut off. */
+  #padkbd .kmain.c12 .krow:not(.fn):not(.nav){grid-template-columns:repeat(12,1fr)}
+  /* Twelve columns in a 280px card only clears an 18px key if the gaps and the
+     deck's own padding give their pixels back. .ic-sm is 18px and the column is
+     narrower than that, so the glyphs come down with the text as well. */
+  #padkbd{--dpad:2px;gap:4px}
+  #padkbd .krow{gap:2px}
+  #padkbd .krow button{font-size:9px;padding:0;border-radius:5px}
+  #padkbd .krow button .ic{width:12px;height:12px}
 }
 /* The corner tools are two 34px buttons inset by 10px, so they occupy the last
    88px of the card. Measured from the card rather than the row, or the deck's
@@ -545,48 +570,89 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .gpoff>.gpmsg p{max-width:34ch}
 
 /* ---------------- keyboard ---------------- */
-/* Every row is the same ten column grid, so a key in column 9 sits at exactly
-   the same x on every row no matter how many keys that row holds. Flexbox could
-   not do this: with flex-basis:0 the unit width depends on the number of gaps in
-   the row, so the up arrow and the down arrow landed a couple of pixels apart. */
-.kbd{display:flex;flex-direction:column;gap:6px;margin-top:12px}
-.krow{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
-/* The function row has thirteen keys, which at phone width would be 22px each -
-   half a usable touch target. It wraps instead and never goes below 36px, which
-   is also low enough that a 600px wide window still fits all thirteen on one
-   line rather than spending a whole extra row on F11 and F12. */
-.krow.fn{grid-template-columns:repeat(auto-fit,minmax(36px,1fr))}
-/* Same reasoning for the navigation row: "Ctrl+C" and "PgUp" cannot be read in a
-   28px column, and a truncated key label is worse than a second line. This row
-   holds no arrows, so it is free to leave the ten column grid. */
-.krow.nav{grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
-.krow button{
-  min-width:0;padding:0 2px;border-radius:9px;
-  /* Key height is derived from the viewport, not fixed. Eight rows plus the type
-     field have to sit between the header and the tab bar, so a 368px tall window
-     needs short keys and a 1200px one can afford tall ones. The 240px is the
-     chrome the keyboard does not control: header, type row, card padding, tabs. */
-  min-height:clamp(30px, calc((100dvh - 240px) / 8), 56px);
+/* The keyboard is up to three blocks side by side, exactly as a physical one is:
+   the alphanumeric block, the navigation cluster and the numpad. Which blocks
+   exist is decided in JS from the measured width - see kbTier - so a wider
+   screen gets more keys rather than the same few keys stretched.
+
+   The flex ratios are the real proportions: ANSI main is 15u, the nav cluster is
+   3u and the numpad is 4u. Giving the blocks those numbers means one key is the
+   same width in all three, which is what makes them read as one keyboard.
+
+   Blocks are bottom aligned, so the space bar and the arrow cluster share a
+   baseline however many clusters sit above them. Every row is a grid, because
+   flexbox could not hold the columns: with flex-basis:0 the unit width depends
+   on the number of gaps in the row, so the up arrow and the down arrow landed a
+   couple of pixels apart. */
+.kbd{display:flex;align-items:flex-end;gap:10px;margin-top:12px;
+  /* One row height for every block, or they cannot line up. Six rows plus the
+     type field sit between the header and the tab bar, so a short window needs
+     short keys and a tall one can afford more. */
+  --kh:clamp(26px, calc((100dvh - 250px) / 7), 52px)}
+.kblock{display:flex;flex-direction:column;gap:6px;min-width:0}
+.kmain{flex:15 1 0}
+/* The nav cluster is a fifth of the main block's width and its legends are
+   words, so it is the one block whose type has to be sized from its own width
+   rather than from the tier. It is a query container for that reason - and it
+   holds no fixed descendant, so the containment it brings is harmless here. */
+.kside{flex:3 1 0;container-type:inline-size}
+.knum{flex:4 1 0}
+.krow{display:grid;gap:6px}
+/* Twelve columns for a phone held upright: enough for a left Shift, the letters,
+   the slash, a right Shift and a real inverted-T arrow cluster, which ten could
+   not hold at once. */
+.kmain.c12 .krow{grid-template-columns:repeat(12,1fr)}
+/* ANSI is exactly 15u wide, so sixty columns makes 1u four columns and every
+   real key width - 1.25u, 1.5u, 1.75u, 2u, 2.25u, 2.75u, 6.25u - lands on a
+   whole number. That is what makes these rows authentic rather than guessed. */
+.kmain.ansi .krow{grid-template-columns:repeat(60,1fr)}
+.kside .krow{grid-template-columns:repeat(3,1fr)}
+.kpad{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:var(--kh);gap:6px}
+/* On the compact layout the function and navigation rows carry long labels and
+   leave the twelve column grid rather than truncate them. Neither holds an
+   arrow, so nothing depends on their alignment. */
+.kmain.c12 .krow.fn{grid-template-columns:repeat(auto-fit,minmax(36px,1fr))}
+.kmain.c12 .krow.nav{grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
+.kgap{height:var(--kh)}
+.krow button,.kpad button{
+  min-width:0;padding:0 2px;border-radius:9px;height:var(--kh);
   background:var(--surface2);border:1px solid var(--line);font-size:13px;font-weight:560;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:transform .1s var(--ease),background .14s;
   /* fast repeated taps otherwise start selecting the key's own label and pop up
      the copy bar over the keyboard */
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
 }
-.krow button:active{transform:scale(.92);background:rgba(0,210,255,.28)}
-.krow button.dn{background:rgba(0,210,255,.34);border-color:var(--acc);transform:scale(.94)}
+/* The tall Plus and Enter span two rows, so they have to grow with the gap too. */
+.kpad button{height:auto;min-height:var(--kh)}
+.krow button:active,.kpad button:active{transform:scale(.92);background:rgba(0,210,255,.28)}
+.krow button.dn,.kpad button.dn{background:rgba(0,210,255,.34);border-color:var(--acc);transform:scale(.94)}
 .krow button.mod{background:rgba(0,210,255,.08);color:var(--acc)}
 .krow button.mod.on{background:rgba(0,210,255,.34);border-color:var(--acc);color:var(--fg)}
-.krow button.s2{grid-column:span 2}
-.krow button.s3{grid-column:span 3}
-.krow button .ic{margin:0 auto}
+.krow button .ic,.kpad button .ic{margin:0 auto}
+/* The wider layouts carry far more keys, so their caps have to be smaller or the
+   labels collide. Sized per tier rather than per breakpoint, because what
+   matters is how many keys are in the row, not how wide the window is. */
+.kbd.t-ansi .krow button{font-size:12px}
+.kbd.t-tkl .krow button,.kbd.t-full .krow button,
+.kbd.t-tkl .kpad button,.kbd.t-full .kpad button{font-size:11.5px}
+/* Three columns and two gaps, so one nav key is a shade under a third of the
+   block: 9cqi keeps a five character legend like PrtSc inside its cap at every
+   width. A fixed size cannot - 10px fitted the cluster on a laptop and cut Home
+   in half on a 25px column, which is what shipped before this.
+   The leading .kbd is load bearing: without it this loses to the tier rules
+   above on specificity and the cluster silently keeps their 12px type. */
+.kbd .kside .krow button{font-size:clamp(6px,9cqi,11px);padding:0 1px;letter-spacing:-.01em}
 /* Phone keyboards win their key size by giving up page padding, not by shrinking
    the keys. Same trade here, so a 375px screen gets ~30px keys like iOS does. */
 @media(max-width:430px){
-  .krow,.kbd{gap:5px}
-  .krow button{font-size:12px;border-radius:8px}
-  .krow.fn{grid-template-columns:repeat(auto-fit,minmax(34px,1fr))}
-  .krow.nav{grid-template-columns:repeat(auto-fit,minmax(54px,1fr))}
+  .krow,.kblock{gap:5px}
+  .kbd{gap:6px}
+  /* 1px of side padding rather than 2. With twelve columns a 360px phone gives a
+     23px key, and the widest modifier cap needs every pixel back that the
+     padding was taking. */
+  .krow button{font-size:12px;border-radius:8px;padding:0 1px}
+  .kmain.c12 .krow.fn{grid-template-columns:repeat(auto-fit,minmax(34px,1fr))}
+  .kmain.c12 .krow.nav{grid-template-columns:repeat(auto-fit,minmax(54px,1fr))}
   /* A phone keyboard buys its key size from the page margin, not by shrinking
      the keys. Same trade: the keys card gives up side padding and the keyboard
      itself bleeds a little past it. */
@@ -594,37 +660,34 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   .kbd{margin-left:-4px;margin-right:-4px}
 }
 @media(max-width:359px){
-  .krow,.kbd{gap:4px}
+  .krow,.kblock{gap:4px}
   .krow button{font-size:10.5px;border-radius:7px;padding:0 1px}
-  .krow.fn{grid-template-columns:repeat(auto-fit,minmax(30px,1fr))}
-  .krow.nav{grid-template-columns:repeat(auto-fit,minmax(48px,1fr))}
+  .krow button .ic{width:15px;height:15px}
+  .kmain.c12 .krow.fn{grid-template-columns:repeat(auto-fit,minmax(30px,1fr))}
+  .kmain.c12 .krow.nav{grid-template-columns:repeat(auto-fit,minmax(48px,1fr))}
   #v-keys .card{padding-left:7px;padding-right:7px}
   .kbd{margin-left:-5px;margin-right:-5px}
 }
-/* Past this the keys only get wider, never more usable, and very wide short keys
-   read as broken. Cap the block and centre it so the proportions stay sane on a
-   large display. */
-@media(min-width:920px){
-  .kbd{max-width:940px;margin-left:auto;margin-right:auto}
+/* Past this a full-size layout is already on screen, so the cap only stops the
+   keys becoming absurdly wide on a very large display. */
+@media(min-width:1500px){
+  .kbd{max-width:1460px;margin-left:auto;margin-right:auto}
 }
-/* Under about 440px of height the letters, the function row, the shortcut row,
-   the type field and the tab bar cannot all fit, and shrinking everything just
-   makes the whole thing unusable. The letters and modifiers win: the card
-   heading and the two least-used rows step aside so the keyboard proper stays
-   fully on screen. Both rows are still reachable from Shortcuts. */
+/* Under about 440px of height the compact layout is tight, so the card heading
+   steps aside to give the keys the room. Rows are never hidden: Esc, Del, PgUp
+   and PgDn exist on those two rows and nowhere else, so dropping them would take
+   keys away with no way to reach them. */
 @media(max-height:440px){
   #v-keys .card>.ch{display:none}
-  .krow.fn,.krow.nav{display:none}
-  .krow button{min-height:clamp(26px, calc((100dvh - 150px) / 5), 44px)}
-  .kbd{margin-top:8px}
+  .kbd{--kh:clamp(24px, calc((100dvh - 150px) / 7), 44px);margin-top:8px}
 }
-/* Below about 300px a ten column row gives 20px keys with the labels cut off.
+/* Below about 300px a twelve column row gives 17px keys with the labels cut off.
    Wrapping is the lesser evil: arrow alignment is lost, but every key is
    readable and hittable, which matters more on a screen this small. */
 @media(max-width:309px){
-  .krow{grid-template-columns:repeat(auto-fit,minmax(30px,1fr))}
-  .krow.nav{grid-template-columns:repeat(auto-fit,minmax(44px,1fr))}
-  .krow button.s2,.krow button.s3{grid-column:span 2}
+  .kmain.c12 .krow{grid-template-columns:repeat(auto-fit,minmax(30px,1fr))}
+  .kmain.c12 .krow.nav{grid-template-columns:repeat(auto-fit,minmax(44px,1fr))}
+  .krow button{font-size:10.5px}
   .krow button{font-size:10.5px}
 }
 
@@ -756,8 +819,23 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--r2);background:var(--surface2);border:1px solid var(--line)}
 .warnbox{background:color-mix(in srgb,var(--bad) 12%,var(--surface2));border-color:color-mix(in srgb,var(--bad) 38%,var(--line));margin-bottom:12px}
 .item .tx{flex:1;min-width:0}
-.item .tx b{display:block;font-size:13.5px;font-weight:560}
+.item .tx b{display:block;font-size:13.5px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .tx span{display:block;font-size:11.5px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A saved email address is a long label next to three or four controls. The text
+   is what gives way, never the buttons - they used to be squeezed into each
+   other on a 375px phone. */
+.item>.btn{flex:0 0 auto}
+.item>.ic{flex:0 0 auto}
+@media(max-width:400px){
+  .item{gap:8px;padding:10px 10px}
+  .item>.iconbtn{width:34px;height:34px;border-radius:10px}
+  .item>.btn.sm{padding:0 10px;font-size:12.5px}
+}
+@media(max-width:340px){
+  .item{gap:6px}
+  .item>.ic{display:none}          /* buys back 30px on an iPhone SE */
+  .item>.iconbtn{width:31px;height:31px}
+}
 .tag{display:inline-block;vertical-align:2px;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.02em;color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 38%,transparent)}
 .log{background:#04060a;border:1px solid var(--line);border-radius:var(--r2);padding:10px;
   font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:#6ee7a8;max-height:190px;overflow-y:auto;margin-top:10px}
@@ -928,6 +1006,8 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
 <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a15 15 0 0 1 19 0M5.8 12.7a10 10 0 0 1 12.4 0M9.2 16.4a5 5 0 0 1 5.6 0M12 20h.01"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5 20 5.5v6c0 5-3.4 8.9-8 10.5-4.6-1.6-8-5.5-8-10.5v-6z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6.1 5.8 12 5.8 21.5 12 21.5 12 17.9 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.9"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.6" cy="16.4" r="4.1"/><path d="m10.5 13.5 8-8M15.6 8.4l2.4 2.4M18.5 5.5l2.4 2.4"/></symbol>
 <symbol id="i-heart" viewBox="0 0 24 24"><path style="fill:currentColor;stroke:none" d="M12 20.7 4.3 13a4.7 4.7 0 0 1 6.6-6.6l1.1 1 1.1-1A4.7 4.7 0 1 1 19.7 13Z"/></symbol>
 <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2.5V5M15 2.5V5M9 19v2.5M15 19v2.5M2.5 9H5M2.5 15H5M19 9h2.5M19 15h2.5"/></symbol>
 <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2.8 9 4.7-9 4.7-9-4.7z"/><path d="m3 12.5 9 4.7 9-4.7M3 17.2l9 4.7 9-4.7"/></symbol>
@@ -955,6 +1035,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
      The text is filled rather than stroked, so it stays crisp as it shrinks. -->
 <symbol id="i-keycap" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="17" rx="3.2"/><rect x="5.8" y="6.2" width="12.4" height="9.6" rx="2"/><text x="12" y="12.6" text-anchor="middle" font-size="5.1" font-weight="700" fill="currentColor" stroke="none" font-family="-apple-system,'Segoe UI',Roboto,sans-serif">Ctrl</text></symbol>
 <symbol id="i-appswitch" viewBox="0 0 24 24"><rect x="2.8" y="2.8" width="13" height="13" rx="2.5"/><path d="M2.8 6.9h13"/><rect x="8.2" y="8.2" width="13" height="13" rx="2.5"/><path d="M8.2 12.3h13"/></symbol>
+<symbol id="i-menukey" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/></symbol>
 </defs></svg>
 
 <div class="app">
@@ -1112,6 +1193,18 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
     <!-- ============ SHORTCUTS ============ -->
     <section class="view" id="v-short">
       <div class="grid">
+        <div class="card span">
+          <div class="ch"><svg class="ic"><use href="#i-shield"/></svg><h2>Passwords</h2>
+            <button class="iconbtn" id="btnVaultNew" aria-label="New password"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="list" id="vaultList"></div>
+          <p class="hint" id="vaultHint" style="margin-top:10px"></p>
+          <div class="row" style="margin-top:10px">
+            <button class="btn sm" id="btnVaultPin">Vault PIN</button>
+            <button class="btn sm bad" id="btnVaultWipe">Erase vault</button>
+          </div>
+        </div>
+
         <div class="card span">
           <div class="scbar">
             <div class="seg" id="osSeg">
@@ -1293,7 +1386,8 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
             <button class="btn sm" data-os-set="win">Windows</button>
             <button class="btn sm" data-os-set="linux">Linux</button>
           </div>
-          <p class="hint" style="margin-top:10px">The board works out whether it is plugged into a Mac or a PC by watching the Num Lock light, and picks the matching lock shortcut, gestures, app switcher and keyboard. Auto lets it decide; the others pin it &mdash; which you need if it called a Linux box Windows, because it cannot tell those two apart on its own.</p>
+          <p class="hint" id="osDiag" style="margin-top:8px;font-variant-numeric:tabular-nums"></p>
+          <p class="hint" style="margin-top:10px">The board works out whether it is plugged into a Mac or a PC from the way the computer reads its USB descriptors &mdash; it never types anything to find out &mdash; and picks the matching lock shortcut, gestures, app switcher and keyboard. Auto lets it decide and re-checks whenever you move the board to another computer; the others pin it, which you need if it called a Linux box Windows, because it cannot tell those two apart on its own.</p>
 
           <div class="sep"></div>
           <div class="ch"><svg class="ic"><use href="#i-keyboard"/></svg><h2>Mac setup</h2></div>
@@ -1480,7 +1574,7 @@ function connect(){
   ws.onopen=()=>{wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
-    refresh();loadCfg();loadMacros();loadPcs();};
+    refresh();loadCfg();loadMacros();loadPcs();loadVault();};
   ws.onclose=()=>{wsUp=false;link(false);aswAbort();tries++;setTimeout(connect,1200);};
   ws.onerror=()=>{try{ws.close();}catch(e){}};
   ws.onmessage=ev=>{
@@ -1492,11 +1586,11 @@ function connect(){
       return;
     }
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source);
+    if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
     if(m.reply==='auth_required'){authOK=false;return askPin();}
     if(m.reply==='lan_locked')return lanLocked();
-    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');loadPcs();}
+    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');loadPcs();loadVault();}
     if(m.reply==='auth_failed'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,m.retry_in?('Wrong PIN. Locked for '+m.retry_in+'s.'):'That PIN was not right.');}
     if(m.reply==='auth_locked'){authOK=false;
@@ -1802,7 +1896,8 @@ const saveFeel=()=>{try{localStorage.setItem('feel',JSON.stringify(S));}catch(e)
 // Host OS globals, declared here (not with the rest of the host-OS block lower
 // down) because defCfg() below reads OS the moment CFG is seeded. 'mac'|'win'|'linux'.
 let OS='win';               // the computer's OS
-let OS_SRC='pending';       // 'auto' | 'manual' | 'pending'
+let OS_SRC='pending';       // 'auto' | 'manual' | 'pending' | 'undetermined'
+let OS_DET='';              // what the board detected, even when OS is pinned by hand
 let ASW_MOD='ALT';          // modifier the app switcher holds: ALT on PC, GUI on Mac
 let scOsManual=false;       // user tapped a shortcut OS tab, so stop following the host
 function osTok(s){return s==='mac'?'mac':s==='linux'?'linux':(s==='windows'||s==='win')?'win':'';}
@@ -1850,7 +1945,7 @@ function saveCfg(){
 const VIEWS=[
   {id:'pad',  t:'Trackpad',  s:'Pad',   i:'cursor'},
   {id:'keys', t:'Keyboard',  s:'Type',  i:'keyboard'},
-  {id:'short',t:'Shortcuts', s:'Keys',  i:'keycap'},
+  {id:'short',t:'Keys',      s:'Keys',  i:'keycap'},
   {id:'media',t:'Media',     s:'Media', i:'media'},
   {id:'game', t:'Gamepad',   s:'Game',  i:'gamepad', beta:1},
   {id:'power',t:'Session',   s:'Power', i:'power'},
@@ -2247,6 +2342,10 @@ const FS={
     document.body.style.overflow='hidden';
     if(this.supported()){try{(padwrap.requestFullscreen||padwrap.webkitRequestFullscreen).call(padwrap);}catch(e){}}
     if(!this.pushed){try{history.pushState({fs:1},'');this.pushed=true;}catch(e){}}
+    // Fullscreen hands the deck the whole screen, which is usually a different
+    // tier. The observer only fires if the width changed, and on a wide page it
+    // may not have, so ask for the rebuild directly.
+    if($('kbd2'))buildKbdIn('kbd2');
     this.sync();
   },
   exit(fromPop){
@@ -2258,7 +2357,9 @@ const FS={
       try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch(e){}
     }
     if(this.pushed&&!fromPop){try{history.back();}catch(e){}}
-    this.pushed=false;this.sync();
+    this.pushed=false;
+    if($('kbd2'))buildKbdIn('kbd2');
+    this.sync();
   },
   toggle(){this.on?this.exit():this.enter();},
   sync(){
@@ -2302,6 +2403,11 @@ const DECK={
       releaseAllHeld();
     }
     padwrap.classList.toggle('kb',on);
+    // The deck has no width until it is shown, so the tier it was last built at
+    // is stale the moment it appears. ResizeObserver only reports that a frame
+    // later, which is one painted frame of the wrong layout - and at a narrow
+    // width that means ANSI keys squeezed to 15px. Rebuild now instead.
+    if(on&&$('kbd2'))buildKbdIn('kbd2');
     const b=$('btnDeck');
     b.innerHTML=ico(on?'cursor':'keyboard');
     b.setAttribute('aria-label',on?'Show trackpad':'Show keyboard');
@@ -2654,49 +2760,120 @@ $('btnGpToggle').onclick=()=>{
 // =====================================================================
 //  keyboard
 // =====================================================================
-// Every row below the function row occupies exactly ten grid columns, so a key
-// in a given column lands on the same x on every row. That is what puts the up
-// arrow directly above the down arrow: UP is column 9 of row 4, DOWN is column 9
-// of row 5 (Space spans two, which is what makes the arithmetic land).
+//  keyboard layouts
+// =====================================================================
+// A physical keyboard does not shrink its keys as the board gets smaller - it
+// drops whole blocks. A 60% has no arrows, a 65% adds them, a 75% adds the
+// function row, a TKL adds the navigation cluster and a full-size adds the
+// numpad. This grows the same way, so a wide screen gets *more keys* rather
+// than the same few keys stretched across it.
 //
-// Third element is a span class: s2 = two columns, s3 = three.
-// A name starting with @ is a layer switch rather than a key.
+// Every key is [label, name, width, class]. Width is in quarter-units, so 4 is
+// one key. A null name is dead space, which real keyboards have and which is
+// what makes the function row and the arrow cluster read correctly.
+//
+// ANSI is exactly 15u wide, so the main block is a 60 column grid and 1u is 4
+// columns. Every real key width is then a whole number of columns: 1.25u = 5,
+// 1.5u = 6, 1.75u = 7, 2u = 8, 2.25u = 9, 2.75u = 11, 6.25u = 25. That is what
+// lets the rows be authentic instead of approximated.
 //
 // Labels are raw HTML because several are inline SVG, so any symbol that means
 // something in HTML is pre-escaped here rather than at render time.
-const KROWS_ABC=[
- {fn:1,keys:[['Esc','ESC'],['F1','F1'],['F2','F2'],['F3','F3'],['F4','F4'],['F5','F5'],['F6','F6'],['F7','F7'],['F8','F8'],['F9','F9'],['F10','F10'],['F11','F11'],['F12','F12']]},
- {keys:[['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0']]},
- {keys:[['Q','q'],['W','w'],['E','e'],['R','r'],['T','t'],['Y','y'],['U','u'],['I','i'],['O','o'],['P','p']]},
- {keys:[['A','a'],['S','s'],['D','d'],['F','f'],['G','g'],['H','h'],['J','j'],['K','k'],['L','l'],[ico('enter','ic-sm'),'ENTER']]},
- // Both Shifts flank the letters, left before Z and right after M, the way every
- // real keyboard places them. Backspace sits at the far right. The four arrows
- // move down to the modifier row as one inline cluster; Caps, far rarer, goes to
- // the navigation row. (Up no longer sits above Down - a right Shift is worth more
- // on a keyboard than that alignment was.)
- {keys:[['\u21e7','#SHIFT','mod'],['Z','z'],['X','x'],['C','c'],['V','v'],['B','b'],['N','n'],['M','m'],
-        ['\u21e7','#SHIFT','mod'],[ico('bksp','ic-sm'),'BACKSPACE']]},
- {keys:[['123','@sym','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
-        [ico('left','ic-sm'),'LEFT'],[ico('up','ic-sm'),'UP'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
- {nav:1,keys:[['\u21ea','CAPSLOCK'],['Tab','TAB'],['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN'],['Del','DELETE'],
-        ['Ctrl+C','CTRL+C'],['Ctrl+V','CTRL+V'],['Ctrl+Z','CTRL+Z'],['Alt+Tab','ALT+TAB']]}
+const ANSI_COLS=60;
+const GAP=w=>[null,null,w];
+
+// Esc + three groups of four, TKL spacing: 1u + 1u gap + 4u + .5u + 4u + .5u + 4u.
+const ANSI_FN=[
+ ['Esc','ESC',4],GAP(4),
+ ['F1','F1',4],['F2','F2',4],['F3','F3',4],['F4','F4',4],GAP(2),
+ ['F5','F5',4],['F6','F6',4],['F7','F7',4],['F8','F8',4],GAP(2),
+ ['F9','F9',4],['F10','F10',4],['F11','F11',4],['F12','F12',4]
 ];
+const ANSI_MAIN=[
+ [['`','`',4],['1','1',4],['2','2',4],['3','3',4],['4','4',4],['5','5',4],['6','6',4],['7','7',4],['8','8',4],['9','9',4],['0','0',4],['-','-',4],['=','=',4],[ico('bksp','ic-sm'),'BACKSPACE',8]],
+ [['Tab','TAB',6],['Q','q',4],['W','w',4],['E','e',4],['R','r',4],['T','t',4],['Y','y',4],['U','u',4],['I','i',4],['O','o',4],['P','p',4],['[','[',4],[']',']',4],['\\','\\',6]],
+ [['\u21ea','CAPSLOCK',7],['A','a',4],['S','s',4],['D','d',4],['F','f',4],['G','g',4],['H','h',4],['J','j',4],['K','k',4],['L','l',4],[';',';',4],['&#39;',"'",4],[ico('enter','ic-sm'),'ENTER',9]],
+ [['\u21e7','#SHIFT',9,'mod'],['Z','z',4],['X','x',4],['C','c',4],['V','v',4],['B','b',4],['N','n',4],['M','m',4],[',',',',4],['.','.',4],['/','/',4],['\u21e7','#SHIFT',11,'mod']],
+ [['Ctrl','#CTRL',5,'mod'],['Win','#GUI',5,'mod'],['Alt','#ALT',5,'mod'],['Space','SPACE',25],['Alt','#ALT',5,'mod'],['Win','#GUI',5,'mod'],[ico('menukey','ic-sm'),'MENU',5],['Ctrl','#CTRL',5,'mod']]
+];
+// 65% right-hand column: the keys a compact layout reaches through its nav row,
+// kept reachable here so moving up a tier never takes a key away. Six rows, to
+// line up with the main block's function row plus five - and the row that pairs
+// with the function row is the empty one, so hiding it in the deck costs no key.
+const NAV_65=[
+ [GAP(3)],
+ [['Del','DELETE',1],['Home','HOME',1],['End','END',1]],
+ [['Ins','INSERT',1],['PgUp','PAGEUP',1],['PgDn','PAGEDOWN',1]],
+ [GAP(3)],
+ [GAP(1),[ico('up','ic-sm'),'UP',1],GAP(1)],
+ [[ico('left','ic-sm'),'LEFT',1],[ico('down','ic-sm'),'DOWN',1],[ico('right','ic-sm'),'RIGHT',1]]
+];
+// TKL right-hand block: the 3x2 navigation cluster above the same arrow T. Six
+// rows, because its top row sits level with the function row exactly as it does
+// on a real board - PrtSc above Ins, not beside the number row.
+const NAV_TKL=[
+ [['PrtSc','PRINTSCREEN',1],['ScrLk','SCROLLLOCK',1],['Pause','PAUSE',1]],
+ [['Ins','INSERT',1],['Home','HOME',1],['PgUp','PAGEUP',1]],
+ [['Del','DELETE',1],['End','END',1],['PgDn','PAGEDOWN',1]],
+ [GAP(3)],
+ [GAP(1),[ico('up','ic-sm'),'UP',1],GAP(1)],
+ [[ico('left','ic-sm'),'LEFT',1],[ico('down','ic-sm'),'DOWN',1],[ico('right','ic-sm'),'RIGHT',1]]
+];
+// Numpad, placed explicitly because the tall Plus and Enter and the double
+// width Zero cannot be expressed as a list of rows.
+// [label, name, column, row, colSpan, rowSpan]
+const NUMPAD=[
+ ['Num','NUMLOCK',1,1],['/','KPSLASH',2,1],['*','KPSTAR',3,1],['-','KPMINUS',4,1],
+ ['7','KP7',1,2],['8','KP8',2,2],['9','KP9',3,2],['+','KPPLUS',4,2,1,2],
+ ['4','KP4',1,3],['5','KP5',2,3],['6','KP6',3,3],
+ ['1','KP1',1,4],['2','KP2',2,4],['3','KP3',3,4],[ico('enter','ic-sm'),'KPENTER',4,4,1,2],
+ ['0','KP0',1,5,2,1],['.','KPDOT',3,5]
+];
+
+// ---------------------------------------------------------------------
+// Compact layout, for a phone held upright. Twelve columns, and the symbols
+// live on a 123 layer because there is no room for them beside the letters.
+// The slash still sits immediately left of the right Shift, and Up directly
+// above Down, so the muscle memory matches the wider layouts.
+const KROWS_ABC=[
+ {fn:1,keys:[['Esc','ESC',1],['F1','F1',1],['F2','F2',1],['F3','F3',1],['F4','F4',1],['F5','F5',1],['F6','F6',1],['F7','F7',1],['F8','F8',1],['F9','F9',1],['F10','F10',1],['F11','F11',1],['F12','F12',1]]},
+ {num:1,keys:[['1','1',1],['2','2',1],['3','3',1],['4','4',1],['5','5',1],['6','6',1],['7','7',1],['8','8',1],['9','9',1],['0','0',1],['-','-',1],[ico('bksp','ic-sm'),'BACKSPACE',1]]},
+ {keys:[['Tab','TAB',1],['Q','q',1],['W','w',1],['E','e',1],['R','r',1],['T','t',1],['Y','y',1],['U','u',1],['I','i',1],['O','o',1],['P','p',1],['\\','\\',1]]},
+ {keys:[['\u21ea','CAPSLOCK',1],['A','a',1],['S','s',1],['D','d',1],['F','f',1],['G','g',1],['H','h',1],['J','j',1],['K','k',1],['L','l',1],[';',';',1],[ico('enter','ic-sm'),'ENTER',1]]},
+ {keys:[['\u21e7','#SHIFT',1,'mod'],['Z','z',1],['X','x',1],['C','c',1],['V','v',1],['B','b',1],['N','n',1],['M','m',1],['/','/',1],
+        ['\u21e7','#SHIFT',1,'mod'],[ico('up','ic-sm'),'UP',1]]},
+ {keys:[['123','@sym',1,'mod'],['Ctrl','#CTRL',1,'mod'],['Alt','#ALT',1,'mod'],['Win','#GUI',1,'mod'],['Space','SPACE',5],
+        [ico('left','ic-sm'),'LEFT',1],[ico('down','ic-sm'),'DOWN',1],[ico('right','ic-sm'),'RIGHT',1]]},
+ {nav:1,keys:[['Home','HOME',1],['End','END',1],['PgUp','PAGEUP',1],['PgDn','PAGEDOWN',1],['Del','DELETE',1]]}
+];
+// Copy, paste, undo and the app switcher are Command based on a Mac, so unlike
+// every other key in the tables these cannot be baked in - they are appended to
+// the nav row at build time, which buildKbd() reruns whenever the OS changes.
+const NAV_COMBOS=()=>OS==='mac'
+ ? [['\u2318C','GUI+C',1],['\u2318V','GUI+V',1],['\u2318Z','GUI+Z',1],['\u2318Tab','GUI+TAB',1]]
+ : [['Ctrl+C','CTRL+C',1],['Ctrl+V','CTRL+V',1],['Ctrl+Z','CTRL+Z',1],['Alt+Tab','ALT+TAB',1]];
 // Every printable ASCII symbol is reachable here. Nothing outside ASCII is
 // offered, because the board types through a US HID map - a character it cannot
 // represent would silently do nothing, which is worse than not showing it.
+// Same twelve column geometry as the letter layer, so Backspace, Enter, the
+// right Shift, the slash and the arrows never move under the thumb.
 const KROWS_SYM=[
- {fn:1,keys:[['Esc','ESC'],['F1','F1'],['F2','F2'],['F3','F3'],['F4','F4'],['F5','F5'],['F6','F6'],['F7','F7'],['F8','F8'],['F9','F9'],['F10','F10'],['F11','F11'],['F12','F12']]},
- {keys:[['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0']]},
- {keys:[['!','!'],['@','@'],['#','#'],['$','$'],['%','%'],['^','^'],['&amp;','&'],['*','*'],['(','('],[')',')']]},
- {keys:[['-','-'],['_','_'],['=','='],['+','+'],['[','['],[']',']'],['{','{'],['}','}'],['&lt;','<'],['&gt;','>']]},
- {keys:[[';',';'],[':',':'],['&#39;',"'"],['&quot;','"'],[',',','],['.','.'],['/','/'],['?','?'],
-        ['\u21e7','#SHIFT','mod'],[ico('bksp','ic-sm'),'BACKSPACE']]},
- {keys:[['ABC','@abc','mod'],['Ctrl','#CTRL','mod'],['Alt','#ALT','mod'],['Win','#GUI','mod'],['Space','SPACE','s2'],
-        [ico('left','ic-sm'),'LEFT'],[ico('up','ic-sm'),'UP'],[ico('down','ic-sm'),'DOWN'],[ico('right','ic-sm'),'RIGHT']]},
- // Same shape as the letter layer: a Shift by the punctuation, arrows inline below.
- {nav:1,keys:[['\\','\\'],['|','|'],['`','`'],['~','~'],['Tab','TAB'],['Enter','ENTER'],['Del','DELETE'],
-        ['Home','HOME'],['End','END'],['PgUp','PAGEUP'],['PgDn','PAGEDOWN']]}
+ {fn:1,keys:[['Esc','ESC',1],['F1','F1',1],['F2','F2',1],['F3','F3',1],['F4','F4',1],['F5','F5',1],['F6','F6',1],['F7','F7',1],['F8','F8',1],['F9','F9',1],['F10','F10',1],['F11','F11',1],['F12','F12',1]]},
+ {num:1,keys:[['1','1',1],['2','2',1],['3','3',1],['4','4',1],['5','5',1],['6','6',1],['7','7',1],['8','8',1],['9','9',1],['0','0',1],['=','=',1],[ico('bksp','ic-sm'),'BACKSPACE',1]]},
+ {keys:[['Tab','TAB',1],['!','!',1],['@','@',1],['#','#',1],['$','$',1],['%','%',1],['^','^',1],['&amp;','&',1],['*','*',1],['(','(',1],[')',')',1],['|','|',1]]},
+ {keys:[['_','_',1],['+','+',1],['[','[',1],[']',']',1],['{','{',1],['}','}',1],['&lt;','<',1],['&gt;','>',1],['`','`',1],['~','~',1],[':',':',1],[ico('enter','ic-sm'),'ENTER',1]]},
+ {keys:[[';',';',1],['&#39;',"'",1],['&quot;','"',1],[',',',',1],['.','.',1],['?','?',1],['-','-',1],['\\','\\',1],['/','/',1],
+        ['\u21e7','#SHIFT',1,'mod'],[ico('up','ic-sm'),'UP',1]]},
+ {keys:[['ABC','@abc',1,'mod'],['Ctrl','#CTRL',1,'mod'],['Alt','#ALT',1,'mod'],['Win','#GUI',1,'mod'],['Space','SPACE',5],
+        [ico('left','ic-sm'),'LEFT',1],[ico('down','ic-sm'),'DOWN',1],[ico('right','ic-sm'),'RIGHT',1]]},
+ {nav:1,keys:[['Home','HOME',1],['End','END',1],['PgUp','PAGEUP',1],['PgDn','PAGEDOWN',1],['Del','DELETE',1]]}
 ];
+
+// Which layout the container is wide enough for. Measured on the keyboard, not
+// the window, because the deck inside the trackpad card is far narrower than
+// the page it sits on.
+const KB_TIERS=[['full',1300],['tkl',1010],['ansi',500],['compact',0]];
+function kbTier(w){for(const t of KB_TIERS)if(w>=t[1])return t[0];return 'compact';}
 let KLAYER='abc';
 const mods=new Set();
 const held=new Set();
@@ -2721,17 +2898,87 @@ function syncMods(){
 // Built into any number of containers. KLAYER is shared deliberately: switching
 // to symbols on the deck should not leave the Type tab on letters.
 const KBDS=['kbd','kbd2'];
+const kbTierOf={};          // hostId -> tier last rendered, so a resize is cheap
+
+// A modifier's cap is relabelled per computer OS - Alt/Opt, Win/Cmd/Super - so a
+// Mac user is not hunting for a key called Win. Everything else keeps the label
+// baked into the row. The double quote has to be escaped for the attribute
+// itself, not just for display, or data-k=""" truncates and that key silently
+// stops working.
+function kBtn(k){
+  if(!k||k[1]===null)return '<span class="kgap" style="grid-column:span '+(k?k[2]:1)+'"></span>';
+  return '<button class="'+(k[3]||'')+'" style="grid-column:span '+k[2]+'"'+
+         ' data-k="'+esc(k[1]).replace(/"/g,'&quot;')+'">'+(modLabel(k[1])||k[0])+'</button>';
+}
+const kRow=(keys,cls)=>'<div class="krow'+(cls?' '+cls:'')+'">'+keys.map(kBtn).join('')+'</div>';
+
+function kbBlocks(tier){
+  if(tier==='compact'){
+    const rows=KLAYER==='abc'?KROWS_ABC:KROWS_SYM;
+    return '<div class="kblock kmain c12">'+
+      rows.map(r=>kRow(r.nav?r.keys.concat(NAV_COMBOS()):r.keys,
+                       r.fn?'fn':r.nav?'nav':r.num?'num':'')).join('')+'</div>';
+  }
+  // The function row is never optional above compact: Esc lives nowhere else, and
+  // a tier that drops it would take a key away from a *wider* screen.
+  let main='<div class="kblock kmain ansi">'+kRow(ANSI_FN,'fn');
+  // The digits row is tagged rather than counted: a positional selector silently
+  // moved onto the letters when the function row stopped being the first child.
+  main+=ANSI_MAIN.map((r,i)=>kRow(r,i===0?'num':'')).join('')+'</div>';
+
+  // The right-hand column always ends with the arrow T, so its bottom row lines
+  // up with the main block's bottom row however many clusters sit above it.
+  // Its top row is tagged fn for the same reason the numpad's spacer is: the
+  // deck hides the function row, and a block that keeps six rows while the main
+  // block shows five divides the same height differently and stops lining up.
+  const tkl=(tier==='tkl'||tier==='full');
+  const right='<div class="kblock kside c3">'+
+    (tkl?NAV_TKL:NAV_65).map((r,i)=>kRow(r,i===0?'fn':'')).join('')+'</div>';
+
+  let num='';
+  if(tier==='full'){
+    num='<div class="kblock knum">'+kRow([GAP(4)],'fn')+'<div class="kpad">'+
+      NUMPAD.map(k=>'<button style="grid-column:'+k[2]+(k[4]?' / span '+k[4]:'')+
+        ';grid-row:'+k[3]+(k[5]?' / span '+k[5]:'')+'"'+
+        ' data-k="'+esc(k[1]).replace(/"/g,'&quot;')+'">'+k[0]+'</button>').join('')+
+      '</div></div>';
+  }
+  return main+right+num;
+}
+
+function kbTierFor(host){
+  const w=host.clientWidth||host.getBoundingClientRect().width;
+  let t=kbTier(w);
+  // The deck is locked to the trackpad card's height, so in a card it cannot
+  // afford a function row or a nav cluster however wide the page is. Fullscreen
+  // is the exception: there it has the whole screen, and capping it would be the
+  // "big screen, few keys" problem this tiering exists to remove.
+  const pw=document.getElementById('padwrap');
+  const fs=pw&&pw.classList.contains('fs');
+  if(host.id==='kbd2'&&t!=='compact'&&!fs)t='ansi';
+  return t;
+}
+
 function buildKbd(){KBDS.forEach(id=>{if($(id))buildKbdIn(id);});}
+
+// Re-render only when the tier actually changes. A resize that does not cross a
+// threshold costs one width read, which matters because rebuilding drops every
+// listener and would fight a key held down at the time.
+function kbWatch(){
+  if(!window.ResizeObserver)return;
+  KBDS.forEach(id=>{
+    const h=$(id); if(!h||h._kro)return;
+    h._kro=new ResizeObserver(()=>{ if(kbTierFor(h)!==kbTierOf[id])buildKbdIn(id); });
+    h._kro.observe(h);
+  });
+}
+
 function buildKbdIn(hostId){
   const host=$(hostId);
-  const rows=KLAYER==='abc'?KROWS_ABC:KROWS_SYM;
-  // The double quote has to be escaped for the attribute itself, not just for
-  // display, or data-k=""" truncates and that key silently stops working.
-  host.innerHTML=rows.map(row=>'<div class="krow'+(row.fn?' fn':'')+(row.nav?' nav':'')+'">'+row.keys.map(k=>
-    // A modifier's cap is relabelled per computer OS - Alt/Opt, Win/Cmd/Super -
-    // so a Mac user is not hunting for a key called Win. Everything else keeps
-    // the label baked into the row.
-    '<button class="'+(k[2]||'')+'" data-k="'+esc(k[1]).replace(/"/g,'&quot;')+'">'+(modLabel(k[1])||k[0])+'</button>').join('')+'</div>').join('');
+  const tier=kbTierFor(host);
+  kbTierOf[hostId]=tier;
+  host.className='kbd t-'+tier;
+  host.innerHTML=kbBlocks(tier);
 
   // Real down/up per key rather than a click, so two fingers can chord: hold Alt
   // with one and strike Tab with another, exactly like a physical keyboard.
@@ -2775,6 +3022,9 @@ function buildKbdIn(hostId){
     b.addEventListener('pointerup',up,{passive:false});
     b.addEventListener('pointercancel',up,{passive:false});
   });
+  // A rebuild across a tier change throws away the old caps, so the latched
+  // modifiers have to be re-lit on the new ones.
+  syncMods();
 }
 
 // =====================================================================
@@ -2941,29 +3191,32 @@ const SC_KEY={ENTER:'Enter',ESC:'Esc',TAB:'Tab',SPACE:'Space',BACKSPACE:'Backspa
 // ---------------------------------------------------------------------
 //  host OS  (the computer, not the phone)
 // ---------------------------------------------------------------------
-// The board tells us what it is plugged into by watching the Num Lock LED, and
-// reports it as host_os in every status. That one fact drives three things on
-// this side: which modifier the app switcher holds, how the modifier keys are
-// labelled, and - unless you are browsing another - which shortcuts show. The
-// firmware owns the same value for the lock shortcut and the gestures, so the
-// two never disagree. SC_OS below is the *shortcuts* filter and defaults to OS;
-// tapping a shortcut OS tab pins it (scOsManual) so browsing is not fought.
+// The board tells us what it is plugged into by watching how the host enumerates
+// it, and reports it as host_os in every status. That one fact drives three
+// things on this side: which modifier the app switcher holds, how the modifier
+// keys are labelled, and - unless you are browsing another - which shortcuts
+// show. The firmware owns the same value for the lock shortcut and the gestures,
+// so the two never disagree. SC_OS below is the *shortcuts* filter and defaults
+// to OS; tapping a shortcut OS tab pins it (scOsManual) so browsing is not
+// fought.
 // (OS, OS_SRC, ASW_MOD, scOsManual and osTok are declared earlier, above defCfg,
 //  because defCfg() reads OS while seeding CFG near the top of the script.)
 // Short cap labels per computer OS. Unicode technical symbols like the ones
 // already used on the keyboard, never emoji (see AGENTS.md).
-// Mac uses its own key glyphs, which is both what a Mac user reads and narrow
-// enough that a phone-width key never clips "Cmd" to "C...". PC labels stay as
-// short words; Super gets the diamond glyph so it fits like the rest.
+// All three are single glyphs, which is what lets the modifier row survive a
+// twelve column grid: "Win" needed 24px in a 22px key on a 360px phone and was
+// clipped, while the glyph fits any width. Mac uses its own key symbols, which
+// is both what a Mac user reads and narrow enough never to clip.
 const KB_MODLABEL={
   '#CTRL' :{mac:'⌃',win:'Ctrl',linux:'Ctrl'},   // ⌃
   '#ALT'  :{mac:'⌥',win:'Alt', linux:'Alt'},     // ⌥
-  '#GUI'  :{mac:'⌘',win:'Win', linux:'◆'},  // ⌘  /  ◆ (Super)
+  '#GUI'  :{mac:'⌘',win:'⊞', linux:'◆'},  // ⌘  /  ⊞ (Windows)  /  ◆ (Super)
   '#SHIFT':{mac:'⇧',win:'⇧',linux:'⇧'} // ⇧
 };
 function modLabel(dataK){const m=KB_MODLABEL[dataK];return m?(m[OS]||m.win):null;}
-function applyHostOs(os,src){
+function applyHostOs(os,src,det){
   if(src)OS_SRC=src;
+  if(det!==undefined)OS_DET=osTok(det);
   const n=osTok(os);
   if(!n||n===OS){paintOsUi();return;}   // 'unknown'/'pending' -> keep what we have
   OS=n;
@@ -3000,15 +3253,25 @@ function paintOsUi(){
     b.classList.toggle('on', b.dataset.osSet===(OS_SRC==='manual'?OS:'auto')));
   const name={mac:'macOS',win:'Windows',linux:'Linux'}[OS]||'Unknown';
   const nm=document.getElementById('osName');
-  if(nm)nm.textContent=OS_SRC==='pending'?'Detecting…':name;
+  if(nm)nm.textContent=OS_SRC==='pending'?'Detecting…'
+    :OS_SRC==='undetermined'?'Not identified':name;
   // Ctrl+Alt+Del is Windows-only; on a Mac it does nothing and would break the
   // unlock flow, so the option is hidden and cleared there.
   const cad=document.getElementById('tCad');
   if(cad){cad.style.display=(OS==='mac')?'none':'';if(OS==='mac')cad.classList.remove('on');}
   const sub=document.getElementById('osSub');
-  if(sub)sub.textContent=OS_SRC==='manual'?'Set by hand'
-    :OS_SRC==='auto'?'Detected from the Num Lock light'
-    :'Working out whether this is a Mac or a PC';
+  if(!sub)return;
+  // A pin set on one computer follows the board to the next one - which is how a
+  // board set up on a Mac ends up holding Cmd on a PC and opening the Start menu.
+  // Say that out loud instead of letting it look like detection failing.
+  const detName={mac:'macOS',win:'Windows',linux:'Linux'}[OS_DET];
+  sub.textContent =
+      (OS_SRC==='manual'&&detName&&OS_DET!==OS)
+        ? 'Set by hand. This computer looks like '+detName+' \u2014 tap Auto to follow it.'
+    : OS_SRC==='manual'       ? 'Set by hand'
+    : OS_SRC==='auto'         ? 'Detected while this computer connected'
+    : OS_SRC==='undetermined' ? 'This computer did not identify itself \u2014 pick one above'
+    :                           'Working out whether this is a Mac or a PC';
 }
 
 let SC_OS='win';
@@ -3221,12 +3484,269 @@ function macroEditor(slot){
 }
 
 // =====================================================================
+//  password vault
+// =====================================================================
+// Secrets the board types for you. The board never sends one back except to the
+// one request that asks for it and proves the PIN in the same breath, so this
+// page holds nothing: every action asks again, including typing. That is on
+// purpose - the keystrokes ARE the secret, and the board cannot see which
+// window they land in.
+let VAULT=[],V_AUTH=false,V_PINSET=false;
+const V_KIND={password:'Password',pin:'PIN'};
+function loadVault(){
+  send({cmd:'vault_list'},r=>{
+    VAULT=(r&&r.entries)||[];
+    V_AUTH=!!(r&&r.auth_set);
+    V_PINSET=!!(r&&r.vault_pin_set);
+    renderVault();
+  });
+}
+// The PIN prompt that guards getting a secret OUT - reading one or typing one.
+// Four boxes rather than a text field, because it is the same act as unlocking
+// the board and should look like it. Nothing is remembered between two of
+// these, so there is no window during which the vault is open.
+function vaultAsk(title,note,run){
+  sheet(title,
+    '<p class="hint">'+note+'</p>'+
+    '<p class="hint" style="margin-top:10px">'+(V_PINSET?'Vault PIN':'Access PIN')+'</p>'+
+    '<div class="pinrow" id="vpinRow">'+
+      [0,1,2,3].map(i=>'<input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" '+
+        'maxlength="1" autocomplete="off" aria-label="PIN digit '+(i+1)+'">').join('')+
+    '</div>'+
+    '<p class="hint" id="vpinMsg" style="margin-top:10px;color:var(--bad)"></p>',
+    ()=>{
+      const p=bindPin('vpinRow',v=>{
+        run(v,r=>{
+          const m=$('vpinMsg');
+          if(m)m.textContent=(r&&r.message)||'That PIN was not right.'+
+            (r&&r.retry_in?' Try again in '+r.retry_in+'s.':'');
+          p.reject();
+        });
+      });
+      p.focus();
+    });
+}
+function renderVault(){
+  $('vaultList').innerHTML=VAULT.length
+    ? VAULT.map(v=>'<div class="item">'+ico('key')+
+        '<div class="tx"><b>'+esc(v.label)+'</b><span>'+(V_KIND[v.type]||'Password')+'</span></div>'+
+        '<button class="btn sm ok" data-vtype="'+v.slot+'">Type</button>'+
+        '<button class="iconbtn" data-vshow="'+v.slot+'" aria-label="Show">'+ico('eye','ic-sm')+'</button>'+
+        '<button class="iconbtn" data-ved="'+v.slot+'" aria-label="Edit">'+ico('edit','ic-sm')+'</button>'+
+        '</div>').join('')
+    : '<p class="hint">Nothing saved yet.</p>';
+
+  $('vaultList').querySelectorAll('[data-vtype]').forEach(b=>b.onclick=()=>{
+    const v=VAULT.find(x=>x.slot===+b.dataset.vtype); if(!v)return;
+    const what=v.type==='pin'?'PIN':'password';
+    vaultAsk('Type on the computer',
+      'This types the '+what+' saved for <b>'+esc(v.label)+'</b> wherever the cursor is on the computer. '+
+      'Put the cursor in the right box first \u2014 the board cannot see where it is typing.',
+      (pin,fail)=>send({cmd:'vault_type',slot:v.slot,pin:pin},r=>{
+        if(r&&r.reply==='vault_typed'){closeSheet();toast('Typed on the computer','ok');buzz(12);}
+        else fail(r);
+      }));
+  });
+
+  $('vaultList').querySelectorAll('[data-vshow]').forEach(b=>b.onclick=()=>{
+    const v=VAULT.find(x=>x.slot===+b.dataset.vshow); if(!v)return;
+    const what=v.type==='pin'?'PIN':'password';
+    vaultAsk('Show this '+what,
+      'This shows the '+what+' saved for <b>'+esc(v.label)+'</b> on this screen.',
+      (pin,fail)=>send({cmd:'vault_get',slot:v.slot,pin:pin},r=>{
+        if(r&&r.reply==='vault_secret')showSecret(r); else fail(r);
+      }));
+  });
+
+  $('vaultList').querySelectorAll('[data-ved]').forEach(b=>b.onclick=()=>{
+    vaultEditor(VAULT.find(x=>x.slot===+b.dataset.ved));
+  });
+
+  $('btnVaultPin').textContent=V_PINSET?'Change vault PIN':'Add a vault PIN';
+  $('btnVaultWipe').style.display=VAULT.length?'':'none';
+  $('vaultHint').innerHTML=V_AUTH
+    ? (V_PINSET
+        ? 'Reading or typing one asks for the <b>vault PIN</b>, every time. Saving and editing do not \u2014 nothing there gives a stored secret back.'
+        : 'Reading or typing one asks for the <b>access PIN</b>, every time. Give the vault a PIN of its own so unlocking the dashboard is not the same as unlocking your passwords.')
+    : 'Set an access PIN under Settings before storing anything. Without one, anybody in radio range could have these typed out.';
+}
+// A reveal is deliberately plain: shown once, in this sheet, and gone when it is
+// closed. Nothing is written to storage and nothing is copied for you.
+function showSecret(r){
+  sheet(esc(r.label),
+    '<p class="hint">'+(V_KIND[r.type]||'Password')+', stored on the board.</p>'+
+    '<div class="fld" style="margin-top:12px"><label>Secret</label>'+
+      '<input id="vshow" readonly value="'+esc(r.secret)+'" '+
+      'style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px"></div>'+
+    '<p class="hint">Close this when you are done. It is not kept anywhere on this page.</p>'+
+    '<button class="btn blk" id="vshowClose" style="margin-top:12px">'+ico('check','ic-sm')+'Done</button>',
+    ()=>{ $('vshowClose').onclick=closeSheet; });
+}
+// No argument adds; passing an entry edits it. Neither asks for the vault PIN:
+// saving cannot disclose anything, and the stored secret is never sent here to
+// be put back in the field - leaving it empty keeps what is on the board.
+function vaultEditor(edit){
+  if(!V_AUTH)return toast('Set an access PIN first','bad');
+  const kind=edit?(edit.type==='pin'?'pin':'password'):'password';
+  const opt=(v,t)=>'<button class="btn sm'+(v===kind?' on':'')+'" data-vk="'+v+'">'+t+'</button>';
+  sheet(edit?'Edit stored secret':'Store a password',
+    '<div class="fld"><label>What it is for</label>'+
+      '<input id="v_l" placeholder="Netflix, work email\u2026" autocomplete="off" value="'+esc(edit?edit.label:'')+'"></div>'+
+    '<div class="fld"><label>Kind</label><div class="row" id="v_k">'+opt('password','Password')+opt('pin','PIN')+'</div></div>'+
+    '<div class="fld"><label id="v_slab">'+(edit?'New password':'Password')+'</label>'+
+      '<input type="password" id="v_s" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
+      (edit?'Leave empty to keep the stored one':'Any length')+'"></div>'+
+    '<p class="hint" id="v_msg" style="color:var(--bad)"></p>'+
+    '<p class="hint">Flash on this board is not encrypted, so anyone who physically takes it can read what is stored here. The PIN is what stops someone in radio range using it.</p>'+
+    '<button class="btn ok blk" id="v_ok" style="margin-top:12px">'+ico('check','ic-sm')+'Save</button>'+
+    (edit?'<button class="btn bad blk" id="v_del" style="margin-top:8px">'+ico('trash','ic-sm')+'Delete this</button>':''),
+    ()=>{
+      let k=kind;
+      const f=$('v_s');
+      // A PIN is digits. Say so with the keypad, and enforce it as it is typed
+      // rather than letting the board reject it after the fact.
+      const paintKind=()=>{
+        const pin=k==='pin';
+        f.setAttribute('inputmode',pin?'numeric':'text');
+        f.placeholder=edit?('Leave empty to keep the stored one'):(pin?'Digits only, any length':'Any length');
+        $('v_slab').textContent=(edit?'New ':'')+(pin?'PIN':'Password');
+        if(pin)f.value=f.value.replace(/[^0-9]/g,'');
+      };
+      f.addEventListener('input',()=>{if(k==='pin')f.value=f.value.replace(/[^0-9]/g,'');});
+      $('v_k').querySelectorAll('[data-vk]').forEach(b=>b.onclick=()=>{
+        k=b.dataset.vk;
+        $('v_k').querySelectorAll('[data-vk]').forEach(x=>x.classList.toggle('on',x===b));
+        paintKind();
+      });
+      paintKind();
+      $('v_ok').onclick=()=>{
+        const l=$('v_l').value.trim(), s=f.value;
+        if(!l)return toast('Give it a name','bad');
+        if(!s&&!edit)return toast(k==='pin'?'Enter the PIN':'Enter the password','bad');
+        if(s&&k==='pin'&&!/^[0-9]+$/.test(s))return toast('A PIN can only contain digits','bad');
+        const m={cmd:'vault_save',label:l,type:k};
+        if(s)m.secret=s;
+        if(edit)m.slot=edit.slot;
+        send(m,r=>{
+          if(r&&r.reply==='vault_saved'){toast(edit?'Updated':'Stored on the board','ok');closeSheet();syncAll();}
+          else{const e=$('v_msg');if(e)e.textContent=(r&&r.message)||'Save failed';}
+        });
+      };
+      // Deleting cannot be undone and the board cannot show you what you are
+      // about to lose, so it asks before it happens.
+      if(edit)$('v_del').onclick=()=>{
+        if(!confirm('Delete "'+edit.label+'"?\n\nThe stored '+(edit.type==='pin'?'PIN':'password')+
+                    ' will be erased from the board. This cannot be undone.'))return;
+        send({cmd:'vault_delete',slot:edit.slot},r=>{
+          if(r&&r.reply==='vault_deleted'){toast('Deleted');closeSheet();syncAll();}
+          else{const e=$('v_msg');if(e)e.textContent=(r&&r.message)||'Could not delete it';}
+        });
+      };
+    });
+}
+// Giving the vault its own PIN is the browser behaviour: the thing that unlocks
+// the dashboard stops being the thing that unlocks the secrets.
+//
+// Changing it needs the current one. Resetting a forgotten one needs the access
+// PIN - and erases the vault, because otherwise the access PIN would quietly be
+// a way to read everything and the second PIN would be decorative.
+function vaultPinEditor(){
+  if(!V_AUTH)return toast('Set an access PIN first','bad');
+  const rows=(id,label)=>
+    '<p class="hint" style="margin-top:12px">'+label+'</p>'+
+    '<div class="pinrow" id="'+id+'">'+
+      [0,1,2,3].map(i=>'<input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" '+
+        'maxlength="1" autocomplete="off" aria-label="'+label+' digit '+(i+1)+'">').join('')+
+    '</div>';
+  const mode=V_PINSET?'change':'add';
+  sheet(V_PINSET?'Change vault PIN':'Add a vault PIN',
+    '<p class="hint">'+(V_PINSET
+      ? 'The vault has its own four digit PIN. Enter it to change it, or leave the new one empty to go back to using the access PIN.'
+      : 'Right now the access PIN opens your stored passwords. Give the vault a PIN of its own and unlocking the dashboard stops being the same thing.')+'</p>'+
+    rows('vpCur',V_PINSET?'Current vault PIN':'Access PIN')+
+    rows('vpNew',V_PINSET?'New vault PIN (or leave empty to remove)':'New vault PIN')+
+    '<p class="hint" id="vp_msg" style="margin-top:10px;color:var(--bad)"></p>'+
+    '<button class="btn ok blk" id="vp_ok" style="margin-top:12px">'+ico('shield','ic-sm')+'Save</button>'+
+    (V_PINSET?'<button class="btn bad blk" id="vp_forgot" style="margin-top:8px">'+ico('trash','ic-sm')+'Forgotten it?</button>':''),
+    ()=>{
+      const cur=bindPin('vpCur'), nw=bindPin('vpNew');
+      const fail=r=>{const e=$('vp_msg');if(e)e.textContent=(r&&r.message)||'Could not change it';cur.reject();};
+      $('vp_ok').onclick=()=>{
+        const c=cur.value(), n=nw.value();
+        if(c.length!==4)return toast('Enter all four digits','bad');
+        if(n.length&&n.length!==4)return toast('A vault PIN is four digits','bad');
+        const m={cmd:'vault_pin',new_pin:n};
+        mode==='change'?m.pin=c:m.access=c;
+        send(m,r=>{
+          if(r&&r.reply==='vault_pin_set'){
+            toast(n?'Vault PIN saved':'Vault PIN removed','ok');closeSheet();syncAll();
+          }else fail(r);
+        });
+      };
+      // The only way past a forgotten vault PIN, and it costs what it guarded.
+      if(V_PINSET)$('vp_forgot').onclick=()=>{
+        if(!confirm('Reset the vault PIN with your access PIN?\n\n'+
+                    'Every stored password will be erased. That is the only way to '+
+                    'reset a PIN you cannot produce \u2014 otherwise the access PIN would be '+
+                    'a way to read them.'))return;
+        vaultAskAccess();
+      };
+    });
+}
+// Reset path: proves the access PIN, sets a new vault PIN, and takes the vault
+// with it. Split out so the confirmation above is read before the PIN is asked.
+function vaultAskAccess(){
+  sheet('Reset vault PIN',
+    '<p class="hint">Enter the <b>access PIN</b> to set a new vault PIN. Everything stored in the vault will be erased.</p>'+
+    '<p class="hint" style="margin-top:12px">Access PIN</p>'+
+    '<div class="pinrow" id="vrAcc">'+
+      [0,1,2,3].map(i=>'<input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" '+
+        'maxlength="1" autocomplete="off" aria-label="Access PIN digit '+(i+1)+'">').join('')+
+    '</div>'+
+    '<p class="hint" style="margin-top:12px">New vault PIN (or leave empty to remove it)</p>'+
+    '<div class="pinrow" id="vrNew">'+
+      [0,1,2,3].map(i=>'<input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" '+
+        'maxlength="1" autocomplete="off" aria-label="New vault PIN digit '+(i+1)+'">').join('')+
+    '</div>'+
+    '<p class="hint" id="vr_msg" style="margin-top:10px;color:var(--bad)"></p>'+
+    '<button class="btn bad blk" id="vr_ok" style="margin-top:12px">'+ico('trash','ic-sm')+'Reset and erase</button>',
+    ()=>{
+      const acc=bindPin('vrAcc'), nw=bindPin('vrNew');
+      acc.focus();
+      $('vr_ok').onclick=()=>{
+        const a=acc.value(), n=nw.value();
+        if(a.length!==4)return toast('Enter all four digits','bad');
+        if(n.length&&n.length!==4)return toast('A vault PIN is four digits','bad');
+        send({cmd:'vault_pin',access:a,new_pin:n},r=>{
+          if(r&&r.reply==='vault_pin_set'){
+            toast('Vault reset','ok');closeSheet();syncAll();
+          }else{
+            const e=$('vr_msg');if(e)e.textContent=(r&&r.message)||'Wrong access PIN';acc.reject();
+          }
+        });
+      };
+    });
+}
+// Ungated on the board, because destroying secrets reveals none of them and it
+// is the only way back from a forgotten vault PIN. Guarded here by two prompts.
+function vaultWipe(){
+  if(!VAULT.length)return toast('Nothing stored');
+  if(!confirm('Erase the whole vault?\n\nAll '+VAULT.length+' stored '+
+              (VAULT.length===1?'secret':'secrets')+' will be destroyed. This cannot be undone.'))return;
+  if(!confirm('Really erase everything?\n\nThis is the last warning.'))return;
+  send({cmd:'vault_wipe'},()=>{toast('Vault erased');syncAll();});
+}
+
+// =====================================================================
 //  saved PCs
 // =====================================================================
 // Names come back from the board, passwords never do. Unlocking sends the slot
 // number and the board looks the password up itself, so the secret only ever
-// travels once - when you save it.
+// travels once - when you save it. Each slot also carries the OS of that
+// computer, because the board may be plugged into a different one by the time
+// the slot is used and the two login windows want different keystrokes.
 let PCS=[],PC_AUTH=false;
+const PC_OSN={mac:'macOS',windows:'Windows',linux:'Linux'};
 function loadPcs(){
   send({cmd:'pc_list'},r=>{
     PCS=(r&&r.profiles)||[];PC_AUTH=!!(r&&r.auth_set);
@@ -3236,8 +3756,10 @@ function loadPcs(){
 function renderPcs(){
   $('pcList').innerHTML=PCS.length
     ? PCS.map(p=>'<div class="item">'+ico('cpu')+
-        '<div class="tx"><b>'+esc(p.name)+'</b><span>password held on the board</span></div>'+
+        '<div class="tx"><b>'+esc(p.name)+'</b><span>'+
+          (PC_OSN[p.os]||'Follows this computer')+'</span></div>'+
         '<button class="btn sm ok" data-pcgo="'+p.slot+'">Unlock</button>'+
+        '<button class="iconbtn" data-pced="'+p.slot+'" aria-label="Edit">'+ico('edit','ic-sm')+'</button>'+
         '<button class="iconbtn" data-pcdel="'+p.slot+'" aria-label="Forget">'+ico('trash','ic-sm')+'</button>'+
         '</div>').join('')
     : '<p class="hint">Nothing saved yet.</p>';
@@ -3246,27 +3768,49 @@ function renderPcs(){
       toast(r&&r.reply==='unlock_done'?'Unlock sent':'Already unlocked','ok');refresh();});
     buzz(12);
   });
+  $('pcList').querySelectorAll('[data-pced]').forEach(b=>b.onclick=()=>{
+    pcEditor(PCS.find(p=>p.slot===+b.dataset.pced));
+  });
   $('pcList').querySelectorAll('[data-pcdel]').forEach(b=>b.onclick=()=>{
-    if(!confirm('Forget this saved password?'))return;
-    send({cmd:'pc_delete',slot:+b.dataset.pcdel},()=>{toast('Forgotten');loadPcs();});
+    const p=PCS.find(q=>q.slot===+b.dataset.pcdel);
+    if(!confirm('Forget "'+((p&&p.name)||'this PC')+'"?\n\nThe password stored on the board will be deleted. This cannot be undone.'))return;
+    send({cmd:'pc_delete',slot:+b.dataset.pcdel},()=>{toast('Forgotten');syncAll();});
   });
   $('pcHint').textContent=PC_AUTH
     ? 'Stored on the board, so every phone sees them. A saved password is never sent back to this page - unlocking just names the slot.'
     : 'Set an access PIN under Settings before saving a password. Without one, anybody in radio range could unlock this PC with a single request.';
 }
-function pcEditor(){
+// No argument saves a new PC; passing a profile edits that slot. Editing never
+// asks for the password again - the board keeps the stored one when the field
+// is left empty, because this page has no way to show it back.
+function pcEditor(edit){
   if(!PC_AUTH)return toast('Set an access PIN first','bad');
-  sheet('Save this PC',
-    '<div class="fld"><label>Name</label><input id="pc_n" placeholder="Work laptop" autocomplete="off"></div>'+
-    '<div class="fld"><label>PC password</label><input type="password" id="pc_p" autocomplete="off" value="'+esc($('unlockPw').value)+'"></div>'+
+  const osNow=(OS==='mac'?'mac':OS==='linux'?'linux':'windows');
+  const cur=edit?(edit.os&&PC_OSN[edit.os]?edit.os:'auto'):osNow;
+  const opt=(v,t)=>'<button class="btn sm'+(v===cur?' on':'')+'" data-pcos="'+v+'">'+t+'</button>';
+  sheet(edit?'Edit saved PC':'Save this PC',
+    '<div class="fld"><label>Name</label><input id="pc_n" placeholder="Work laptop" autocomplete="off" value="'+esc(edit?edit.name:'')+'"></div>'+
+    '<div class="fld"><label>This computer is</label><div class="row" id="pc_os">'+
+      opt('windows','Windows')+opt('mac','macOS')+opt('linux','Linux')+opt('auto','Auto')+
+    '</div><p class="hint">Its login screen is woken differently on each, and the board may be plugged into another computer by the time you use this. Auto follows whatever is attached.</p></div>'+
+    '<div class="fld"><label>PC password</label><input type="password" id="pc_p" autocomplete="off" placeholder="'+(edit?'Leave empty to keep the saved one':'')+'" value="'+esc(edit?'':$('unlockPw').value)+'"></div>'+
     '<p class="hint">The board stores this in flash, which is not encrypted. Anyone who takes the board can read it, so treat it like a written-down password. The access PIN is what stops someone in radio range using it.</p>'+
     '<button class="btn ok blk" id="pc_ok" style="margin-top:14px">'+ico('check','ic-sm')+'Save</button>',
     ()=>{
+      let os=cur;
+      $('pc_os').querySelectorAll('[data-pcos]').forEach(b=>b.onclick=()=>{
+        os=b.dataset.pcos;
+        $('pc_os').querySelectorAll('[data-pcos]').forEach(x=>x.classList.toggle('on',x===b));
+      });
       $('pc_ok').onclick=()=>{
         const n=$('pc_n').value.trim(), p=$('pc_p').value;
-        if(!n||!p)return toast('Name and password are both needed','bad');
-        send({cmd:'pc_save',name:n,password:p},r=>{
-          if(r&&r.status==='ok'){toast('Saved on the board','ok');$('unlockPw').value='';loadPcs();closeSheet();}
+        if(!n)return toast('A name is needed','bad');
+        if(!p&&!edit)return toast('Name and password are both needed','bad');
+        const m={cmd:'pc_save',name:n,os:os};
+        if(p)m.password=p;
+        if(edit)m.slot=edit.slot;
+        send(m,r=>{
+          if(r&&r.status==='ok'){toast(edit?'Updated':'Saved on the board','ok');$('unlockPw').value='';closeSheet();syncAll();}
           else toast((r&&r.message)||'Save failed','bad');
         });
       };
@@ -3276,15 +3820,41 @@ function pcEditor(){
 // =====================================================================
 //  status
 // =====================================================================
+// Everything the board stores is shown in more than one place, so nothing may
+// depend on the user pressing Refresh. Anything that changes state on the board
+// calls syncAll(); the status poll below catches changes made from another
+// phone, and applyStatus() rebuilds whatever a change to the PIN affects.
+let AUTH_SET=null;
+function syncAll(){refresh();loadMacros();loadPcs();loadVault();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
 }
 function applyStatus(d){
   if(!d)return;
-  if(d.host_os)applyHostOs(d.host_os,d.host_os_source);
+  if(d.host_os)applyHostOs(d.host_os,d.host_os_source,d.host_os_detected);  // The evidence behind the verdict, in the UI rather than only on the serial
+  // port: a detection argument is settled by reading these, not by guessing at
+  // what a given host does during enumeration.
+  const od=$('osDiag');
+  if(od&&d.detect_phase!==undefined){
+    od.textContent='Signals seen: string reads \u00d7'+(d.usb_str_reqs|0)+
+      ' (re-reads \u00d7'+(d.usb_str_rereads|0)+')'+
+      ' \u00b7 SET_IDLE \u00d7'+(d.usb_set_idle|0)+
+      ' \u00b7 lock-key reports \u00d7'+(d.usb_led_reports|0)+
+      ' \u00b7 control requests \u00d7'+(d.usb_ctrl_reqs|0)+
+      ' \u00b7 '+d.detect_phase+' \u2192 '+(d.host_os_detected||'?')+
+      (d.usb_str_seq?' \u00b7 indices '+d.usb_str_seq:'');
+  }
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
-  if(d.auth_set!==undefined)$('authState').textContent=d.auth_set?'On':'Off';
+  // The access PIN decides what half the dashboard is allowed to offer, and it
+  // can be turned on from Settings or from another phone entirely. Notice it
+  // changing and rebuild whatever depended on it, rather than leaving the other
+  // tabs showing a stale "set a PIN first".
+  if(d.auth_set!==undefined){
+    $('authState').textContent=d.auth_set?'On':'Off';
+    if(AUTH_SET!==null&&AUTH_SET!==!!d.auth_set){loadPcs();loadVault();}
+    AUTH_SET=!!d.auth_set;
+  }
   // Being reachable from a whole network instead of only from radio range is a
   // real change in exposure, and it is invisible unless we say so.
   if(d.lan_exposed!==undefined)$('lanWarn').style.display=d.lan_exposed?'':'none';
@@ -3449,7 +4019,7 @@ function bindAll(){
   // The computer's OS lives on the board, so this drives set_host_os and the
   // reply (or the pushed host_os event) reskins everything through applyHostOs.
   document.querySelectorAll('#osSel [data-os-set]').forEach(b=>b.onclick=()=>{
-    send({cmd:'set_host_os',os:b.dataset.osSet},r=>{if(r&&r.host_os)applyHostOs(r.host_os,r.host_os_source);});
+    send({cmd:'set_host_os',os:b.dataset.osSet},r=>{if(r&&r.host_os)applyHostOs(r.host_os,r.host_os_source,r.host_os_detected);});
     buzz(8);
     toast(b.dataset.osSet==='auto'?'Detecting the computer':SC_NAME[b.dataset.osSet]||'Set');
   });
@@ -3506,7 +4076,7 @@ function bindAll(){
   try{btnMouse=localStorage.getItem('btnview')==='mouse';}catch(e){}
   setBtnView(btnMouse);
   $('btnBtnView').onclick=()=>{btnMouse=!btnMouse;setBtnView(btnMouse);buzz(8);};
-  $('btnRefresh').onclick=()=>{refresh();loadMacros();loadPcs();toast('Refreshed');};
+  $('btnRefresh').onclick=()=>{syncAll();toast('Refreshed');};
   $('btnInfo').onclick=showHelp;
 
   $('btnType').onclick=()=>doType(false);
@@ -3526,6 +4096,9 @@ function bindAll(){
   $('btnKnobNew').onclick=()=>knobEditor(-1);
   $('btnQuickNew').onclick=()=>quickEditor(-1);
   $('btnPcNew').onclick=pcEditor;
+  $('btnVaultNew').onclick=()=>vaultEditor();
+  $('btnVaultPin').onclick=vaultPinEditor;
+  $('btnVaultWipe').onclick=vaultWipe;
 
   $('btnUnlock').onclick=()=>{
     const pw=$('unlockPw').value;if(!pw)return toast('Enter the password','bad');
@@ -3612,10 +4185,16 @@ function bindAll(){
   $('apSsid').addEventListener('input',apCount);apCount();
   $('apnewReload').onclick=()=>location.reload();
   const pinSet=bindPin('pinSet');
-  const applyPin=v=>send({cmd:'set_auth',token:v},r=>{
+  // The board erases the vault when the access PIN is replaced by someone who
+  // could not produce the old one. This page usually can, so it sends it and
+  // the user keeps their passwords through an ordinary PIN change.
+  const applyPin=v=>send({cmd:'set_auth',token:v,old:sessionStorage.getItem('pin')||''},r=>{
     if(r&&r.status==='ok'){
       v?sessionStorage.setItem('pin',v):sessionStorage.removeItem('pin');
-      toast(v?'PIN set':'PIN turned off','ok');refresh();loadPcs();pinSet.clear();
+      toast(v?'PIN set':'PIN turned off','ok');
+      if(r.vault_wiped)toast('Stored passwords were erased with the old PIN','bad');
+      pinSet.clear();
+      syncAll();
     }else{toast((r&&r.message)||'Failed','bad');pinSet.reject();}
   });
   $('btnPin').onclick=()=>{
@@ -3623,8 +4202,13 @@ function bindAll(){
     if(v.length!==4){toast('Enter all four digits','bad');pinSet.reject();return;}
     applyPin(v);
   };
+  // Without a PIN the vault guards nothing, so the board will not keep it. Say
+  // that before it happens rather than in a toast afterwards.
   $('btnPinOff').onclick=()=>{
     if(!confirm('Turn the PIN off? Anyone in radio range could then type on this PC.'))return;
+    if(VAULT.length&&!confirm('Your '+VAULT.length+' stored '+
+        (VAULT.length===1?'password':'passwords')+' will also be erased.\n\n'+
+        'Without a PIN there is nothing guarding them, so the board does not keep them.'))return;
     applyPin('');
   };
   $('btnTestHid').onclick=()=>send({cmd:'test_hid'});
@@ -3890,7 +4474,7 @@ function renderPres(){
 // =====================================================================
 //  boot
 // =====================================================================
-buildNav();buildKbd();bindAll();bindGpButtons();
+buildNav();buildKbd();kbWatch();bindAll();bindGpButtons();
 RAIL.init();$('btnRail').onclick=()=>RAIL.toggle();
 document.querySelectorAll('[data-nofill]').forEach(guardAutofill);
 DECK.set((()=>{try{return localStorage.getItem('deck')==='1';}catch(e){return false;}})(),true);

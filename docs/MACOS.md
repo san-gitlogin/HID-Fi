@@ -102,13 +102,32 @@ assistant does not appear, you do not need it — macOS already knows the layout
 
 ## What changes once it knows it is a Mac
 
-The board cannot see your screen, but the computer does tell every keyboard which
-of its lock-key lights to turn on. Windows and Linux have a **Num Lock** and
-light it; macOS has none and stays silent. So a couple of seconds after it is
-plugged in, the board taps Num Lock once, watches for the light, and taps it
-straight back — and from that one fact it knows a Mac from a PC.
+The board cannot see your screen, but the computer tells it something while it
+reads the USB descriptors on the way to setting up the keyboard, without being
+asked. Detection reads those enumeration signals — it never types anything to
+find out.
 
-With a Mac detected, it switches automatically:
+**What it reads:** macOS asks for each descriptor string twice — two bytes first
+to learn how long it is, then the whole string — so the same request arrives back
+to back, for string after string. Windows does that for the odd string but not as
+a habit, so the board judges the proportion, not the count.
+
+> An earlier build instead assumed macOS does not send the HID `SET_IDLE`
+> request. Measured
+> on a real Mac, it does, so every Mac was reported as Windows. `SET_IDLE` is
+> still counted as evidence a host is there, but it no longer decides anything.
+
+> Earlier versions tapped **Num Lock** and timed the host's LED reply. That is
+> gone. It changed state on your computer, it did not always undo the toggle, and
+> a slow host was misread as a Mac. Nothing is typed now, so there is nothing to
+> undo, and detection re-runs whenever you move the board to another computer.
+
+**If it says "Not identified"**, the computer did not say enough to be
+recognised — Windows in particular caches a device's descriptor strings and may
+stay quiet on a replug. The dashboard asks you to pick rather than guessing, and
+**Settings → Computer** prints the raw signals it saw underneath.
+
+With a Mac selected, it switches automatically:
 
 | Thing | On a PC | On a Mac |
 |---|---|---|
@@ -122,11 +141,16 @@ With a Mac detected, it switches automatically:
 
 You can see and change what it thinks it is under **Settings → Computer**:
 
-- **Auto** lets the Num Lock probe decide (the default).
+- **Auto** lets detection decide (the default).
 - **macOS / Windows / Linux** pin it by hand, saved on the board. Use this if it
-  is wrong — in particular, the probe **cannot tell Linux from Windows**, because
-  both have a Num Lock, so a Linux desktop is detected as "Windows" until you set
-  it here.
+  is wrong — in particular, detection **cannot tell Linux from Windows**, because
+  both enumerate the same way, so a Linux desktop is detected as "Windows" until
+  you set it here.
+
+> A pinned OS stays pinned when you move the board to a different computer. That
+> is deliberate — your choice wins — but it is also how a board set up on a Mac
+> ends up holding Command on a PC and opening the Start menu. When the pin and the
+> attached computer disagree, **Settings → Computer** says so and offers Auto.
 
 ---
 
@@ -148,15 +172,18 @@ You can see and change what it thinks it is under **Settings → Computer**:
 - **US layout only.** The board types US-ANSI ASCII. If your Mac is set to a
   non-US keyboard layout, symbols and passwords will come out wrong. This is the
   project's biggest open problem and it is not Mac-specific.
-- **Detection is a default, not a guarantee.** The Num Lock probe is quick and
-  reliable in practice, but if anything looks wrong, pin the OS under **Settings
-  → Computer** — a manual choice always wins.
-- **Give it a moment after connecting.** Detection settles a couple of seconds
-  after the board mounts. Until it does, **Settings → Computer** shows
-  "Detecting…", and a lock fired in that window falls back to the PC shortcut
-  (`Win+L`), which does nothing on a Mac. In normal use it has long since settled
-  by the time you open the dashboard; if you ever see it, just lock again, or pin
-  macOS so there is no wait at all.
+- **Detection is a default, not a guarantee.** It is passive and reliable in
+  practice, but if anything looks wrong, pin the OS under **Settings → Computer**
+  — a manual choice always wins.
+- **Give it a moment after connecting.** Detection settles about three seconds
+  after the host enumerates the board. Until it does, **Settings → Computer**
+  shows "Detecting…", and a lock fired in that window falls back to the PC
+  shortcut (`Win+L`), which does nothing on a Mac. In normal use it has long since
+  settled by the time you open the dashboard; if you ever see it, just lock again,
+  or pin macOS so there is no wait at all.
+- **A silent host reads as "Not identified".** If a computer enumerates the board
+  without sending anything recognisable, the board says so rather than guessing.
+  Pick an OS under **Settings → Computer** and it will stop asking.
 - **Haptics.** iOS Safari has never implemented the web vibration API, so the
   dashboard's haptic ticks are silent on an iPhone regardless of the computer.
 

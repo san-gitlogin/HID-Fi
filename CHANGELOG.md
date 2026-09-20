@@ -3,7 +3,189 @@
 All notable changes to this project.
 
 The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
-`hid_fi_v3.6`.
+`hid_fi_v3.8`.
+
+---
+
+## v3.8 - 2026-09-21
+
+A password vault, a keyboard that grows with the screen, and Mac-or-PC
+switching that is finally right.
+
+> v3.7 was never released — its work is folded in here, so this is everything
+> since v3.6.
+
+> Verified on an ESP32-S3 N16R8 against Windows 11: detection settles to
+> `windows` within the 3 s window, nothing is typed into the host, and Num Lock
+> is never touched. The macOS half of the discriminator — that macOS re-reads a
+> string descriptor index back to back and Windows does not — is taken from
+> keyboardio's FingerprintUSBHost and QMK's `os_detection`, and has **not** been
+> measured on a Mac by this project. Settings → Computer prints the raw counts,
+> so one look on a Mac confirms or refutes it.
+>
+> The vault's gate is covered by `tests/test_vault.py` (37 checks on a clean
+> board) and a live probe on a board holding real entries. **`vault_type`
+> putting real keystrokes on the wire has not been machine-tested** — it would
+> have typed a secret into whatever window had focus — so that one path is
+> verified by inspection and by hand.
+
+### Changed
+
+- **The keyboard is tiered, not stretched.** It gains whole blocks as width
+  allows, the way physical keyboards do: **compact** (12 columns, `123` symbol
+  layer, under 500px) → **ANSI** with the function row, arrows and the
+  `Del`/`Home`/`End` column (500px) → **+ the full navigation cluster** (TKL,
+  1010px) → **+numpad**, a full 104 keys (1300px). A wide screen now gets more
+  keys instead of the same few keys stretched across it, and rotating a phone to
+  landscape or opening the trackpad deck in fullscreen moves up the tiers.
+  - **Going up a tier never takes a key away.** An earlier `fn` tier put the
+    function row at 790px, so `Esc` was on a phone, gone between 500px and 790px,
+    and back on a laptop. The function row is now part of every tier above
+    compact, and the 65% side column carries the keys the compact nav row
+    reaches. A row is only hidden if its keys are reachable another way — the
+    digits row used to go on short screens, which took the numbers away outright
+    on layouts that have no `123` layer.
+  - Every block carries the **same number of rows**, so the nav cluster and the
+    numpad line up with the main block instead of dividing the same height into
+    six rows against five.
+  - The nav cluster's legends **size from its own width** with a container query.
+    A fixed font fitted a laptop and cut `Home`, `PgUp` and `PgDn` in half on a
+    25px column.
+  - The ANSI block is a **60 column grid**, because ANSI is exactly 15u wide and
+    that makes 1u four columns — so 1.25u, 1.5u, 1.75u, 2u, 2.25u, 2.75u and
+    6.25u are all whole numbers and every row sums to exactly 60.
+  - The three blocks are flexed **15 : 3 : 4**, their real proportions, so one
+    key is the same width in all three.
+- **A real inverted-T arrow cluster.** Up sits directly above Down with Left and
+  Right either side. The arrows used to sit in a flat `← ↑ ↓ →` line.
+- **The key beside the right Shift is the slash, not M.** Anyone reaching for `/`
+  by position — which is how the row is read on any keyboard — used to hit M.
+- **The Windows modifier cap is the `⊞` glyph** rather than the word "Win", which
+  no longer fits. The Mac and Linux caps were already single glyphs, so all three
+  are now consistent. The Menu key is an icon for the same reason.
+- **Host OS detection is now passive.** The board no longer taps Num Lock and
+  times the host's LED reply. Nothing is typed into the host, so there is nothing
+  to undo.
+- **A Mac is no longer reported as Windows.** The first pass at passive detection
+  assumed macOS does not send the HID `SET_IDLE` request; measured on a real Mac,
+  it does, so the signal separated nothing and every Mac read as a PC. The
+  discriminator is now the shape of the host's **string-descriptor reads**: macOS
+  asks for each string twice — two bytes to learn its length, then the whole
+  thing — so the same index arrives back to back, string after string. Windows
+  does it for the odd string too (measured on Windows 11 against this board: 11
+  requests, 2 repeats), so the verdict is the *proportion* of repeats rather than
+  a count. Seeing any of this means the firmware owns
+  `tud_descriptor_string_cb()`, which the ESP32 core declares weak; it rebuilds
+  the descriptor from the `USB` object's own manufacturer, product and serial
+  strings, so the board still enumerates as exactly the same device.
+- **A host that says nothing is reported as `undetermined` rather than guessed
+  at.** Windows caches a device's descriptor strings, so a PC that already knows
+  this board can be nearly silent on a replug. The dashboard asks you to pick.
+- **A settled verdict is no longer revised by later traffic.** Only a new
+  enumeration replaces it — a Caps Lock LED report or a Device Manager refresh is
+  not the host changing its mind.
+- **Detection re-arms whenever the USB bus drops**, so carrying the board from a
+  Mac to a PC is picked up a few seconds after it enumerates, without a reboot.
+  The previous answer stays on screen until a new one is reached, so a momentary
+  glitch does not blank the UI.
+
+### Fixed
+
+- **The dashboard went stale between tabs.** Setting the access PIN in Settings
+  left the Keys tab still saying "set an access PIN first" until the page was
+  reloaded. Every write to the board now refreshes what depends on it, and the
+  status poll notices a PIN set from another phone and rebuilds the affected
+  cards. Nothing in the dashboard should need the Refresh button; that is now
+  the rule rather than the exception.
+- **A long entry name crushed the buttons next to it.** A saved email address in
+  the password list pushed Type, Show and Edit into each other on a 375px phone.
+  The label truncates now, the controls never shrink, and the row tightens on
+  narrow screens — checked from 320px up.
+- **The compact keyboard's shortcut keys stayed Windows combos on a Mac.** The
+  nav row's `Ctrl+C`, `Ctrl+V`, `Ctrl+Z` and `Alt+Tab` were baked into the layout
+  table while every other key around them followed the detected OS, so on a Mac
+  four keys did nothing useful. They are now `⌘C`, `⌘V`, `⌘Z` and `⌘Tab` there.
+- **A whole row of letters vanished in landscape.** The rule that drops the
+  digits row on short screens selected `:nth-child(2)`, which followed the row
+  *order* rather than the row — so once the layout gained a block structure it
+  deleted `Tab Q W E R T Y U I O P [ ] \` instead. It hit every phone in
+  landscape. The rule now targets the row by class, and the responsive suite
+  fails if a visible keyboard is missing any letter.
+- **The trackpad deck was capped at ANSI even in fullscreen**, where it has the
+  whole screen. Fullscreen now reaches the full-size layout.
+- **Opening the deck painted one frame at the previous tier**, because
+  `ResizeObserver` reports a frame late. At a narrow width that meant ANSI keys
+  squeezed to 15px. The deck toggle and fullscreen now rebuild synchronously.
+- **Detection could stall forever.** It waited on `tud_mounted()` and an 800 ms
+  echo window with no retry and no re-arm. Measured on one Windows laptop: the
+  same board resolved in 5 s on one boot and was still `unknown`/`pending` 9 s
+  into the next. A host that says nothing recognisable is now reported as
+  `undetermined` and the dashboard asks you to pick.
+- **A misdetected Windows host was left with Num Lock flipped.** The Windows
+  branch undid its own toggle; the macOS branch did not.
+- **`usbWakeHost()` slept 120 ms on the pointer hot path** whenever a host had
+  suspended the bus — the one thing `loop()` is never allowed to do.
+- **A pinned OS silently outlived the computer it was set on.** `status` now
+  carries `host_os_detected` beside `host_os`, and Settings → Computer says so.
+- **`flash_esp.ps1` died mid-flash after a successful build.** It sets
+  `$ErrorActionPreference = 'Stop'`, and esptool 5.3.1 writes progress to stderr,
+  which PowerShell turned into a terminating `NativeCommandError`. Every native
+  tool call now runs through one helper that judges the tool by its exit code.
+- `tests/test_inventory.py` opened the serial port with the bare
+  `serial.Serial(port)` constructor, which asserts DTR and RTS and so reset the
+  board on every run.
+
+### Added
+
+- **A password vault.** Twelve slots holding a purpose, a kind (PIN or password)
+  and a secret of any length, which the board types for you — so a password is
+  never typed on a keyboard that could be watched or logged, and a PIN is not
+  assumed to be four digits. Keys → Passwords, above the shortcuts.
+  - **Reading one back or typing one asks for the PIN, every single time**, with
+    the same four-box prompt the board itself uses. There is no session that
+    keeps the vault open, because keystrokes *are* the secret and the board
+    cannot see which window they land in.
+  - **Storing, renaming and deleting do not ask.** None of them discloses
+    anything, and a PIN prompt in front of an act that cannot leak is a toll
+    rather than a control.
+  - **The gate holds on USB serial too**, which is the one exception to serial
+    being ungated, and wrong guesses are rate limited there as well.
+  - **The vault can have its own PIN**, separate from the one that unlocks the
+    dashboard — the way a browser asks for your account password before showing
+    a saved one. Forgotten it? It can be reset with the access PIN, and that
+    erases the vault; otherwise the access PIN would quietly be a way to read
+    everything and the second PIN would be decorative.
+  - **Resetting the access PIN erases the vault** unless the old one is given.
+    The dashboard passes it for you, so an ordinary PIN change keeps everything.
+  - Listing gives purposes and kinds only — never a secret, not even its length.
+    Editing never reveals: leave the field empty and the stored secret is kept.
+    An entry saved as a PIN is refused unless it is all digits, and the field
+    shows a number pad and strips anything else as you type.
+- **A saved PC remembers which OS it is.** Unlocking a Mac and unlocking a PC
+  are not the same keystrokes, and the board may be plugged into a different
+  computer by the time a saved password is used — Esc into a Mac login window
+  collapses the password field. `pc_save` now takes `os`, defaulting to whatever
+  the board is plugged into when you save, `pc_list` reports it, and `unlock`
+  uses the slot's OS rather than the attached one. Saved PCs can also be
+  **edited** from the dashboard: passing an occupied slot updates the name and
+  OS, and the password may be left empty to keep the stored one, since the page
+  has no way to show it back. Forgetting one now names the PC in the
+  confirmation and says the password will be deleted.
+- **A numpad that sends real keypad usages.** `KP0`–`KP9`, `KPDOT`, `KPPLUS`,
+  `KPMINUS`, `KPSTAR`, `KPSLASH` and `KPENTER` are distinct HID keys from the
+  number row, and applications that tell them apart see the difference.
+- **`status` reports the evidence**, not just the verdict: `host_os_detected`,
+  `detect_phase`, `usb_str_reqs`, `usb_str_rereads`, `usb_str_seq`,
+  `usb_set_idle`, `usb_ctrl_reqs` and `usb_led_reports`. Settings → Computer
+  shows the same counts and the raw sequence of string indices the host asked
+  for, so a detection argument can be settled by reading numbers on the phone.
+- **Keyboard geometry is a regression test.** `tests/test_dashboard_static.py`
+  evaluates every layout table in node and fails if an ANSI row stops summing to
+  60, if Up stops sitting above Down, if the slash leaves the right Shift, if the
+  numpad cells overlap, or if any key name is missing from `mapKeyName()`.
+- **`tests/test_host_os.py`** — detection settles, reports its evidence, survives
+  a pin/auto round trip, and the host's Num Lock is read before and after to
+  prove nothing was typed.
 
 ---
 

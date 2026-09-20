@@ -1,6 +1,6 @@
 /*
   ============================================================================
-  HID-Fi v3.6 — USB HID trackpad + remote + WiFi dashboard
+  HID-Fi v3.8 — USB HID trackpad + remote + WiFi dashboard
 
   Board:  ESP32-S3-N16R8 (YD-ESP32-S3, 16MB Flash, 8MB PSRAM)
 
@@ -56,7 +56,7 @@
     Security: {"cmd":"set_auth","token":"1234"} / {"cmd":"auth","token":"1234"}
     LED:      {"cmd":"led_set"|"led_blink"|"led_status",...}
     WiFi:     {"cmd":"wifi_configure"|"wifi_status"|"wifi_disconnect"|"ap_configure",...}
-    Misc:     ping, status, echo, test_hid, set_verbose
+    Misc:     ping, status, echo, test_hid, set_verbose, set_host_os
 
   WebSocket binary opcodes (little-endian), client -> board:
     0x01 MOVE [i16 dx][i16 dy][i8 wheel][i8 pan]
@@ -103,13 +103,23 @@ extern "C" bool tud_suspended(void);
 extern "C" bool tud_remote_wakeup(void);
 extern "C" bool tud_mounted(void);
 
-// Returns true if the bus was suspended and a resume was requested. Costs a bool
-// read when the host is awake, so it is safe on the pointer hot path.
+// Returns true if the bus was suspended and a resume was requested.
+//
+// This sits on the pointer hot path, so it must not sleep. The previous version
+// did -- delay(120) on every report once a host suspended the bus, which is the
+// one thing loop() is never allowed to do. The resume completes on the wire
+// asynchronously; losing the report that triggered it is invisible, a cursor
+// that stalls for an eighth of a second is not. Rate limited so a host that
+// never armed us as a wake source cannot turn every pointer event into a
+// rejected control transfer. system/wake does its own blocking wait, because
+// there the user is explicitly asking and has nothing to feel lag in.
 static bool usbWakeHost() {
     if (!tud_suspended()) return false;
-    bool allowed = tud_remote_wakeup();   // false if the host never armed us as a wake source
-    delay(120);                           // let the bus resume before the first report
-    return allowed;
+    static uint32_t lastWakeReq = 0;
+    uint32_t now = millis();
+    if (now - lastWakeReq < 500) return false;
+    lastWakeReq = now;
+    return tud_remote_wakeup();           // false if the host never armed us as a wake source
 }
 
 // ==================== SERIAL PORT ====================
@@ -142,6 +152,15 @@ String  mdnsName  = "";
 String  authToken = "";                  // empty = no PIN; WiFi clients unrestricted
 uint8_t  authFails     = 0;              // consecutive wrong PINs, reset on success
 uint32_t authLockUntil = 0;              // millis() deadline; 0 = not locked out
+// Vault state lives up here because set_auth and storage_info both consult it,
+// and those run well before the vault's own section. See PASSWORD VAULT.
+#define VAULT_SLOTS      12
+#define VAULT_LABEL_MAX  48
+#define VAULT_SECRET_MAX 128
+enum VaultKind : uint8_t { VK_PASSWORD = 0, VK_PIN = 1 };
+String   vaultPinCode  = "";             // empty = the access PIN guards the vault
+uint8_t  vaultFails    = 0;
+uint32_t vaultLockUntil = 0;
 bool    wsAuthed[WS_MAX_CLIENTS];
 unsigned long pendingRestartAt   = 0;    // deferred reboot so the reply can flush first
 unsigned long consumerReleaseAt  = 0;    // deferred media-key release, keeps the socket free
@@ -248,7 +267,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v3.6"
+#define  FW_VERSION "hid_fi_v3.8"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -294,18 +313,50 @@ const char* lockStateStr() {
 }
 
 // ==================== HOST OS DETECTION ====================
-// HID is one way, but there is a single thing the host tells the keyboard back:
-// which of its lock-key LEDs to light. That is enough to tell a Mac from a PC.
-// Windows and Linux own a Num Lock and echo its LED the instant it is toggled;
-// macOS has no Num Lock and stays silent. So the board taps Num Lock once,
-// watches for the echo, and taps it straight back to undo the toggle:
-//   echo seen -> Windows or Linux   (the LED alone cannot tell those two apart)
-//   silence   -> macOS
-// The result only steers defaults - the lock shortcut, the gesture combos, the
-// app-switch modifier and the keyboard layout. A manual override always wins,
-// because a user on a Linux box the probe called "windows" must be able to say so.
-HostOS hostOsDetected = OS_UNKNOWN;   // what the Num Lock probe concluded
-HostOS hostOsManual   = OS_UNKNOWN;   // user override; OS_UNKNOWN = trust the probe
+// Which computer the board is plugged into steers the lock shortcut, the gesture
+// combos, the app-switch modifier and the keyboard layout, so getting it wrong is
+// immediately visible to whoever is holding the phone.
+//
+// It used to be probed by tapping Num Lock and timing the host's LED reply. That
+// was wrong in three ways, all of them measured on real hardware: it changed
+// state on the user's PC, the "no reply" branch never undid the toggle it had
+// just caused, and an 800 ms window turned any slow host into a Mac. The same
+// board against one Windows laptop resolved in 5 s on one boot and was still
+// undecided 9 s into the next.
+//
+// Detection is now passive. A host identifies itself during enumeration without
+// being asked anything, by the shape of its own descriptor reads:
+//
+//   String reads  the discriminator. macOS reads a string descriptor twice -
+//                 two bytes first to learn its length, then the whole thing -
+//                 so the same index arrives back to back. Windows and Linux ask
+//                 once with a 255 byte read and never repeat an index. This is
+//                 the signal the keyboardio FingerprintUSBHost work found and
+//                 QMK's os_detection ships; there it is read off the setup
+//                 packet's wLength, which the Arduino layer does not expose, so
+//                 the back-to-back repeat is used as the same evidence.
+//   SET_IDLE      NOT a discriminator. v3.7 assumed only Windows and Linux sent
+//                 it; measured on a real Mac, macOS sends it too. Still counted
+//                 and still reported, because it is evidence a host is there.
+//   SET_PROTOCOL  every host sends it, so it only means "a host is enumerating
+//                 us" and is what opens the decision window.
+//   LED report    an unsolicited lock-key report. Windows sends one at
+//                 enumeration to sync the lock LEDs, so it corroborates a PC,
+//                 but it is corroboration only - macOS sends one whenever Caps
+//                 Lock changes.
+//
+// Nothing is typed, so there is nothing to undo, and it re-arms whenever the bus
+// drops - which is what makes carrying the board from a Mac to a PC work without
+// a reboot.
+//
+// Deliberately NOT used: the MS OS string descriptor at index 0xEE, which only
+// Windows requests. Windows caches that answer per VID/PID/bcdDevice under
+// HKLM\SYSTEM\CurrentControlSet\Control\usbflags and never asks again. Verified
+// on the development PC, where this board was already recorded as osvc=00 00. It
+// would fire once on a fresh machine and then make that same machine look like a
+// Mac on every plug-in afterwards.
+HostOS hostOsDetected = OS_UNKNOWN;   // what this enumeration implied
+HostOS hostOsManual   = OS_UNKNOWN;   // user override; OS_UNKNOWN = trust detection
 
 const char* hostOsName(HostOS o) {
     switch (o) {
@@ -315,40 +366,127 @@ const char* hostOsName(HostOS o) {
         default:         return "unknown";
     }
 }
-// The OS the rest of the firmware actually acts on, and where it came from.
-HostOS      hostOs()       { return hostOsManual != OS_UNKNOWN ? hostOsManual : hostOsDetected; }
-const char* hostOsSource() {
-    if (hostOsManual   != OS_UNKNOWN) return "manual";
-    if (hostOsDetected != OS_UNKNOWN) return "auto";
-    return "pending";
-}
-// True when the effective OS is a Mac - the one branch nearly every mapping needs.
-inline bool hostIsMac() { return hostOs() == OS_MAC; }
 
-// Written only from the USB event task, read only from loop(); a plain volatile
-// is enough for that one-writer/one-reader hand-off.
-volatile uint32_t ledEventCount = 0;
-volatile uint8_t  ledStateBits  = 0;
+// All four counters are written only from the USB event task and read only from
+// loop(); a plain volatile is enough for that one-writer/one-reader hand-off.
+volatile uint32_t ledEventCount   = 0;
+volatile uint8_t  ledStateBits    = 0;
+volatile uint32_t usbSetIdleCount = 0;   // SET_IDLE only - the Mac-vs-PC signal
+volatile uint32_t usbCtrlCount    = 0;   // any HID control request - "a host is there"
+
 void keyboardLedCb(void* /*arg*/, esp_event_base_t /*base*/, int32_t /*id*/, void* data) {
     arduino_usb_hid_keyboard_event_data_t* d = (arduino_usb_hid_keyboard_event_data_t*)data;
     ledStateBits = d->leds;
     ledEventCount++;
 }
 
-// The probe is a state machine ticked from loop() so nothing blocks. It runs
-// once after the host has mounted and settled; set_host_os with "auto" can rearm it.
-enum DetectPhase : uint8_t { DET_WAIT_MOUNT, DET_SETTLE, DET_PROBED, DET_DONE };
-DetectPhase detectPhase     = DET_WAIT_MOUNT;
-uint32_t    detectAt        = 0;    // millis() at the last phase change
-uint32_t    ledCountAtProbe = 0;    // LED events seen before the Num Lock tap
-#define DETECT_SETTLE_MS 1500       // after mount, let the host finish its own LED init
-#define DETECT_REPLY_MS   800       // how long to wait for the Num Lock echo
+// Declared in USB.cpp with C++ linkage and no public header, so it is forward
+// declared here exactly as the core's own .cpp files do. The event loop it posts
+// to is created in the ESPUSB constructor, which runs before setup().
+esp_err_t arduino_usb_event_handler_register_with(esp_event_base_t event_base, int32_t event_id,
+                                                  esp_event_handler_t event_handler, void* event_handler_arg);
+
+void usbHidCtrlCb(void* /*arg*/, esp_event_base_t /*base*/, int32_t id, void* /*data*/) {
+    if (id == ARDUINO_USB_HID_SET_IDLE_EVENT) usbSetIdleCount++;
+    usbCtrlCount++;
+}
+
+// How the host reads our string descriptors, which is the one signal that tells
+// macOS from Windows. The core defines this callback __attribute__((weak)) in
+// esp32-hal-tinyusb.c, so this definition replaces it at link time.
+//
+// It has to rebuild the descriptor itself, because the core's string table is
+// file-static and unreachable from here. The strings come straight back out of
+// the USB object, which is the same place the core got them, so the board
+// enumerates byte for byte as it did before - same manufacturer, same product,
+// same MAC-derived serial, so the host does not see a new device.
+volatile uint32_t usbStrReqCount    = 0;  // GET_DESCRIPTOR(String) requests
+volatile uint32_t usbStrRereadCount = 0;  // ...that asked for the same index again
+#define USB_STR_SEQ_LEN 16
+volatile uint8_t  usbStrSeq[USB_STR_SEQ_LEN] = {0};  // the last few indices asked for
+volatile uint8_t  usbStrSeqHead = 0;
+extern "C" uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t /*langid*/) {
+    static uint16_t desc[127];
+    static uint8_t  lastIndex = 0xFF;   // only ever touched from the USB task
+
+    usbStrReqCount++;
+    if (index == lastIndex) usbStrRereadCount++;
+    lastIndex = index;
+    // Kept so the raw fingerprint can be read off a phone. An enumeration is a
+    // dozen requests at most, so the last sixteen are the whole of it.
+    usbStrSeq[usbStrSeqHead] = index;
+    usbStrSeqHead = (usbStrSeqHead + 1) % USB_STR_SEQ_LEN;
+
+    uint8_t chrCount;
+    if (index == 0) {
+        desc[1] = 0x0409;               // LANGID: English (United States)
+        chrCount = 1;
+    } else {
+        const char* str;
+        switch (index) {
+            case 1:  str = USB.manufacturerName(); break;
+            case 2:  str = USB.productName();      break;
+            case 3:  str = USB.serialNumber();     break;
+            // Interface names the core adds for itself. Cosmetic, but they must
+            // resolve: a stalled string request during enumeration is the kind
+            // of thing a host holds against a device.
+            default: str = "TinyUSB Device";       break;
+        }
+        if (!str) return NULL;
+        size_t len = strlen(str);
+        if (len > 126) len = 126;
+        chrCount = (uint8_t)len;
+        for (uint8_t i = 0; i < chrCount; i++) desc[1 + i] = str[i];
+    }
+    desc[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chrCount + 2));
+    return desc;
+}
+
+// Ticked from loop(), so nothing here blocks.
+enum DetectPhase : uint8_t {
+    DET_IDLE,      // no host enumerating; counters baselined, waiting
+    DET_WATCHING,  // a host turned up, collecting signals
+    DET_SETTLED    // verdict reached for this enumeration
+};
+DetectPhase detectPhase = DET_IDLE;
+uint32_t detectAt       = 0;      // millis() the window opened
+bool     detectMounted  = false;  // last tud_mounted(), to spot the bus dropping
+uint32_t detectIdleBase = 0;      // counter values when this enumeration began
+uint32_t detectCtrlBase = 0;
+uint32_t detectLedBase  = 0;
+uint32_t detectStrBase  = 0;
+uint32_t detectRerdBase = 0;
+#define DETECT_WINDOW_MS 3000     // enumeration chatter is over well inside this
+
+// The OS the rest of the firmware acts on, and where it came from.
+HostOS hostOs() { return hostOsManual != OS_UNKNOWN ? hostOsManual : hostOsDetected; }
+const char* hostOsSource() {
+    if (hostOsManual   != OS_UNKNOWN) return "manual";
+    if (hostOsDetected != OS_UNKNOWN) return "auto";
+    // A host that enumerated us but said nothing we recognise. Saying so lets the
+    // dashboard ask, instead of spinning on "Detecting..." forever the way the
+    // Num Lock probe used to when its reply never came.
+    return (detectPhase == DET_SETTLED) ? "undetermined" : "pending";
+}
+// True when the effective OS is a Mac - the one branch nearly every mapping needs.
+inline bool hostIsMac() { return hostOs() == OS_MAC; }
+
+const char* detectPhaseStr() {
+    switch (detectPhase) {
+        case DET_WATCHING: return "watching";
+        case DET_SETTLED:  return "settled";
+        default:           return "idle";
+    }
+}
 
 void announceHostOs() {
-    StaticJsonDocument<160> doc;
-    doc["event"]          = "host_os";
-    doc["host_os"]        = hostOsName(hostOs());
-    doc["host_os_source"] = hostOsSource();
+    StaticJsonDocument<192> doc;
+    doc["event"]            = "host_os";
+    doc["host_os"]          = hostOsName(hostOs());
+    doc["host_os_source"]   = hostOsSource();
+    // Sent even when a manual pin is in force, so the dashboard can point out
+    // that the pinned OS and the computer actually attached disagree.
+    doc["host_os_detected"] = hostOsName(hostOsDetected);
     String out;
     serializeJson(doc, out);
     // Push it so an open dashboard reskins immediately rather than on its next poll.
@@ -356,38 +494,90 @@ void announceHostOs() {
     COM_SERIAL.println(out);
 }
 
+// Back to waiting for a host. Baselines the counters so only the next
+// enumeration is judged, and leaves hostOsDetected alone on purpose: holding the
+// last answer on screen until a new one is reached means a momentary bus glitch
+// does not blank the UI, while a genuine move to another computer replaces it a
+// few seconds after that computer enumerates us.
+void detectArm() {
+    detectIdleBase = usbSetIdleCount;
+    detectCtrlBase = usbCtrlCount;
+    detectLedBase  = ledEventCount;
+    detectStrBase  = usbStrReqCount;
+    detectRerdBase = usbStrRereadCount;
+    detectPhase    = DET_IDLE;
+}
+
+// The verdict for the enumeration currently being judged, from the deltas since
+// detectArm(). Split out because DET_SETTLED runs it again for a host that was
+// still enumerating when the window closed.
+HostOS detectVerdict() {
+    uint32_t rereads = usbStrRereadCount - detectRerdBase;
+    uint32_t strReqs = usbStrReqCount    - detectStrBase;
+    uint32_t leds    = ledEventCount     - detectLedBase;
+
+    // Positive Mac evidence: a host that reads a string's length before reading
+    // the string itself, for string after string. It is a ratio rather than a
+    // count because Windows does it too, just not as a habit - measured on
+    // Windows 11 against this board, 11 string requests of which 2 were repeats.
+    // macOS repeats every index, so half its requests or more are repeats.
+    if (rereads >= 3 && rereads * 2 >= strReqs) return OS_MAC;
+    // A host that read our strings straight through, or synced the lock LEDs at
+    // enumeration. Linux does both exactly as Windows does and cannot be told
+    // apart this way, so it reads as windows and a Linux user pins it by hand.
+    if (strReqs >= 3 || leds > 0) return OS_WINDOWS;
+    // Windows caches string descriptors per device, so a board it already knows
+    // may say almost nothing on a replug. Guessing from silence is what made
+    // v3.7 call every Mac a PC, so silence is reported as silence.
+    return OS_UNKNOWN;
+}
+
 void updateHostDetect() {
-    if (detectPhase == DET_DONE) return;
-    // A manual choice makes the probe pointless - record it as settled and stop.
-    if (hostOsManual != OS_UNKNOWN) { detectPhase = DET_DONE; return; }
     if (!hidReady) return;
     uint32_t now = millis();
+
+    // Detection keeps running even when the OS is pinned by hand. The pin still
+    // wins everywhere it matters, but knowing what was actually detected is what
+    // lets the dashboard flag a pin left over from a different computer.
+    bool mounted = tud_mounted();
+    if (detectMounted && !mounted) detectArm();
+    detectMounted = mounted;
+
     switch (detectPhase) {
-        case DET_WAIT_MOUNT:
-            if (tud_mounted() && !tud_suspended()) { detectPhase = DET_SETTLE; detectAt = now; }
-            break;
-        case DET_SETTLE:
-            if (now - detectAt >= DETECT_SETTLE_MS) {
-                if (tud_suspended()) return;        // never type into a sleeping host
-                ledCountAtProbe = ledEventCount;
-                Keyboard.press(KEY_NUM_LOCK); delay(5); Keyboard.release(KEY_NUM_LOCK);
-                detectPhase = DET_PROBED; detectAt = now;
+        case DET_IDLE:
+            if (mounted || usbCtrlCount != detectCtrlBase || ledEventCount != detectLedBase) {
+                detectAt    = now;
+                detectPhase = DET_WATCHING;
             }
             break;
-        case DET_PROBED:
-            if (ledEventCount > ledCountAtProbe) {
-                // The host toggled a Num Lock LED for us: it has one, so it is a PC.
-                hostOsDetected = OS_WINDOWS;
-                Keyboard.press(KEY_NUM_LOCK); delay(5); Keyboard.release(KEY_NUM_LOCK); // undo the toggle
-                detectPhase = DET_DONE;
-                announceHostOs();
-            } else if (now - detectAt >= DETECT_REPLY_MS) {
-                // No echo: no Num Lock, so a Mac.
-                hostOsDetected = OS_MAC;
-                detectPhase = DET_DONE;
+
+        case DET_WATCHING: {
+            if (now - detectAt < DETECT_WINDOW_MS) break;
+            HostOS verdict = detectVerdict();
+            detectPhase = DET_SETTLED;
+            if (verdict != hostOsDetected) {
+                hostOsDetected = verdict;
                 announceHostOs();
             }
             break;
+        }
+
+        case DET_SETTLED:
+            // A host slower than the window is what broke the old probe: it was
+            // called a Mac and never reconsidered. Evidence arriving late now
+            // answers an open question - but only an open one. A settled verdict
+            // stands until the bus drops and a new enumeration replaces it,
+            // because the host's own later traffic (a Caps Lock LED report, a
+            // Device Manager refresh) is not another enumeration.
+            if (hostOsDetected == OS_UNKNOWN) {
+                HostOS late = detectVerdict();
+                if (late != OS_UNKNOWN) {
+                    hostOsDetected = late;
+                    announceHostOs();
+                }
+            }
+            break;
+
         default: break;
     }
 }
@@ -508,6 +698,16 @@ void handleKeyReleaseAll();
 void handlePcSave(const JsonDocument& inDoc);
 void handlePcList();
 void handlePcDelete(const JsonDocument& inDoc);
+HostOS pcOs(int slot);
+void handleVaultList();
+void handleVaultSave(const JsonDocument& inDoc);
+void handleVaultGet(const JsonDocument& inDoc);
+void handleVaultType(const JsonDocument& inDoc);
+void handleVaultDelete(const JsonDocument& inDoc);
+void handleVaultWipe();
+void handleVaultPin(const JsonDocument& inDoc);
+void vaultWipeAll();
+int  vaultCount();
 String pcPassword(int slot);
 uint8_t hidKeyFor(const char* name);
 
@@ -525,7 +725,7 @@ void setup() {
     
     COM_SERIAL.println();
     COM_SERIAL.println("========================================");
-    COM_SERIAL.println("HID-Fi v3.6 — ESP32-S3 USB HID + WiFi");
+    COM_SERIAL.println("HID-Fi v3.8 — ESP32-S3 USB HID + WiFi");
     COM_SERIAL.println("========================================");
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = false;
@@ -542,13 +742,24 @@ void setup() {
     if (powerMode > PWR_SAVER) powerMode = PWR_BALANCED;   // guard against a bad stored value
     if (hostOsManual > OS_LINUX) hostOsManual = OS_UNKNOWN;
 
+    preferences.begin("vault", true);
+    vaultPinCode = preferences.getString("pin", "");
+    preferences.end();
+
     // Exactly one mouse object may exist -- see the note on the globals.
     COM_SERIAL.printf("[HID] Initializing USB HID (pointer=%s, gamepad=%s)...\n",
                       absoluteMode ? "absolute" : "relative", gamepadEnabled ? "on" : "off");
     Keyboard.begin();
-    // The host reports its lock-key LEDs here; that echo is how the board tells a
-    // Mac from a PC. Registered before USB.begin() so no early report is missed.
+    // The host reports its lock-key LEDs here; Windows sends one at enumeration,
+    // which corroborates a PC. Registered before USB.begin() so none is missed.
     Keyboard.onEvent(ARDUINO_USB_HID_KEYBOARD_LED_EVENT, keyboardLedCb);
+    // SET_IDLE and SET_PROTOCOL only say a host is enumerating us - neither tells
+    // a Mac from a PC, which the string-descriptor reads do. All of it is passive:
+    // the board never types anything to find out. See HOST OS DETECTION.
+    arduino_usb_event_handler_register_with(ARDUINO_USB_HID_EVENTS, ARDUINO_USB_HID_SET_IDLE_EVENT,
+                                            usbHidCtrlCb, NULL);
+    arduino_usb_event_handler_register_with(ARDUINO_USB_HID_EVENTS, ARDUINO_USB_HID_SET_PROTOCOL_EVENT,
+                                            usbHidCtrlCb, NULL);
     if (absoluteMode) { mouseAbs = new USBHIDAbsoluteMouse(); mouseAbs->begin(); }
     else              { mouseRel = new USBHIDRelativeMouse(); mouseRel->begin(); }
     Consumer.begin();
@@ -1095,7 +1306,7 @@ void setupWebRoutes() {
     
     // GET /api/status — quick status (includes AP info)
     webServer.on("/api/status", HTTP_GET, []() {
-        StaticJsonDocument<1024> doc;
+        StaticJsonDocument<1536> doc;
         buildStatusDoc(doc);
         String resp;
         serializeJson(doc, resp);
@@ -1438,6 +1649,27 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "pc_delete") == 0) {
         handlePcDelete(inDoc);
     }
+    else if (strcmp(cmd, "vault_list") == 0) {
+        handleVaultList();
+    }
+    else if (strcmp(cmd, "vault_save") == 0) {
+        handleVaultSave(inDoc);
+    }
+    else if (strcmp(cmd, "vault_get") == 0) {
+        handleVaultGet(inDoc);
+    }
+    else if (strcmp(cmd, "vault_type") == 0) {
+        handleVaultType(inDoc);
+    }
+    else if (strcmp(cmd, "vault_delete") == 0) {
+        handleVaultDelete(inDoc);
+    }
+    else if (strcmp(cmd, "vault_wipe") == 0) {
+        handleVaultWipe();
+    }
+    else if (strcmp(cmd, "vault_pin") == 0) {
+        handleVaultPin(inDoc);
+    }
     else {
         StaticJsonDocument<256> doc;
         doc["status"] = "error";
@@ -1516,7 +1748,12 @@ void handleUnlock(const JsonDocument& inDoc) {
     }
     
     bool useCtrlAltDel = inDoc["ctrl_alt_del"] | false;
-    bool mac = hostIsMac();
+    // A saved slot carries the OS of the computer it belongs to, which is not
+    // always the one attached now. Esc into a Mac login window collapses the
+    // password field, so getting this from the slot rather than from detection
+    // is what makes a board that travels between machines safe to use.
+    HostOS slotOs = (profile >= 0) ? pcOs(profile) : OS_UNKNOWN;
+    bool mac = (slotOs != OS_UNKNOWN) ? (slotOs == OS_MAC) : hostIsMac();
     // macOS is fussier than Windows here: pressing Esc at the login window collapses
     // the password field, and the field can take longer to appear and take focus,
     // so a Mac gets a gentler wake and a longer wait by default.
@@ -1525,7 +1762,7 @@ void handleUnlock(const JsonDocument& inDoc) {
     int postTypeDelay = inDoc["post_type_delay"] | POST_TYPE_DELAY;
 
     COM_SERIAL.printf("[UNLOCK] Starting unlock sequence (os=%s prev_state=%s)...\n",
-                      hostOsName(hostOs()), lockStateStr());
+                      hostOsName(slotOs != OS_UNKNOWN ? slotOs : hostOs()), lockStateStr());
 
     // Step 1: Wake
     if (useCtrlAltDel) {
@@ -1752,6 +1989,22 @@ uint8_t mapKeyName(const String& name) {
     if (name == "PLUS")                         return KEY_KP_PLUS;
     if (name == "MINUS")                        return '-';
     if (name == "EQUALS" || name == "EQUAL")    return '=';
+    // Keypad. These are distinct HID usages from the number row, and a real
+    // numpad has to send them: applications that separate the two (Excel, CAD,
+    // games bound to KP keys) see a different key. Without a name here they
+    // would fall through hidKeyFor()'s single-character path and send the
+    // top-row digit instead, which looks right and is not.
+    if (name == "KP0") return KEY_KP_0;   if (name == "KP1") return KEY_KP_1;
+    if (name == "KP2") return KEY_KP_2;   if (name == "KP3") return KEY_KP_3;
+    if (name == "KP4") return KEY_KP_4;   if (name == "KP5") return KEY_KP_5;
+    if (name == "KP6") return KEY_KP_6;   if (name == "KP7") return KEY_KP_7;
+    if (name == "KP8") return KEY_KP_8;   if (name == "KP9") return KEY_KP_9;
+    if (name == "KPDOT" || name == "KPPERIOD")  return KEY_KP_DOT;
+    if (name == "KPPLUS")                       return KEY_KP_PLUS;
+    if (name == "KPMINUS")                      return KEY_KP_MINUS;
+    if (name == "KPSTAR" || name == "KPASTERISK") return KEY_KP_ASTERISK;
+    if (name == "KPSLASH")                      return KEY_KP_SLASH;
+    if (name == "KPENTER")                      return KEY_KP_ENTER;
     return 0;
 }
 
@@ -1837,9 +2090,9 @@ void handleSetLockState(const JsonDocument& inDoc) {
 
 // ==================== SET HOST OS ====================
 // "mac" / "windows" / "linux" pin the OS by hand and persist it; "auto" clears
-// the override and re-arms the Num Lock probe. The manual choice is what makes
-// the feature trustworthy: the probe cannot tell Linux from Windows, and a user
-// who knows better must always be able to correct it.
+// the override and re-arms detection. The manual choice is what makes the feature
+// trustworthy: detection cannot tell Linux from Windows, and a user who knows
+// better must always be able to correct it.
 void handleSetHostOs(const JsonDocument& inDoc) {
     String os = String(inDoc["os"] | "");
     os.toLowerCase();
@@ -1847,7 +2100,12 @@ void handleSetHostOs(const JsonDocument& inDoc) {
     if (os == "auto") {
         hostOsManual = OS_UNKNOWN;
         hostOsDetected = OS_UNKNOWN;
-        detectPhase = DET_WAIT_MOUNT;      // rerun the probe
+        // Re-judge this enumeration rather than baselining the counters away. The
+        // host has not changed and it only reads our descriptors once, when it
+        // first sets the keyboard up - zeroing the evidence here would guarantee
+        // an "undetermined" verdict until the cable was physically replugged.
+        detectAt    = millis();
+        detectPhase = DET_WATCHING;
     } else if (os == "mac" || os == "macos") {
         hostOsManual = OS_MAC;
     } else if (os == "windows" || os == "win") {
@@ -1874,6 +2132,7 @@ void handleSetHostOs(const JsonDocument& inDoc) {
     doc["reply"] = "host_os_set";
     doc["host_os"] = hostOsName(hostOs());
     doc["host_os_source"] = hostOsSource();
+    doc["host_os_detected"] = hostOsName(hostOsDetected);
     sendJson(doc);
 }
 
@@ -1976,6 +2235,27 @@ void buildStatusDoc(JsonDocument& doc) {
     // set by hand. The dashboard uses it to pick Mac vs PC shortcuts and layout.
     doc["host_os"] = hostOsName(hostOs());
     doc["host_os_source"] = hostOsSource();
+    // What enumeration concluded regardless of any manual pin, so the dashboard
+    // can warn that a pin is left over from a different computer. The raw signal
+    // counts are what make a detection argument settleable instead of guesswork.
+    doc["host_os_detected"] = hostOsName(hostOsDetected);
+    doc["detect_phase"] = detectPhaseStr();
+    doc["usb_set_idle"] = usbSetIdleCount;
+    doc["usb_ctrl_reqs"] = usbCtrlCount;
+    doc["usb_led_reports"] = ledEventCount;
+    doc["usb_str_reqs"] = usbStrReqCount;
+    doc["usb_str_rereads"] = usbStrRereadCount;
+    // The raw fingerprint, oldest first, so a wrong verdict can be diagnosed from
+    // the phone instead of from a rebuild with logging in it.
+    {
+        String seq;
+        for (uint8_t i = 0; i < USB_STR_SEQ_LEN; i++) {
+            uint8_t v = usbStrSeq[(usbStrSeqHead + i) % USB_STR_SEQ_LEN];
+            if (seq.length()) seq += ',';
+            seq += v;
+        }
+        doc["usb_str_seq"] = seq;
+    }
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
     doc["gamepad"] = gamepadEnabled;
     doc["auth_set"] = (authToken.length() > 0);
@@ -1986,7 +2266,7 @@ void buildStatusDoc(JsonDocument& doc) {
 }
 
 void handleDeviceStatus(bool fromWifi) {
-    StaticJsonDocument<1024> doc;
+    StaticJsonDocument<1536> doc;
     buildStatusDoc(doc);
     doc["boot_button"] = (digitalRead(BOOT_BUTTON) == LOW) ? "pressed" : "released";
     
@@ -2236,6 +2516,11 @@ void handleStorageInfo() {
     c["ui_bytes"]     = (int)preferences.getString("ui", "").length();
     preferences.end();
 
+    JsonObject v = doc.createNestedObject("vault");
+    v["entries"]       = vaultCount();     // how many, never what
+    v["slots"]         = VAULT_SLOTS;
+    v["vault_pin_set"] = vaultPinCode.length() > 0;
+
     JsonObject w = doc.createNestedObject("wifi_cfg");
     preferences.begin("wifi_cfg", true);
     String sSsid = preferences.getString("ssid", "");
@@ -2250,7 +2535,7 @@ void handleStorageInfo() {
     w["static_dns"]    = preferences.getString("dns", "");
     preferences.end();
 
-    doc["note"] = "Macros are listed by macro_list and saved PCs by pc_list. No password or PIN is ever returned by any command.";
+    doc["note"] = "Macros are listed by macro_list, saved PCs by pc_list and vault entries by vault_list. No password, secret or PIN is ever returned by any of them.";
     sendJson(doc);
 }
 
@@ -3259,6 +3544,17 @@ void handleSetAuth(const JsonDocument& inDoc) {
         d["status"]="error"; d["message"]="PIN must be at least 4 characters (or empty to disable)";
         sendJson(d); return;
     }
+    // The access PIN is what guards the vault unless a separate vault PIN was
+    // set. Serial can call this without proving anything, so changing the PIN
+    // has to destroy what it was guarding - otherwise anyone with the cable
+    // could set a PIN of their own and then use it. Proving you knew the old
+    // one keeps the vault: that is a user changing their PIN, not an attacker
+    // taking it over.
+    bool vaultGuardedByAccessPin = (vaultPinCode.length() == 0);
+    bool provedOld = authToken.length() && (authToken == String(inDoc["old"] | ""));
+    bool wipeVault = vaultGuardedByAccessPin && !provedOld && vaultCount() > 0;
+    if (wipeVault) vaultWipeAll();
+
     authToken = tk;
     preferences.begin("hid_cfg", false);
     preferences.putString("auth", authToken);
@@ -3269,9 +3565,11 @@ void handleSetAuth(const JsonDocument& inDoc) {
     if (authToken.length() && cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) {
         wsAuthed[wsClientNum] = true;
     }
+    if (wipeVault) COM_SERIAL.println("[AUTH] PIN replaced without the old one - vault erased");
 
-    StaticJsonDocument<192> doc;
+    StaticJsonDocument<224> doc;
     doc["status"]="ok"; doc["reply"]="auth_set"; doc["auth_set"]=(authToken.length() > 0);
+    doc["vault_wiped"]=wipeVault;
     sendJson(doc);
 }
 
@@ -3511,10 +3809,375 @@ void handleKeyReleaseAll() {
     sendJson(doc);
 }
 
+// ==================== PASSWORD VAULT ====================
+// Secrets the user asks the board to remember and type for them - a login
+// password, a card PIN, a door code. The point is that it is typed by a device
+// rather than by the user, so it is never on a keyboard somebody could be
+// watching and never in a clipboard.
+//
+// Every rule here exists to stop one thing: a secret leaving the board without
+// the PIN being presented for that specific act. See SECURITY.md.
+//
+//  - Nothing is stored until an access PIN exists. Without one, a stored secret
+//    is a secret anybody in radio range can use.
+//  - Getting a secret OUT - reading it back or typing it - needs the PIN in that
+//    request, every time. There is no session that keeps the vault open, so
+//    "type this into the focused window" asks again each time; that keystroke is
+//    indistinguishable from the secret itself.
+//  - Putting one IN, renaming it or deleting it does not, because none of those
+//    discloses anything. Asking for a PIN to save a password nobody can read
+//    back buys nothing and costs the user every time. Tampering is the accepted
+//    price; disclosure is not.
+//  - The gate is checked on EVERY transport, USB serial included. This is the
+//    one exception to serial being ungated: serial is open so the board can be
+//    recovered, not so it can be read. It is rate limited on serial too, because
+//    an ungated 4 digit guess loop over a cable is no guess loop at all.
+//  - Wiping is deliberately NOT gated. Destroying a secret discloses nothing and
+//    it is the way back if the vault PIN is forgotten.
+//
+// The slot counts and the vault's own PIN are declared with the other auth
+// globals near the top, because set_auth and storage_info need them.
+static String vaultKey(char kind, int slot) { return String(kind) + String(slot); }
+
+const char* vaultKindName(uint8_t k) { return k == VK_PIN ? "pin" : "password"; }
+
+bool vaultLocked() {
+    return vaultLockUntil != 0 && (int32_t)(millis() - vaultLockUntil) < 0;
+}
+uint32_t vaultLockRemaining() {
+    return vaultLocked() ? ((vaultLockUntil - millis()) / 1000) + 1 : 0;
+}
+
+// Which PIN opens the vault right now. The separate one when it exists, the
+// access PIN otherwise, and "" when neither is set - in which case the vault
+// refuses to hold anything at all.
+const String& vaultGateCode() { return vaultPinCode.length() ? vaultPinCode : authToken; }
+
+// Same escalating backoff as the access PIN, on its own counter so guessing at
+// the vault cannot lock a user out of the dashboard and vice versa.
+bool vaultPinCheck(const String& candidate) {
+    if (vaultGateCode().length() && vaultGateCode() == candidate) {
+        vaultFails = 0;
+        vaultLockUntil = 0;
+        return true;
+    }
+    if (vaultFails < 250) vaultFails++;
+    static const uint32_t backoff[] = { 0, 0, 5000, 15000, 60000, 300000 };
+    uint32_t wait = backoff[vaultFails < 6 ? vaultFails : 5];
+    if (wait) vaultLockUntil = millis() + wait;
+    COM_SERIAL.printf("[VAULT] wrong PIN (%u consecutive, lock %lus)\n",
+                      vaultFails, (unsigned long)(wait / 1000));
+    return false;
+}
+
+// One door for every vault command that touches a secret. Replies with the
+// reason and returns false when it is shut, so each handler is two lines.
+bool vaultOpen(const JsonDocument& inDoc) {
+    StaticJsonDocument<256> d;
+    if (vaultGateCode().length() == 0) {
+        d["status"]="error"; d["reply"]="vault_locked";
+        d["message"]="Set an access PIN first. Without one the vault would guard nothing.";
+        sendJson(d); return false;
+    }
+    if (vaultLocked()) {
+        d["status"]="error"; d["reply"]="vault_locked";
+        d["retry_in"]=(int)vaultLockRemaining();
+        d["message"]="Too many wrong PINs";
+        sendJson(d); return false;
+    }
+    if (!vaultPinCheck(String(inDoc["pin"] | ""))) {
+        d["status"]="error"; d["reply"]="vault_denied";
+        d["message"]="PIN required";
+        if (vaultLocked()) d["retry_in"]=(int)vaultLockRemaining();
+        sendJson(d); return false;
+    }
+    return true;
+}
+
+int vaultCount() {
+    int n = 0;
+    preferences.begin("vault", true);
+    for (int i = 0; i < VAULT_SLOTS; i++) {
+        if (preferences.getString(vaultKey('l', i).c_str(), "").length()) n++;
+    }
+    preferences.end();
+    return n;
+}
+
+// Used by set_auth: the access PIN is what guards the vault unless a separate
+// one was set, so changing it without proving you knew it has to destroy what
+// it was guarding. Otherwise ungated serial set_auth would be a way in.
+void vaultWipeAll() {
+    preferences.begin("vault", false);
+    preferences.clear();
+    preferences.end();
+    vaultPinCode = "";
+    vaultFails = 0;
+    vaultLockUntil = 0;
+}
+
+void handleVaultList() {
+    DynamicJsonDocument doc(2048);
+    doc["status"]="ok"; doc["reply"]="vault_list";
+    JsonArray a = doc.createNestedArray("entries");
+    preferences.begin("vault", true);
+    for (int i = 0; i < VAULT_SLOTS; i++) {
+        String label = preferences.getString(vaultKey('l', i).c_str(), "");
+        if (label.length() == 0) continue;
+        JsonObject o = a.createNestedObject();
+        o["slot"]  = i;
+        o["label"] = label;                // purpose and kind only - never the secret,
+        o["type"]  = vaultKindName(preferences.getUChar(vaultKey('t', i).c_str(), VK_PASSWORD));
+    }                                      // and not the length either
+    preferences.end();
+    doc["slots"]        = VAULT_SLOTS;
+    doc["auth_set"]     = authToken.length() > 0;
+    doc["vault_pin_set"]= vaultPinCode.length() > 0;
+    doc["locked"]       = vaultLocked();
+    if (vaultLocked()) doc["retry_in"] = (int)vaultLockRemaining();
+    sendJson(doc);
+}
+
+void handleVaultSave(const JsonDocument& inDoc) {
+    if (authToken.length() == 0) {
+        StaticJsonDocument<288> d;
+        d["status"]="error"; d["reply"]="vault_locked";
+        d["message"]="Set an access PIN first. Without one, anybody in radio range could have these typed out.";
+        sendJson(d); return;
+    }
+
+    String label = String(inDoc["label"] | "");
+    label.trim();
+    if (label.length() > VAULT_LABEL_MAX) label = label.substring(0, VAULT_LABEL_MAX);
+    String secret = String(inDoc["secret"] | "");
+    if (secret.length() > VAULT_SECRET_MAX) secret = secret.substring(0, VAULT_SECRET_MAX);
+
+    int slot = inDoc["slot"] | -1;
+    preferences.begin("vault", false);
+    bool occupied = (slot >= 0 && slot < VAULT_SLOTS)
+                    && preferences.getString(vaultKey('l', slot).c_str(), "").length() > 0;
+    // Editing must not need the secret retyped, because the dashboard is never
+    // given it to put back in the field. An empty secret keeps the stored one.
+    if (label.length() == 0 || (secret.length() == 0 && !occupied)) {
+        preferences.end();
+        StaticJsonDocument<224> d;
+        d["status"]="error"; d["message"]="label and secret are both required";
+        sendJson(d); return;
+    }
+    if (slot < 0 || slot >= VAULT_SLOTS) {
+        for (int i = 0; i < VAULT_SLOTS; i++) {
+            if (preferences.getString(vaultKey('l', i).c_str(), "").length() == 0) { slot = i; break; }
+        }
+    }
+    if (slot < 0 || slot >= VAULT_SLOTS) {
+        preferences.end();
+        StaticJsonDocument<192> d;
+        d["status"]="error"; d["message"]="All vault slots are in use";
+        sendJson(d); return;
+    }
+    String kindReq = String(inDoc["type"] | "");
+    kindReq.toLowerCase();
+    uint8_t kind = occupied ? preferences.getUChar(vaultKey('t', slot).c_str(), VK_PASSWORD) : VK_PASSWORD;
+    if (kindReq == "pin")           kind = VK_PIN;
+    else if (kindReq == "password") kind = VK_PASSWORD;
+    // A PIN that is not digits is a password wearing the wrong label, and the
+    // dashboard shows a number pad for it. Refuse rather than silently store it.
+    if (kind == VK_PIN && secret.length()) {
+        for (size_t i = 0; i < secret.length(); i++) {
+            if (!isdigit((unsigned char)secret[i])) {
+                preferences.end();
+                StaticJsonDocument<224> d;
+                d["status"]="error"; d["message"]="A PIN can only contain digits";
+                sendJson(d); return;
+            }
+        }
+    }
+
+    preferences.putString(vaultKey('l', slot).c_str(), label);
+    if (secret.length()) preferences.putString(vaultKey('s', slot).c_str(), secret);
+    preferences.putUChar(vaultKey('t', slot).c_str(), kind);
+    preferences.end();
+    // Label and kind only. The secret and its length are never written to a log.
+    COM_SERIAL.printf("[VAULT] saved slot %d (%s, %s)\n", slot, label.c_str(), vaultKindName(kind));
+
+    StaticJsonDocument<256> doc;
+    doc["status"]="ok"; doc["reply"]="vault_saved"; doc["slot"]=slot;
+    doc["label"]=label; doc["type"]=vaultKindName(kind);
+    sendJson(doc);
+}
+
+// The one command that hands a secret back, and the reason the gate above exists.
+void handleVaultGet(const JsonDocument& inDoc) {
+    if (!vaultOpen(inDoc)) return;
+    int slot = inDoc["slot"] | -1;
+    if (slot < 0 || slot >= VAULT_SLOTS) {
+        StaticJsonDocument<160> d;
+        d["status"]="error"; d["message"]="Invalid slot"; sendJson(d); return;
+    }
+    preferences.begin("vault", true);
+    String label  = preferences.getString(vaultKey('l', slot).c_str(), "");
+    String secret = preferences.getString(vaultKey('s', slot).c_str(), "");
+    uint8_t kind  = preferences.getUChar(vaultKey('t', slot).c_str(), VK_PASSWORD);
+    preferences.end();
+    if (label.length() == 0) {
+        StaticJsonDocument<160> d;
+        d["status"]="error"; d["message"]="Empty slot"; sendJson(d); return;
+    }
+    COM_SERIAL.printf("[VAULT] revealed slot %d (%s)\n", slot, label.c_str());
+    StaticJsonDocument<384> doc;
+    doc["status"]="ok"; doc["reply"]="vault_secret"; doc["slot"]=slot;
+    doc["label"]=label; doc["type"]=vaultKindName(kind);
+    doc["secret"]=secret;
+    sendJson(doc);
+}
+
+// Types a stored secret into whatever the host has focused. The PIN is demanded
+// here exactly as it is for a reveal: the keystrokes ARE the secret, and the
+// board cannot see where they are going.
+void handleVaultType(const JsonDocument& inDoc) {
+    if (!hidReady) {
+        StaticJsonDocument<192> d;
+        d["status"]="error"; d["message"]="USB HID not initialized"; sendJson(d); return;
+    }
+    if (!vaultOpen(inDoc)) return;
+    int slot = inDoc["slot"] | -1;
+    if (slot < 0 || slot >= VAULT_SLOTS) {
+        StaticJsonDocument<160> d;
+        d["status"]="error"; d["message"]="Invalid slot"; sendJson(d); return;
+    }
+    preferences.begin("vault", true);
+    String label  = preferences.getString(vaultKey('l', slot).c_str(), "");
+    String secret = preferences.getString(vaultKey('s', slot).c_str(), "");
+    preferences.end();
+    if (label.length() == 0 || secret.length() == 0) {
+        StaticJsonDocument<160> d;
+        d["status"]="error"; d["message"]="Empty slot"; sendJson(d); return;
+    }
+    typeString(secret.c_str());
+    if (inDoc["enter"] | false) {
+        delay(POST_TYPE_DELAY);
+        Keyboard.press(KEY_RETURN);
+        delay(50);
+        Keyboard.releaseAll();
+    }
+    COM_SERIAL.printf("[VAULT] typed slot %d (%s)\n", slot, label.c_str());
+    StaticJsonDocument<224> doc;
+    doc["status"]="ok"; doc["reply"]="vault_typed"; doc["slot"]=slot; doc["label"]=label;
+    sendJson(doc);
+}
+
+void handleVaultDelete(const JsonDocument& inDoc) {
+    int slot = inDoc["slot"] | -1;
+    if (slot < 0 || slot >= VAULT_SLOTS) {
+        StaticJsonDocument<160> d;
+        d["status"]="error"; d["message"]="Invalid slot"; sendJson(d); return;
+    }
+    preferences.begin("vault", false);
+    preferences.remove(vaultKey('l', slot).c_str());
+    preferences.remove(vaultKey('s', slot).c_str());
+    preferences.remove(vaultKey('t', slot).c_str());
+    preferences.end();
+    COM_SERIAL.printf("[VAULT] deleted slot %d\n", slot);
+    StaticJsonDocument<192> doc;
+    doc["status"]="ok"; doc["reply"]="vault_deleted"; doc["slot"]=slot;
+    sendJson(doc);
+}
+
+// Ungated on purpose: it only destroys. It is also the only way back when the
+// vault PIN has been forgotten, which is the same bargain a browser profile
+// makes - lose the password, lose what it protected.
+void handleVaultWipe() {
+    int had = vaultCount();
+    vaultWipeAll();
+    COM_SERIAL.printf("[VAULT] wiped (%d entries destroyed)\n", had);
+    StaticJsonDocument<224> doc;
+    doc["status"]="ok"; doc["reply"]="vault_wiped"; doc["destroyed"]=had;
+    sendJson(doc);
+}
+
+// Sets, changes or resets the vault's own PIN.
+//
+// Two ways in, and the difference is the whole point. Knowing the current vault
+// PIN changes it and keeps everything. Not knowing it, and falling back to the
+// access PIN, is a *reset* - and a reset erases the vault. Otherwise anyone
+// holding the access PIN could simply overwrite the vault PIN and read
+// everything, which would make the separate PIN decorative.
+void handleVaultPin(const JsonDocument& inDoc) {
+    StaticJsonDocument<288> d;
+    if (authToken.length() == 0) {
+        d["status"]="error"; d["reply"]="vault_locked";
+        d["message"]="Set an access PIN first.";
+        sendJson(d); return;
+    }
+    if (vaultLocked()) {
+        d["status"]="error"; d["reply"]="vault_locked";
+        d["retry_in"]=(int)vaultLockRemaining();
+        d["message"]="Too many wrong PINs";
+        sendJson(d); return;
+    }
+    String next = String(inDoc["new_pin"] | "");
+    bool digitsOnly = true;
+    for (size_t i = 0; i < next.length(); i++) {
+        if (!isdigit((unsigned char)next[i])) { digitsOnly = false; break; }
+    }
+    if (next.length() && (next.length() != 4 || !digitsOnly)) {
+        d["status"]="error";
+        d["message"]="The vault PIN is four digits (or empty to go back to the access PIN)";
+        sendJson(d); return;
+    }
+
+    String byVault  = String(inDoc["pin"] | "");       // the current vault PIN
+    String byAccess = String(inDoc["access"] | "");    // the access PIN, for a reset
+    bool haveVaultPin = vaultPinCode.length() > 0;
+    bool knowsVault   = haveVaultPin && byVault.length() && byVault == vaultPinCode;
+    bool knowsAccess  = byAccess.length() && byAccess == authToken;
+
+    if (!knowsVault && !knowsAccess) {
+        // One counter for both, so guessing at either is throttled the same way.
+        vaultPinCheck(byVault.length() ? byVault : byAccess);
+        d["status"]="error"; d["reply"]="vault_denied";
+        d["message"] = haveVaultPin ? "Wrong PIN" : "Wrong access PIN";
+        if (vaultLocked()) d["retry_in"]=(int)vaultLockRemaining();
+        sendJson(d); return;
+    }
+    vaultFails = 0;
+    vaultLockUntil = 0;
+
+    // Reset rather than change: the vault PIN is being replaced by someone who
+    // could not produce it, so what it was guarding does not survive.
+    bool wipe = haveVaultPin && !knowsVault;
+    if (wipe) {
+        int had = vaultCount();
+        vaultWipeAll();
+        COM_SERIAL.printf("[VAULT] PIN reset with the access PIN - %d entries destroyed\n", had);
+    }
+
+    vaultPinCode = next;
+    preferences.begin("vault", false);
+    if (next.length()) preferences.putString("pin", next);
+    else               preferences.remove("pin");
+    preferences.end();
+    COM_SERIAL.printf("[VAULT] vault PIN %s\n", next.length() ? "set" : "cleared (access PIN now guards it)");
+
+    StaticJsonDocument<224> doc;
+    doc["status"]="ok"; doc["reply"]="vault_pin_set";
+    doc["vault_pin_set"]=(vaultPinCode.length() > 0);
+    doc["vault_wiped"]=wipe;
+    sendJson(doc);
+}
+
 // ==================== SAVED PC PASSWORDS ====================
-// A slot holds a name and a password. The password can be written and it can be
-// used, but there is deliberately no command that reads one back - not over
-// WiFi, not over serial.
+// A slot holds a name, a password and which OS that computer is. The password
+// can be written and it can be used, but there is deliberately no command that
+// reads one back - not over WiFi, not over serial.
+//
+// The OS is stored per slot because unlocking is not the same on both: a Mac
+// login window is woken with a jiggle and a Shift, a PC with Esc, and Esc on a
+// Mac collapses the password field. Detection describes the computer the board
+// is plugged into *now*, which is not necessarily the one a saved password
+// belongs to - a board carried to a second machine would otherwise type a Mac
+// wake into a Windows login screen. OS_UNKNOWN means "follow the attached
+// computer", which is what a slot saved before this existed does.
 //
 // NVS is not encrypted. Anyone holding this board can dump its flash and read
 // these, and anyone in radio range could unlock the PC with a single request.
@@ -3523,6 +4186,15 @@ void handleKeyReleaseAll() {
 #define PC_SLOTS 8
 
 static String pcKey(char kind, int slot) { return String(kind) + String(slot); }
+
+// The OS saved against a slot, or OS_UNKNOWN for "whatever is attached".
+HostOS pcOs(int slot) {
+    if (slot < 0 || slot >= PC_SLOTS) return OS_UNKNOWN;
+    preferences.begin("pcprof", true);
+    uint8_t v = preferences.getUChar(pcKey('o', slot).c_str(), OS_UNKNOWN);
+    preferences.end();
+    return (v > OS_LINUX) ? OS_UNKNOWN : (HostOS)v;
+}
 
 void handlePcSave(const JsonDocument& inDoc) {
     if (authToken.length() == 0) {
@@ -3534,13 +4206,20 @@ void handlePcSave(const JsonDocument& inDoc) {
     String name = String(inDoc["name"] | "");
     String pw   = String(inDoc["password"] | "");
     name.trim();
-    if (name.length() == 0 || pw.length() == 0) {
+    int slot = inDoc["slot"] | -1;
+
+    preferences.begin("pcprof", false);
+    bool occupied = (slot >= 0 && slot < PC_SLOTS)
+                    && preferences.getString(pcKey('n', slot).c_str(), "").length() > 0;
+    // Editing an existing slot must not force the password to be typed again -
+    // the dashboard cannot show it, so asking for it would mean losing it to a
+    // rename. An empty password on an occupied slot keeps the stored one.
+    if (name.length() == 0 || (pw.length() == 0 && !occupied)) {
+        preferences.end();
         StaticJsonDocument<192> d;
         d["status"]="error"; d["message"]="name and password are both required";
         sendJson(d); return;
     }
-    int slot = inDoc["slot"] | -1;
-    preferences.begin("pcprof", false);
     if (slot < 0 || slot >= PC_SLOTS) {
         for (int i = 0; i < PC_SLOTS; i++) {
             if (preferences.getString(pcKey('n', i).c_str(), "").length() == 0) { slot = i; break; }
@@ -3552,18 +4231,32 @@ void handlePcSave(const JsonDocument& inDoc) {
         d["status"]="error"; d["message"]="All slots are in use";
         sendJson(d); return;
     }
+    // Unspecified means "the computer this was saved from", which is the answer
+    // the user would have given anyway. "auto" is the explicit opt out.
+    String osReq = String(inDoc["os"] | "");
+    osReq.toLowerCase();
+    HostOS os;
+    if      (osReq == "mac")     os = OS_MAC;
+    else if (osReq == "windows") os = OS_WINDOWS;
+    else if (osReq == "linux")   os = OS_LINUX;
+    else if (osReq == "auto")    os = OS_UNKNOWN;
+    else if (occupied)           os = (HostOS)preferences.getUChar(pcKey('o', slot).c_str(), OS_UNKNOWN);
+    else                         os = hostOs();
+
     preferences.putString(pcKey('n', slot).c_str(), name);
-    preferences.putString(pcKey('p', slot).c_str(), pw);
+    if (pw.length()) preferences.putString(pcKey('p', slot).c_str(), pw);
+    preferences.putUChar(pcKey('o', slot).c_str(), (uint8_t)os);
     preferences.end();
-    COM_SERIAL.printf("[PC] saved profile %d (%s), %u char password\n",
-                      slot, name.c_str(), (unsigned)pw.length());
-    StaticJsonDocument<224> doc;
+    COM_SERIAL.printf("[PC] saved profile %d (%s) os=%s, password %s\n",
+                      slot, name.c_str(), hostOsName(os), pw.length() ? "updated" : "unchanged");
+    StaticJsonDocument<256> doc;
     doc["status"]="ok"; doc["reply"]="pc_saved"; doc["slot"]=slot; doc["name"]=name;
+    doc["os"] = hostOsName(os);
     sendJson(doc);
 }
 
 void handlePcList() {
-    StaticJsonDocument<640> doc;
+    StaticJsonDocument<1024> doc;
     doc["status"]="ok"; doc["reply"]="pc_list";
     JsonArray a = doc.createNestedArray("profiles");
     preferences.begin("pcprof", true);
@@ -3573,6 +4266,8 @@ void handlePcList() {
         JsonObject o = a.createNestedObject();
         o["slot"] = i;
         o["name"] = n;                 // names only - never the password
+        uint8_t v = preferences.getUChar(pcKey('o', i).c_str(), OS_UNKNOWN);
+        o["os"] = hostOsName(v > OS_LINUX ? OS_UNKNOWN : (HostOS)v);
     }
     preferences.end();
     doc["auth_set"] = authToken.length() > 0;
@@ -3590,6 +4285,7 @@ void handlePcDelete(const JsonDocument& inDoc) {
     preferences.begin("pcprof", false);
     preferences.remove(pcKey('n', slot).c_str());
     preferences.remove(pcKey('p', slot).c_str());
+    preferences.remove(pcKey('o', slot).c_str());
     preferences.end();
     COM_SERIAL.printf("[PC] deleted profile %d\n", slot);
     StaticJsonDocument<160> doc;

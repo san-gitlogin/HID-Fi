@@ -42,6 +42,8 @@ no rights to install anything on.
 - [The two USB ports are not interchangeable](#the-two-usb-ports-are-not-interchangeable)
 - [Quick start](#quick-start)
 - [Change the password first](#change-the-password-first)
+- [Recommended setup](#recommended-setup)
+- [Mac or PC, worked out for you](#mac-or-pc-worked-out-for-you)
 - [How it works](#how-it-works)
 - [Documentation](#documentation)
 - [FAQ](#faq)
@@ -56,14 +58,15 @@ no rights to install anything on.
 |---|---|
 | **Trackpad** | One finger moves, tap clicks, two fingers scroll and pinch, three swipe desktops. Press and hold to grab a window. Speed, acceleration, momentum and scroll direction all adjustable. |
 | **Keyboard on the pad** | The trackpad card flips to a keyboard and back from one button, so a click and the typing that follows it do not cost a trip across the app. |
-| **Keyboard** | On-screen keys with real press and release, so you can hold Ctrl with one thumb and strike another key with the other. Letters and a full symbol layer covering every printable ASCII character. Type a whole string, or fire a custom combo. |
+| **Keyboard** | On-screen keys with real press and release, so you can hold Ctrl with one thumb and strike another key with the other. It scales with the screen: a phone gets letters and a symbol layer, a laptop gets a full ANSI board, and a wide screen gets the function row, the navigation cluster and the numpad — all 104 keys. Type a whole string, or fire a custom combo. |
 | **Mouse** | Left, right and a scroll wheel you actually drag — each notch is a detent with a haptic tick, and a tap on it middle-clicks. |
+| **Passwords** | A vault on the board for the passwords and PINs you keep typing. It types them for you, so they never touch a keyboard that could be watched or logged. Guarded by a PIN that is asked for **every** time — including to type one — and optionally by a PIN of its own, separate from the one that unlocks the dashboard. |
 | **Shortcuts** | Hundreds of macOS, Windows and Linux shortcuts, grouped, searchable, and filtered to the OS you pick. Tap one and it fires on the PC. |
 | **App switcher** | Hold the tile and Alt stays down, so the host keeps its own switcher open. Slide to pick a window, let go to raise it. |
 | **Media** | Volume knobs you turn with a finger, playback keys, brightness, and editable quick actions for mic-mute and call keys. |
 | **Gamepad** | Optional second USB device: two sticks, D-pad, twelve buttons. |
-| **Session** | Unlock a locked PC by typing its password, lock it again, sleep and wake, presenter controls, and a net-zero cursor jiggle to stay awake. |
-| **Knows the computer** | Detects whether it is plugged into a Mac or a PC by watching the Num Lock light, and switches the lock shortcut, gestures, app switcher and keyboard to match — or pin it by hand. See [docs/MACOS.md](docs/MACOS.md). |
+| **Session** | Unlock a locked PC by typing its password, lock it again, sleep and wake, presenter controls, and a net-zero cursor jiggle to stay awake. Saved PCs remember whether they are a Mac or a PC, so each one is woken the way its own login screen expects. |
+| **Knows the computer** | Detects whether it is plugged into a Mac or a PC from the way the host reads its USB descriptors — typing nothing to find out — and switches the lock shortcut, gestures, app switcher and keyboard to match. Or pin it by hand. See [docs/MACOS.md](docs/MACOS.md). |
 | **Knows itself** | Both MAC addresses, what is in the board's permanent memory, and every client on its access point — without ever handing back a password or PIN. |
 
 Flick sideways across empty space to move between tabs. It is deliberately fussy:
@@ -83,16 +86,9 @@ own: a Mac gets Mac keys, shortcuts and gestures, a PC gets Windows ones.
 
 <table>
 <tr>
-<td width="50%" align="center"><img src="docs/assets/screens/hero-keyboard.png" width="300" alt="On-screen keyboard with both Shift keys and Mac modifier glyphs, detected automatically"></td>
-<td width="50%" align="center"><img src="docs/assets/screens/hero-settings.png" width="300" alt="Automatic Mac or PC detection, and one-tap macOS keyboard setup"></td>
-</tr>
-</table>
-
-<table>
-<tr>
 <td align="center" width="25%"><img src="docs/assets/screens/01-trackpad.png" width="180" alt="Trackpad"><br><b>Trackpad</b><br><sub>Move, tap, two-finger scroll, pinch, three-finger gestures</sub></td>
 <td align="center" width="25%"><img src="docs/assets/screens/02-keyboard.png" width="180" alt="Keyboard"><br><b>Keyboard</b><br><sub>Full keyboard, both Shifts, Mac or PC keys</sub></td>
-<td align="center" width="25%"><img src="docs/assets/screens/03-shortcuts.png" width="180" alt="Shortcuts"><br><b>Shortcuts</b><br><sub>Hundreds, filtered to your OS</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/03-shortcuts.png" width="180" alt="Passwords and shortcuts"><br><b>Keys</b><br><sub>Password vault, and hundreds of shortcuts</sub></td>
 <td align="center" width="25%"><img src="docs/assets/screens/04-media.png" width="180" alt="Media"><br><b>Media</b><br><sub>Volume knobs, playback, quick actions</sub></td>
 </tr>
 <tr>
@@ -102,6 +98,24 @@ own: a Mac gets Mac keys, shortcuts and gestures, a PC gets Windows ones.
 <td align="center" width="25%"></td>
 </tr>
 </table>
+
+### The keyboard grows with the screen
+
+It is not one keyboard scaled up and down. The layout gains whole blocks as the
+width allows, the way physical keyboards do &mdash; so a big screen gets *more
+keys*, not the same few keys stretched across it.
+
+| Width | Layout | Like a… |
+|---|---|---|
+| under 500px | Letters, a `123` symbol layer, function row, real inverted-T arrows | phone keyboard |
+| 500px+ | Full **ANSI**: `` ` `` `-` `=` `[` `]` `\` `;` `'` `,` `.` `/`, both Shifts, function row, arrows, `Del`/`Home`/`End` and `Ins`/`PgUp`/`PgDn` | 65% keyboard |
+| 1010px+ | …plus the full **navigation cluster** (`PrtSc`/`ScrLk`/`Pause`) | TKL |
+| 1300px+ | …plus the **numpad** &mdash; 104 keys | full-size |
+
+Rotating a phone to landscape, or opening the trackpad card's keyboard in
+fullscreen, moves up the tiers too. **Going up a tier never takes a key away** —
+every layout can reach everything the smaller one could, and a test sweeps 67
+viewports to prove it.
 
 ---
 
@@ -152,22 +166,83 @@ certainly still on the COM port. Full detail in
 
 > **Never flashed an ESP board before?** [docs/FLASHING.md](docs/FLASHING.md#install-the-tools-first-time-only)
 > walks you through installing the tools from zero — `arduino-cli`, the ESP32
-> support, the USB driver — and cloning this repo, all step by step.
+> support, the USB driver — all step by step.
 
-**1. Flash it**, with the board on its **COM** port:
+**1. Flash it**, with the board on its **COM** port. Copy the whole block.
+
+<details open>
+<summary><b>Windows</b> (PowerShell)</summary>
 
 ```powershell
-.\flash_esp.ps1 -Compile         # Windows
+# One time only: tools, ESP32 support and the two libraries (~1 GB, a few minutes)
+winget install ArduinoSA.CLI
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+arduino-cli lib install ArduinoJson
+arduino-cli lib install WebSockets
+
+# Every time: get the code and flash
+git clone https://github.com/san-gitlogin/HID-Fi
+cd HID-Fi
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\flash_esp.ps1 -Compile
 ```
+
+Windows also needs the **CH343 driver** once, from
+[wch-ic.com](https://www.wch-ic.com/downloads/CH343SER_EXE.html) — replug the
+board after installing it. The `Set-ExecutionPolicy` line applies to that one
+PowerShell window only; nothing is changed permanently.
+
+</details>
+
+<details open>
+<summary><b>macOS</b> (Terminal)</summary>
 
 ```bash
-./flash_esp.sh -c                # macOS / Linux
+# One time only: tools, ESP32 support and the two libraries (~1 GB, a few minutes)
+brew install arduino-cli
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+arduino-cli lib install ArduinoJson
+arduino-cli lib install WebSockets
+
+# Every time: get the code and flash
+git clone https://github.com/san-gitlogin/HID-Fi
+cd HID-Fi
+chmod +x flash_esp.sh
+./flash_esp.sh -c
 ```
 
-The script finds the board, the toolchain and esptool by itself.
-[docs/FLASHING.md](docs/FLASHING.md) walks through it from nothing, including
-installing the ESP32 core. **On a Mac there are a couple of one-time setup
-steps** — the accessory prompt and the keyboard assistant — all covered in
+macOS usually needs no driver. If no port shows up, install
+[WCH's macOS driver](https://www.wch-ic.com/downloads/CH343SER_MAC_ZIP.html).
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+arduino-cli lib install ArduinoJson
+arduino-cli lib install WebSockets
+
+git clone https://github.com/san-gitlogin/HID-Fi
+cd HID-Fi
+chmod +x flash_esp.sh
+./flash_esp.sh -c
+```
+
+If you get a permission error on the serial port, run
+`sudo usermod -aG dialout $USER`, then log out and back in.
+
+</details>
+
+Already set up? Flashing is just the last line: `.\flash_esp.ps1 -Compile` on
+Windows, `./flash_esp.sh -c` elsewhere. The script finds the board, the toolchain
+and esptool by itself. **On a Mac there are two one-time setup steps** — the
+accessory prompt and the keyboard assistant — covered in
 [docs/MACOS.md](docs/MACOS.md).
 
 **2. Plug the USB port** into the computer you want to control.
@@ -207,7 +282,8 @@ about a month.
 
 **USB serial is never gated and never locked out.** If you forget the PIN or lock
 yourself out, plug into the COM port and set a new one over serial. That is the
-deliberate way back in.
+deliberate way back in. The one exception is reading a stored password back out
+of the vault — that asks for a PIN even over the cable.
 
 ### Joining your home network is not the same as using the access point
 
@@ -225,6 +301,70 @@ different, so the firmware enforces the difference instead of just warning:
 
 More detail, including what this project does *not* protect against, in
 [SECURITY.md](SECURITY.md).
+
+---
+
+## Recommended setup
+
+Five minutes, in this order. Everything here is in the **Settings** tab unless
+it says otherwise.
+
+| # | Do this | Why it matters |
+|---|---|---|
+| 1 | **Change the access point name and password** | Every board ships with `hid12345`, printed in this README. Until you change it, anyone in range who has seen this project can type on your computer. A distinctive name also stops you joining someone else's board by mistake. |
+| 2 | **Set a four digit access PIN** | It gates every wireless request, with an escalating lockout behind it. Nothing else on this list works without it — saving a PC password or a vault entry is refused until a PIN exists. |
+| 3 | **Decide how you will reach it** | The board's **own access point** is the safer default: an attacker has to be in radio range. Joining your home network is more convenient and strictly more exposed — see below. |
+| 4 | **Give the vault its own PIN** *(Keys → Passwords)* | Then unlocking the dashboard stops being the same thing as unlocking your stored passwords, the way a browser asks again before showing one. |
+| 5 | **Turn the access point off when you are on a network** *(Power)* | An access point beacons whether anyone is listening or not. Holding **BOOT** for two seconds always brings it back. |
+| 6 | **Unplug it when you are not using it** | It is a keyboard that someone in range might be able to type on. |
+
+**If you do join a home network:**
+
+- Set the PIN **first**, from the access point, before joining. The firmware will
+  refuse wireless control from the wider network until you have, but doing it in
+  the right order saves you a puzzle.
+- Prefer a **guest or IoT network** that cannot reach your main machines.
+- Give it a **static address** so you can find it in the router's client list and
+  firewall it if you want to.
+- Remember there is **no TLS**. Anyone already on that network can read the
+  traffic, including a password as you type it into the unlock field. Treat the
+  network itself as the security boundary.
+
+**What the board will never do**, whichever route you use: hand a saved PC
+password back, or hand a vault secret back without the PIN for that specific
+request — on WiFi or over the USB cable. Full reasoning in
+[SECURITY.md](SECURITY.md).
+
+---
+
+## Mac or PC, worked out for you
+
+Plug the board into a computer and it watches how that computer reads the USB
+descriptors it is being offered — it never types anything to find out — then
+switches the lock shortcut, the gestures, the app switcher and the key caps to
+match. A Mac gets `⌘ ⌥ ⌃`, a PC gets Ctrl/Alt/⊞.
+
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/assets/screens/hero-keyboard.png" width="300" alt="On-screen keyboard with both Shift keys and Mac modifier glyphs, detected automatically"></td>
+<td width="50%" align="center"><img src="docs/assets/screens/hero-settings.png" width="300" alt="Automatic Mac or PC detection, and one-tap macOS keyboard setup"></td>
+</tr>
+<tr>
+<td align="center"><sub>Mac modifier glyphs, picked automatically</sub></td>
+<td align="center"><sub>Settings &rarr; Computer, and the one-tap macOS keyboard setup</sub></td>
+</tr>
+</table>
+
+Detection re-runs whenever the board is moved to another computer, and **you can
+always pin the OS by hand** in Settings → Computer if it gets it wrong. Two
+honest limits: Linux enumerates exactly as Windows does, so it reads as Windows
+until you pin it, and a computer that has already cached this board's
+descriptors may not say enough to be recognised — in which case the dashboard
+says so and asks you to pick, rather than guessing.
+
+**macOS also has two one-time setup steps** the first time you plug in: allowing
+the accessory, and the Keyboard Setup Assistant. The dashboard drives both, and
+[docs/MACOS.md](docs/MACOS.md) covers them.
 
 ---
 
@@ -309,9 +449,10 @@ drivers it already has. That is why it works on the lock screen, in the BIOS, an
 on machines you cannot install anything on.
 
 **Does it work with a Mac?**
-Yes. It detects a Mac automatically (by watching the Num Lock light) and switches
-the lock shortcut, gestures, app switcher and keyboard to match. There are two
-one-time Mac setup steps the first time you plug in — see [docs/MACOS.md](docs/MACOS.md).
+Yes. It detects a Mac automatically — passively, from how macOS sets up the
+keyboard, without pressing anything — and switches the lock shortcut, gestures,
+app switcher and keyboard to match. There are two one-time Mac setup steps the
+first time you plug in — see [docs/MACOS.md](docs/MACOS.md).
 
 **Windows too?**
 Yes, and it is plug-and-play there. Everything that changes for a Mac stays as
