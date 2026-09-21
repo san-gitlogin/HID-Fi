@@ -464,6 +464,15 @@ You are almost certainly still on the **COM** port. Flash over COM, then plug th
 **USB** port into the computer you want to control. A charge-only cable does the
 same thing — use a data cable. See [the two USB ports](#the-two-usb-ports-are-not-interchangeable).
 
+**The cursor has gone laggy. What do I do?**
+Close the dashboard tab and open it again. That clears it. Lag that creeps in
+after a tab has been sitting open for hours is a browser-side problem, not the
+board — check the **ms** pill in the top bar, and if it still reads normal while
+the cursor feels slow, the round trip is fine and the tab is the thing to
+replace. The pill beside it tells you how many dashboards are connected; more
+than one phone driving the board at once will also cost you smoothness, and it
+turns amber to say so.
+
 **Can the board read my screen, or tell if the PC is locked?**
 No. HID is one-way: the board only sends input, it can never read the host back.
 Anything the dashboard shows about the computer — volume, mute, lock state — is
