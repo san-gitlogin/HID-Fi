@@ -134,6 +134,7 @@ Always run these after a firmware change:
 
 ```powershell
 python tests\test_dashboard_static.py  # no board needed, run before flashing
+python tests\test_dashboard_live.py    # no board needed, drives the UI over a WebSocket
 python tests\test_v34_features.py      # expect 24/24
 python tests\test_power_health.py      # expect 34/34
 python tests\test_wifi_join.py         # expect 20/20, ~40s
@@ -174,6 +175,13 @@ string, runs `node --check` over the script, and verifies every `$('id')` and
 every literal icon reference resolves. **A JavaScript syntax error gives a blank
 white dashboard**, and the only way to diagnose that after flashing is to reflash.
 This check has caught real bugs before they reached the board.
+
+`tests/test_dashboard_live.py` goes further and **drives the real dashboard in a
+headless browser against a fake board that speaks WebSocket and demands a PIN**.
+That transport is where the reply queue lives, and a stub that only answers HTTP
+cannot see it — which is exactly how a queue desync shipped. If you are changing
+anything about `send()`, `waiters` or the auth handshake, this is the test that
+will tell you.
 
 ---
 
@@ -368,6 +376,23 @@ The pattern that works here:
   access PIN affects, so a PIN set in Settings is visible in Keys immediately —
   and so is one set from another phone, because status is polled. A card that
   only updates when its own tab reloads is a bug.
+- **The WebSocket reply queue is positional, so keep it 1:1.** Replies come back
+  in the order the commands were sent and `waiters` matches them by position.
+  Every command must push exactly one slot — `send()` pushes `null` when there is
+  no callback — and every reply must consume exactly one, refusals included.
+  Messages carrying `event` are pushed by the board and must consume none.
+  Getting this wrong does not fail loudly: it silently delivers each reply to
+  the previous command's handler for the rest of the socket's life. It shipped
+  once as an empty Keys tab on a board that was holding the user's passwords.
+  `tests/test_dashboard_live.py` is the regression test and needs no board.
+- **A socket's handlers belong to that socket, not to `ws`.** `connect()` keeps
+  the new socket in a local and every handler checks `ws === sock` before doing
+  anything, so a socket that is still closing cannot write over the state of the
+  one that replaced it. `connect()` also returns early while a socket is
+  `CONNECTING` or `OPEN`, because reconnect timers, the visibility handler and
+  the watchdog can all fire at once. Reading the shared `ws` from inside a
+  handler is how you get two live sockets and a board that thinks two dashboards
+  are connected.
 - **A list row is icon, text, then controls, and the text is what gives way.**
   `.item .tx b` truncates and the buttons carry `flex:0 0 auto`. A saved email
   address used to push Type, Show and Edit into each other on a 375px phone.

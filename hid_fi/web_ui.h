@@ -165,6 +165,11 @@ body.rail-slim .railtoggle .ic{transform:rotate(180deg)}
   background:var(--surface);border:1px solid var(--line);font-size:12px;color:var(--fg2);white-space:nowrap;
 }
 .pill b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+.pill .ic{width:14px;height:14px;flex:0 0 14px;color:var(--fg3)}
+/* More than one dashboard is normal - every phone that opens it is one - but it
+   is also the first thing to check when the pointer feels slow, so it is worth
+   noticing rather than hunting for in Settings. */
+.pill.conn.multi .ic,.pill.conn.multi b{color:var(--warn)}
 .dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:var(--fg3)}
 .dot.ok{background:var(--ok);box-shadow:0 0 0 3px rgba(34,211,154,.15)}
 .dot.bad{background:var(--bad);box-shadow:0 0 0 3px rgba(255,90,90,.15)}
@@ -922,6 +927,10 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   .tile span{font-size:10px}
   .knobs{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
   .pill{height:27px;padding:0 9px;font-size:11px}
+  /* At this width the title has nothing left to give, so the count only earns
+     its place when it is saying something: more than one dashboard. */
+  .pill.conn{display:none}
+  .pill.conn.multi{display:inline-flex}
 }
 /* ---------------- landscape on a phone ----------------
    A phone on its side is wide enough to keep the rail, but only ~400px tall, and
@@ -1005,6 +1014,9 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5 17.5 10.5"/></symbol>
 <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
 <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a15 15 0 0 1 19 0M5.8 12.7a10 10 0 0 1 12.4 0M9.2 16.4a5 5 0 0 1 5.6 0M12 20h.01"/></symbol>
+<!-- Two devices, side by side rather than overlapping: strokes that cross each
+     other turn to mush at the 14px this is actually drawn at. -->
+<symbol id="i-devices" viewBox="0 0 24 24"><rect x="2.5" y="6" width="8" height="12.5" rx="1.8"/><rect x="13.5" y="3.5" width="8" height="17" rx="2"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5 20 5.5v6c0 5-3.4 8.9-8 10.5-4.6-1.6-8-5.5-8-10.5v-6z"/><path d="m9 12 2 2 4-4"/></symbol>
 <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6.1 5.8 12 5.8 21.5 12 21.5 12 17.9 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.9"/></symbol>
 <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.6" cy="16.4" r="4.1"/><path d="m10.5 13.5 8-8M15.6 8.4l2.4 2.4M18.5 5.5l2.4 2.4"/></symbol>
@@ -1056,6 +1068,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
       <div class="tmark" aria-hidden="true"><svg class="ic"><use href="#i-logo"/></svg></div>
       <h1 id="vtitle">Trackpad</h1>
       <div class="pill" title="round trip over the socket"><span class="dot" id="tdot"></span><b id="trtt">--</b></div>
+      <div class="pill conn" id="connPill" title="dashboards connected to this board"><svg class="ic"><use href="#i-devices"/></svg><b id="connN">--</b></div>
       <button class="iconbtn" id="btnInfo" aria-label="Gestures"><svg class="ic"><use href="#i-info"/></svg></button>
       <button class="iconbtn" id="btnRefresh" aria-label="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
     </header>
@@ -1559,7 +1572,22 @@ const bAbs=new DataView(new ArrayBuffer(5));
 const bPing=new DataView(new ArrayBuffer(5));
 const bGp=new DataView(new ArrayBuffer(10));
 const bCon=new DataView(new ArrayBuffer(3));
+// The board answers commands in the order they arrive, one reply each, so this
+// queue only stays aligned if EVERY command pushes exactly one slot and EVERY
+// reply consumes exactly one - refusals included.
+//
+// Both halves of that were broken. A command sent without a callback pushed
+// nothing but was still answered, and `auth_required` returned without
+// consuming a slot. Either one shifts every later reply onto the wrong
+// handler for the life of the socket. It showed up as an empty Keys tab while
+// the board was holding the entries: the vault's answer was being delivered to
+// another card's callback, and no amount of refreshing could fix it.
 const waiters=[];
+function settle(m){
+  if(!waiters.length)return;
+  const cb=waiters.shift();
+  if(cb){try{cb(m);}catch(e){}}
+}
 // The scan is a plain GET rather than a socket command, so it has to carry the
 // PIN itself. A header, not a query string, so it stays out of browser history
 // and any log the request passes through.
@@ -1568,16 +1596,35 @@ function pinHeader(){
   return {};
 }
 
+// Every handler here is bound to *this* socket rather than to whatever `ws`
+// happens to point at when it fires, and a second connection is never opened
+// while one is alive.
+//
+// Both mattered. A close arriving from a connection that had already been
+// replaced used to mark the transport down, clear the live socket's pending
+// callbacks and schedule yet another connect - so a tab left open across a few
+// board reboots quietly accumulated connections. The board counted each as a
+// separate dashboard, and the pointer stream had to share the phone's radio
+// with all of them: fine at rest, hundreds of milliseconds while moving. A
+// freshly opened tab was always smooth, which is what gave it away.
 function connect(){
-  try{ws=new WebSocket('ws://'+location.hostname+':81/');}catch(e){link(false);return setTimeout(connect,1500);}
-  ws.binaryType='arraybuffer';
-  ws.onopen=()=>{wsUp=true;tries=0;link(true);bootDone();apDone();
+  if(ws&&(ws.readyState===0||ws.readyState===1))return;   // CONNECTING or OPEN
+  let sock;
+  try{sock=new WebSocket('ws://'+location.hostname+':81/');}
+  catch(e){link(false);return setTimeout(connect,1500);}
+  ws=sock;
+  sock.binaryType='arraybuffer';
+  const live=()=>ws===sock;
+  sock.onopen=()=>{if(!live())return;
+    wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();};
-  ws.onclose=()=>{wsUp=false;link(false);aswAbort();tries++;setTimeout(connect,1200);};
-  ws.onerror=()=>{try{ws.close();}catch(e){}};
-  ws.onmessage=ev=>{
+  sock.onclose=()=>{if(!live())return;
+    wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
+  sock.onerror=()=>{try{sock.close();}catch(e){}};
+  sock.onmessage=ev=>{
+    if(!live())return;
     if(ev.data instanceof ArrayBuffer){
       const d=new DataView(ev.data);
       if(d.getUint8(0)===0x81){const id=d.getUint32(1,true),t=pings.get(id);
@@ -1586,17 +1633,18 @@ function connect(){
       return;
     }
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);
+    // Pushed by the board rather than answering anything, so it takes no slot.
+    if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);return;}
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
-    if(m.reply==='auth_required'){authOK=false;return askPin();}
-    if(m.reply==='lan_locked')return lanLocked();
-    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');loadPcs();loadVault();}
+    if(m.reply==='auth_required'){authOK=false;askPin();return settle(m);}
+    if(m.reply==='lan_locked'){lanLocked();return settle(m);}
+    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();}
     if(m.reply==='auth_failed'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,m.retry_in?('Wrong PIN. Locked for '+m.retry_in+'s.'):'That PIN was not right.');}
     if(m.reply==='auth_locked'){authOK=false;
       askPin();pinAskDone(false,'Too many wrong PINs. Try again in '+(m.retry_in||0)+'s.');}
     if(m.reply&&m.reply!=='mouse_moved')logline((m.status==='ok'?'ok ':'!! ')+(m.reply||m.message||''),m.status!=='ok');
-    if(waiters.length){const cb=waiters.shift();try{cb(m);}catch(e){}}
+    settle(m);
   };
 }
 function link(up){
@@ -1606,7 +1654,10 @@ function link(up){
   if(!up){$('trtt').textContent='--';$('tdot').className='dot';}
 }
 function send(o,cb){
-  if(wsUp){if(cb)waiters.push(cb);try{ws.send(JSON.stringify(o));return;}catch(e){}}
+  if(wsUp){
+    waiters.push(cb||null);            // a slot even with no callback, or the queue drifts
+    try{ws.send(JSON.stringify(o));return;}catch(e){waiters.pop();}
+  }
   const pin=sessionStorage.getItem('pin');
   fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(pin?Object.assign({token:pin},o):o)})
@@ -3846,6 +3897,18 @@ function applyStatus(d){
       (d.usb_str_seq?' \u00b7 indices '+d.usb_str_seq:'');
   }
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
+  // How many dashboards the board is serving. Polled, so a second phone opening
+  // this page shows up here on its own - and so does a tab that was left open
+  // somewhere and is still holding a socket.
+  if(d.ws_clients!==undefined){
+    const n=d.ws_clients|0, ap=d.ap_clients|0;
+    $('connN').textContent=n;
+    const pill=$('connPill');
+    pill.classList.toggle('multi',n>1);
+    pill.title=(n===1?'1 dashboard':n+' dashboards')+' connected to this board'+
+      (ap?' \u00b7 '+ap+' device'+(ap===1?'':'s')+' on its access point':'')+
+      (n>1?' \u2014 they share the link, so the pointer can feel slower':'');
+  }
   // The access PIN decides what half the dashboard is allowed to offer, and it
   // can be turned on from Settings or from another phone entirely. Notice it
   // changing and rebuild whatever depended on it, rather than leaving the other

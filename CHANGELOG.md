@@ -91,6 +91,33 @@ switching that is finally right.
 
 ### Fixed
 
+- **The dashboard showed an empty Keys tab while the board held the entries.**
+  Replies come back over the socket in the order the commands were sent, and the
+  page matched them to callbacks by position — but a command sent without a
+  callback pushed no slot while still being answered, and `auth_required`
+  returned without consuming one. On every connect the page asks for the config,
+  macros, PCs and vault *before* the PIN has been accepted, so four refusals
+  arrived and stranded four callbacks. From then on every reply was delivered to
+  the previous command's handler for the life of the socket: the vault's answer
+  landed in another card's callback, the list rendered empty, saving appeared to
+  do nothing, and a vault PIN that had been set still offered to add one. A hard
+  refresh never helped because the sequence is identical on every load.
+  Now every command takes exactly one slot and every reply consumes exactly one,
+  refusals included; pushed events consume none, and the queue is cleared when
+  the socket closes. `tests/test_dashboard_live.py` drives the real dashboard
+  against a fake board that speaks WebSocket and demands a PIN — the transport
+  an HTTP-only stub could never exercise, which is how this got through.
+- **A reconnect could leave a second socket running.** `connect()` assigned the
+  new socket to the shared `ws` immediately and its handlers read that variable
+  rather than their own socket, so a reconnect that overlapped a socket still
+  closing left the older one's callbacks writing over the newer one's state, and
+  nothing stopped a second `connect()` starting while one was already opening.
+  Each socket's handlers are now bound to the socket that owns them and ignore
+  everything once they are no longer the live one, and `connect()` returns early
+  if a socket is already connecting or open. This was found while chasing a
+  cursor that got laggy in a tab left open for hours; **it is not proven to be
+  that cause** — five simulated reboots never reproduced the accumulation — but
+  the binding was wrong regardless.
 - **The dashboard went stale between tabs.** Setting the access PIN in Settings
   left the Keys tab still saying "set an access PIN first" until the page was
   reloaded. Every write to the board now refreshes what depends on it, and the
@@ -137,6 +164,14 @@ switching that is finally right.
 
 ### Added
 
+- **The topbar says how many dashboards are connected**, next to the latency
+  pill. Because the board is an open access point within radio range, "am I the
+  only one driving this?" was a question the dashboard could answer and did not.
+  One connection is stated plainly; more than one turns the pill amber and the
+  tooltip breaks it down into sockets and WiFi clients. It is the same pill as
+  the latency readout — same radius, same surface, same tabular figures — and on
+  a 320px screen it hides itself unless there is more than one, where the page
+  title needs the room more than a count of one does.
 - **A password vault.** Twelve slots holding a purpose, a kind (PIN or password)
   and a secret of any length, which the board types for you — so a password is
   never typed on a keyboard that could be watched or logged, and a PIN is not
