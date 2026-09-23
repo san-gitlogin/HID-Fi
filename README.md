@@ -34,8 +34,20 @@ no rights to install anything on.
 
 ---
 
+## Watch the build
+
+[![Control Any PC From Your Phone via Wi-Fi using an ESP32 S3 — a hands-on with HID-Fi](docs/assets/video-thumb.png)](https://www.youtube.com/watch?v=HUG3y0nIfkw)
+
+From a blank ESP32-S3 board to driving a computer from your phone: the two USB-C
+ports, installing the tools on Windows and macOS, flashing with one command, and a
+tour of the dashboard.
+**[Watch on YouTube](https://www.youtube.com/watch?v=HUG3y0nIfkw)** (9:39)
+
+---
+
 ## Contents
 
+- [Watch the build](#watch-the-build)
 - [What it does](#what-it-does)
 - [The dashboard](#the-dashboard)
 - [What you need](#what-you-need)
