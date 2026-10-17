@@ -1,0 +1,22 @@
+{
+  "_about": "Deliberate bugs. tests/unit/test_typing.py::test_bench_catches_planted_bugs applies each to the firmware's TYPE STRING section and requires the unit tier to FAIL. A mutation that survives means the tests have a blind spot. Each 'find' must match the current source exactly once.",
+  "mutations": [
+    {"name": "lax decoder lets surrogates through", "find": "if (c == 0xED) hi = 0x9F; }", "replace": "}"},
+    {"name": "overlong 3-byte forms accepted", "find": "if (c == 0xE0) lo = 0xA0;", "replace": ""},
+    {"name": "code points past U+10FFFF accepted", "find": "if (c == 0xF4) hi = 0x8F; }", "replace": "}"},
+    {"name": "wrong low surrogate", "find": "typeHex(0xDC00 + (v & 0x3FF), 4);", "replace": "typeHex(0xDC00 + (v & 0x3FE), 4);"},
+    {"name": "Option never released on macOS", "find": "Keyboard.release(KEY_LEFT_ALT);   // the character commits on release", "replace": ""},
+    {"name": "Linux entry uses releaseAll", "find": "        Keyboard.release('u');\n        Keyboard.release(KEY_LEFT_SHIFT);\n        Keyboard.release(KEY_LEFT_CTRL);", "replace": "        Keyboard.releaseAll();"},
+    {"name": "Caps Lock ignored on Linux", "find": "bool caps = ledStateBits & 0x02;", "replace": "bool caps = false;"},
+    {"name": "en dash missing from the fold table", "find": "case 0x2013:", "replace": "case 0x2017:"},
+    {"name": "ASCII keystroke timing changed", "find": "    delay(CHAR_DELAY);\n    Keyboard.release(c);", "replace": "    delay(CHAR_DELAY + 1);\n    Keyboard.release(c);"},
+    {"name": "Unicode entry on for any OS", "find": "return (o == OS_MAC || o == OS_LINUX) && (unicodeHosts & (1 << o)) && unicodeSafeOn(o);", "replace": "return unicodeHosts != 0;"},
+    {"name": "uppercase hex digits (Shift under Option)", "find": "static const char hx[] = \"0123456789abcdef\";", "replace": "static const char hx[] = \"0123456789ABCDEF\";"},
+    {"name": "Linux entry never committed", "find": "        typeAscii(' ');                   // commits the character", "replace": ""},
+    {"name": "skipped characters not counted", "find": "if (!fold) { skipped++; continue; }", "replace": "if (!fold) { continue; }"},
+    {"name": "truncated sequence swallows the next character", "find": "if (k <= n) { skipped++; i += k; continue; }", "replace": "if (k <= n) { skipped++; i += k + 1; continue; }"},
+    {"name": "pin-vs-detection guard removed", "find": "return (o == OS_MAC || o == OS_LINUX) && (unicodeHosts & (1 << o)) && unicodeSafeOn(o);", "replace": "return (o == OS_MAC || o == OS_LINUX) && (unicodeHosts & (1 << o));"},
+    {"name": "macOS guard ignores a detected PC", "find": "if (o == OS_MAC)   return hostOsDetected != OS_WINDOWS && hostOsDetected != OS_LINUX;", "replace": "if (o == OS_MAC)   return hostOsDetected != OS_LINUX;"},
+    {"name": "raw bytes reach press() again (the original bug)", "find": "if (c < 0x80) { typeAscii((char)c); i++; continue; }", "replace": "if (true) { typeAscii((char)c); i++; continue; }"}
+  ]
+}

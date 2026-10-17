@@ -17,6 +17,14 @@ import serial
 import serial.tools.list_ports
 
 
+def repo_firmware_version():
+    """FW_VERSION from the sketch, so this check never goes stale on a release."""
+    import re
+    from pathlib import Path
+    ino = (Path(__file__).resolve().parent.parent / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
+    return re.search(r'#define\s+FW_VERSION\s+"([^"]+)"', ino).group(1)
+
+
 def find_port():
     for p in serial.tools.list_ports.comports():
         if p.vid == 0x1A86 and p.pid in (0x55D3, 0x7523):
@@ -82,12 +90,13 @@ def main():
             time.sleep(0.05)
 
     results = []
-    print(f"\nVerifying v3.8 on {port}\n" + "=" * 60)
+    expected = repo_firmware_version()
+    print(f"\nVerifying {expected} on {port}\n" + "=" * 60)
 
     print("\n-- identity --")
     st = send(ser, {"cmd": "status"})
-    results.append(check(ser, "status is v3.8", {"cmd": "status"},
-                         "status", {"firmware": "hid_fi_v3.8", "hid_ready": True}))
+    results.append(check(ser, f"board runs this checkout's firmware ({expected})", {"cmd": "status"},
+                         "status", {"firmware": expected, "hid_ready": True}))
     gamepad_on = bool(st and st.get("gamepad"))
     absolute = bool(st and st.get("pointer_mode") == "absolute")
     print(f"  (board state: gamepad={'on' if gamepad_on else 'off'}, "

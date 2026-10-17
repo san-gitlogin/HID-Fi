@@ -1,0 +1,4 @@
+{
+ "document.addEventListener.passive": "iOS Safari's gesturestart/change/end pinch blocker; Chromium never fires gesture* events",
+ "txAbs": "unused: nothing calls it; in absolute mode the firmware turns the pad's relative moves into its own virtual cursor (hidMouseMove), so nothing is lost"
+}

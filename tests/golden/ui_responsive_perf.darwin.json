@@ -1,0 +1,62 @@
+{
+ "desktop 1080p": {
+  "all tabs (work)": 19.7,
+  "first paint (wall)": 60.0,
+  "fullscreen pad (wall)": 14.7,
+  "fullscreen pad (work)": 1.7,
+  "keyboard deck (wall)": 12.9,
+  "keyboard deck (work)": 3.0,
+  "layout shift on load": 0.0,
+  "load (work)": 14.1,
+  "load to connected (wall)": 62.8,
+  "rotate (work)": 5.1,
+  "sheet (wall)": 16.4,
+  "sheet (work)": 0.8,
+  "tab switch, slowest (work)": 6.8
+ },
+ "display 4K": {
+  "all tabs (work)": 53.9,
+  "first paint (wall)": "n/a",
+  "fullscreen pad (wall)": 29.6,
+  "fullscreen pad (work)": 1.9,
+  "keyboard deck (wall)": 38.6,
+  "keyboard deck (work)": 13.5,
+  "layout shift on load": 0.0,
+  "load (work)": 12.0,
+  "load to connected (wall)": 66.3,
+  "rotate (work)": 34.8,
+  "sheet (wall)": 33.4,
+  "sheet (work)": 1.0,
+  "tab switch, slowest (work)": 39.7
+ },
+ "phone (4x slower CPU)": {
+  "all tabs (work)": 59.1,
+  "first paint (wall)": 100,
+  "fullscreen pad (wall)": 15.1,
+  "fullscreen pad (work)": 6.0,
+  "keyboard deck (wall)": 12.8,
+  "keyboard deck (work)": 8.0,
+  "layout shift on load": 0,
+  "load (work)": 57.1,
+  "load to connected (wall)": 141.8,
+  "rotate (work)": 11.2,
+  "sheet (wall)": 18.8,
+  "sheet (work)": 2.4,
+  "tab switch, slowest (work)": 17.0
+ },
+ "tablet (2x slower CPU)": {
+  "all tabs (work)": 36.4,
+  "first paint (wall)": 72,
+  "fullscreen pad (wall)": 13.7,
+  "fullscreen pad (work)": 3.4,
+  "keyboard deck (wall)": 10.2,
+  "keyboard deck (work)": 6.1,
+  "layout shift on load": 0,
+  "load (work)": 31.9,
+  "load to connected (wall)": 90.1,
+  "rotate (work)": 6.1,
+  "sheet (wall)": 16.8,
+  "sheet (work)": 1.4,
+  "tab switch, slowest (work)": 12.1
+ }
+}

@@ -1,0 +1,110 @@
+# Every push and pull request: every tier that needs no board.
+# Weekly (and on demand): the same against the LATEST ESP32 core and libraries,
+# so a breaking upstream change is found before a contributor trips over it.
+name: tests
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"        # Mondays 03:17 UTC - latest-dependencies check
+  workflow_dispatch:
+
+jobs:
+  pinned:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Linux input stack for the hostsim tier (system python)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            xvfb ibus ibus-gtk3 python3-gi gir1.2-gtk-3.0 python3-xlib x11-xkb-utils dbus-x11 g++
+
+      - name: Python test dependencies
+        run: |
+          pip install -r tests/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Cache the ESP32 core
+        uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino15-${{ hashFiles('tests/deps.json') }}
+
+      - name: Pinned firmware dependencies (tests/deps.json)
+        run: |
+          CORE=$(python -c "import json;print(json.load(open('tests/deps.json'))['firmware']['esp32:esp32'])")
+          AJ=$(python -c "import json;print(json.load(open('tests/deps.json'))['firmware']['ArduinoJson'])")
+          WS=$(python -c "import json;print(json.load(open('tests/deps.json'))['firmware']['WebSockets'])")
+          arduino-cli core update-index
+          arduino-cli core install "esp32:esp32@${CORE}"
+          arduino-cli lib install "ArduinoJson@${AJ}" "WebSockets@${WS}"
+
+      - name: Tests (static, unit, ui, build, hostsim)
+        run: python tests/run.py --ci
+
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: tests/.reports/
+
+  windows-flasher:
+    # flash_esp.ps1 picks a board among several exactly as flash_esp.sh does;
+    # this runs its end-to-end tests (fake ports, stand-in esptool) on Windows.
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tests/requirements.txt
+      - name: Flasher tests (PowerShell 7)
+        shell: pwsh
+        run: python -m pytest tests/unit/test_flash_ports.py tests/static -q -p no:cacheprovider -p no:asyncio
+
+  latest-dependencies:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Linux input stack
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            xvfb ibus ibus-gtk3 python3-gi gir1.2-gtk-3.0 python3-xlib x11-xkb-utils dbus-x11 g++
+      - run: pip install -r tests/requirements.txt
+      - uses: arduino/setup-arduino-cli@v2
+      - name: LATEST core and libraries (not the pins)
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install ArduinoJson WebSockets
+          arduino-cli core list; arduino-cli lib list
+      # Not --ci: pins are expected to differ here. The canary and golden tests are
+      # what tell you whether the new versions still behave the way HID-Fi needs.
+      - name: Tests against the latest versions
+        run: python tests/run.py --tier static,unit,build,hostsim
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-deps-reports
+          path: tests/.reports/

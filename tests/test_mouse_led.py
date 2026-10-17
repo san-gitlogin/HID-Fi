@@ -10,7 +10,7 @@ Exercises every REQ/ACK combination of the Phase 3.2 additions:
 
 Usage:
     python test_mouse_led.py COM6
-    python test_mouse_led.py COM6 --skip-clicks    # skip real mouse clicks (safer)
+    python test_mouse_led.py COM6 --skip-clicks    # no presses or clicks at all (safe)
 
 WARNING: unless --skip-clicks is given, this WILL move the mouse and perform
 real clicks on whatever window is focused. Click an empty desktop area first,
@@ -154,11 +154,15 @@ def main():
                          {"cmd": "mouse_move", "dx": 20, "dy": 0}, expect_reply="mouse_moved", ser=ser))
     results.append(check(3, "MOUSE_MOVE back left 20px",
                          {"cmd": "mouse_move", "dx": -20, "dy": 0}, expect_reply="mouse_moved", ser=ser))
-    results.append(check(4, "MOUSE_MOVE clamps to int8 (dx=999 -> 127)",
+    # Since v3.4 a large delta is split across several reports instead of being
+    # clipped to one int8 report (test_v34_features checks the split), so the
+    # whole 999 is honoured - and the move back must be the whole 999 too, or
+    # the cursor is left ~870px away from where the test found it.
+    results.append(check(4, "MOUSE_MOVE large delta is not clipped (dx=999)",
                          {"cmd": "mouse_move", "dx": 999}, expect_reply="mouse_moved",
-                         expect_fields={"dx": 127}, ser=ser))
-    results.append(check(5, "MOUSE_MOVE back (dx=-127)",
-                         {"cmd": "mouse_move", "dx": -127}, expect_reply="mouse_moved", ser=ser))
+                         expect_fields={"dx": 999}, ser=ser))
+    results.append(check(5, "MOUSE_MOVE back (dx=-999)",
+                         {"cmd": "mouse_move", "dx": -999}, expect_reply="mouse_moved", ser=ser))
 
     # ── Mouse scroll ──
     results.append(check(6, "MOUSE_SCROLL down",
@@ -166,17 +170,17 @@ def main():
     results.append(check(7, "MOUSE_SCROLL up",
                          {"cmd": "mouse_scroll", "amount": -3}, expect_reply="mouse_scrolled", ser=ser))
 
-    # ── Mouse press / release ──
-    results.append(check(8, "MOUSE_PRESS left",
-                         {"cmd": "mouse_press", "button": "left"}, expect_reply="mouse_pressed", ser=ser))
-    results.append(check(9, "MOUSE_RELEASE left",
-                         {"cmd": "mouse_release", "button": "left"}, expect_reply="mouse_released", ser=ser))
-
-    # ── Mouse click ──
+    # ── Mouse press / release / click ──
+    # A press followed by a release IS a click on whatever is under the cursor,
+    # so --skip-clicks skips 8 and 9 as well as 10-12.
     if skip_clicks:
-        print("\n  (Skipping click tests 10-12 per --skip-clicks)")
-        results.extend([True, True, True])
+        print("\n  (Skipping press/release/click tests 8-12 per --skip-clicks)")
+        results.extend([True, True, True, True, True])
     else:
+        results.append(check(8, "MOUSE_PRESS left",
+                             {"cmd": "mouse_press", "button": "left"}, expect_reply="mouse_pressed", ser=ser))
+        results.append(check(9, "MOUSE_RELEASE left",
+                             {"cmd": "mouse_release", "button": "left"}, expect_reply="mouse_released", ser=ser))
         results.append(check(10, "MOUSE_CLICK left",
                              {"cmd": "mouse_click", "button": "left"}, expect_reply="mouse_clicked", ser=ser))
         results.append(check(11, "MOUSE_CLICK right (context menu)",

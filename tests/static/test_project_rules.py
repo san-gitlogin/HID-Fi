@@ -1,0 +1,170 @@
+"""Rules that hold for the source tree itself. Needs only Python (and Node for one check).
+
+Each of these exists because the thing it checks was once wrong, or because
+getting it wrong is invisible until a user hits it.
+"""
+import py_compile
+import re
+import subprocess
+import sys
+
+import pytest
+
+from support import firmware, paths
+
+pytestmark = pytest.mark.static
+
+
+def test_dashboard_is_well_formed():
+    """The dashboard is a PROGMEM string: a JS error compiles fine and serves a blank page."""
+    r = subprocess.run([sys.executable, str(paths.TESTS / "test_dashboard_static.py")],
+                       capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
+    assert "all checks passed" in r.stdout
+
+
+def test_every_firmware_command_is_documented():
+    doc = (paths.DOCS / "COMMANDS.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r'"cmd"\s*:\s*"([a-z_0-9]+)"', doc)) | set(re.findall(r"`([a-z_0-9]+)`", doc))
+    missing = [c for c in firmware.dispatch_commands() if c not in documented]
+    assert not missing, f"commands the firmware accepts but docs/COMMANDS.md never mentions: {missing}"
+
+
+def test_docs_name_no_command_the_firmware_lacks():
+    doc = (paths.DOCS / "COMMANDS.md").read_text(encoding="utf-8")
+    stale = sorted(set(re.findall(r'"cmd"\s*:\s*"([a-z_0-9]+)"', doc)) - set(firmware.dispatch_commands()))
+    assert not stale, f"docs/COMMANDS.md documents commands the firmware does not dispatch: {stale}"
+
+
+def test_firmware_version_matches_changelog():
+    top = re.search(r"^## (v[\d.]+)", paths.CHANGELOG.read_text(encoding="utf-8"), re.M)
+    assert top, "CHANGELOG.md has no '## vX.Y' heading"
+    assert firmware.fw_version() == f"hid_fi_{top.group(1)}", \
+        f"FW_VERSION is {firmware.fw_version()} but the newest CHANGELOG entry is {top.group(1)}"
+
+
+def test_build_settings_agree_everywhere():
+    """flash_esp.sh, flash_esp.ps1 and docs/FLASHING.md must build the same thing."""
+    fq = firmware.fqbn()
+    ps1 = (paths.REPO / "flash_esp.ps1").read_text(encoding="utf-8")
+    flashing = (paths.DOCS / "FLASHING.md").read_text(encoding="utf-8")
+    assert fq in ps1, "flash_esp.ps1 builds with a different FQBN than flash_esp.sh"
+    assert fq in flashing, "docs/FLASHING.md quotes a different FQBN than flash_esp.sh"
+    assert "USBMode=default" in fq, "USBMode must be USB-OTG (TinyUSB) or the board never types"
+    assert "CDCOnBoot=default" in fq, "CDC on boot must be off - serial runs over the CH343 UART"
+
+
+@pytest.mark.parametrize("script", ["flash_esp.sh", "flash_esp.ps1"])
+def test_flashers_never_write_merged_bin(script):
+    """merged.bin at 0x0 erases NVS: every saved setting and password."""
+    code = [l for l in (paths.REPO / script).read_text(encoding="utf-8").splitlines()
+            if not l.lstrip().startswith("#") and "merged" in l]
+    assert not code, f"{script} references merged.bin outside a comment: {code}"
+
+
+def test_dashboard_has_no_emoji():
+    """Icons are SVG sprite symbols - an emoji renders differently on every phone."""
+    # Emoji blocks plus the emoji-presentation selector and joiner. Typographic
+    # symbols are fine: the Mac modifier glyphs (command, option, control, shift)
+    # are deliberate key caps, not emoji.
+    html = (paths.WEB_UI).read_text(encoding="utf-8")
+    emoji = lambda c: (0x1F000 <= ord(c) <= 0x1FAFF or 0x2600 <= ord(c) <= 0x27BF
+                       or ord(c) in (0xFE0F, 0x200D, 0x2B50, 0x2B55, 0x2B1B, 0x2B1C))
+    found = sorted({c for c in html if emoji(c)})
+    assert not found, f"emoji/symbol characters in web_ui.h: {found} - use an SVG sprite icon"
+
+
+def test_test_scripts_compile():
+    bad = []
+    for f in list(paths.TESTS.rglob("*.py")):
+        if ".build" in f.parts:
+            continue
+        try:
+            py_compile.compile(str(f), doraise=True)
+        except py_compile.PyCompileError as e:
+            bad.append(f"{f.relative_to(paths.REPO)}: {e.msg.splitlines()[-1]}")
+    assert not bad, "\n".join(bad)
+
+
+def test_deps_manifest_is_complete():
+    import json
+    m = json.loads(paths.DEPS.read_text())
+    for k in ("esp32:esp32", "ArduinoJson", "WebSockets"):
+        assert re.fullmatch(r"\d+\.\d+\.\d+", m["firmware"].get(k, "")), f"tests/deps.json: firmware pin for {k} must be an exact x.y.z"
+
+
+# ---- the test coverage contract for commands -------------------------------------------
+# A command an AI (or anyone) adds to the firmware is not done until it is
+# documented, modelled in the simulated board the dashboard scenarios run
+# against, and sent by at least one test. Each of the three has been missed
+# before: six commands had no test at all when this rule was written.
+def _command_uses():
+    """Every place a test sends a command by name, across tests/ (the model excluded)."""
+    # sent directly, or asserted as sent by the dashboard: received("x"), receive "x"
+    pat = re.compile(r"""["']cmd["']\s*:\s*["']([a-z_0-9]+)["']|cmd=["']([a-z_0-9]+)["']"""
+                     r"""|received\(["']([a-z_0-9]+)["']|receives? ["]([a-z_0-9]+)["]""")
+    used = {}
+    for f in list(paths.TESTS.rglob("*.py")) + list(paths.TESTS.rglob("*.feature")):
+        if ".build" in f.parts or f.name == "board_sim.py":
+            continue
+        for m in pat.finditer(f.read_text(encoding="utf-8", errors="ignore")):
+            name = next(g for g in m.groups() if g)
+            used.setdefault(name, set()).add(f.relative_to(paths.TESTS).as_posix())
+    return used
+
+
+def test_every_firmware_command_is_sent_by_a_test():
+    used = _command_uses()
+    missing = [c for c in firmware.dispatch_commands() if c not in used]
+    assert not missing, (f"commands no test ever sends: {missing}. Add a scenario under tests/ui/bdd/features/ "
+                         f"(dashboard) or tests/board/ (serial-only) - see .claude/skills/hidfi-feature")
+
+
+def test_every_firmware_command_is_modelled_by_the_simulated_board():
+    sim = (paths.TESTS / "support" / "board_sim.py").read_text(encoding="utf-8")
+    modelled = set(re.findall(r'c == "([a-z_0-9]+)"', sim)) | set(re.findall(r'"([a-z_0-9]+)"', sim))
+    missing = [c for c in firmware.dispatch_commands() if c not in modelled]
+    assert not missing, (f"tests/support/board_sim.py does not model {missing}, so the dashboard scenarios "
+                         f"cannot exercise them. Model the reply exactly (tests/board/test_sim_contract.py checks it)")
+
+
+# ---- the responsive matrix measures every sheet and overlay ----------------------------
+# tests/support/responsive_run.py opens each one on all 441 screens. One added to
+# the dashboard but not to that list would never be measured anywhere.
+def _dashboard_js():
+    from support import dashboard
+    return dashboard.extract_html()
+
+
+def test_every_sheet_is_measured_on_every_screen():
+    from support import responsive_run
+    js = _dashboard_js()
+    opened = " ".join(e for _, e in responsive_run.SHEET_STATES)
+    # Sheets built inline in a handler, by title: each needs a state that reaches it.
+    inline = {"Wake did not work": "sheet wake failed"}
+    missing = []
+    for m in re.finditer(r"function (\w+)\([^)]*\)\{", js):
+        body = js[m.end():]
+        nxt = re.search(r"\nfunction \w+\(", body)
+        body = body[:nxt.start()] if nxt else body
+        calls = re.findall(r"\bsheet\(\s*([^,]+),", body)
+        if not calls or m.group(1) in ("sheet", "closeSheet") or m.group(1) + "(" in opened:
+            continue
+        if all(any(t in c for t in inline) for c in calls):
+            continue                      # only inline sheets, checked by title below
+        missing.append(m.group(1))
+    names = {n for n, _ in responsive_run.SHEET_STATES}
+    missing += [t for t, st in inline.items() if t in js and st not in names]
+    assert not missing, (f"sheets the responsive matrix never opens: {missing} - add them to SHEET_STATES in "
+                         f"tests/support/responsive_run.py")
+
+
+def test_every_overlay_is_measured_on_every_screen():
+    from support import responsive_run
+    js = _dashboard_js()
+    overlays = set(re.findall(r"\$\('(\w+)'\)\.classList\.add\('on'\)", js)) - {"sheet"}
+    covered = " ".join(e for _, e, _ in responsive_run.OVERLAY_STATES)
+    starters = {"boot": "bootStart(", "apnew": "apStart(", "asw": "aswOpen("}
+    missing = sorted(o for o in overlays if starters.get(o, o) not in covered)
+    assert not missing, (f"overlays the responsive matrix never shows: {missing} - add them to OVERLAY_STATES "
+                         f"in tests/support/responsive_run.py")

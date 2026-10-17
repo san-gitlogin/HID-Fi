@@ -1,0 +1,3863 @@
+{
+ "1400|v-game|gpEnable||Enable controller": [
+  [
+   "J{\"cmd\":\"gamepad_enable\",\"on\":true,\"reboot\":true}"
+  ]
+ ],
+ "1400|v-keys|btnMacroNew||": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "1400|v-keys|btnTypeEnter||Enter": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "1400|v-keys||k=#ALT|⌥": [
+  [
+   "B0701414c54"
+  ],
+  [
+   "B0701414c54"
+  ]
+ ],
+ "1400|v-keys||k=#CTRL|⌃": [
+  [
+   "B07014354524c"
+  ],
+  [
+   "B07014354524c"
+  ]
+ ],
+ "1400|v-keys||k=#GUI|⌘": [
+  [
+   "B0701475549"
+  ],
+  [
+   "B0701475549"
+  ]
+ ],
+ "1400|v-keys||k=#SHIFT|⇧": [
+  [
+   "B07015348494654"
+  ],
+  [
+   "B07015348494654"
+  ]
+ ],
+ "1400|v-keys||k='|'": [
+  [
+   "B070127",
+   "B070027"
+  ]
+ ],
+ "1400|v-keys||k=,|,": [
+  [
+   "B07012c",
+   "B07002c"
+  ]
+ ],
+ "1400|v-keys||k=-|-": [
+  [
+   "B07012d",
+   "B07002d"
+  ]
+ ],
+ "1400|v-keys||k=.|.": [
+  [
+   "B07012e",
+   "B07002e"
+  ]
+ ],
+ "1400|v-keys||k=/|/": [
+  [
+   "B07012f",
+   "B07002f"
+  ]
+ ],
+ "1400|v-keys||k=0|0": [
+  [
+   "B070130",
+   "B070030"
+  ]
+ ],
+ "1400|v-keys||k=1|1": [
+  [
+   "B070131",
+   "B070031"
+  ]
+ ],
+ "1400|v-keys||k=2|2": [
+  [
+   "B070132",
+   "B070032"
+  ]
+ ],
+ "1400|v-keys||k=3|3": [
+  [
+   "B070133",
+   "B070033"
+  ]
+ ],
+ "1400|v-keys||k=4|4": [
+  [
+   "B070134",
+   "B070034"
+  ]
+ ],
+ "1400|v-keys||k=5|5": [
+  [
+   "B070135",
+   "B070035"
+  ]
+ ],
+ "1400|v-keys||k=6|6": [
+  [
+   "B070136",
+   "B070036"
+  ]
+ ],
+ "1400|v-keys||k=7|7": [
+  [
+   "B070137",
+   "B070037"
+  ]
+ ],
+ "1400|v-keys||k=8|8": [
+  [
+   "B070138",
+   "B070038"
+  ]
+ ],
+ "1400|v-keys||k=9|9": [
+  [
+   "B070139",
+   "B070039"
+  ]
+ ],
+ "1400|v-keys||k=;|;": [
+  [
+   "B07013b",
+   "B07003b"
+  ]
+ ],
+ "1400|v-keys||k==|=": [
+  [
+   "B07013d",
+   "B07003d"
+  ]
+ ],
+ "1400|v-keys||k=BACKSPACE|": [
+  [
+   "B07014241434b5350414345",
+   "B07004241434b5350414345"
+  ]
+ ],
+ "1400|v-keys||k=CAPSLOCK|⇪": [
+  [
+   "B0701434150534c4f434b",
+   "B0700434150534c4f434b"
+  ]
+ ],
+ "1400|v-keys||k=DELETE|Del": [
+  [
+   "B070144454c455445",
+   "B070044454c455445"
+  ]
+ ],
+ "1400|v-keys||k=DOWN|": [
+  [
+   "B0701444f574e",
+   "B0700444f574e"
+  ]
+ ],
+ "1400|v-keys||k=END|End": [
+  [
+   "B0701454e44",
+   "B0700454e44"
+  ]
+ ],
+ "1400|v-keys||k=ENTER|": [
+  [
+   "B0701454e544552",
+   "B0700454e544552"
+  ]
+ ],
+ "1400|v-keys||k=ESC|Esc": [
+  [
+   "B0701455343",
+   "B0700455343"
+  ]
+ ],
+ "1400|v-keys||k=F10|F10": [
+  [
+   "B0701463130",
+   "B0700463130"
+  ]
+ ],
+ "1400|v-keys||k=F11|F11": [
+  [
+   "B0701463131",
+   "B0700463131"
+  ]
+ ],
+ "1400|v-keys||k=F12|F12": [
+  [
+   "B0701463132",
+   "B0700463132"
+  ]
+ ],
+ "1400|v-keys||k=F1|F1": [
+  [
+   "B07014631",
+   "B07004631"
+  ]
+ ],
+ "1400|v-keys||k=F2|F2": [
+  [
+   "B07014632",
+   "B07004632"
+  ]
+ ],
+ "1400|v-keys||k=F3|F3": [
+  [
+   "B07014633",
+   "B07004633"
+  ]
+ ],
+ "1400|v-keys||k=F4|F4": [
+  [
+   "B07014634",
+   "B07004634"
+  ]
+ ],
+ "1400|v-keys||k=F5|F5": [
+  [
+   "B07014635",
+   "B07004635"
+  ]
+ ],
+ "1400|v-keys||k=F6|F6": [
+  [
+   "B07014636",
+   "B07004636"
+  ]
+ ],
+ "1400|v-keys||k=F7|F7": [
+  [
+   "B07014637",
+   "B07004637"
+  ]
+ ],
+ "1400|v-keys||k=F8|F8": [
+  [
+   "B07014638",
+   "B07004638"
+  ]
+ ],
+ "1400|v-keys||k=F9|F9": [
+  [
+   "B07014639",
+   "B07004639"
+  ]
+ ],
+ "1400|v-keys||k=HOME|Home": [
+  [
+   "B0701484f4d45",
+   "B0700484f4d45"
+  ]
+ ],
+ "1400|v-keys||k=INSERT|Ins": [
+  [
+   "B0701494e53455254",
+   "B0700494e53455254"
+  ]
+ ],
+ "1400|v-keys||k=LEFT|": [
+  [
+   "B07014c454654",
+   "B07004c454654"
+  ]
+ ],
+ "1400|v-keys||k=MENU|": [
+  [
+   "B07014d454e55",
+   "B07004d454e55",
+   "B0700414c54",
+   "B0700475549"
+  ]
+ ],
+ "1400|v-keys||k=PAGEDOWN|PgDn": [
+  [
+   "B070150414745444f574e",
+   "B070050414745444f574e"
+  ]
+ ],
+ "1400|v-keys||k=PAGEUP|PgUp": [
+  [
+   "B0701504147455550",
+   "B0700504147455550"
+  ]
+ ],
+ "1400|v-keys||k=PAUSE|Pause": [
+  [
+   "B07015041555345",
+   "B07005041555345"
+  ]
+ ],
+ "1400|v-keys||k=PRINTSCREEN|PrtSc": [
+  [
+   "B07015052494e5453435245454e",
+   "B07005052494e5453435245454e",
+   "B07004354524c"
+  ]
+ ],
+ "1400|v-keys||k=RIGHT|": [
+  [
+   "B07015249474854",
+   "B07005249474854"
+  ]
+ ],
+ "1400|v-keys||k=SCROLLLOCK|ScrLk": [
+  [
+   "B07015343524f4c4c4c4f434b",
+   "B07005343524f4c4c4c4f434b"
+  ]
+ ],
+ "1400|v-keys||k=SPACE|Space": [
+  [
+   "B07015350414345",
+   "B07005350414345",
+   "B07005348494654",
+   "B07004354524c",
+   "B0700475549",
+   "B0700414c54"
+  ]
+ ],
+ "1400|v-keys||k=TAB|Tab": [
+  [
+   "B0701544142",
+   "B0700544142"
+  ]
+ ],
+ "1400|v-keys||k=UP|": [
+  [
+   "B07015550",
+   "B07005550"
+  ]
+ ],
+ "1400|v-keys||k=[|[": [
+  [
+   "B07015b",
+   "B07005b"
+  ]
+ ],
+ "1400|v-keys||k=\\|\\": [
+  [
+   "B07015c",
+   "B07005c"
+  ]
+ ],
+ "1400|v-keys||k=]|]": [
+  [
+   "B07015d",
+   "B07005d"
+  ]
+ ],
+ "1400|v-keys||k=`|`": [
+  [
+   "B070160",
+   "B070060"
+  ]
+ ],
+ "1400|v-keys||k=a|A": [
+  [
+   "B070161",
+   "B070061"
+  ]
+ ],
+ "1400|v-keys||k=b|B": [
+  [
+   "B070162",
+   "B070062"
+  ]
+ ],
+ "1400|v-keys||k=c|C": [
+  [
+   "B070163",
+   "B070063"
+  ]
+ ],
+ "1400|v-keys||k=d|D": [
+  [
+   "B070164",
+   "B070064"
+  ]
+ ],
+ "1400|v-keys||k=e|E": [
+  [
+   "B070165",
+   "B070065"
+  ]
+ ],
+ "1400|v-keys||k=f|F": [
+  [
+   "B070166",
+   "B070066"
+  ]
+ ],
+ "1400|v-keys||k=g|G": [
+  [
+   "B070167",
+   "B070067"
+  ]
+ ],
+ "1400|v-keys||k=h|H": [
+  [
+   "B070168",
+   "B070068"
+  ]
+ ],
+ "1400|v-keys||k=i|I": [
+  [
+   "B070169",
+   "B070069"
+  ]
+ ],
+ "1400|v-keys||k=j|J": [
+  [
+   "B07016a",
+   "B07006a"
+  ]
+ ],
+ "1400|v-keys||k=k|K": [
+  [
+   "B07016b",
+   "B07006b"
+  ]
+ ],
+ "1400|v-keys||k=l|L": [
+  [
+   "B07016c",
+   "B07006c"
+  ]
+ ],
+ "1400|v-keys||k=m|M": [
+  [
+   "B07016d",
+   "B07006d"
+  ]
+ ],
+ "1400|v-keys||k=n|N": [
+  [
+   "B07016e",
+   "B07006e"
+  ]
+ ],
+ "1400|v-keys||k=o|O": [
+  [
+   "B07016f",
+   "B07006f"
+  ]
+ ],
+ "1400|v-keys||k=p|P": [
+  [
+   "B070170",
+   "B070070"
+  ]
+ ],
+ "1400|v-keys||k=q|Q": [
+  [
+   "B070171",
+   "B070071"
+  ]
+ ],
+ "1400|v-keys||k=r|R": [
+  [
+   "B070172",
+   "B070072"
+  ]
+ ],
+ "1400|v-keys||k=s|S": [
+  [
+   "B070173",
+   "B070073"
+  ]
+ ],
+ "1400|v-keys||k=t|T": [
+  [
+   "B070174",
+   "B070074"
+  ]
+ ],
+ "1400|v-keys||k=u|U": [
+  [
+   "B070175",
+   "B070075"
+  ]
+ ],
+ "1400|v-keys||k=v|V": [
+  [
+   "B070176",
+   "B070076"
+  ]
+ ],
+ "1400|v-keys||k=w|W": [
+  [
+   "B070177",
+   "B070077"
+  ]
+ ],
+ "1400|v-keys||k=x|X": [
+  [
+   "B070178",
+   "B070078"
+  ]
+ ],
+ "1400|v-keys||k=y|Y": [
+  [
+   "B070179",
+   "B070079"
+  ]
+ ],
+ "1400|v-keys||k=z|Z": [
+  [
+   "B07017a",
+   "B07007a",
+   "B07005348494654"
+  ]
+ ],
+ "1400|v-keys||ms=0|Slot 0": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "1400|v-keys||ms=1|Slot 1": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":1}"
+  ]
+ ],
+ "1400|v-keys||ms=2|Slot 2": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":2}"
+  ]
+ ],
+ "1400|v-keys||ms=3|Slot 3": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":3}"
+  ]
+ ],
+ "1400|v-keys||ms=4|Slot 4": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":4}"
+  ]
+ ],
+ "1400|v-keys||ms=5|Slot 5": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":5}"
+  ]
+ ],
+ "1400|v-keys||ms=6|Slot 6": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":6}"
+  ]
+ ],
+ "1400|v-keys||ms=7|Slot 7": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":7}"
+  ]
+ ],
+ "1400|v-media||md=brightness_down|Dimmer": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_down\"}"
+  ]
+ ],
+ "1400|v-media||md=brightness_up|Brighter": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_up\"}"
+  ]
+ ],
+ "1400|v-media||md=mute|Mute": [
+  [
+   "B06e200"
+  ]
+ ],
+ "1400|v-media||md=next|Next": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"next\"}"
+  ]
+ ],
+ "1400|v-media||md=play_pause|Play / pause": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"play_pause\"}"
+  ]
+ ],
+ "1400|v-media||md=prev|Previous": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"prev\"}"
+  ]
+ ],
+ "1400|v-media||md=search|Search": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"search\"}"
+  ]
+ ],
+ "1400|v-media||md=stop|Stop": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"stop\"}"
+  ]
+ ],
+ "1400|v-media||q=0|Mic mute": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+M\"}"
+  ]
+ ],
+ "1400|v-media||q=1|Answer": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F10\"}"
+  ]
+ ],
+ "1400|v-media||q=2|Hang up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "1400|v-media||q=3|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "1400|v-media||q=4|Lock PC": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "1400|v-media||q=5|Screenshot": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+4\"}"
+  ]
+ ],
+ "1400|v-pad|btnGrab3||Grab / drag": [
+  [
+   "B02010001"
+  ]
+ ],
+ "1400|v-pad|btnGrab4||Grab / drag": [
+  [
+   "B02010101"
+  ]
+ ],
+ "1400|v-pad|btnGrab||": [
+  [
+   "B02010101"
+  ]
+ ],
+ "1400|v-pad|mWheel||": [
+  [
+   "B02040201"
+  ]
+ ],
+ "1400|v-pad||gs=back|Back": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"back\"}"
+  ]
+ ],
+ "1400|v-pad||gs=desktop_left|Space left": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_left\"}"
+  ]
+ ],
+ "1400|v-pad||gs=desktop_right|Space right": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_right\"}"
+  ]
+ ],
+ "1400|v-pad||gs=forward|Forward": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"forward\"}"
+  ]
+ ],
+ "1400|v-pad||gs=switch_app|Switch app": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"switch_app\"}"
+  ]
+ ],
+ "1400|v-pad||gs=task_view|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "1400|v-pad||mb2=1|Double click": [
+  [
+   "B02010202"
+  ],
+  [
+   "B02010202"
+  ]
+ ],
+ "1400|v-pad||mb=1|Left": [
+  [
+   "B02010201"
+  ]
+ ],
+ "1400|v-pad||mb=2|Right": [
+  [
+   "B02020201"
+  ]
+ ],
+ "1400|v-power|btnLock||Lock": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "1400|v-power|btnWigStart||Start": [
+  [
+   "J{\"cmd\":\"wiggle\",\"mode\":\"interval\",\"amplitude\":5,\"interval_ms\":10000,\"force\":true}"
+  ]
+ ],
+ "1400|v-power|btnWigStop||Stop": [
+  [
+   "J{\"cmd\":\"wiggle_stop\"}"
+  ]
+ ],
+ "1400|v-power||pr=black|Black": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"black\"}"
+  ]
+ ],
+ "1400|v-power||pr=end|End": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"end\"}"
+  ]
+ ],
+ "1400|v-power||pr=next|Next": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"next\"}"
+  ]
+ ],
+ "1400|v-power||pr=prev|Prev": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"prev\"}"
+  ]
+ ],
+ "1400|v-power||pr=start|Start": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"start\"}"
+  ]
+ ],
+ "1400|v-power||pr=white|White": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"white\"}"
+  ]
+ ],
+ "1400|v-setup|btnIdSlash||2 · Key by right Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"/\"}"
+  ]
+ ],
+ "1400|v-setup|btnIdZ||1 · Key by left Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"z\"}"
+  ]
+ ],
+ "1400|v-setup|btnTestHid||Test HID": [
+  [
+   "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "1400|v-setup||osSet=auto|Auto": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"auto\"}"
+  ]
+ ],
+ "1400|v-setup||osSet=linux|Linux": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"linux\"}"
+  ]
+ ],
+ "1400|v-setup||osSet=mac|macOS": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"mac\"}"
+  ]
+ ],
+ "1400|v-setup||osSet=win|Windows": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"win\"}"
+  ]
+ ],
+ "1400|v-setup||pwr=balanced|Balanced": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"balanced\"}"
+  ]
+ ],
+ "1400|v-setup||pwr=performance|Performance": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"performance\"}"
+  ]
+ ],
+ "1400|v-setup||uni=linux|Linux is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"linux\",\"on\":true}"
+  ]
+ ],
+ "1400|v-setup||uni=mac|macOS is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+F2|Run dialogAlt+F2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+F4|Close the active windowA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F4\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+HOME|Home pageAlt+Home": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+HOME\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+LEFT|BackAlt+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+PRINTSCREEN|Active windowAlt+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+PRINTSCREEN\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+RIGHT|ForwardAlt+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+SHIFT+TAB|Switch app backwardsAlt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+SHIFT+TAB\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+TAB|Switch appAlt+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+TAB\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+UP|Go up a folderAlt+Up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+`|Next window in this appA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+,|PreferencesCtrl+,": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+.|Emoji pickerCtrl+.": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+.\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+0|Reset zoomCtrl+0": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+0\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+1|First tabCtrl+1": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+1\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+9|Last tabCtrl+9": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+T\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+BACKSPACE|Delete word leftCtrl+Bac": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+BACKSPACE\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+B|BoldCtrl+B": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+B\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+C|CopyCtrl+C": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+C\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+DELETE|Delete word rightCtrl+De": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+DELETE\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+D|Bookmark this pageCtrl+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+D\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+END|End of documentCtrl+End": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+END\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+EQUALS|Zoom inCtrl+=": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+EQUALS\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+F|FindCtrl+F": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+F|Search in this folderCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+G|Find nextCtrl+G": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+G\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+HOME|Start of documentCtrl+Ho": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+HOME\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+H|HistoryCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+H|ReplaceCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+H|Show hidden filesCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+I|Get info / propertiesCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+I|ItalicCtrl+I": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+J|DownloadsCtrl+J": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+J\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+LEFT|Word leftCtrl+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+L|Address barCtrl+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+MINUS|Zoom outCtrl+-": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+MINUS\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+N|NewCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+O|OpenCtrl+O": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+O\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+P|PrintCtrl+P": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+P\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+Q|Quit applicationCtrl+Q": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Q\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+RIGHT|Word rightCtrl+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+R|ReloadCtrl+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+DELETE|Clear browsing dataCtrl+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+DELETE\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+END|Select to end of documen": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+END\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+G|Find previousCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+G\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+HOME|Select to start of docum": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+HOME\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+J|JavaScript consoleCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+J\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+LEFT|Select word leftCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+N|New folderCtrl+Shift+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+N|Private windowCtrl+Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+O|Bookmark managerCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+O\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+RIGHT|Select word rightCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+R|Reload ignoring cacheCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+R\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+S|Save asCtrl+Shift+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+S\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+TAB|Previous tabCtrl+Shift+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+TAB\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+T|Reopen closed tabCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+T\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+Z|RedoCtrl+Shift+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+Z\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+S|SaveCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+S\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+TAB|Next tabCtrl+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+TAB\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+T|New tabCtrl+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+T\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+U|UnderlineCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+U|View page sourceCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+V|PasteCtrl+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+V\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+W|Close tabCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+W|Close windowCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+X|CutCtrl+X": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+X\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+Z|UndoCtrl+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Z\"}"
+  ]
+ ],
+ "1400|v-short||sc=DELETE|Move to trashDelete": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"DELETE\"}"
+  ]
+ ],
+ "1400|v-short||sc=END|End of lineEnd": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"END\"}"
+  ]
+ ],
+ "1400|v-short||sc=ENTER|Open the selected itemEn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "1400|v-short||sc=F11|Full screenF11": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "1400|v-short||sc=F12|Developer toolsF12": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F12\"}"
+  ]
+ ],
+ "1400|v-short||sc=F2|RenameF2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+D|Show desktopSuper+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+E|File managerSuper+E": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+E\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+H|Minimise windowSuper+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+H\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+LEFT|Snap window leftSuper+Le": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+L|Lock the screenSuper+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+UP|Maximise / full screenSu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI|Mission Control / Task v": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI|SearchSuper": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI|Start menu / launcherSup": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "1400|v-short||sc=HOME|Start of lineHome": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"HOME\"}"
+  ]
+ ],
+ "1400|v-short||sc=MENU|Context menuMenu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"MENU\"}"
+  ]
+ ],
+ "1400|v-short||sc=PAGEDOWN|Page downPgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEDOWN\"}"
+  ]
+ ],
+ "1400|v-short||sc=PAGEUP|Page upPgUp": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
+  ]
+ ],
+ "1400|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
+  ]
+ ],
+ "1400|v-short||sc=SHIFT+DELETE|Delete permanentlyShift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+DELETE\"}"
+  ]
+ ],
+ "1400|v-short||sc=SHIFT+END|Select to end of lineShi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+END\"}"
+  ]
+ ],
+ "1400|v-short||sc=SHIFT+F10|Context menu (no Menu ke": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+F10\"}"
+  ]
+ ],
+ "1400|v-short||sc=SHIFT+HOME|Select to start of lineS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
+  ]
+ ],
+ "1400|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
+  ]
+ ],
+ "390|v-game|gpEnable||Enable controller": [
+  [
+   "J{\"cmd\":\"gamepad_enable\",\"on\":true,\"reboot\":true}"
+  ]
+ ],
+ "390|v-keys|btnMacroNew||": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "390|v-keys|btnTypeEnter||Enter": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "390|v-keys||k=#ALT|⌥": [
+  [
+   "B0701414c54"
+  ]
+ ],
+ "390|v-keys||k=#CTRL|⌃": [
+  [
+   "B07014354524c"
+  ]
+ ],
+ "390|v-keys||k=#GUI|⌘": [
+  [
+   "B0701475549"
+  ]
+ ],
+ "390|v-keys||k=#SHIFT|⇧": [
+  [
+   "B07015348494654"
+  ],
+  [
+   "B07015348494654"
+  ]
+ ],
+ "390|v-keys||k=-|-": [
+  [
+   "B07012d",
+   "B07002d"
+  ]
+ ],
+ "390|v-keys||k=/|/": [
+  [
+   "B07012f",
+   "B07002f"
+  ]
+ ],
+ "390|v-keys||k=0|0": [
+  [
+   "B070130",
+   "B070030"
+  ]
+ ],
+ "390|v-keys||k=1|1": [
+  [
+   "B070131",
+   "B070031"
+  ]
+ ],
+ "390|v-keys||k=2|2": [
+  [
+   "B070132",
+   "B070032"
+  ]
+ ],
+ "390|v-keys||k=3|3": [
+  [
+   "B070133",
+   "B070033"
+  ]
+ ],
+ "390|v-keys||k=4|4": [
+  [
+   "B070134",
+   "B070034"
+  ]
+ ],
+ "390|v-keys||k=5|5": [
+  [
+   "B070135",
+   "B070035"
+  ]
+ ],
+ "390|v-keys||k=6|6": [
+  [
+   "B070136",
+   "B070036"
+  ]
+ ],
+ "390|v-keys||k=7|7": [
+  [
+   "B070137",
+   "B070037"
+  ]
+ ],
+ "390|v-keys||k=8|8": [
+  [
+   "B070138",
+   "B070038"
+  ]
+ ],
+ "390|v-keys||k=9|9": [
+  [
+   "B070139",
+   "B070039"
+  ]
+ ],
+ "390|v-keys||k=;|;": [
+  [
+   "B07013b",
+   "B07003b"
+  ]
+ ],
+ "390|v-keys||k=BACKSPACE|": [
+  [
+   "B07014241434b5350414345",
+   "B07004241434b5350414345"
+  ]
+ ],
+ "390|v-keys||k=CAPSLOCK|⇪": [
+  [
+   "B0701434150534c4f434b",
+   "B0700434150534c4f434b"
+  ]
+ ],
+ "390|v-keys||k=DELETE|Del": [
+  [
+   "B070144454c455445",
+   "B070044454c455445"
+  ]
+ ],
+ "390|v-keys||k=DOWN|": [
+  [
+   "B0701444f574e",
+   "B0700444f574e"
+  ]
+ ],
+ "390|v-keys||k=END|End": [
+  [
+   "B0701454e44",
+   "B0700454e44"
+  ]
+ ],
+ "390|v-keys||k=ENTER|": [
+  [
+   "B0701454e544552",
+   "B0700454e544552"
+  ]
+ ],
+ "390|v-keys||k=ESC|Esc": [
+  [
+   "B0701455343",
+   "B0700455343"
+  ]
+ ],
+ "390|v-keys||k=F10|F10": [
+  [
+   "B0701463130",
+   "B0700463130"
+  ]
+ ],
+ "390|v-keys||k=F11|F11": [
+  [
+   "B0701463131",
+   "B0700463131"
+  ]
+ ],
+ "390|v-keys||k=F12|F12": [
+  [
+   "B0701463132",
+   "B0700463132"
+  ]
+ ],
+ "390|v-keys||k=F1|F1": [
+  [
+   "B07014631",
+   "B07004631"
+  ]
+ ],
+ "390|v-keys||k=F2|F2": [
+  [
+   "B07014632",
+   "B07004632"
+  ]
+ ],
+ "390|v-keys||k=F3|F3": [
+  [
+   "B07014633",
+   "B07004633"
+  ]
+ ],
+ "390|v-keys||k=F4|F4": [
+  [
+   "B07014634",
+   "B07004634"
+  ]
+ ],
+ "390|v-keys||k=F5|F5": [
+  [
+   "B07014635",
+   "B07004635"
+  ]
+ ],
+ "390|v-keys||k=F6|F6": [
+  [
+   "B07014636",
+   "B07004636"
+  ]
+ ],
+ "390|v-keys||k=F7|F7": [
+  [
+   "B07014637",
+   "B07004637"
+  ]
+ ],
+ "390|v-keys||k=F8|F8": [
+  [
+   "B07014638",
+   "B07004638"
+  ]
+ ],
+ "390|v-keys||k=F9|F9": [
+  [
+   "B07014639",
+   "B07004639"
+  ]
+ ],
+ "390|v-keys||k=GUI+C|⌘C": [
+  [
+   "B07014755492b43",
+   "B07004755492b43"
+  ]
+ ],
+ "390|v-keys||k=GUI+TAB|⌘Tab": [
+  [
+   "B07014755492b544142",
+   "B07004755492b544142"
+  ]
+ ],
+ "390|v-keys||k=GUI+V|⌘V": [
+  [
+   "B07014755492b56",
+   "B07004755492b56"
+  ]
+ ],
+ "390|v-keys||k=GUI+Z|⌘Z": [
+  [
+   "B07014755492b5a",
+   "B07004755492b5a"
+  ]
+ ],
+ "390|v-keys||k=HOME|Home": [
+  [
+   "B0701484f4d45",
+   "B0700484f4d45"
+  ]
+ ],
+ "390|v-keys||k=LEFT|": [
+  [
+   "B07014c454654",
+   "B07004c454654"
+  ]
+ ],
+ "390|v-keys||k=PAGEDOWN|PgDn": [
+  [
+   "B070150414745444f574e",
+   "B070050414745444f574e"
+  ]
+ ],
+ "390|v-keys||k=PAGEUP|PgUp": [
+  [
+   "B0701504147455550",
+   "B0700504147455550"
+  ]
+ ],
+ "390|v-keys||k=RIGHT|": [
+  [
+   "B07015249474854",
+   "B07005249474854"
+  ]
+ ],
+ "390|v-keys||k=SPACE|Space": [
+  [
+   "B07015350414345",
+   "B07005350414345",
+   "B07004354524c",
+   "B0700414c54",
+   "B0700475549"
+  ]
+ ],
+ "390|v-keys||k=TAB|Tab": [
+  [
+   "B0701544142",
+   "B0700544142"
+  ]
+ ],
+ "390|v-keys||k=UP|": [
+  [
+   "B07015550",
+   "B07005550",
+   "B07005348494654"
+  ]
+ ],
+ "390|v-keys||k=\\|\\": [
+  [
+   "B07015c",
+   "B07005c"
+  ]
+ ],
+ "390|v-keys||k=a|A": [
+  [
+   "B070161",
+   "B070061"
+  ]
+ ],
+ "390|v-keys||k=b|B": [
+  [
+   "B070162",
+   "B070062"
+  ]
+ ],
+ "390|v-keys||k=c|C": [
+  [
+   "B070163",
+   "B070063"
+  ]
+ ],
+ "390|v-keys||k=d|D": [
+  [
+   "B070164",
+   "B070064"
+  ]
+ ],
+ "390|v-keys||k=e|E": [
+  [
+   "B070165",
+   "B070065"
+  ]
+ ],
+ "390|v-keys||k=f|F": [
+  [
+   "B070166",
+   "B070066"
+  ]
+ ],
+ "390|v-keys||k=g|G": [
+  [
+   "B070167",
+   "B070067"
+  ]
+ ],
+ "390|v-keys||k=h|H": [
+  [
+   "B070168",
+   "B070068"
+  ]
+ ],
+ "390|v-keys||k=i|I": [
+  [
+   "B070169",
+   "B070069"
+  ]
+ ],
+ "390|v-keys||k=j|J": [
+  [
+   "B07016a",
+   "B07006a"
+  ]
+ ],
+ "390|v-keys||k=k|K": [
+  [
+   "B07016b",
+   "B07006b"
+  ]
+ ],
+ "390|v-keys||k=l|L": [
+  [
+   "B07016c",
+   "B07006c"
+  ]
+ ],
+ "390|v-keys||k=m|M": [
+  [
+   "B07016d",
+   "B07006d"
+  ]
+ ],
+ "390|v-keys||k=n|N": [
+  [
+   "B07016e",
+   "B07006e"
+  ]
+ ],
+ "390|v-keys||k=o|O": [
+  [
+   "B07016f",
+   "B07006f"
+  ]
+ ],
+ "390|v-keys||k=p|P": [
+  [
+   "B070170",
+   "B070070"
+  ]
+ ],
+ "390|v-keys||k=q|Q": [
+  [
+   "B070171",
+   "B070071"
+  ]
+ ],
+ "390|v-keys||k=r|R": [
+  [
+   "B070172",
+   "B070072"
+  ]
+ ],
+ "390|v-keys||k=s|S": [
+  [
+   "B070173",
+   "B070073"
+  ]
+ ],
+ "390|v-keys||k=t|T": [
+  [
+   "B070174",
+   "B070074"
+  ]
+ ],
+ "390|v-keys||k=u|U": [
+  [
+   "B070175",
+   "B070075"
+  ]
+ ],
+ "390|v-keys||k=v|V": [
+  [
+   "B070176",
+   "B070076"
+  ]
+ ],
+ "390|v-keys||k=w|W": [
+  [
+   "B070177",
+   "B070077"
+  ]
+ ],
+ "390|v-keys||k=x|X": [
+  [
+   "B070178",
+   "B070078"
+  ]
+ ],
+ "390|v-keys||k=y|Y": [
+  [
+   "B070179",
+   "B070079"
+  ]
+ ],
+ "390|v-keys||k=z|Z": [
+  [
+   "B07017a",
+   "B07007a",
+   "B07005348494654"
+  ]
+ ],
+ "390|v-keys||ms=0|Slot 0": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "390|v-keys||ms=1|Slot 1": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":1}"
+  ]
+ ],
+ "390|v-keys||ms=2|Slot 2": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":2}"
+  ]
+ ],
+ "390|v-keys||ms=3|Slot 3": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":3}"
+  ]
+ ],
+ "390|v-keys||ms=4|Slot 4": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":4}"
+  ]
+ ],
+ "390|v-keys||ms=5|Slot 5": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":5}"
+  ]
+ ],
+ "390|v-keys||ms=6|Slot 6": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":6}"
+  ]
+ ],
+ "390|v-keys||ms=7|Slot 7": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":7}"
+  ]
+ ],
+ "390|v-media||md=brightness_down|Dimmer": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_down\"}"
+  ]
+ ],
+ "390|v-media||md=brightness_up|Brighter": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_up\"}"
+  ]
+ ],
+ "390|v-media||md=mute|Mute": [
+  [
+   "B06e200"
+  ]
+ ],
+ "390|v-media||md=next|Next": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"next\"}"
+  ]
+ ],
+ "390|v-media||md=play_pause|Play / pause": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"play_pause\"}"
+  ]
+ ],
+ "390|v-media||md=prev|Previous": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"prev\"}"
+  ]
+ ],
+ "390|v-media||md=search|Search": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"search\"}"
+  ]
+ ],
+ "390|v-media||md=stop|Stop": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"stop\"}"
+  ]
+ ],
+ "390|v-media||q=0|Mic mute": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+M\"}"
+  ]
+ ],
+ "390|v-media||q=1|Answer": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F10\"}"
+  ]
+ ],
+ "390|v-media||q=2|Hang up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "390|v-media||q=3|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "390|v-media||q=4|Lock PC": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "390|v-media||q=5|Screenshot": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+4\"}"
+  ]
+ ],
+ "390|v-pad|btnGrab3||Grab / drag": [
+  [
+   "B02010001"
+  ]
+ ],
+ "390|v-pad|btnGrab4||Grab / drag": [
+  [
+   "B02010101"
+  ]
+ ],
+ "390|v-pad|btnGrab||": [
+  [
+   "B02010101"
+  ]
+ ],
+ "390|v-pad|mWheel||": [
+  [
+   "B02040201"
+  ]
+ ],
+ "390|v-pad||gs=back|Back": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"back\"}"
+  ]
+ ],
+ "390|v-pad||gs=desktop_left|Space left": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_left\"}"
+  ]
+ ],
+ "390|v-pad||gs=desktop_right|Space right": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_right\"}"
+  ]
+ ],
+ "390|v-pad||gs=forward|Forward": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"forward\"}"
+  ]
+ ],
+ "390|v-pad||gs=switch_app|Switch app": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"switch_app\"}"
+  ]
+ ],
+ "390|v-pad||gs=task_view|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "390|v-pad||mb2=1|Double click": [
+  [
+   "B02010202"
+  ],
+  [
+   "B02010202"
+  ]
+ ],
+ "390|v-pad||mb=1|Left": [
+  [
+   "B02010201"
+  ]
+ ],
+ "390|v-pad||mb=2|Right": [
+  [
+   "B02020201"
+  ]
+ ],
+ "390|v-power|btnLock||Lock": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "390|v-power|btnWigStart||Start": [
+  [
+   "J{\"cmd\":\"wiggle\",\"mode\":\"interval\",\"amplitude\":5,\"interval_ms\":10000,\"force\":true}"
+  ]
+ ],
+ "390|v-power|btnWigStop||Stop": [
+  [
+   "J{\"cmd\":\"wiggle_stop\"}"
+  ]
+ ],
+ "390|v-power||pr=black|Black": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"black\"}"
+  ]
+ ],
+ "390|v-power||pr=end|End": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"end\"}"
+  ]
+ ],
+ "390|v-power||pr=next|Next": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"next\"}"
+  ]
+ ],
+ "390|v-power||pr=prev|Prev": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"prev\"}"
+  ]
+ ],
+ "390|v-power||pr=start|Start": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"start\"}"
+  ]
+ ],
+ "390|v-power||pr=white|White": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"white\"}"
+  ]
+ ],
+ "390|v-setup|btnIdSlash||2 · Key by right Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"/\"}"
+  ]
+ ],
+ "390|v-setup|btnIdZ||1 · Key by left Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"z\"}"
+  ]
+ ],
+ "390|v-setup|btnTestHid||Test HID": [
+  [
+   "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "390|v-setup||osSet=auto|Auto": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"auto\"}"
+  ]
+ ],
+ "390|v-setup||osSet=linux|Linux": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"linux\"}"
+  ]
+ ],
+ "390|v-setup||osSet=mac|macOS": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"mac\"}"
+  ]
+ ],
+ "390|v-setup||osSet=win|Windows": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"win\"}"
+  ]
+ ],
+ "390|v-setup||pwr=balanced|Balanced": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"balanced\"}"
+  ]
+ ],
+ "390|v-setup||pwr=performance|Performance": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"performance\"}"
+  ]
+ ],
+ "390|v-setup||uni=linux|Linux is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"linux\",\"on\":true}"
+  ]
+ ],
+ "390|v-setup||uni=mac|macOS is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
+  ]
+ ],
+ "390|v-short||sc=ALT+F2|Run dialogAlt+F2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+F4|Close the active windowA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F4\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+HOME|Home pageAlt+Home": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+HOME\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+LEFT|BackAlt+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+PRINTSCREEN|Active windowAlt+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+PRINTSCREEN\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+RIGHT|ForwardAlt+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+SHIFT+TAB|Switch app backwardsAlt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+SHIFT+TAB\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+TAB|Switch appAlt+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+TAB\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+UP|Go up a folderAlt+Up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+`|Next window in this appA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+,|PreferencesCtrl+,": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+.|Emoji pickerCtrl+.": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+.\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+0|Reset zoomCtrl+0": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+0\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+1|First tabCtrl+1": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+1\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+9|Last tabCtrl+9": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+T\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+BACKSPACE|Delete word leftCtrl+Bac": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+BACKSPACE\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+B|BoldCtrl+B": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+B\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+C|CopyCtrl+C": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+C\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+DELETE|Delete word rightCtrl+De": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+DELETE\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+D|Bookmark this pageCtrl+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+D\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+END|End of documentCtrl+End": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+END\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+EQUALS|Zoom inCtrl+=": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+EQUALS\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+F|FindCtrl+F": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+F|Search in this folderCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+G|Find nextCtrl+G": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+G\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+HOME|Start of documentCtrl+Ho": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+HOME\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+H|HistoryCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+H|ReplaceCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+H|Show hidden filesCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+I|Get info / propertiesCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+I|ItalicCtrl+I": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+J|DownloadsCtrl+J": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+J\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+LEFT|Word leftCtrl+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+L|Address barCtrl+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+MINUS|Zoom outCtrl+-": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+MINUS\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+N|NewCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+O|OpenCtrl+O": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+O\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+P|PrintCtrl+P": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+P\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+Q|Quit applicationCtrl+Q": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Q\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+RIGHT|Word rightCtrl+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+R|ReloadCtrl+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+DELETE|Clear browsing dataCtrl+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+DELETE\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+END|Select to end of documen": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+END\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+G|Find previousCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+G\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+HOME|Select to start of docum": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+HOME\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+J|JavaScript consoleCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+J\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+LEFT|Select word leftCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+N|New folderCtrl+Shift+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+N|Private windowCtrl+Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+O|Bookmark managerCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+O\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+RIGHT|Select word rightCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+R|Reload ignoring cacheCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+R\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+S|Save asCtrl+Shift+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+S\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+TAB|Previous tabCtrl+Shift+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+TAB\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+T|Reopen closed tabCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+T\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+Z|RedoCtrl+Shift+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+Z\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+S|SaveCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+S\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+TAB|Next tabCtrl+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+TAB\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+T|New tabCtrl+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+T\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+U|UnderlineCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+U|View page sourceCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+V|PasteCtrl+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+V\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+W|Close tabCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+W|Close windowCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+X|CutCtrl+X": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+X\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+Z|UndoCtrl+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Z\"}"
+  ]
+ ],
+ "390|v-short||sc=DELETE|Move to trashDelete": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"DELETE\"}"
+  ]
+ ],
+ "390|v-short||sc=END|End of lineEnd": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"END\"}"
+  ]
+ ],
+ "390|v-short||sc=ENTER|Open the selected itemEn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "390|v-short||sc=F11|Full screenF11": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "390|v-short||sc=F12|Developer toolsF12": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F12\"}"
+  ]
+ ],
+ "390|v-short||sc=F2|RenameF2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+D|Show desktopSuper+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+E|File managerSuper+E": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+E\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+H|Minimise windowSuper+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+H\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+LEFT|Snap window leftSuper+Le": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+L|Lock the screenSuper+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+UP|Maximise / full screenSu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI|Mission Control / Task v": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI|SearchSuper": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI|Start menu / launcherSup": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "390|v-short||sc=HOME|Start of lineHome": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"HOME\"}"
+  ]
+ ],
+ "390|v-short||sc=MENU|Context menuMenu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"MENU\"}"
+  ]
+ ],
+ "390|v-short||sc=PAGEDOWN|Page downPgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEDOWN\"}"
+  ]
+ ],
+ "390|v-short||sc=PAGEUP|Page upPgUp": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
+  ]
+ ],
+ "390|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
+  ]
+ ],
+ "390|v-short||sc=SHIFT+DELETE|Delete permanentlyShift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+DELETE\"}"
+  ]
+ ],
+ "390|v-short||sc=SHIFT+END|Select to end of lineShi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+END\"}"
+  ]
+ ],
+ "390|v-short||sc=SHIFT+F10|Context menu (no Menu ke": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+F10\"}"
+  ]
+ ],
+ "390|v-short||sc=SHIFT+HOME|Select to start of lineS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
+  ]
+ ],
+ "390|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
+  ]
+ ],
+ "820|v-game|gpEnable||Enable controller": [
+  [
+   "J{\"cmd\":\"gamepad_enable\",\"on\":true,\"reboot\":true}"
+  ]
+ ],
+ "820|v-keys|btnMacroNew||": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "820|v-keys|btnTypeEnter||Enter": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "820|v-keys||k=#ALT|⌥": [
+  [
+   "B0701414c54"
+  ],
+  [
+   "B0701414c54"
+  ]
+ ],
+ "820|v-keys||k=#CTRL|⌃": [
+  [
+   "B07014354524c"
+  ],
+  [
+   "B07014354524c"
+  ]
+ ],
+ "820|v-keys||k=#GUI|⌘": [
+  [
+   "B0701475549"
+  ],
+  [
+   "B0701475549"
+  ]
+ ],
+ "820|v-keys||k=#SHIFT|⇧": [
+  [
+   "B07015348494654"
+  ],
+  [
+   "B07015348494654"
+  ]
+ ],
+ "820|v-keys||k='|'": [
+  [
+   "B070127",
+   "B070027"
+  ]
+ ],
+ "820|v-keys||k=,|,": [
+  [
+   "B07012c",
+   "B07002c"
+  ]
+ ],
+ "820|v-keys||k=-|-": [
+  [
+   "B07012d",
+   "B07002d"
+  ]
+ ],
+ "820|v-keys||k=.|.": [
+  [
+   "B07012e",
+   "B07002e"
+  ]
+ ],
+ "820|v-keys||k=/|/": [
+  [
+   "B07012f",
+   "B07002f"
+  ]
+ ],
+ "820|v-keys||k=0|0": [
+  [
+   "B070130",
+   "B070030"
+  ]
+ ],
+ "820|v-keys||k=1|1": [
+  [
+   "B070131",
+   "B070031"
+  ]
+ ],
+ "820|v-keys||k=2|2": [
+  [
+   "B070132",
+   "B070032"
+  ]
+ ],
+ "820|v-keys||k=3|3": [
+  [
+   "B070133",
+   "B070033"
+  ]
+ ],
+ "820|v-keys||k=4|4": [
+  [
+   "B070134",
+   "B070034"
+  ]
+ ],
+ "820|v-keys||k=5|5": [
+  [
+   "B070135",
+   "B070035"
+  ]
+ ],
+ "820|v-keys||k=6|6": [
+  [
+   "B070136",
+   "B070036"
+  ]
+ ],
+ "820|v-keys||k=7|7": [
+  [
+   "B070137",
+   "B070037"
+  ]
+ ],
+ "820|v-keys||k=8|8": [
+  [
+   "B070138",
+   "B070038"
+  ]
+ ],
+ "820|v-keys||k=9|9": [
+  [
+   "B070139",
+   "B070039"
+  ]
+ ],
+ "820|v-keys||k=;|;": [
+  [
+   "B07013b",
+   "B07003b"
+  ]
+ ],
+ "820|v-keys||k==|=": [
+  [
+   "B07013d",
+   "B07003d"
+  ]
+ ],
+ "820|v-keys||k=BACKSPACE|": [
+  [
+   "B07014241434b5350414345",
+   "B07004241434b5350414345"
+  ]
+ ],
+ "820|v-keys||k=CAPSLOCK|⇪": [
+  [
+   "B0701434150534c4f434b",
+   "B0700434150534c4f434b"
+  ]
+ ],
+ "820|v-keys||k=DELETE|Del": [
+  [
+   "B070144454c455445",
+   "B070044454c455445",
+   "B07004354524c"
+  ]
+ ],
+ "820|v-keys||k=DOWN|": [
+  [
+   "B0701444f574e",
+   "B0700444f574e"
+  ]
+ ],
+ "820|v-keys||k=END|End": [
+  [
+   "B0701454e44",
+   "B0700454e44"
+  ]
+ ],
+ "820|v-keys||k=ENTER|": [
+  [
+   "B0701454e544552",
+   "B0700454e544552"
+  ]
+ ],
+ "820|v-keys||k=ESC|Esc": [
+  [
+   "B0701455343",
+   "B0700455343"
+  ]
+ ],
+ "820|v-keys||k=F10|F10": [
+  [
+   "B0701463130",
+   "B0700463130"
+  ]
+ ],
+ "820|v-keys||k=F11|F11": [
+  [
+   "B0701463131",
+   "B0700463131"
+  ]
+ ],
+ "820|v-keys||k=F12|F12": [
+  [
+   "B0701463132",
+   "B0700463132"
+  ]
+ ],
+ "820|v-keys||k=F1|F1": [
+  [
+   "B07014631",
+   "B07004631"
+  ]
+ ],
+ "820|v-keys||k=F2|F2": [
+  [
+   "B07014632",
+   "B07004632"
+  ]
+ ],
+ "820|v-keys||k=F3|F3": [
+  [
+   "B07014633",
+   "B07004633"
+  ]
+ ],
+ "820|v-keys||k=F4|F4": [
+  [
+   "B07014634",
+   "B07004634"
+  ]
+ ],
+ "820|v-keys||k=F5|F5": [
+  [
+   "B07014635",
+   "B07004635"
+  ]
+ ],
+ "820|v-keys||k=F6|F6": [
+  [
+   "B07014636",
+   "B07004636"
+  ]
+ ],
+ "820|v-keys||k=F7|F7": [
+  [
+   "B07014637",
+   "B07004637"
+  ]
+ ],
+ "820|v-keys||k=F8|F8": [
+  [
+   "B07014638",
+   "B07004638"
+  ]
+ ],
+ "820|v-keys||k=F9|F9": [
+  [
+   "B07014639",
+   "B07004639"
+  ]
+ ],
+ "820|v-keys||k=HOME|Home": [
+  [
+   "B0701484f4d45",
+   "B0700484f4d45"
+  ]
+ ],
+ "820|v-keys||k=INSERT|Ins": [
+  [
+   "B0701494e53455254",
+   "B0700494e53455254"
+  ]
+ ],
+ "820|v-keys||k=LEFT|": [
+  [
+   "B07014c454654",
+   "B07004c454654"
+  ]
+ ],
+ "820|v-keys||k=MENU|": [
+  [
+   "B07014d454e55",
+   "B07004d454e55",
+   "B0700414c54",
+   "B0700475549"
+  ]
+ ],
+ "820|v-keys||k=PAGEDOWN|PgDn": [
+  [
+   "B070150414745444f574e",
+   "B070050414745444f574e"
+  ]
+ ],
+ "820|v-keys||k=PAGEUP|PgUp": [
+  [
+   "B0701504147455550",
+   "B0700504147455550"
+  ]
+ ],
+ "820|v-keys||k=RIGHT|": [
+  [
+   "B07015249474854",
+   "B07005249474854"
+  ]
+ ],
+ "820|v-keys||k=SPACE|Space": [
+  [
+   "B07015350414345",
+   "B07005350414345",
+   "B07005348494654",
+   "B07004354524c",
+   "B0700475549",
+   "B0700414c54"
+  ]
+ ],
+ "820|v-keys||k=TAB|Tab": [
+  [
+   "B0701544142",
+   "B0700544142"
+  ]
+ ],
+ "820|v-keys||k=UP|": [
+  [
+   "B07015550",
+   "B07005550"
+  ]
+ ],
+ "820|v-keys||k=[|[": [
+  [
+   "B07015b",
+   "B07005b"
+  ]
+ ],
+ "820|v-keys||k=\\|\\": [
+  [
+   "B07015c",
+   "B07005c"
+  ]
+ ],
+ "820|v-keys||k=]|]": [
+  [
+   "B07015d",
+   "B07005d"
+  ]
+ ],
+ "820|v-keys||k=`|`": [
+  [
+   "B070160",
+   "B070060"
+  ]
+ ],
+ "820|v-keys||k=a|A": [
+  [
+   "B070161",
+   "B070061"
+  ]
+ ],
+ "820|v-keys||k=b|B": [
+  [
+   "B070162",
+   "B070062"
+  ]
+ ],
+ "820|v-keys||k=c|C": [
+  [
+   "B070163",
+   "B070063"
+  ]
+ ],
+ "820|v-keys||k=d|D": [
+  [
+   "B070164",
+   "B070064"
+  ]
+ ],
+ "820|v-keys||k=e|E": [
+  [
+   "B070165",
+   "B070065"
+  ]
+ ],
+ "820|v-keys||k=f|F": [
+  [
+   "B070166",
+   "B070066"
+  ]
+ ],
+ "820|v-keys||k=g|G": [
+  [
+   "B070167",
+   "B070067"
+  ]
+ ],
+ "820|v-keys||k=h|H": [
+  [
+   "B070168",
+   "B070068"
+  ]
+ ],
+ "820|v-keys||k=i|I": [
+  [
+   "B070169",
+   "B070069"
+  ]
+ ],
+ "820|v-keys||k=j|J": [
+  [
+   "B07016a",
+   "B07006a"
+  ]
+ ],
+ "820|v-keys||k=k|K": [
+  [
+   "B07016b",
+   "B07006b"
+  ]
+ ],
+ "820|v-keys||k=l|L": [
+  [
+   "B07016c",
+   "B07006c"
+  ]
+ ],
+ "820|v-keys||k=m|M": [
+  [
+   "B07016d",
+   "B07006d"
+  ]
+ ],
+ "820|v-keys||k=n|N": [
+  [
+   "B07016e",
+   "B07006e"
+  ]
+ ],
+ "820|v-keys||k=o|O": [
+  [
+   "B07016f",
+   "B07006f"
+  ]
+ ],
+ "820|v-keys||k=p|P": [
+  [
+   "B070170",
+   "B070070"
+  ]
+ ],
+ "820|v-keys||k=q|Q": [
+  [
+   "B070171",
+   "B070071"
+  ]
+ ],
+ "820|v-keys||k=r|R": [
+  [
+   "B070172",
+   "B070072"
+  ]
+ ],
+ "820|v-keys||k=s|S": [
+  [
+   "B070173",
+   "B070073"
+  ]
+ ],
+ "820|v-keys||k=t|T": [
+  [
+   "B070174",
+   "B070074"
+  ]
+ ],
+ "820|v-keys||k=u|U": [
+  [
+   "B070175",
+   "B070075"
+  ]
+ ],
+ "820|v-keys||k=v|V": [
+  [
+   "B070176",
+   "B070076"
+  ]
+ ],
+ "820|v-keys||k=w|W": [
+  [
+   "B070177",
+   "B070077"
+  ]
+ ],
+ "820|v-keys||k=x|X": [
+  [
+   "B070178",
+   "B070078"
+  ]
+ ],
+ "820|v-keys||k=y|Y": [
+  [
+   "B070179",
+   "B070079"
+  ]
+ ],
+ "820|v-keys||k=z|Z": [
+  [
+   "B07017a",
+   "B07007a",
+   "B07005348494654"
+  ]
+ ],
+ "820|v-keys||ms=0|Slot 0": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "820|v-keys||ms=1|Slot 1": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":1}"
+  ]
+ ],
+ "820|v-keys||ms=2|Slot 2": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":2}"
+  ]
+ ],
+ "820|v-keys||ms=3|Slot 3": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":3}"
+  ]
+ ],
+ "820|v-keys||ms=4|Slot 4": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":4}"
+  ]
+ ],
+ "820|v-keys||ms=5|Slot 5": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":5}"
+  ]
+ ],
+ "820|v-keys||ms=6|Slot 6": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":6}"
+  ]
+ ],
+ "820|v-keys||ms=7|Slot 7": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":7}"
+  ]
+ ],
+ "820|v-media||md=brightness_down|Dimmer": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_down\"}"
+  ]
+ ],
+ "820|v-media||md=brightness_up|Brighter": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"brightness_up\"}"
+  ]
+ ],
+ "820|v-media||md=mute|Mute": [
+  [
+   "B06e200"
+  ]
+ ],
+ "820|v-media||md=next|Next": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"next\"}"
+  ]
+ ],
+ "820|v-media||md=play_pause|Play / pause": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"play_pause\"}"
+  ]
+ ],
+ "820|v-media||md=prev|Previous": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"prev\"}"
+  ]
+ ],
+ "820|v-media||md=search|Search": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"search\"}"
+  ]
+ ],
+ "820|v-media||md=stop|Stop": [
+  [
+   "J{\"cmd\":\"media\",\"key\":\"stop\"}"
+  ]
+ ],
+ "820|v-media||q=0|Mic mute": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+M\"}"
+  ]
+ ],
+ "820|v-media||q=1|Answer": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F10\"}"
+  ]
+ ],
+ "820|v-media||q=2|Hang up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "820|v-media||q=3|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "820|v-media||q=4|Lock PC": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "820|v-media||q=5|Screenshot": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+4\"}"
+  ]
+ ],
+ "820|v-pad|btnGrab3||Grab / drag": [
+  [
+   "B02010001"
+  ]
+ ],
+ "820|v-pad|btnGrab4||Grab / drag": [
+  [
+   "B02010101"
+  ]
+ ],
+ "820|v-pad|btnGrab||": [
+  [
+   "B02010101"
+  ]
+ ],
+ "820|v-pad|mWheel||": [
+  [
+   "B02040201"
+  ]
+ ],
+ "820|v-pad||gs=back|Back": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"back\"}"
+  ]
+ ],
+ "820|v-pad||gs=desktop_left|Space left": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_left\"}"
+  ]
+ ],
+ "820|v-pad||gs=desktop_right|Space right": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"desktop_right\"}"
+  ]
+ ],
+ "820|v-pad||gs=forward|Forward": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"forward\"}"
+  ]
+ ],
+ "820|v-pad||gs=switch_app|Switch app": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"switch_app\"}"
+  ]
+ ],
+ "820|v-pad||gs=task_view|Mission Control": [
+  [
+   "J{\"cmd\":\"gesture\",\"name\":\"task_view\"}"
+  ]
+ ],
+ "820|v-pad||mb2=1|Double click": [
+  [
+   "B02010202"
+  ],
+  [
+   "B02010202"
+  ]
+ ],
+ "820|v-pad||mb=1|Left": [
+  [
+   "B02010201"
+  ]
+ ],
+ "820|v-pad||mb=2|Right": [
+  [
+   "B02020201"
+  ]
+ ],
+ "820|v-power|btnLock||Lock": [
+  [
+   "J{\"cmd\":\"lock\"}"
+  ]
+ ],
+ "820|v-power|btnWigStart||Start": [
+  [
+   "J{\"cmd\":\"wiggle\",\"mode\":\"interval\",\"amplitude\":5,\"interval_ms\":10000,\"force\":true}"
+  ]
+ ],
+ "820|v-power|btnWigStop||Stop": [
+  [
+   "J{\"cmd\":\"wiggle_stop\"}"
+  ]
+ ],
+ "820|v-power||pr=black|Black": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"black\"}"
+  ]
+ ],
+ "820|v-power||pr=end|End": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"end\"}"
+  ]
+ ],
+ "820|v-power||pr=next|Next": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"next\"}"
+  ]
+ ],
+ "820|v-power||pr=prev|Prev": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"prev\"}"
+  ]
+ ],
+ "820|v-power||pr=start|Start": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"start\"}"
+  ]
+ ],
+ "820|v-power||pr=white|White": [
+  [
+   "J{\"cmd\":\"presenter\",\"action\":\"white\"}"
+  ]
+ ],
+ "820|v-setup|btnIdSlash||2 · Key by right Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"/\"}"
+  ]
+ ],
+ "820|v-setup|btnIdZ||1 · Key by left Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"z\"}"
+  ]
+ ],
+ "820|v-setup|btnTestHid||Test HID": [
+  [
+   "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "820|v-setup||osSet=auto|Auto": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"auto\"}"
+  ]
+ ],
+ "820|v-setup||osSet=linux|Linux": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"linux\"}"
+  ]
+ ],
+ "820|v-setup||osSet=mac|macOS": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"mac\"}"
+  ]
+ ],
+ "820|v-setup||osSet=win|Windows": [
+  [
+   "J{\"cmd\":\"set_host_os\",\"os\":\"win\"}"
+  ]
+ ],
+ "820|v-setup||pwr=balanced|Balanced": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"balanced\"}"
+  ]
+ ],
+ "820|v-setup||pwr=performance|Performance": [
+  [
+   "J{\"cmd\":\"power_mode\",\"mode\":\"performance\"}"
+  ]
+ ],
+ "820|v-setup||uni=linux|Linux is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"linux\",\"on\":true}"
+  ]
+ ],
+ "820|v-setup||uni=mac|macOS is set up": [
+  [
+   "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
+  ]
+ ],
+ "820|v-short||sc=ALT+F2|Run dialogAlt+F2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+F4|Close the active windowA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+F4\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+HOME|Home pageAlt+Home": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+HOME\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+LEFT|BackAlt+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+PRINTSCREEN|Active windowAlt+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+PRINTSCREEN\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+RIGHT|ForwardAlt+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ],
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+SHIFT+TAB|Switch app backwardsAlt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+SHIFT+TAB\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+TAB|Switch appAlt+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+TAB\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+UP|Go up a folderAlt+Up": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+`|Next window in this appA": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+,|PreferencesCtrl+,": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+.|Emoji pickerCtrl+.": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+.\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+0|Reset zoomCtrl+0": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+0\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+1|First tabCtrl+1": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+1\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+9|Last tabCtrl+9": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+T\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+BACKSPACE|Delete word leftCtrl+Bac": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+BACKSPACE\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+B|BoldCtrl+B": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+B\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+C|CopyCtrl+C": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+C\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+DELETE|Delete word rightCtrl+De": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+DELETE\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+D|Bookmark this pageCtrl+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+D\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+END|End of documentCtrl+End": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+END\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+EQUALS|Zoom inCtrl+=": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+EQUALS\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+F|FindCtrl+F": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+F|Search in this folderCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+F\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+G|Find nextCtrl+G": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+G\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+HOME|Start of documentCtrl+Ho": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+HOME\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+H|HistoryCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+H|ReplaceCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+H|Show hidden filesCtrl+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+H\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+I|Get info / propertiesCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+I|ItalicCtrl+I": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+I\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+J|DownloadsCtrl+J": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+J\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+LEFT|Word leftCtrl+Left": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+L|Address barCtrl+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+MINUS|Zoom outCtrl+-": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+MINUS\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+N|NewCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+O|OpenCtrl+O": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+O\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+P|PrintCtrl+P": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+P\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+Q|Quit applicationCtrl+Q": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Q\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+RIGHT|Word rightCtrl+Right": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+R|ReloadCtrl+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+DELETE|Clear browsing dataCtrl+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+DELETE\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+END|Select to end of documen": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+END\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+G|Find previousCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+G\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+HOME|Select to start of docum": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+HOME\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+J|JavaScript consoleCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+J\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+LEFT|Select word leftCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+N|New folderCtrl+Shift+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+N|Private windowCtrl+Shift": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+N\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+O|Bookmark managerCtrl+Shi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+O\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+RIGHT|Select word rightCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+R|Reload ignoring cacheCtr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+R\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+S|Save asCtrl+Shift+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+S\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+TAB|Previous tabCtrl+Shift+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+TAB\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+T|Reopen closed tabCtrl+Sh": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+T\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+Z|RedoCtrl+Shift+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+Z\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+S|SaveCtrl+S": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+S\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+TAB|Next tabCtrl+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+TAB\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+T|New tabCtrl+T": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+T\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+U|UnderlineCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+U|View page sourceCtrl+U": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+U\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+V|PasteCtrl+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+V\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+W|Close tabCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+W|Close windowCtrl+W": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+W\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+X|CutCtrl+X": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+X\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+Z|UndoCtrl+Z": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+Z\"}"
+  ]
+ ],
+ "820|v-short||sc=DELETE|Move to trashDelete": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"DELETE\"}"
+  ]
+ ],
+ "820|v-short||sc=END|End of lineEnd": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"END\"}"
+  ]
+ ],
+ "820|v-short||sc=ENTER|Open the selected itemEn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
+  ]
+ ],
+ "820|v-short||sc=F11|Full screenF11": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F11\"}"
+  ]
+ ],
+ "820|v-short||sc=F12|Developer toolsF12": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F12\"}"
+  ]
+ ],
+ "820|v-short||sc=F2|RenameF2": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+D|Show desktopSuper+D": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+E|File managerSuper+E": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+E\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+H|Minimise windowSuper+H": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+H\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+LEFT|Snap window leftSuper+Le": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+L|Lock the screenSuper+L": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+UP|Maximise / full screenSu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI|Mission Control / Task v": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI|SearchSuper": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI|Start menu / launcherSup": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI\"}"
+  ]
+ ],
+ "820|v-short||sc=HOME|Start of lineHome": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"HOME\"}"
+  ]
+ ],
+ "820|v-short||sc=MENU|Context menuMenu": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"MENU\"}"
+  ]
+ ],
+ "820|v-short||sc=PAGEDOWN|Page downPgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEDOWN\"}"
+  ]
+ ],
+ "820|v-short||sc=PAGEUP|Page upPgUp": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
+  ]
+ ],
+ "820|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
+  ]
+ ],
+ "820|v-short||sc=SHIFT+DELETE|Delete permanentlyShift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+DELETE\"}"
+  ]
+ ],
+ "820|v-short||sc=SHIFT+END|Select to end of lineShi": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+END\"}"
+  ]
+ ],
+ "820|v-short||sc=SHIFT+F10|Context menu (no Menu ke": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+F10\"}"
+  ]
+ ],
+ "820|v-short||sc=SHIFT+HOME|Select to start of lineS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
+  ]
+ ],
+ "820|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
+  ]
+ ]
+}

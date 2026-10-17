@@ -1,0 +1,9 @@
+# Test dependencies. Minimum versions are in tests/deps.json; these are the
+# versions the suite is run with.
+pytest>=8.0,<9
+pytest-bdd>=8.1,<9           # dashboard scenarios (tests/ui/bdd)
+pytest-xdist>=3.5,<4         # parallel board-free tiers; optional, run.py falls back to one process
+pyserial>=3.5,<4
+playwright>=1.40,<2
+websocket-client>=1.6,<2     # WiFi perf tests only
+evdev>=1.6; sys_platform == "linux"   # Linux end-to-end only

@@ -1,0 +1,149 @@
+Feature: The dashboard shell - navigation, connection, the access PIN
+  The frame every screen lives in: seven tabs, the live connection to the board,
+  the latency and connection-count pills, help for every tab, and the access PIN
+  that gates everything when one is set.
+
+  Scenario Outline: Every tab can be opened from the tab bar on a phone
+    Given the dashboard is open
+    When I open the "<tab>" tab
+    Then the "<tab>" tab is shown
+    And "#vtitle" reads "<title>"
+
+    Examples:
+      | tab      | title    |
+      | Trackpad | Trackpad |
+      | Keyboard | Keyboard |
+      | Keys     | Keys     |
+      | Media    | Media    |
+      | Gamepad  | Gamepad  |
+      | Session  | Session  |
+      | Settings | Settings |
+
+  Scenario Outline: Every tab can be opened from the sidebar on a desktop
+    Given the dashboard is open on a desktop
+    When I open the "<tab>" tab
+    Then the "<tab>" tab is shown
+
+    Examples:
+      | tab      |
+      | Keyboard |
+      | Settings |
+      | Trackpad |
+
+  Scenario: A link to a tab opens that tab
+    Given the dashboard is opened at "#setup"
+    Then the "Settings" tab is shown
+
+  Scenario: The browser's back button returns to the previous tab
+    Given the dashboard is open
+    When I open the "Media" tab
+    And I open the "Session" tab
+    And I go back in the browser
+    Then the "Media" tab is shown
+
+  Scenario: The dashboard connects and shows what it is talking to
+    Given the dashboard is open
+    Then "#ltext" reads "live"
+    And "#brandsub" reads "v3.9"
+    And "#connN" reads "1"
+
+  Scenario: The latency pill shows the round trip to the board
+    Given the dashboard is open
+    When the latency ping has had time to run
+    Then "#trtt" contains "ms"
+
+  Scenario: Help is available on every tab
+    Given the dashboard is open
+    When I tap the "#btnInfo" control
+    Then the dialog "Trackpad gestures" is open
+    When I close the dialog
+    And I open the "Settings" tab
+    And I tap the "#btnInfo" control
+    Then the dialog "Settings" is open
+    When I tap outside the dialog
+    Then no dialog is open
+
+  Scenario: Refresh asks the board for everything again
+    Given the dashboard is open
+    When I tap the "#btnRefresh" control
+    Then I see the message "Refreshed"
+    And the board receives {"cmd": "status"}
+    And the board receives {"cmd": "vault_list"}
+    And the board receives {"cmd": "pc_list"}
+    And the board receives {"cmd": "macro_list"}
+
+  Scenario: A new connection releases anything a previous session left held
+    Given the dashboard is open
+    Then the board receives {"cmd": "key_release_all"}
+
+  Scenario: Losing the board shows offline, and the dashboard reconnects by itself
+    Given the dashboard is open
+    When the board drops the connection
+    Then "#ltext" reads "offline"
+    And the dashboard reconnects
+    And "#ltext" reads "live"
+
+  Scenario: A board with a PIN asks for it before anything works
+    Given the board's access PIN is "4826"
+    When I open the dashboard without signing in
+    Then the dialog "Access PIN" is open
+    When I enter the PIN "4826"
+    Then I see the message "Unlocked"
+    And no dialog is open
+    And the board receives {"cmd": "auth", "token": "4826"}
+
+  Scenario: A wrong PIN is refused, and the next wrong one locks for 5 seconds
+    Given the board's access PIN is "4826"
+    When I open the dashboard without signing in
+    And I enter the PIN "1111"
+    Then "#pinAskMsg" reads "That PIN was not right."
+    When I enter the PIN "2222"
+    Then "#pinAskMsg" contains "Locked for 5s"
+
+  Scenario: While locked out even the right PIN is refused until the wait is over
+    Given the board's access PIN is "4826"
+    When I open the dashboard without signing in
+    And I enter the PIN "1111"
+    And I enter the PIN "2222"
+    And I enter the PIN "4826"
+    Then "#pinAskMsg" contains "Too many wrong PINs"
+    When 6 seconds pass on the board
+    And I enter the PIN "4826"
+    Then I see the message "Unlocked"
+
+  Scenario: Signing in survives a reconnect without asking again
+    Given the dashboard is open and signed in with "4826"
+    When the board drops the connection
+    Then the dashboard reconnects
+    And no dialog is open
+    And the board receives {"cmd": "auth", "token": "4826"}
+
+  Scenario: The sidebar collapses on a desktop and stays collapsed
+    Given the dashboard is open on a desktop
+    When I tap the "#btnRail" control
+    Then the sidebar is collapsed
+    When I reload the dashboard
+    Then the sidebar is collapsed
+
+  @known_issue:swipe_tabs
+  Scenario: A quick sideways flick moves between tabs on a phone
+    Given the dashboard is open
+    And I am on the "Keyboard" tab
+    When I flick left across empty space
+    Then the "Keys" tab is shown
+    When I flick right across empty space
+    Then the "Keyboard" tab is shown
+
+  Scenario: When the board cannot be reached at all, the link says so and the dashboard keeps trying
+    Given the dashboard is open
+    When the board becomes unreachable
+    Then "#ltext" reads "offline"
+    When the board takes connections again
+    Then the dashboard reconnects
+
+  Scenario: With the socket out of reach, coming back to the page asks for status over HTTP
+    Given the dashboard is open
+    When the board becomes unreachable
+    And the page is hidden
+    And the page is shown again
+    Then the board was asked for its status over HTTP

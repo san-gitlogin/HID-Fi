@@ -10,8 +10,21 @@ undone.
     python tests/test_inventory.py
 """
 import json, sys, time, serial
+import serial.tools.list_ports
 
-PORT = "COM13"
+
+def find_port():
+    for p in serial.tools.list_ports.comports():
+        if p.vid == 0x1A86 and p.pid in (0x55D3, 0x7523):
+            return p.device
+    return None
+
+
+# The port from the command line, else the board's CH343/CH340 bridge on any OS.
+PORT = sys.argv[1] if len(sys.argv) > 1 else find_port()
+if not PORT:
+    print("No board found - pass the port, e.g. python tests/test_inventory.py COM13")
+    sys.exit(1)
 ok = fail = 0
 
 

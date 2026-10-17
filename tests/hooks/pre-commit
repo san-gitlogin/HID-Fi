@@ -1,0 +1,5 @@
+#!/bin/sh
+# HID-Fi pre-commit: the fast checks (a few seconds). Installed by
+#   python tests/run.py install-hooks
+# Skip once, knowingly, with: git commit --no-verify
+exec python3 "$(git rev-parse --show-toplevel)/tests/run.py" --tier static,unit --serial

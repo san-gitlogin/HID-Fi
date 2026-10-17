@@ -1,0 +1,8 @@
+[
+ "hid_fi/hid_fi.ino: warning: '++' expression of 'volatile'-qualified type is deprecated [-Wvolatile]",
+ "hid_fi/hid_fi.ino: warning: 'ArduinoJson::JsonArray ArduinoJson::JsonDocument::createNestedArray(TChar*) [with TChar = const char]' is deprecated: use doc[key].to<JsonArray>() instead [-Wdeprecated-declarations]",
+ "hid_fi/hid_fi.ino: warning: 'ArduinoJson::JsonObject ArduinoJson::JsonArray::createNestedObject() const' is deprecated: use add<JsonObject>() instead [-Wdeprecated-declarations]",
+ "hid_fi/hid_fi.ino: warning: 'ArduinoJson::JsonObject ArduinoJson::JsonDocument::createNestedObject(TChar*) [with TChar = const char]' is deprecated: use doc[key].to<JsonObject>() instead [-Wdeprecated-declarations]",
+ "hid_fi/hid_fi.ino: warning: 'DynamicJsonDocument' is deprecated: use JsonDocument instead [-Wdeprecated-declarations]",
+ "hid_fi/hid_fi.ino: warning: 'template<unsigned int N> class ArduinoJson::StaticJsonDocument' is deprecated: use JsonDocument instead [-Wdeprecated-declarations]"
+]

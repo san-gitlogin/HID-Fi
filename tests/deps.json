@@ -1,0 +1,27 @@
+{
+  "_about": "Versions HID-Fi is verified against. Firmware dependencies are exact pins: they are compiled into the product, so a different version is a different product until the suite says otherwise. Tool versions are minimums. To move a pin, follow docs/TESTING.md#upgrading-a-dependency.",
+  "firmware": {
+    "esp32:esp32": "3.3.1",
+    "ArduinoJson": "7.4.3",
+    "WebSockets": "2.7.2"
+  },
+  "tools": {
+    "arduino-cli": "1.0.0",
+    "python": "3.9",
+    "node": "18.0.0",
+    "pytest": "8.0.0",
+    "pytest-bdd": "8.1.0",
+    "pytest-xdist": "3.5.0",
+    "pyserial": "3.5",
+    "playwright": "1.40.0"
+  },
+  "verified": {
+    "date": "2026-10-17",
+    "firmware": "hid_fi_v3.9",
+    "on": [
+      "macOS 15 (Darwin 24.6), Apple Silicon - board on COM + USB",
+      "Windows 10/11 (Chrome reports NT 10.0) - board USB, COM on a Mac",
+      "Debian 12 VM (kernel 6.1, IBus 1.5.27) - recorded HID reports, no USB"
+    ]
+  }
+}
