@@ -43,12 +43,35 @@ attempt. A locked-out reply carries `retry_in` in seconds. See
 
 | Command | Parameters | Notes |
 |---|---|---|
-| `type` | `text`, `enter` | Types a string; `enter` presses Return afterwards |
+| `type` | `text`, `enter` | Types a string; `enter` presses Return afterwards. The reply's `skipped` counts characters that could not be typed (see below) |
 | `press` | `keys` | A combo such as `CTRL+SHIFT+ESC` |
 | `key_down` | `key` | Holds a key down |
 | `key_up` | `key` | Releases it |
 | `key_release_all` | — | Releases everything |
 | `test_hid` | — | Types `HID_OK` to prove the USB side is alive |
+| `set_unicode` | `os` (`mac`/`linux`), `on` | Says that computer is set up for Unicode entry, so emoji and accents are typed for real. Off by default; saved on the board |
+| `unicode_test` | `os` (`mac`/`linux`) | Types `é😀` through that OS's Unicode entry whatever the setting, so a person can see whether it works. Refused (`status: error`) for any other OS, and on a computer the board has detected as a different one |
+
+### Text that is not plain English
+
+A USB keyboard sends key positions, never characters, so `type` decodes the
+text as UTF-8 and does one of three things with each character:
+
+| Character | What is typed |
+|---|---|
+| ASCII | The key, exactly as before |
+| Phone punctuation - curly quotes, dashes, `…`, non-breaking spaces | The plain ASCII it stands for (`’` → `'`, `—` → `-`, `…` → `...`) |
+| Anything else (emoji, accents, other scripts) | Through the host's Unicode entry when `set_unicode` is on for that OS: Option + hex on macOS with *Unicode Hex Input* selected, Ctrl+Shift+U + hex + Space on Linux (IBus/GTK). Otherwise it is skipped, and counted in `skipped` |
+
+Bytes that are not well-formed UTF-8 are skipped and counted - never typed as
+keys. The board never uses the macOS sequence on a computer it detected as a
+PC (Option is Alt there), nor the Linux one on a detected Mac, even if the OS
+is pinned by hand.
+
+```json
+{"cmd":"type","text":"what’s 😀"}
+{"status":"ok","reply":"typed","length":12,"skipped":1,"enter":false}
+```
 
 ### Key names
 
@@ -393,6 +416,9 @@ carries `"busy":true` rather than disturbing the association.
 
 ## Status
 
+`{"cmd":"echo","data":"..."}` answers `{"reply":"echo","data":"...","length":N}` with
+the same text back - a round-trip check for a transport.
+
 `{"cmd":"status"}` returns everything:
 
 ```json
@@ -426,7 +452,9 @@ carries `"busy":true` rather than disturbing the association.
   "auth_set": true,
   "pc_state": "unknown",
   "host_os": "mac",
-  "host_os_source": "auto"
+  "host_os_source": "auto",
+  "unicode_mac": false,
+  "unicode_linux": false
 }
 ```
 

@@ -267,7 +267,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v3.8"
+#define  FW_VERSION "hid_fi_v3.9"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -357,6 +357,11 @@ const char* lockStateStr() {
 // Mac on every plug-in afterwards.
 HostOS hostOsDetected = OS_UNKNOWN;   // what this enumeration implied
 HostOS hostOsManual   = OS_UNKNOWN;   // user override; OS_UNKNOWN = trust detection
+// Which host OSes the user has set up for Unicode typing, as bits (1 << HostOS).
+// A keyboard sends key positions, never characters, so emoji and accents need
+// the host's own hex-entry method - and that method types junk on a host that
+// was not set up for it. Hence per OS, off until the user says it is ready.
+uint8_t unicodeHosts = 0;
 
 const char* hostOsName(HostOS o) {
     switch (o) {
@@ -611,7 +616,9 @@ void handleWifiDisconnect();
 void handleApConfigure(const JsonDocument& inDoc);
 void pressKeyCombo(const char* comboStr);
 uint8_t mapKeyName(const String& name);
-void typeString(const char* text);
+int typeString(const char* text);
+void handleSetUnicode(const JsonDocument& inDoc);
+void handleUnicodeTest(const JsonDocument& inDoc);
 void sendJson(const JsonDocument& doc);
 void sendWifiResponse();
 void setupWifi();
@@ -738,6 +745,7 @@ void setup() {
     powerMode      = (PowerMode)preferences.getUChar("pwr", PWR_BALANCED);
     apAutoOff      = preferences.getBool("apoff", false);
     hostOsManual   = (HostOS)preferences.getUChar("os", OS_UNKNOWN);
+    unicodeHosts   = preferences.getUChar("uni", 0);
     preferences.end();
     if (powerMode > PWR_SAVER) powerMode = PWR_BALANCED;   // guard against a bad stored value
     if (hostOsManual > OS_LINUX) hostOsManual = OS_UNKNOWN;
@@ -1547,6 +1555,12 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "set_host_os") == 0) {
         handleSetHostOs(inDoc);
     }
+    else if (strcmp(cmd, "set_unicode") == 0) {
+        handleSetUnicode(inDoc);
+    }
+    else if (strcmp(cmd, "unicode_test") == 0) {
+        handleUnicodeTest(inDoc);
+    }
     else if (strcmp(cmd, "wiggle") == 0) {
         handleWiggle(inDoc);
     }
@@ -1837,7 +1851,7 @@ void handleType(const JsonDocument& inDoc) {
     bool pressEnter = inDoc["enter"] | false;
     
     COM_SERIAL.printf("[TYPE] Typing %d characters\n", strlen(text));
-    typeString(text);
+    int skipped = typeString(text);
     
     if (pressEnter) {
         delay(100);
@@ -1850,6 +1864,7 @@ void handleType(const JsonDocument& inDoc) {
     doc["status"] = "ok";
     doc["reply"] = "typed";
     doc["length"] = strlen(text);
+    doc["skipped"] = skipped;
     doc["enter"] = pressEnter;
     sendJson(doc);
 }
@@ -1928,7 +1943,7 @@ void pressKeyCombo(const char* comboStr) {
         } else if (keyCode == 0 && tokens[i].length() == 1) {
             char c = tokens[i].charAt(0);
             if (c >= 'A' && c <= 'Z') c += 32;  // lowercase for HID
-            Keyboard.press(c);
+            if ((uint8_t)c < 0x80) Keyboard.press(c);  // >= 0x80 is a raw keycode to press()
         }
     }
     
@@ -2009,14 +2024,147 @@ uint8_t mapKeyName(const String& name) {
 }
 
 // ==================== TYPE STRING ====================
-void typeString(const char* text) {
-    usbWakeHost();
-    for (int i = 0; text[i] != '\0'; i++) {
-        Keyboard.press(text[i]);
-        delay(CHAR_DELAY);
-        Keyboard.release(text[i]);
-        delay(CHAR_DELAY);
+// Text arrives as UTF-8, but Keyboard.press() reads every byte >= 0x88 as a raw
+// HID keycode and 0x80-0x87 as a modifier. Fed a phone's smart quote (E2 80 99)
+// it typed Keypad-2, tapped Ctrl, then 'n' - and a degree sign (C2 B0) pressed
+// F1 then Enter. So no byte >= 0x80 may ever reach press(): decode the text,
+// fold the punctuation phone keyboards substitute on their own back to the
+// ASCII the user meant, and skip anything a US layout cannot produce.
+static const char* asciiFold(uint32_t cp) {
+    switch (cp) {
+        case 0x00A0: case 0x2002: case 0x2003: case 0x2004: case 0x2005:
+        case 0x2006: case 0x2007: case 0x2008: case 0x2009: case 0x200A:
+        case 0x202F: case 0x205F: case 0x3000:
+            return " ";
+        case 0x2018: case 0x2019: case 0x201A: case 0x201B:
+        case 0x2032: case 0x02BC: case 0x00B4:
+            return "'";
+        case 0x201C: case 0x201D: case 0x201E: case 0x201F:
+        case 0x2033: case 0x00AB: case 0x00BB:
+            return "\"";
+        case 0x2010: case 0x2011: case 0x2012: case 0x2013:
+        case 0x2014: case 0x2015: case 0x2212:
+            return "-";
+        case 0x2026:
+            return "...";
+        case 0x200B: case 0x200C: case 0x200D: case 0x2060: case 0xFEFF:
+            return "";                    // invisible - nothing to type, nothing lost
+        default:
+            return nullptr;
     }
+}
+
+static void typeAscii(char c) {
+    Keyboard.press(c);
+    delay(CHAR_DELAY);
+    Keyboard.release(c);
+    delay(CHAR_DELAY);
+}
+
+// Unicode entry through the host's own input method. Only macOS and Linux have
+// one that needs no software installed: Windows' Alt+numpad hex is capped at 16
+// bits (no emoji) and off unless a registry value is set, so it is not used.
+//   macOS  - "Unicode Hex Input" selected: hold Option, type UTF-16 hex. Code
+//            points above U+FFFF go in as a surrogate pair under one Option hold.
+//   Linux  - IBus/GTK: Ctrl+Shift+U, hex, Space.
+// A manual OS pin is saved on the board and travels with it, so "pinned to
+// mac" can be plugged into a PC. There, Option is Alt: Alt+F opens menus and
+// Alt+D jumps to the address bar, so the hex digits would fire commands. What
+// enumeration actually saw overrides the pin for this one purpose. Windows is
+// always detected (it syncs the lock LEDs at enumeration); Linux enumerates as
+// Windows, so a Linux pin is only vetoed by a detected Mac.
+static bool unicodeSafeOn(HostOS o) {
+    if (o == OS_MAC)   return hostOsDetected != OS_WINDOWS && hostOsDetected != OS_LINUX;
+    if (o == OS_LINUX) return hostOsDetected != OS_MAC;
+    return false;
+}
+
+static bool unicodeReady() {
+    HostOS o = hostOs();
+    return (o == OS_MAC || o == OS_LINUX) && (unicodeHosts & (1 << o)) && unicodeSafeOn(o);
+}
+
+static void typeHex(uint32_t v, int digits) {
+    static const char hx[] = "0123456789abcdef";
+    for (int d = digits - 1; d >= 0; d--) typeAscii(hx[(v >> (4 * d)) & 0xF]);
+}
+
+static void typeUnicode(uint32_t cp, HostOS os) {
+    if (os == OS_MAC) {
+        Keyboard.press(KEY_LEFT_ALT);
+        delay(CHAR_DELAY);
+        if (cp > 0xFFFF) {
+            uint32_t v = cp - 0x10000;
+            typeHex(0xD800 + (v >> 10), 4);
+            typeHex(0xDC00 + (v & 0x3FF), 4);
+        } else {
+            typeHex(cp, 4);
+        }
+        Keyboard.release(KEY_LEFT_ALT);   // the character commits on release
+        delay(CHAR_DELAY);
+    } else {
+        // Caps Lock stops IBus taking Ctrl+Shift+U, so lift it for the entry
+        // and put it back (QMK does the same). Release only what was pressed
+        // here - releaseAll() would also drop a key the user is holding.
+        bool caps = ledStateBits & 0x02;
+        if (caps) { Keyboard.press(KEY_CAPS_LOCK); delay(CHAR_DELAY); Keyboard.release(KEY_CAPS_LOCK); delay(CHAR_DELAY); }
+        Keyboard.press(KEY_LEFT_CTRL);
+        Keyboard.press(KEY_LEFT_SHIFT);
+        Keyboard.press('u');
+        delay(CHAR_DELAY);
+        Keyboard.release('u');
+        Keyboard.release(KEY_LEFT_SHIFT);
+        Keyboard.release(KEY_LEFT_CTRL);
+        delay(CHAR_DELAY);
+        typeHex(cp, cp > 0xFFFF ? (cp > 0xFFFFF ? 6 : 5) : 4);
+        typeAscii(' ');                   // commits the character
+        if (caps) { Keyboard.press(KEY_CAPS_LOCK); delay(CHAR_DELAY); Keyboard.release(KEY_CAPS_LOCK); delay(CHAR_DELAY); }
+    }
+}
+
+// Returns how many characters could not be typed and were skipped.
+int typeString(const char* text) {
+    usbWakeHost();
+    int skipped = 0;
+    const uint8_t* s = (const uint8_t*)text;
+    size_t i = 0;
+    while (s[i]) {
+        uint8_t c = s[i];
+        if (c < 0x80) { typeAscii((char)c); i++; continue; }
+
+        // Well-formed UTF-8 only (Unicode Table 3-7). The bounds on the second
+        // byte reject overlong forms, UTF-16 surrogates and anything past
+        // U+10FFFF - JSON can carry a lone "\ud800", and typed through a
+        // host's hex entry it would land as a broken character. Each
+        // ill-formed run counts once, as its maximal subpart.
+        size_t n; uint32_t cp; uint8_t lo = 0x80, hi = 0xBF;
+        if      (c >= 0xC2 && c <= 0xDF) { n = 1; cp = c & 0x1F; }
+        else if (c >= 0xE0 && c <= 0xEF) { n = 2; cp = c & 0x0F;
+                                           if (c == 0xE0) lo = 0xA0;
+                                           if (c == 0xED) hi = 0x9F; }
+        else if (c >= 0xF0 && c <= 0xF4) { n = 3; cp = c & 0x07;
+                                           if (c == 0xF0) lo = 0x90;
+                                           if (c == 0xF4) hi = 0x8F; }
+        else { skipped++; i++; continue; }          // C0, C1, F5-FF, stray continuation
+        size_t k = 1;
+        for (; k <= n; k++) {
+            uint8_t b = s[i + k];
+            if (b < lo || b > hi) break;            // also stops at the NUL
+            cp = (cp << 6) | (b & 0x3F);
+            lo = 0x80; hi = 0xBF;
+        }
+        if (k <= n) { skipped++; i += k; continue; } // ill-formed or truncated
+        i += n + 1;
+
+        // The host can take the real character, so give it exactly what was
+        // typed - curly quotes included - rather than an ASCII stand-in.
+        if (unicodeReady()) { typeUnicode(cp, hostOs()); continue; }
+
+        const char* fold = asciiFold(cp);
+        if (!fold) { skipped++; continue; }
+        for (; *fold; fold++) typeAscii(*fold);
+    }
+    return skipped;
 }
 
 // ==================== LOCK ====================
@@ -2136,6 +2284,63 @@ void handleSetHostOs(const JsonDocument& inDoc) {
     sendJson(doc);
 }
 
+// {"cmd":"set_unicode","os":"mac","on":true} - the user has set this OS up for
+// Unicode typing. "os" defaults to the computer the board is plugged into.
+void handleSetUnicode(const JsonDocument& inDoc) {
+    String os = String(inDoc["os"] | hostOsName(hostOs()));
+    os.toLowerCase();
+    HostOS o = (os == "mac" || os == "macos") ? OS_MAC : (os == "linux") ? OS_LINUX : OS_UNKNOWN;
+    StaticJsonDocument<192> doc;
+    if (o == OS_UNKNOWN) {
+        doc["status"] = "error";
+        doc["message"] = "Unicode typing works on mac or linux only";
+        sendJson(doc);
+        return;
+    }
+    if (inDoc["on"] | false) unicodeHosts |=  (1 << o);
+    else                     unicodeHosts &= ~(1 << o);
+    preferences.begin("hid_cfg", false);
+    preferences.putUChar("uni", unicodeHosts);
+    preferences.end();
+    doc["status"] = "ok";
+    doc["reply"] = "unicode_set";
+    doc["unicode_mac"]   = (bool)(unicodeHosts & (1 << OS_MAC));
+    doc["unicode_linux"] = (bool)(unicodeHosts & (1 << OS_LINUX));
+    sendJson(doc);
+}
+
+// {"cmd":"unicode_test","os":"mac"} - type a known sample through that OS's
+// Unicode entry whether or not it is switched on, so the user can see for
+// themselves if the computer is set up. HID cannot read the answer back, so
+// the dashboard asks the user, and only their yes turns the setting on.
+#define UNICODE_TEST_SAMPLE "\xC3\xA9\xF0\x9F\x98\x80"   // e-acute, then U+1F600
+void handleUnicodeTest(const JsonDocument& inDoc) {
+    StaticJsonDocument<192> doc;
+    if (!hidReady) {
+        doc["status"] = "error"; doc["message"] = "USB HID not initialized"; sendJson(doc); return;
+    }
+    String os = String(inDoc["os"] | hostOsName(hostOs()));
+    os.toLowerCase();
+    HostOS o = (os == "mac" || os == "macos") ? OS_MAC : (os == "linux") ? OS_LINUX : OS_UNKNOWN;
+    if (o == OS_UNKNOWN) {
+        doc["status"] = "error"; doc["message"] = "Unicode typing works on mac or linux only"; sendJson(doc); return;
+    }
+    if (!unicodeSafeOn(o)) {
+        doc["status"] = "error";
+        doc["message"] = o == OS_MAC ? "This computer looks like a PC - the macOS test would press Alt shortcuts here, so it was not sent"
+                                     : "This computer looks like a Mac - the Linux test was not sent";
+        sendJson(doc); return;
+    }
+    usbWakeHost();
+    typeUnicode(0x00E9, o);
+    typeUnicode(0x1F600, o);
+    doc["status"] = "ok";
+    doc["reply"] = "unicode_test_sent";
+    doc["os"] = hostOsName(o);
+    doc["sample"] = UNICODE_TEST_SAMPLE;
+    sendJson(doc);
+}
+
 // ==================== TEST HID ====================
 void handleTestHid() {
     if (!hidReady) {
@@ -2240,6 +2445,8 @@ void buildStatusDoc(JsonDocument& doc) {
     // counts are what make a detection argument settleable instead of guesswork.
     doc["host_os_detected"] = hostOsName(hostOsDetected);
     doc["detect_phase"] = detectPhaseStr();
+    doc["unicode_mac"]   = (bool)(unicodeHosts & (1 << OS_MAC));
+    doc["unicode_linux"] = (bool)(unicodeHosts & (1 << OS_LINUX));
     doc["usb_set_idle"] = usbSetIdleCount;
     doc["usb_ctrl_reqs"] = usbCtrlCount;
     doc["usb_led_reports"] = ledEventCount;

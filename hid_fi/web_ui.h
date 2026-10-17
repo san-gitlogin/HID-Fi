@@ -1410,6 +1410,21 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
             <button class="btn sm" id="btnIdSlash">2&nbsp;&middot;&nbsp;Key by right Shift</button>
           </div>
           <p class="hint" style="margin-top:10px">The board is a US keyboard, so the answer is always these same two keys. These send exactly what the assistant is waiting for.</p>
+
+          <div class="sep"></div>
+          <div class="ch"><svg class="ic"><use href="#i-keyboard"/></svg><h2>Emoji and symbols</h2></div>
+          <p class="hint">A keyboard sends keys, not characters, so emoji, accents and curly quotes need the computer's own Unicode entry switched on once. Until then they are turned into plain quotes and dashes, or skipped.</p>
+          <p class="hint" style="margin-top:8px"><b>macOS:</b> System Settings &rarr; Keyboard &rarr; Input Sources &rarr; Edit &rarr; + &rarr; Others &rarr; <b>Unicode Hex Input</b>, and make it the input source you use. It types normal text exactly like ABC. <b>Linux:</b> works out of the box in GTK apps with IBus (GNOME). Then turn it on here:</p>
+          <div class="chips" style="margin-top:10px">
+            <button class="chip" data-uni="mac">macOS is set up</button>
+            <button class="chip" data-uni-test="mac">Test on macOS</button>
+          </div>
+          <div class="chips" style="margin-top:8px">
+            <button class="chip" data-uni="linux">Linux is set up</button>
+            <button class="chip" data-uni-test="linux">Test on Linux</button>
+          </div>
+          <p class="hint" style="margin-top:8px">Not sure? Click into a text box on the computer, then tap Test. It types &eacute; and a smiley the Unicode way and asks what you saw &mdash; only a yes turns it on. If the computer is not set up yet you will see a few stray symbols instead; delete them.</p>
+          <p class="hint" style="margin-top:8px">Windows has no built-in way to type an emoji from a keyboard, so on a PC they are still skipped.</p>
         </div>
 
         <div class="card">
@@ -3881,6 +3896,9 @@ function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
 }
+function paintUni(d){
+  document.querySelectorAll('[data-uni]').forEach(b=>b.classList.toggle('on',!!d['unicode_'+b.dataset.uni]));
+}
 function applyStatus(d){
   if(!d)return;
   if(d.host_os)applyHostOs(d.host_os,d.host_os_source,d.host_os_detected);  // The evidence behind the verdict, in the UI rather than only on the serial
@@ -3896,6 +3914,7 @@ function applyStatus(d){
       ' \u00b7 '+d.detect_phase+' \u2192 '+(d.host_os_detected||'?')+
       (d.usb_str_seq?' \u00b7 indices '+d.usb_str_seq:'');
   }
+  if(d.unicode_mac!==undefined)paintUni(d);
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
   // How many dashboards the board is serving. Polled, so a second phone opening
   // this page shows up here on its own - and so does a tab that was left open
@@ -4085,6 +4104,28 @@ function bindAll(){
     send({cmd:'set_host_os',os:b.dataset.osSet},r=>{if(r&&r.host_os)applyHostOs(r.host_os,r.host_os_source,r.host_os_detected);});
     buzz(8);
     toast(b.dataset.osSet==='auto'?'Detecting the computer':SC_NAME[b.dataset.osSet]||'Set');
+  });
+  document.querySelectorAll('[data-uni]').forEach(b=>b.onclick=()=>{
+    const on=!b.classList.contains('on');
+    send({cmd:'set_unicode',os:b.dataset.uni,on:on},r=>{if(r&&r.reply==='unicode_set')paintUni(r);});
+    buzz(8);
+    toast(on?'Emoji and symbols on for '+SC_NAME[b.dataset.uni]:'Emoji and symbols off for '+SC_NAME[b.dataset.uni]);
+  });
+  // HID is one way, so the board cannot see whether the sample arrived. The
+  // user is the only witness - their answer, not the send, flips the setting.
+  document.querySelectorAll('[data-uni-test]').forEach(b=>b.onclick=()=>{
+    const os=b.dataset.uniTest, name=SC_NAME[os];
+    if(!confirm('Click into a text box on the '+name+' computer first.\n\nType the test sample there now?'))return;
+    send({cmd:'unicode_test',os:os},r=>{
+      if(!r||r.reply!=='unicode_test_sent')return toast((r&&r.message)||'Test failed','bad');
+      setTimeout(()=>{
+        if(confirm('Did exactly '+r.sample+' appear on the computer?\n\nOK = yes, turn it on. Cancel = no.')){
+          send({cmd:'set_unicode',os:os,on:true},q=>{if(q&&q.reply==='unicode_set')paintUni(q);});
+          toast('Emoji and symbols on for '+name,'ok');
+        }else toast(name+' is not set up yet - follow the steps above, then test again','bad');
+      },400);
+    });
+    buzz(8);
   });
   // The Keyboard Setup Assistant asks for the key beside each Shift; the board is
   // a US keyboard so those are always Z and /. These answer it with one tap.
@@ -4407,7 +4448,11 @@ function doType(withEnter,srcId){
     if(withEnter){send({cmd:'press',keys:'ENTER'});buzz(8);return;}
     return toast('Type something first','bad');
   }
-  send({cmd:'type',text:v,enter:withEnter});
+  // The board types US-layout ASCII. It folds smart quotes and dashes back to
+  // plain ones itself, and says how many characters it had to leave out.
+  send({cmd:'type',text:v,enter:withEnter},r=>{
+    if(r&&r.skipped>0)toast(r.skipped+(r.skipped>1?' characters were':' character was')+' skipped. For emoji, see Settings \u2192 Emoji and symbols','bad');
+  });
   el.value='';
   buzz(8);
 }
