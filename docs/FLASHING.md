@@ -180,15 +180,45 @@ If something goes wrong, jump to [When it goes wrong](#when-it-goes-wrong) below
 ```powershell
 .\flash_esp.ps1                  # find the board, flash it, verify it
 .\flash_esp.ps1 -Compile         # rebuild from source first
-.\flash_esp.ps1 -Port COM13      # skip auto-detection
-.\flash_esp.ps1 -All             # flash every board that is plugged in
+.\flash_esp.ps1 -Port COM13      # use this port
+.\flash_esp.ps1 -Serial 5CBC409942   # use the board with this USB serial number
+.\flash_esp.ps1 -All             # flash every HID-Fi board that is plugged in
+.\flash_esp.ps1 -Which           # only say which board(s) would be flashed - opens no port
+.\flash_esp.ps1 -Identify        # ask each board what firmware it runs (restarts them)
 .\flash_esp.ps1 -Erase           # wipe the chip completely, then flash
 .\flash_esp.ps1 -Erase -Force    # the same, without the confirmation prompt
 .\flash_esp.ps1 -NoVerify        # skip the serial check at the end
 ```
 
+`flash_esp.sh` takes the same options: `-c`, `-p`, `-s`, `-a`, `-w`, `--identify`,
+`-e`, `-f`, `-n`, `--force-port`.
+
 Exit codes, for scripting: `0` ok · `1` flash failed · `2` compile failed ·
-`3` no firmware image · `4` no board found · `5` esptool missing · `10` several boards, name one.
+`3` no firmware image · `4` no board found · `5` esptool missing ·
+`10` several boards, name one · `11` that port is not a HID-Fi board.
+
+### Several boards plugged in
+
+The script recognises a HID-Fi board by what it is - its **COM** connector is a
+WCH CH343 bridge, USB `1A86:55D3` - not by what the port happens to be called.
+So:
+
+| On the desk | What happens |
+|---|---|
+| One HID-Fi board, plus an Arduino, an ESP32 dev kit, anything else | The HID-Fi board is flashed. The others are listed as ignored and never touched. |
+| Two or more HID-Fi boards | Nothing is guessed. At a terminal it lists them and asks which (a number, or `a` for all); in a script or CI it stops with exit `10` and the list. |
+| Pick one by port | `-Port COM13` / `-p /dev/cu.usbmodem5CBC4099421` |
+| Pick one by serial number | `-Serial 5CBC409942` / `-s 5CBC409942` - the start is enough if it is unique. The serial number stays the same whichever socket or hub the board is in; the port name does not. |
+| All of them | `-All` / `-a`: each is flashed and verified in turn, one failure does not stop the rest, and a summary says which worked |
+| The same board every time | Set `HIDFI_SERIAL` (or `HIDFI_PORT`) in your shell profile |
+| A port that is not a HID-Fi board | Refused (exit `11`), because flashing it would overwrite whatever that board runs. `-ForcePort` / `--force-port` if you really mean it. |
+| A HID-Fi board stuck in its ROM bootloader | It shows as an Espressif native-USB device (`303A:1001`); the script points it out, and `-Port` on it is allowed - that is how it is recovered. |
+| One board, two names (macOS with WCH's driver shows `cu.wchusbserial…` and `cu.usbserial…`) | Counted once. |
+
+`-Which` / `-w` shows the decision without opening any port - run it first when in
+doubt. On macOS and Linux the script needs `pyserial` to tell ports apart
+(`pip install pyserial`); without it, it falls back to the old rule: exactly one
+USB serial port, or name it.
 
 ### Your settings survive an upgrade
 
@@ -290,7 +320,8 @@ Expect four: HID Keyboard Device, HID-compliant mouse, consumer control, system 
 | Flash fails or times out | Hold **BOOT**, tap **RESET**, release **BOOT**, then run the script again. That forces the bootloader. |
 | Flash works, but nothing types | `USBMode` was not USB-OTG, or the **USB** cable is not connected, or the USB-OTG pads are not bridged. |
 | Serial connects but never answers | `CDCOnBoot` was enabled at build time, or DTR/RTS are being asserted and rebooting the board. |
-| `several boards, name one` | More than one is plugged in. Use `-Port COMx` or `-All`. The script will not guess. |
+| `several boards, name one` | More than one HID-Fi board is plugged in. Use `-Port COMx`, `-Serial <serial>` or `-All` - see [Several boards plugged in](#several-boards-plugged-in). The script will not guess. |
+| `is not a HID-Fi board's COM port` | The port you named is some other device - an Arduino, an ESP32 kit on another USB bridge. Check `-Which`; `-ForcePort` only if you are sure. |
 | Script will not run at all | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force`, then run it again in the same shell. |
 | **The board keeps reappearing and vanishing, and HID stops working** | It is in the ROM bootloader, not your firmware. See below. |
 | **`Invalid head of packet (0x45)` while uploading the stub flasher** | The CH343 UART is carrying the running firmware's boot banner into the stub upload. Flash over the native USB-Serial-JTAG port instead — see below. |

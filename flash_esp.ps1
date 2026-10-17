@@ -20,7 +20,20 @@
 
 .EXAMPLE
     .\flash_esp.ps1 -All
-    Flash every connected board in turn.
+    Flash every connected HID-Fi board in turn.
+
+.EXAMPLE
+    .\flash_esp.ps1 -Serial 5CBC409942
+    Flash the board with this USB serial number. Unlike COM numbers it does not
+    change when the board is plugged into another socket.
+
+.EXAMPLE
+    .\flash_esp.ps1 -Which
+    Only say which board(s) would be flashed. Opens no port.
+
+.EXAMPLE
+    .\flash_esp.ps1 -Identify
+    Ask each HID-Fi board what firmware it runs. Opening a port can restart it.
 
 .EXAMPLE
     .\flash_esp.ps1 -Erase
@@ -28,13 +41,24 @@
     first. Add -Force to skip the question in a script.
 
 .NOTES
+    Several boards plugged in: only HID-Fi boards (their COM connector is a CH343,
+    USB VID 1A86 PID 55D3) are ever picked on their own; an Arduino or another ESP32
+    kit is listed and left alone. With more than one HID-Fi board it asks which, or
+    without a console stops with exit 10. HIDFI_PORT / HIDFI_SERIAL set a default.
+    A port that is not a HID-Fi COM bridge is refused unless -ForcePort.
+
     Exit codes: 0 ok | 1 flash failed | 2 compile failed | 3 no firmware image
                 4 no board found | 5 esptool missing | 10 several boards, pick one
+                11 that port is not a HID-Fi board
 #>
 [CmdletBinding()]
 param(
-    [string]$Port,
+    [string]$Port = $env:HIDFI_PORT,
+    [string]$Serial = $env:HIDFI_SERIAL,
     [switch]$All,
+    [switch]$Which,
+    [switch]$Identify,
+    [switch]$ForcePort,
     [switch]$Compile,
     [switch]$Erase,
     [switch]$Force,
@@ -45,7 +69,7 @@ $ErrorActionPreference = 'Stop'
 
 $base   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $sketch = Join-Path $base 'hid_fi'
-$build  = Join-Path $sketch 'build'
+$build  = if ($env:HIDFI_BUILD_DIR) { $env:HIDFI_BUILD_DIR } else { Join-Path $sketch 'build' }
 $fqbn   = 'esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=huge_app'
 
 function Say  ($m) { Write-Host $m }
@@ -77,6 +101,7 @@ function Invoke-Native {
 # ---------------------------------------------------------------- tools
 # esptool ships inside the ESP32 core, so a fresh machine needs no pip install.
 function Find-Esptool {
+    if ($env:HIDFI_ESPTOOL) { return @{ Kind = 'exe'; Path = $env:HIDFI_ESPTOOL } }      # tests
     $root = Join-Path $env:LOCALAPPDATA 'Arduino15\packages\esp32\tools\esptool_py'
     if (Test-Path $root) {
         $exe = Get-ChildItem $root -Recurse -Filter 'esptool.exe' -ErrorAction SilentlyContinue |
@@ -108,6 +133,7 @@ function Find-ArduinoCli {
 
 # boot_app0 lives in the core, not in our build folder
 function Find-BootApp0 {
+    if ($env:HIDFI_BOOT_APP0) { return $env:HIDFI_BOOT_APP0 }                             # tests
     $root = Join-Path $env:LOCALAPPDATA 'Arduino15\packages\esp32\hardware\esp32'
     if (-not (Test-Path $root)) { return $null }
     $f = Get-ChildItem $root -Recurse -Filter 'boot_app0.bin' -ErrorAction SilentlyContinue |
@@ -116,17 +142,108 @@ function Find-BootApp0 {
     return $null
 }
 
-# The board's "COM" cable is a CH343 bridge: VID 1A86, PID 55D3.
-function Get-Boards {
-    Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
-        Where-Object { $_.DeviceID -match 'VID_1A86&PID_55D3' -and $_.Name -match '\(COM\d+\)' } |
+# ---------------------------------------------------------------- which board
+# The same rules as tools/flash_ports.py (used by flash_esp.sh), so a desk with
+# several boards behaves the same on every OS. Never guess between boards.
+$HidfiCom = @{ Vid = 0x1A86; Pid = 0x55D3 }          # WCH CH343, the board's "COM" connector
+$OtherBridges = @{
+    '1A86:7523' = 'CH340'; '1A86:55D4' = 'CH9102'; '10C4:EA60' = 'CP210x'
+    '0403:6001' = 'FTDI'; '0403:6010' = 'FTDI'; '0403:6014' = 'FTDI'; '0403:6015' = 'FTDI'
+    '2341:0043' = 'Arduino Uno'; '2341:0001' = 'Arduino Uno'; '2341:0042' = 'Arduino Mega'
+}
+
+function Get-Ports {
+    if ($env:HIDFI_FAKE_PORTS) {                      # tests: [{device, vid, pid, serial, ...}]
+        return @(Get-Content $env:HIDFI_FAKE_PORTS -Raw | ConvertFrom-Json | ForEach-Object {
+            New-PortInfo $_.device ([int]$_.vid) ([int]$_.pid) "$($_.serial)" "$($_.description)" })
+    }
+    @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '\((COM\d+)\)' } |
         ForEach-Object {
-            # $Matches is overwritten by every -match, so grab the port before matching again
-            $null = $_.Name -match '\((COM\d+)\)'
-            $com = $Matches[1]
-            $serial = if ($_.DeviceID -match 'PID_55D3\\(.+)$') { $Matches[1] } else { '?' }
-            [pscustomobject]@{ Port = $com; Serial = $serial }
-        } | Sort-Object Port
+            # $Matches is overwritten by every -match, so take each part in turn
+            $null = $_.Name -match '\((COM\d+)\)'; $com = $Matches[1]
+            $vid = 0; $pid_ = 0; $sn = ''
+            if ($_.DeviceID -match 'VID_([0-9A-F]{4})&PID_([0-9A-F]{4})') {
+                $vid = [Convert]::ToInt32($Matches[1], 16); $pid_ = [Convert]::ToInt32($Matches[2], 16)
+            }
+            if ($_.DeviceID -match 'PID_[0-9A-F]{4}\\([^\\&]+)$') { $sn = $Matches[1] }
+            New-PortInfo $com $vid $pid_ $sn ($_.Name -replace '\s*\(COM\d+\)', '')
+        } | Sort-Object { [int]($_.Port -replace '\D', '') })
+}
+
+function New-PortInfo($port, [int]$vid, [int]$pid_, $serial, $desc) {
+    $key = '{0:X4}:{1:X4}' -f $vid, $pid_
+    $kind = if ($vid -eq $HidfiCom.Vid -and $pid_ -eq $HidfiCom.Pid) { 'hidfi' }
+            elseif ($vid -eq 0x303A) { 'esp-native' }
+            elseif ($OtherBridges.ContainsKey($key)) { 'other-bridge' }
+            elseif ($vid) { 'other' } else { 'not-usb' }
+    $what = switch ($kind) {
+        'hidfi'        { 'HID-Fi COM (CH343)' }
+        'esp-native'   { 'ESP32 native USB - a board in its ROM bootloader, or a different firmware' }
+        'other-bridge' { "$($OtherBridges[$key]) serial - not a HID-Fi board" }
+        'other'        { "$desc ($($key.ToLower()))" }
+        default        { 'not a USB device' }
+    }
+    [pscustomobject]@{ Port = $port; Serial = $(if ($serial) { $serial } else { '?' }); Kind = $kind; What = $what }
+}
+
+function Show-Port($p) { "$($p.Port)  serial $($p.Serial)  $($p.What)" }
+
+# Returns @{ Targets; Candidates; Lines; Code } - the same answers as flash_ports.choose().
+function Select-Boards($ports) {
+    $devs = @($ports | Where-Object { $_.Kind -ne 'not-usb' })
+    $boards = @($devs | Where-Object { $_.Kind -eq 'hidfi' })
+    $r = @{ Targets = @(); Candidates = @(); Lines = @(); Code = 0 }
+    if ($Port) {
+        $hit = $ports | Where-Object { $_.Port -eq $Port } | Select-Object -First 1
+        if (-not $hit) {
+            $r.Lines = @("$Port is not connected.") + @($devs | ForEach-Object { '  ' + (Show-Port $_) }); $r.Code = 4; return $r
+        }
+        if ($hit.Kind -eq 'hidfi' -or $hit.Kind -eq 'esp-native' -or $ForcePort) {
+            if ($hit.Kind -eq 'esp-native') { $r.Lines = @("$Port is an ESP32's native USB port - if this is a HID-Fi board stuck in its ROM bootloader, flashing it here brings it back.") }
+            elseif ($hit.Kind -ne 'hidfi') { $r.Lines = @("$Port is not a HID-Fi COM bridge ($($hit.What)); flashing it anyway because you forced it.") }
+            $r.Targets = @($hit); return $r
+        }
+        $r.Lines = @("$Port is not a HID-Fi board's COM port: $($hit.What).",
+                     'Flashing it would overwrite whatever that board runs. If you are sure, add -ForcePort.')
+        $r.Code = 11; return $r
+    }
+    if ($Serial) {
+        $hits = @($devs | Where-Object { $_.Serial -ne '?' -and $_.Serial.ToLower().StartsWith($Serial.ToLower()) })
+        if ($hits.Count -eq 1) {
+            if ($hits[0].Kind -ne 'hidfi' -and -not $ForcePort) {
+                $r.Lines = @("Serial $Serial is $(Show-Port $hits[0]) - not a HID-Fi COM bridge. Add -ForcePort if you are sure."); $r.Code = 11; return $r
+            }
+            $r.Targets = $hits; return $r
+        }
+        if ($hits.Count -eq 0) { $r.Lines = @("No board with serial $Serial is connected.") + @($devs | ForEach-Object { '  ' + (Show-Port $_) }); $r.Code = 4; return $r }
+        $r.Lines = @("Serial $Serial matches $($hits.Count) boards - give more of it:") + @($hits | ForEach-Object { '  ' + (Show-Port $_) }); $r.Code = 10; return $r
+    }
+    if ($All) {
+        if ($boards.Count -eq 0) { $r.Lines = Get-NothingLines $devs; $r.Code = 4; return $r }
+        $r.Targets = $boards; $r.Lines = @("Flashing all $($boards.Count) HID-Fi boards."); return $r
+    }
+    if ($boards.Count -eq 1) {
+        $others = @($devs | Where-Object { $_.Port -ne $boards[0].Port })
+        if ($others.Count) { $r.Lines = @("Ignoring $($others.Count) other serial device(s), not HID-Fi boards:") + @($others | ForEach-Object { '  ' + (Show-Port $_) }) }
+        $r.Targets = $boards; return $r
+    }
+    if ($boards.Count -eq 0) { $r.Lines = Get-NothingLines $devs; $r.Code = 4; return $r }
+    $i = 0
+    $r.Lines = @("$($boards.Count) HID-Fi boards are connected, so none was picked:") +
+               @($boards | ForEach-Object { $i++; "  $i. $(Show-Port $_)" }) +
+               @('Pick one with -Port COMx or -Serial <serial>, or flash them all with -All.')
+    $r.Candidates = $boards; $r.Code = 10; return $r
+}
+
+function Get-NothingLines($devs) {
+    $l = @('No HID-Fi board found. Its COM connector is a CH343 bridge (USB VID 1A86 PID 55D3).')
+    $native = @($devs | Where-Object { $_.Kind -eq 'esp-native' })
+    if ($native.Count) { $l += "An ESP32 is connected by its native USB port - a HID-Fi board stuck in its ROM bootloader looks like this. To flash it there: -Port $($native[0].Port)" }
+    $rest = @($devs | Where-Object { $_.Kind -ne 'esp-native' })
+    if ($rest.Count) { $l += 'Other serial devices (never flashed unless named with -Port and -ForcePort):'; $l += @($rest | ForEach-Object { '  ' + (Show-Port $_) }) }
+    $l += 'Plug the cable into the port labelled "COM", use a data cable, and install the CH343 driver if Windows shows an unknown device: https://www.wch-ic.com/downloads/CH343SER_EXE.html'
+    return $l
 }
 
 # ---------------------------------------------------------------- actions
@@ -233,6 +350,31 @@ Say ''
 Say 'ESP32-S3 USB-HID firmware flasher'
 Say '---------------------------------'
 
+Step 'Finding the board'
+$sel = Select-Boards (Get-Ports)
+$sel.Lines | ForEach-Object { Say "   $_" }
+if ($Identify) {
+    $cands = @($sel.Targets) + @($sel.Candidates)
+    if (-not $cands.Count) { $cands = @(Get-Ports | Where-Object { $_.Kind -in 'hidfi', 'esp-native' }) }
+    Say '   Asking each board what it runs (this can restart it):'
+    foreach ($c in $cands) { Say "   $($c.Port)  serial $($c.Serial)"; [void](Test-Firmware $c.Port) }
+    exit 0
+}
+if ($sel.Code -eq 10 -and $sel.Candidates.Count -and -not $Which -and -not $env:CI -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    $ans = Read-Host "   Which one? [1-$($sel.Candidates.Count), a = all, Enter = none]"
+    if ($ans -eq 'a') { $sel.Targets = $sel.Candidates; $sel.Code = 0 }
+    elseif ($ans -match '^\d+$' -and [int]$ans -ge 1 -and [int]$ans -le $sel.Candidates.Count) {
+        $sel.Targets = @($sel.Candidates[[int]$ans - 1]); $sel.Code = 0
+    } else { Bad 'Nothing chosen, nothing flashed.'; exit 10 }
+}
+if ($sel.Code -ne 0) {
+    if ($sel.Code -eq 10) { Bad 'Several HID-Fi boards - I will not guess.' } else { Bad 'Nothing flashed.' }
+    exit $sel.Code
+}
+$targets = @($sel.Targets)
+$targets | ForEach-Object { Ok "Using $($_.Port)  (serial $($_.Serial))" }
+if ($Which) { exit 0 }
+
 # Nothing here can be undone: the board never hands back a password or a PIN, so
 # there is no way to save them first and put them back afterwards.
 if ($Erase -and -not $Force) {
@@ -245,6 +387,7 @@ if ($Erase -and -not $Force) {
     Say  '   Passwords and PINs cannot be read off the board, so none of this can'
     Say  '   be backed up. You will have to type it all in again.'
     Say  ''
+    Say  "   This applies to $($targets.Count) board(s)."
     $answer = Read-Host '   Type ERASE to continue, anything else to stop'
     if ($answer -cne 'ERASE') { Say '   Nothing was changed.'; exit 0 }
 }
@@ -276,44 +419,22 @@ if (-not $bootApp0) {
     exit 5
 }
 
-Step 'Finding the board'
-if ($Port) {
-    $targets = @([pscustomobject]@{ Port = $Port; Serial = 'forced' })
-    Ok "Using $Port (you named it)"
-} else {
-    $found = @(Get-Boards)
-    if ($found.Count -eq 0) {
-        Bad 'No ESP32-S3 board detected.'
-        Say '   Plug the cable into the port labelled "COM" (the CH343 side).'
-        Say '   A charge-only cable will not work - it must carry data.'
-        Say '   If Windows shows an unknown device, install the CH343 driver:'
-        Say '     https://www.wch-ic.com/downloads/CH343SER_EXE.html'
-        exit 4
-    }
-    if ($found.Count -gt 1 -and -not $All) {
-        Bad "$($found.Count) boards are connected, so I will not guess."
-        $found | ForEach-Object { Say "     $($_.Port)  serial $($_.Serial)" }
-        Say '   Pick one:      .\flash_esp.ps1 -Port COM13'
-        Say '   Or do them all: .\flash_esp.ps1 -All'
-        exit 10
-    }
-    $targets = $found
-    $targets | ForEach-Object { Ok "$($_.Port)  serial $($_.Serial)" }
-}
-
 $failed = 0
+$summary = @()
 foreach ($t in $targets) {
     Step "Flashing $($t.Port)"
     if (Invoke-Flash $t.Port $tool $bootApp0) {
+        $summary += "ok      $($t.Port)"
         if (-not $NoVerify) {
             Step "Verifying $($t.Port)"
             Start-Sleep -Milliseconds 900       # board reboots after flashing
             [void](Test-Firmware $t.Port)
         }
-    } else { $failed++ }
+    } else { $failed++; $summary += "FAILED  $($t.Port)" }
 }
 
 Say ''
+if ($targets.Count -gt 1) { Step 'Summary'; $summary | ForEach-Object { Say "   $_" } }
 if ($failed -gt 0) { Bad "$failed board(s) failed."; exit 1 }
 Ok 'Done.'
 exit 0
