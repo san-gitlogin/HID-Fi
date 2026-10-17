@@ -28,16 +28,24 @@ Two things follow from that and shape every decision:
 ```
 flash_esp.ps1                  build + flash + verify (Windows), auto-detects everything
 flash_esp.sh                   the same for macOS / Linux
+tools/flash_ports.py           which port is a HID-Fi board, among several (used by flash_esp.sh)
 hid_fi/
   hid_fi.ino           all firmware: transports, dispatch, HID, NVS
   web_ui.h                     the entire dashboard as one PROGMEM string
   unlock_client.py             CLI for the board over serial or WiFi
 tests/
-  test_v34_features.py         24 checks, reversible only, safe on a live desktop
-  test_secrets.py              proves no command hands a stored secret back
-  test_vault.py                the password vault and its PIN gate
-  test_lock_state.py           lock-state machine
-  test_mouse_led.py            REQ/ACK protocol; sends REAL clicks without --skip-clicks
+  run.py                       THE test command - picks tiers, runs pytest, prints the table
+  conftest.py  pytest.ini      fixtures, tier markers, the safety rules
+  deps.json                    versions HID-Fi is verified against (firmware deps are exact pins)
+  support/                     board session, dashboard + fake board, e2e test page, corpus,
+                               firmware facts, Linux key derivation, perf budgets
+  static/ unit/ ui/ compile/ hostsim/ board/ e2e/ perf/    one folder per tier
+  ui/bdd/                      the dashboard, one feature file per tab, + the coverage contract
+  ui/responsive/               every state on 441 screens, turning and resizing, layout speed
+  hooks/                       git pre-commit / pre-push, and the Claude Code Stop hook
+  golden/                      what "unchanged" means - never edit to make a failure pass
+  test_*.py                    the original standalone suites; the tiers run them
+                               (test_lock_state.py really locks the PC - manual only)
 docs/
   HARDWARE.md  FLASHING.md  MACOS.md  COMMANDS.md  ARCHITECTURE.md
 ```
@@ -76,7 +84,16 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 ```
 
 Exit codes: `0` ok, `1` flash failed, `2` compile failed, `3` no image, `4` no
-board, `5` no esptool, `10` ambiguous (more than one board — ask the user which).
+board, `5` no esptool, `10` ambiguous (more than one board — ask the user which),
+`11` the named port is not a HID-Fi board.
+
+**Several boards on one machine.** Both flashers pick only boards whose COM
+connector is the CH343 (`1A86:55D3`), never guess between several, and never
+flash another kind of device unless forced. Before flashing on a machine you do
+not know, run `-Which` / `--which`: it shows the decision and opens no port. The
+selection logic is `tools/flash_ports.py` (the PowerShell script mirrors it) and
+`tests/unit/test_flash_ports.py` runs both scripts end to end on fake ports with a
+stand-in esptool - change one, change both, and keep that test passing.
 
 The FQBN, if you ever need it directly:
 
@@ -130,21 +147,36 @@ path does not have, so the board stays in the bootloader and no HID appears.
 
 ## Testing
 
-Always run these after a firmware change:
+**The one command** - see [docs/TESTING.md](docs/TESTING.md) for everything:
 
-```powershell
-python tests\test_dashboard_static.py  # no board needed, run before flashing
-python tests\test_dashboard_live.py    # no board needed, drives the UI over a WebSocket
-python tests\test_v34_features.py      # expect 24/24
-python tests\test_power_health.py      # expect 34/34
-python tests\test_wifi_join.py         # expect 20/20, ~40s
-python tests\test_memory_soak.py       # ~1 min, proves there is no leak
-python tests\test_secrets.py           # no command leaks a secret
-python tests\test_vault.py             # the vault gate holds — needs a board with
-                                       # no PIN and an empty vault; it refuses otherwise
+```bash
+python tests/run.py            # no board: static, unit, ui, build, hostsim - run before saying "done"
+python tests/run.py --board    # + serial suites against the board on COM
+python tests/run.py --e2e      # + real typing/mouse into a focus-guarded page on THIS computer
+python tests/run.py --all      # everything; after any firmware change, with a board attached
 ```
 
-They are safe on a live desktop and restore anything they touch.
+Rules for agents:
+
+- **Ask before any tier that touches the user's computer.** `--board` moves the
+  mouse (net zero) and changes the volume (down then up); `--e2e` types and
+  clicks into a test page and needs the user to click Start and keep hands off.
+  Read a script end to end before running it on someone's desktop - a "safe"
+  flag once still pressed the mouse button.
+- **A skip is not a pass.** Report skipped tiers and their reasons, exactly as the
+  summary prints them. "Tests pass" with the hardware tiers skipped is a claim
+  about the no-board tiers only.
+- **Golden files** (`tests/golden/`) define "unchanged". Update one only for an
+  intended change (`--update-golden`), read the diff, and say why. Never to make
+  a failure go away.
+- **Read facts from the source** (`tests/support/firmware.py`, `linux_keys.py`)
+  instead of copying lists into tests; a copy drifts.
+- **Add a property, add a planted bug.** `tests/unit/firmware/mutations.json`
+  lists deliberate bugs that the unit tier must catch; a new guarantee needs one.
+- **Firmware dependency versions are exact pins.** Moving one follows
+  [docs/TESTING.md#upgrading-a-dependency](docs/TESTING.md#upgrading-a-dependency).
+
+What the original suites guard, so nobody "simplifies" them away:
 
 `test_wifi_join.py` is the regression test for the blocking-join bug. It pings
 throughout a join and fails if latency spikes, so it is what stops that class of
@@ -158,15 +190,25 @@ purpose**, because that is the transport with no PIN and no lockout.
 `test_vault.py` proves the vault's gate: that nothing can be read, typed, edited
 or deleted without the PIN, and that resetting the access PIN blind destroys
 what it guarded. That last check erases the vault, so the test **refuses to run**
-on a board that has a PIN set or entries stored. Do not defeat that guard — it
-is the only thing standing between the suite and somebody's real passwords.
+on a board that has a PIN set or entries stored (the board tier reports that as
+a skip). Do not defeat that guard — it is the only thing standing between the
+suite and somebody's real passwords.
 
-**Still manual, because they need a client on the board's AP:** a successful
-join, the `lan_locked` gate, `/api/scan`, PIN lockout engaging, and the dashboard
-end to end.
+**The dashboard is tested in Chromium against a model of the board**
+(`tests/ui/bdd`, ~280 scenarios across every tab; about 100 s with
+`pytest-xdist`). The model, `tests/support/board_sim.py`, is held to the real
+firmware by `tests/board/test_sim_contract.py` whenever a board is attached - so
+when the firmware's replies change, change the model in the same commit or that
+test fails. The model also covers what used to be manual: a join, the
+`lan_locked` gate, `/api/scan` over the LAN, the PIN lockout.
+
+**Still manual, on real hardware:** those same paths against a real access
+point, the zoom-reset button (only iOS Safari lets a page be pinch-zoomed), and
+iOS haptics. The WiFi performance tests run when given `--board-url`.
 
 **`test_mouse_led.py` without `--skip-clicks` sends real clicks** into whatever is
-focused. Do not run it casually.
+focused. The board tier always passes `--skip-clicks`, which since v3.9 also skips
+the press/release pair (a press and a release *is* a click).
 
 ### Check the dashboard without flashing
 
@@ -189,7 +231,12 @@ will tell you.
 
 **Opening the COM port resets the board.** The CH343's DTR and RTS lines drive
 GPIO0 and EN through the auto-reset circuit, and pyserial asserts both on
-`open()`. This is normal and every test in `tests/` accounts for it.
+`open()`. This is normal and every test in `tests/` accounts for it. On macOS the
+built-in CDC-ACM driver (port `cu.usbmodem*`) pulses the lines **even when
+`dtr`/`rts` are set False before `open()`** - so every open is a reboot there, the
+USB side drops for a few seconds, and keystrokes sent straight after an open are
+lost. The test suite therefore opens the port once per run
+(`tests/support/board.py`) and waits for `usb_mounted` before typing.
 
 Always open the way the repo already does — set the lines **before** `open()`:
 
@@ -256,10 +303,44 @@ The pattern that works here:
    command, via `sendJson()`.
 3. **Dashboard side.** Add markup in the right `<section class="view">`, styles in
    the matching CSS block, and wiring in `bindAll()`. Icons go in the SVG sprite.
-4. **Validate before flashing** — syntax check, tag balance, icon references.
-5. **Flash, run the suite, then verify the new thing specifically**, ideally with
+4. **Model it and test it, in the same change** (the skill
+   `.claude/skills/hidfi-feature` walks through it):
+   - a new command: a branch in `tests/support/board_sim.py` that replies exactly
+     as the firmware does, a line in `tests/board/test_sim_contract.py` proving it,
+     and docs in `docs/COMMANDS.md`;
+   - a new control, sheet or behaviour on the dashboard: a scenario in
+     `tests/ui/bdd/features/<tab>.feature` written as a person would describe it,
+     with steps in `tests/ui/bdd/test_<tab>.py`. Tap it the way a finger does
+     (`ui.touch_*` for gestures), and assert what reaches the board.
+5. **Validate before flashing** — syntax check, tag balance, icon references.
+6. **Flash, run the suite, then verify the new thing specifically**, ideally with
    a throwaway probe script over serial that leaves the board as it found it.
-6. **Update the docs** in the same change.
+7. **Update the docs** in the same change.
+
+### Definition of done
+
+A change is done when `python tests/run.py` prints **PASSED** and each of these
+holds. The first four are enforced - the run fails without them:
+
+- [ ] every firmware command is documented, modelled by the simulated board and
+      sent by a test (`tests/static`, three rules);
+- [ ] every control on the dashboard is touched by a scenario, and every named
+      dashboard function runs in one (the **coverage contract**, printed at the end
+      of the ui tier; see `docs/TESTING.md#the-dashboard-coverage-contract`);
+- [ ] the share of the dashboard script the scenarios run has not dropped below
+      `tests/golden/ui_js_coverage.json`; the lines that never run are listed in
+      `tests/.reports/ui_js_uncovered.txt` - read it, it is the to-do list;
+- [ ] the responsive matrix (441 screens, every tab, sheet and overlay, turning
+      and resizing, layout speed) shows no new problem - it is part of the ui
+      tier; a new sheet or overlay is added to `tests/support/responsive_run.py`;
+- [ ] no golden file changed except for a stated, intended reason;
+- [ ] a bug found but not fixed in this change is a scenario tagged
+      `@known_issue:<key>` with the reason in `KNOWN_ISSUES`
+      (`tests/ui/bdd/conftest.py`) and a line in `docs/TESTING.md#known-issues`.
+      The tag is a strict xfail: when the bug is fixed the scenario passes, the run
+      fails, and the tag must come off. Never delete a scenario to get a green run;
+- [ ] hardware tiers were run, with the user's OK, for any firmware change - or the
+      summary says plainly that they were not.
 
 ### Constraints that will bite you
 
@@ -405,6 +486,32 @@ The pattern that works here:
 - `contain: layout` makes an element a containing block for `position: fixed`
   descendants. It broke fullscreen once. Do not reintroduce it on `.card` or
   `.view`.
+
+---
+
+## Text typing - the rule that came from a bug
+
+`Keyboard.press()` in the ESP32 core reads every byte **>= 0x88 as a raw HID
+usage** and 0x80-0x87 as a modifier. Text arrives as UTF-8, so before v3.9 a
+phone's curly quote (`E2 80 99`) typed Keypad-2, a Ctrl tap and `n`, and a degree
+sign pressed F1 then **Enter**. Therefore:
+
+- **No byte >= 0x80 may reach `Keyboard.press()`.** `typeString()` decodes
+  well-formed UTF-8 (Unicode Table 3-7) and either types ASCII, folds phone
+  punctuation to ASCII, enters the character through the host's Unicode input
+  (`set_unicode`), or skips and counts it. Any new path that presses a character
+  must go through it. The one-character fallback in `pressKeyCombo()` has a
+  `< 0x80` guard and must keep it. **Open item:** `hidKeyFor()` (used by
+  `key_down`/`key_up` and the WebSocket key frames) still passes a one-byte name
+  straight to `press()`. Valid UTF-8 never produces a one-byte name >= 0x80, but
+  a raw byte over serial or HTTP would; it needs the same guard.
+- **The Unicode sequences only run where they are safe.** The macOS one holds
+  Option, which is Alt on a PC (Alt+F opens menus), so it is vetoed whenever
+  detection saw Windows, even if the OS is pinned by hand; the Linux one is vetoed
+  on a detected Mac. Off by default, per OS.
+- The unit tier compiles `typeString()` against the installed core and checks
+  every Unicode scalar value; `tests/golden/typing_ascii.json` pins plain typing
+  report-for-report.
 
 ---
 

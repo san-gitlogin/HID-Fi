@@ -15,8 +15,8 @@ or software on the host.
 |---|---|
 | `hid_fi/hid_fi.ino` | All firmware — transports, command dispatch, HID, NVS |
 | `hid_fi/web_ui.h` | The **entire dashboard** as one PROGMEM raw string |
-| `flash_esp.ps1` | Build, flash and verify; auto-detects board and toolchain |
-| `tests/` | `test_v34_features.py` is the regression suite — run it after firmware changes |
+| `flash_esp.ps1` / `flash_esp.sh` | Build, flash and verify; auto-detects board and toolchain |
+| `tests/run.py` | **The** test command - every tier, a pass/fail/skip table. Guide: `docs/TESTING.md` |
 | `docs/` | Hardware, flashing, command reference, architecture |
 
 ## Build and flash
@@ -24,9 +24,24 @@ or software on the host.
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force   # if scripts are blocked
 .\flash_esp.ps1 -Compile
-python tests\test_dashboard_static.py  # no board needed
-python tests\test_v34_features.py     # expect 24/24
+python tests\run.py            # no board needed - run before saying "done"
+python tests\run.py --all      # with a board on COM + USB - ask the user first: it moves the mouse and types into a test page
 ```
+
+A skipped tier is not a passed tier - report the skips. Never edit `tests/golden/`
+to make a failure pass; `--update-golden` is for intended changes, with a reason.
+
+Adding or changing a feature (`.claude/skills/hidfi-feature/SKILL.md` has the steps):
+a new firmware command is documented in `docs/COMMANDS.md`, modelled in
+`tests/support/board_sim.py` and sent by a test - static rules fail otherwise. A
+new dashboard control or behaviour gets a scenario in
+`tests/ui/bdd/features/<tab>.feature`; the ui tier ends with a **coverage
+contract** that fails if any control is untouched, any function never runs, or
+less of the dashboard script runs than `tests/golden/ui_js_coverage.json`. A bug
+you find and do not fix becomes a scenario tagged `@known_issue:<key>` (strict
+xfail) plus a line in `docs/TESTING.md#known-issues` - never a deleted test.
+No byte >= 0x80 may reach `Keyboard.press()` (the core reads it as a raw HID
+usage) - text goes through `typeString()`; see AGENTS.md "Text typing".
 
 ## Never hammer the serial port
 

@@ -15,16 +15,18 @@ BIOS.
 - `hid_fi/hid_fi.ino` — all firmware (~3,600 lines)
 - `hid_fi/web_ui.h` — the whole dashboard as one PROGMEM raw string
   (~3,900 lines): HTML, CSS, JS and an SVG icon sprite
-- `flash_esp.ps1` — build, flash, verify
-- `tests/test_v34_features.py` — 24-check regression suite, safe on a live desktop
+- `flash_esp.ps1` / `flash_esp.sh` — build, flash, verify
+- `tests/run.py` — **the** test command; tiers, safety rules and golden files are in
+  `docs/TESTING.md`
 
 ## Commands
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force   # if scripts are blocked
-.\flash_esp.ps1 -Compile              # build and flash
-python tests\test_dashboard_static.py # no board needed, run before flashing
-python tests\test_v34_features.py     # expect 24/24
+```bash
+./flash_esp.sh -c                     # build and flash (Windows: .\flash_esp.ps1 -Compile)
+python tests/run.py                   # no board needed - run before saying "done"
+python tests/run.py --all             # with a board on COM + USB - ASK the user first
+python tests/run.py doctor            # installed vs pinned versions
+python tests/run.py --tier ui         # the dashboard: ~280 scenarios + the coverage contract
 ```
 
 ## Serial access will reset the board — and can brick-look it
@@ -76,8 +78,21 @@ diagnose from the USB device list rather than from serial noise you are causing.
     PIN. `macro_get` is ungated over serial, so a secret never goes in a macro.
 12. **The dashboard never relies on the Refresh button.** Every board write
     calls `syncAll()`; `applyStatus()` rebuilds what the access PIN affects.
-12. **Restore hardware state.** If a probe sets a PIN or saves a profile, undo it
+13. **Restore hardware state.** If a probe sets a PIN or saves a profile, undo it
     and verify the undo. Delete throwaway scripts when done.
+14. **No byte >= 0x80 reaches `Keyboard.press()`.** The core reads those as raw
+    HID usages - that is how a phone's curly quote typed "2n" and a degree sign
+    pressed Enter. Text goes through `typeString()`; see AGENTS.md "Text typing".
+15. **Tests that touch the user's computer need their OK.** `--board` moves the
+    mouse and changes volume (net zero); `--e2e` types into a page they must
+    start. Read a script before running it on someone's desktop. Report skips as
+    skips, and never edit `tests/golden/` to make a failure pass.
+16. **New behaviour ships with its scenario.** A command is documented, modelled
+    in `tests/support/board_sim.py` and sent by a test; a dashboard control has a
+    scenario in `tests/ui/bdd/features/`. The coverage contract and the Stop hook
+    (`.claude/settings.json`) fail the turn otherwise - follow
+    `.claude/skills/hidfi-feature`. A bug found and not fixed is tagged
+    `@known_issue`, never deleted.
 
 ## Expected working style
 

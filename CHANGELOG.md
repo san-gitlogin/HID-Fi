@@ -7,6 +7,103 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v3.9 - 2026-10-17
+
+Emoji and accents reach the computer, and phone text stops arriving garbled.
+
+**New: emoji, accents and real curly quotes**, on a Mac and on Linux. A USB
+keyboard sends key positions, never characters, so the board types each one
+through the host's own Unicode entry: on macOS, Option plus the UTF-16 hex
+with *Unicode Hex Input* selected (emoji go in as a surrogate pair under one
+Option hold); on Linux, Ctrl+Shift+U, the hex, then Space. Both type junk on a
+host that is not set up, so each is off until you turn it on in
+Settings → Emoji and symbols (`set_unicode`), and it follows the detected OS.
+Not sure whether a computer is set up? **Test** types `é😀` through that OS's
+entry (`unicode_test`) without changing anything, and asks what you saw — the
+board cannot read the screen, so only your yes turns it on.
+A manual OS pin is saved on the board and travels with it, so detection
+overrides it here: the macOS sequence (Option is Alt on a PC, where Alt+F opens
+menus) is never sent to a computer enumeration identified as Windows, and the
+Linux one never to a detected Mac. The Test button refuses in the same cases.
+Windows has no built-in equivalent — its Alt+numpad hex is capped at 16 bits
+and needs a registry change — so a PC keeps the fallback below.
+
+**Fixed: text typed from a phone came out garbled.** Phone keyboards swap in
+curly quotes and dashes on their own, and `typeString()` handed each UTF-8 byte
+straight to `Keyboard.press()` — which reads any byte at or above `0x88` as a
+raw HID keycode. So `’` (`E2 80 99`) typed Keypad-2, tapped Ctrl, then typed
+`n`: *what’s* arrived as *what2ns*. Worse, `°` (`C2 B0`) pressed F1 and then
+**Enter**.
+
+Text is now decoded as UTF-8 before anything is pressed. Smart quotes, dashes,
+the ellipsis and non-breaking spaces fold back to the ASCII the user meant;
+anything a US layout cannot produce is skipped, never typed as a stray keycode.
+This is also the fallback whenever Unicode entry is off.
+The `type` reply carries `skipped`, and the dashboard says when it is non-zero.
+This covers every path that types text — the text box, macros, PC unlock and
+the vault — because they all go through `typeString()`.
+
+**New: one command for every test.** `python tests/run.py` runs every tier the
+machine can - static, unit, ui, build, hostsim with no board; `--board`, `--e2e`,
+`--perf` for the hardware - and prints a pass/fail/skip table with the reason for
+every skip. The firmware's typing code is now compiled and checked on the host
+against the installed ESP32 core, plain typing and every dashboard control are
+pinned against golden references verified identical to v3.8, Linux gets an
+evdev suite that grabs the board's devices (every key, media, sleep/power,
+pointer to the pixel) and a CI replay through Xvfb + IBus + GTK, and CI runs the
+no-board tiers on every push plus a weekly build against the latest core and
+libraries. Dependencies are pinned in `tests/deps.json`. See docs/TESTING.md.
+
+**New: the dashboard, scenario by scenario, and on every screen.** About 280 BDD
+scenarios drive every tab in Chromium with real touch input against a model of
+the board that is itself checked against the firmware. A coverage contract fails
+the run if any control goes untouched or any dashboard code goes unrun (151/151
+controls, 95.6% of the script today). A responsive matrix read from the CSS draws
+every state on 441 screens - folded phones to 8K, upright and turned, browser
+toolbars showing and hidden, notches included - and measures layout speed on a
+slowed phone, a tablet, 1080p and 4K. Every firmware command must be documented,
+modelled and tested, every sheet and overlay measured, and a Claude Code hook and
+optional git hooks run the checks before work is handed back.
+
+**Flashing with several boards plugged in.** Both flashers now recognise a HID-Fi
+board by its USB identity (the CH343 on its COM connector) instead of by port
+name: an Arduino or another ESP32 kit on the same machine is listed and left
+alone, two or more HID-Fi boards are never guessed between (it asks, or stops
+with exit 10), a board can be picked by its USB serial number (`-Serial` / `-s`,
+stable across sockets and hubs) or all flashed with `-All` / `-a` (now on macOS
+and Linux too, with a per-board summary), `-Which` / `-w` shows the decision
+without opening a port, and a named port that is not a HID-Fi board is refused
+unless forced. On macOS one board seen under two names is counted once - before,
+that alone could stop the script with "several serial ports found".
+
+Found by them and **not yet fixed** (each one is a test that fails the day it is):
+with no access PIN on a home network, the LAN lock does not cover binary frames,
+so another device on that network can still press keys; after a reconnect with a
+PIN set, the vault, saved PCs and macros come up empty until Refresh; an iPhone
+driving a Windows PC shows Mac shortcuts; the "+" for saved PCs opens the edit
+sheet; on short landscape screens the app switcher's buttons fall off the screen;
+and a handful of labels and keys are cut or covered at particular sizes.
+docs/TESTING.md#known-issues has the full list.
+
+Fixed in the old suites: `test_mouse_led.py --skip-clicks` still pressed and
+released the left button (a click) and left the pointer ~870 px from where it
+started; `test_v34_features.py` expected `v3.8` by name; `test_inventory.py` only
+ran on `COM13`.
+
+> Verified on hardware against macOS (this board, Unicode Hex Input) and
+> Windows 10 or 11 (Chrome reported NT 10.0): plain typing, shortcuts, held keys, macros and 50+
+> scripts and emoji sets, including the pinned-to-macOS-on-a-PC case, which sends
+> no Alt. Linux was verified in a Debian 12 VM: the firmware's exact HID reports,
+> translated with the kernel's own `hid_keyboard[]` table, through Xorg, IBus
+> 1.5.27 and GTK, and through GTK without IBus - exact in every script, with
+> Caps Lock on and off. Not tested: Qt/KDE apps and terminals without IBus, where
+> Ctrl+Shift+U is not an input method and the hex would be typed as text.
+> Off-board, every Unicode scalar value round-trips through a model of each host,
+> plain ASCII is byte-identical to v3.8 including timing, and 16 planted bugs
+> are all caught.
+
+---
+
 ## v3.8 - 2026-09-21
 
 A password vault, a keyboard that grows with the screen, and Mac-or-PC

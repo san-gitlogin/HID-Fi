@@ -12,12 +12,12 @@
 - Host OS: 
 
 ```
-python tests\test_v34_features.py
+python tests/run.py            # always
+python tests/run.py --all      # if you touched firmware and have a board
 ```
 
-```
-paste the result here
-```
+<!-- Paste tests/.reports/summary.md here. Say which OS the hardware tiers ran on,
+     and copy any SKIPPED reasons - a skipped tier is not a passed one. -->
 
 <!-- If you changed the dashboard, please add a screenshot at phone width
      (360-390px). Most of this UI is used one-handed on a phone. -->
@@ -29,8 +29,11 @@ paste the result here
 
 - [ ] I read [AGENTS.md](../AGENTS.md) / [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [ ] Firmware builds and flashes
-- [ ] `tests/test_v34_features.py` passes
-- [ ] Dashboard JavaScript passes `node --check` (if I touched `web_ui.h`)
+- [ ] `python tests/run.py` passes (and `--all` on a board, for firmware changes)
+- [ ] The dashboard coverage contract is OK - every control touched, every function run (see the last lines of the ui tier)
+- [ ] New commands are documented, modelled in `tests/support/board_sim.py` and sent by a test
+- [ ] Any bug found and not fixed is a `@known_issue` scenario and a line in `docs/TESTING.md#known-issues`
+- [ ] Any change to `tests/golden/` is intended, and explained above
 - [ ] No emoji added to the dashboard
 - [ ] No new way to read a saved PC password back out
 - [ ] The shape of existing serial commands is unchanged

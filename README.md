@@ -449,6 +449,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |
 | [SECURITY.md](SECURITY.md) | Threat model, and what is deliberately not protected |
+| [docs/TESTING.md](docs/TESTING.md) | The one test command, every tier, testing on macOS, Windows and Linux, upgrading dependencies |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing, and the constraints that will bite you |
 
 ---
@@ -495,6 +496,15 @@ Out of the box, no — every board ships with the same access-point password.
 Change it and set a 4-digit PIN, both in Settings, before using it for anything
 that matters. See [SECURITY.md](SECURITY.md).
 
+**Can I type emoji and accents from my phone?**
+On a Mac and on Linux, yes. A USB keyboard sends keys, not characters, so the
+board types each one through the computer's own Unicode entry - and that has to
+be switched on once: *Unicode Hex Input* on a Mac, IBus on Linux (GNOME has it).
+Then turn it on in **Settings → Emoji and symbols**; the **Test** button there
+checks it for you. Windows has no built-in way to type an emoji from a keyboard,
+so on a PC emoji are skipped - and curly quotes and dashes from a phone keyboard
+always arrive as plain `'` `"` `-`, never as garbage.
+
 **My keyboard isn't a US layout — will passwords type correctly?**
 Not yet. The board types US-layout ASCII, so symbols and passwords come out wrong
 on other layouts. This is the most valuable open problem in the project.
@@ -518,7 +528,9 @@ board.
 **If this is useful to you, please star the repo.** It is the main signal that
 tells me whether to keep working on it.
 
-Fork it, build something, send it back if others would want it.
+Fork it, build something, send it back if others would want it. One command
+tells you whether you broke anything - `python tests/run.py` needs no board, and
+`python tests/run.py --all` adds the hardware; see [docs/TESTING.md](docs/TESTING.md).
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the build, the test suites, and the two
 hardware constraints that are not obvious from the code.
 

@@ -51,51 +51,50 @@ PC passwords.
 
 ## Testing
 
-```powershell
-python tests\test_dashboard_static.py  # no board needed - run this first
-python tests\test_responsive.py       # no board needed - 68 screen sizes
-python tests\test_v34_features.py      # 24 checks, reversible actions only
-python tests\test_power_health.py      # power modes, heap reporting, input bounds
-python tests\test_inventory.py         # MACs, stored settings, AP clients
-python tests\test_wifi_join.py         # join state machine, proves loop() never blocks
-python tests\test_memory_soak.py       # 2000 commands, checks for a leak
-python tests\test_lock_state.py        # lock-state machine
-python tests\test_mouse_led.py --skip-clicks
+One command, from the repository root:
+
+```bash
+python tests/run.py install-hooks  # once: checks run themselves before a commit and a push
+python tests/run.py            # no board needed - run this before every commit
+python tests/run.py --all      # with a board on COM and USB - run this after any firmware change
 ```
 
-`test_dashboard_static.py` needs no hardware. It extracts the dashboard from the
-PROGMEM string, runs `node --check` over the script, and verifies that every
-`$('id')` and every icon reference actually resolves. A JavaScript error in that
-string compiles perfectly and serves a blank white page, so run it before you
-flash.
+It runs every test your machine can run, skips the rest with the reason, and
+ends with a pass/fail/skip table per tier. **[docs/TESTING.md](docs/TESTING.md)**
+is the full guide: what each tier needs and proves, testing on macOS, Windows and
+Linux, the safety rules, golden files, performance budgets and upgrading a
+dependency. The first time: `pip install -r tests/requirements.txt` and
+`python -m playwright install chromium`.
 
-`test_responsive.py` needs no hardware either, but it does need Playwright
-(`python -m playwright install chromium`). It drives a real browser over 68
-viewports from a 240px feature phone to 8K, checking every tab for content wider
-than the screen, key labels clipped inside their own button, and the trackpad card
-changing size when it flips to the keyboard. Run it after any CSS change - none of
-those failures are visible on the one screen you happen to be developing on.
+What matters most when you change something:
 
-`test_v34_features.py` is the one to run after any firmware change. It is safe on
-a live desktop — it only sends reversible things and restores what it touched.
+- **Firmware typing or key handling** - the unit tier compiles the real typing
+  code against the installed ESP32 core and compares plain-text typing, report by
+  report and delay by delay, against `tests/golden/typing_ascii.json`. If you
+  meant to change it, `--update-golden` and say why.
+- **The dashboard** - the static tier catches the blank-white-page class of bug
+  (a JS error inside the PROGMEM string compiles fine), and the ui tier checks
+  67 screen sizes, that every control still sends what it sent before, and runs
+  ~280 BDD scenarios (`tests/ui/bdd/features/`) against a model of the board.
+  It ends with a coverage contract: a control no scenario touches, or code no
+  scenario runs, fails the run. New UI means a new scenario - see
+  `docs/TESTING.md#the-dashboard-scenario-by-scenario`.
+- **Anything a computer receives** - only the e2e tier proves it. On Linux it is
+  exact (`sudo -E python tests/run.py --e2e`, the board's devices are grabbed so
+  nothing reaches your desktop); on macOS and Windows it types into a test page
+  that you start with one click.
 
-`test_power_health.py` reads the current power mode, exercises all three, and puts
-the original back. `test_memory_soak.py` takes about a minute and is the only way
-to tell a leak from normal churn.
+The original scripts in `tests/` still run on their own - `python
+tests/test_v34_features.py` and so on - and the tiers run them for you.
+`test_lock_state.py` is the exception: it really locks the computer, so it is
+never run automatically. `test_mouse_led.py` without `--skip-clicks` sends real
+clicks into whatever is focused; the board tier always passes `--skip-clicks`.
 
-`test_wifi_join.py` drives the join state machine using an SSID that does not
-exist, so it needs no credentials. It refuses to run if the board already has
-saved credentials, and clears what it sets. The part that matters is that it
-pings continuously *during* the join and compares latency against the idle
-baseline &mdash; that is the regression test for the blocking-join bug, and it is
-the only test that would catch it coming back.
-
-**What none of these cover:** anything that needs a client on the board's own
-access point. A successful join, the `lan_locked` exposure gate, `/api/scan`, the
-PIN lockout actually engaging, and the dashboard itself are all still manual.
-
-**`test_mouse_led.py` without `--skip-clicks` sends real mouse clicks** into
-whatever is focused. Do not run it on a desktop you care about.
+**Still manual on real hardware:** a successful WiFi join against a real router,
+the `lan_locked` gate and `/api/scan` from a real LAN client, the PIN lockout on
+the board itself. The dashboard side of all of these is covered against the
+model. The WiFi performance tests run if you point them at
+the board (`--board-url`).
 
 ### Checking dashboard changes without flashing
 
@@ -162,11 +161,13 @@ Match what is there. Specifically:
 ## Pull requests
 
 - One logical change per PR.
-- Say which board you tested on, and paste the output of
-  `tests\test_v34_features.py`.
+- Say which board and which OS you tested on, and paste
+  `tests/.reports/summary.md` from `python tests/run.py` (plus `--all` if you
+  touched firmware and have a board).
 - If you changed the dashboard, a screenshot at phone width (360–390px) helps a
   lot. Most of this UI is used one-handed on a phone.
-- If you changed anything about timing, feel, or latency, say what you measured.
+- If you changed anything about timing, feel, or latency, run `--perf` and say
+  what moved - `tests/.reports/perf.json` has the numbers.
 
 I would rather have a small tested change than a large untested one.
 
