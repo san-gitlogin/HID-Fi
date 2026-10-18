@@ -72,7 +72,6 @@ Feature: The Session tab - unlock, lock, saved PCs, sleep and wake, presenter, s
     Then the board receives {"cmd": "pc_save", "name": "Work laptop", "os": "windows", "password": "hunter2"}
     And the saved PC "Work laptop" shows "Windows"
 
-  @known_issue:pc_new_event
   Scenario: The + button opens Save this PC, with the unlock password already filled in
     Given the dashboard is open and signed in with "4826"
     When I open the "Session" tab

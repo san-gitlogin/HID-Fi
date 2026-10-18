@@ -129,7 +129,7 @@ def test_every_firmware_command_is_modelled_by_the_simulated_board():
 
 
 # ---- the responsive matrix measures every sheet and overlay ----------------------------
-# tests/support/responsive_run.py opens each one on all 441 screens. One added to
+# tests/support/responsive_run.py opens each one on all 500+ screens. One added to
 # the dashboard but not to that list would never be measured anywhere.
 def _dashboard_js():
     from support import dashboard

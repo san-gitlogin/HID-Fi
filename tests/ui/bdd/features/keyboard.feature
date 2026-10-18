@@ -65,7 +65,6 @@ Feature: The Keyboard tab
     And I tap the key "#ALT"
     Then the board releases "ALT"
 
-  @known_issue:latch_drop
   Scenario: Tapping a latched modifier again clears its latched look
     When I tap the key "#ALT"
     And I tap the key "#ALT"

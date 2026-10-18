@@ -407,7 +407,6 @@ Feature: The Settings tab
     And I tap "Next"
     Then I see the message "Set a PIN to use this over your network"
 
-  @known_issue:lan_binary
   Scenario: Over the home network without a PIN, the trackpad cannot move the pointer either
     Given the board is on the home network
     And the board has no access PIN
@@ -417,7 +416,6 @@ Feature: The Settings tab
     And I drag one finger across the trackpad
     Then the board refused the pointer
 
-  @known_issue:lan_scan
   Scenario: Scanning over the home network without a PIN says a PIN is needed
     Given the board is on the home network
     And the board has no access PIN

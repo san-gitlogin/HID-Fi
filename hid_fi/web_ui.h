@@ -239,6 +239,11 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
 .btn.bad{background:linear-gradient(135deg,#c0392b,var(--bad));border-color:transparent;color:#fff;font-weight:650}
 .btn.on{background:rgba(0,210,255,.2);border-color:var(--acc)}
 .btn.sm{min-height:38px;font-size:13px;padding:0 12px}
+/* Under 310px (a Galaxy Fold's cover screen) a row of three or four choices -
+   Auto/macOS/Windows/Linux, the power modes, a PC's OS - cut "Windows" and
+   "Performance" short. The side padding is what gives. */
+@media(max-width:359px){#osSel .btn.sm,[data-pwr].btn,#pc_os .btn.sm{padding:0 4px;font-size:12px}}
+@media(max-width:309px){#osSel .btn.sm,[data-pwr].btn,#pc_os .btn.sm{padding:0 4px;font-size:11px;letter-spacing:-.01em}}
 .btn.blk{width:100%}
 .row{display:flex;gap:9px;flex-wrap:wrap}
 .row>*{flex:1 1 0;min-width:0}
@@ -370,7 +375,16 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
    rows share the card's height instead, which cannot overflow by construction.
    Shorter still and the type field goes, because the Type tab has one and keys
    people can hit matter more here. */
-@media(max-height:360px){.padwrap:not(.fs) .pkrow{display:none}}
+@media(max-height:360px){
+  .padwrap:not(.fs) .pkrow{display:none}
+  /* That row was what kept the keys out from under the two corner buttons. A
+     screen this short is a phone on its side, wide but with no height to give,
+     so the keys make room beside the buttons rather than below them. */
+  .padwrap.kb:not(.fs) #padkbd{padding-top:48px}
+}
+@media(max-height:360px) and (min-width:560px){
+  .padwrap.kb:not(.fs) #padkbd{padding-top:var(--dpad);padding-right:86px}
+}
 /* Below 310px the shared rule lets rows wrap onto a second line for readability.
    The Type tab can grow to absorb that; a deck locked to the pad's height cannot
    - letting it wrap was measured at 12.7px tall keys, which is not a key at all.
@@ -448,6 +462,8 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
      as well. Without this the Exit button sits underneath browser chrome and
      cannot be tapped at all. */
   padding-bottom:calc(10px + max(env(safe-area-inset-bottom), 20px));
+  /* a phone on its side has the notch at one end of this bar */
+  padding-left:calc(12px + env(safe-area-inset-left));padding-right:calc(12px + env(safe-area-inset-right));
   background:linear-gradient(0deg,rgba(6,8,13,.94),rgba(6,8,13,0));
 }
 .fsbar{display:none}
@@ -480,7 +496,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .knobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));gap:14px}
 .knob{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 8px 12px;border-radius:var(--r2);
   background:var(--surface2);border:1px solid var(--line);position:relative}
-.knob .dial{position:relative;width:100%;max-width:138px;aspect-ratio:1;touch-action:none;user-select:none;cursor:grab}
+.knob .dial{position:relative;width:100%;max-width:min(138px,34dvh);aspect-ratio:1;touch-action:none;user-select:none;cursor:grab}
 .knob .dial:active{cursor:grabbing}
 .knob .tks{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
 .tk{stroke:rgba(255,255,255,.16);stroke-width:1.9;stroke-linecap:round;transition:stroke .1s linear}
@@ -511,7 +527,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 }
 .knob .kv{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;text-align:center}
 .knob .kv em{display:block;font-style:normal;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg2)}
-.knob .mn,.knob .mx{position:absolute;bottom:2%;font-size:8.5px;letter-spacing:1px;color:var(--fg3);pointer-events:none}
+.knob .mn,.knob .mx{position:absolute;bottom:2%;font-size:9px;letter-spacing:1px;color:var(--fg3);pointer-events:none}
 .knob .mn{left:2%}.knob .mx{right:2%}
 .knob .kn{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:560;
   color:var(--fg2);text-align:center;line-height:1.2}
@@ -532,7 +548,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 /* always three across, whatever the width - a controller that stacks vertically
    on a phone is unusable, so the parts scale instead of wrapping */
 .padlayout{display:grid;gap:10px;grid-template-columns:1fr auto 1fr;align-items:center}
-.stick{width:100%;max-width:clamp(92px,25vw,190px);aspect-ratio:1;margin:0 auto;position:relative;touch-action:none;user-select:none}
+.stick{width:100%;max-width:min(clamp(92px,25vw,190px),44dvh);aspect-ratio:1;margin:0 auto;position:relative;touch-action:none;user-select:none}
 .stick .base{position:absolute;inset:0;border-radius:50%;
   background:radial-gradient(circle at 50% 38%,#182233,#0b1018 70%);
   border:1px solid var(--line);box-shadow:inset 0 8px 22px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4)}
@@ -664,6 +680,21 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   #v-keys .card{padding-left:9px;padding-right:9px}
   .kbd{margin-left:-4px;margin-right:-4px}
 }
+/* The longest compact caps ("Ctrl", "Alt", "Tab", "?123") ran one or two pixels
+   past a 21-23px key. Their type is a tenth smaller than their neighbours'; the
+   keys stay the same size. Not below 310px, where the deck is already at 9px. */
+@media(max-width:520px) and (min-width:431px){
+  .kmain.c12 .krow button:is([data-k="#CTRL"],[data-k="#ALT"],[data-k="TAB"],[data-k^="@"]){
+    font-size:11.5px;letter-spacing:-.03em;padding:0}
+}
+@media(max-width:430px) and (min-width:360px){
+  .kmain.c12 .krow button:is([data-k="#CTRL"],[data-k="#ALT"],[data-k="TAB"],[data-k^="@"]){
+    font-size:10.8px;letter-spacing:-.03em;padding:0}
+}
+@media(max-width:359px) and (min-width:310px){
+  .kmain.c12 .krow button:is([data-k="#CTRL"],[data-k="#ALT"],[data-k="TAB"],[data-k^="@"]){
+    font-size:9.5px;letter-spacing:-.03em;padding:0}
+}
 @media(max-width:359px){
   .krow,.kblock{gap:4px}
   .krow button{font-size:10.5px;border-radius:7px;padding:0 1px}
@@ -753,6 +784,19 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .aswbig:active,.aswbig.hot{background:rgba(0,210,255,.24);border-color:var(--acc);transform:scale(.93)}
 .aswn{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--acc);text-align:center}
 .asw .row{width:min(330px,100%)}
+.asw{padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right))
+             max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+/* A phone on its side, Safari's toolbars showing, is ~340px tall: stacked, the
+   buttons that let go of Alt fell off the bottom. Side by side it all fits, with
+   no scrolling while a key is held. */
+@media(max-height:480px){
+  .asw{flex-flow:row wrap;align-content:center;gap:8px 24px;padding-top:max(10px,env(safe-area-inset-top));
+       padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  .asw h3,.asw p{display:none}
+  .aswbig{width:54px;height:54px}
+  .aswpad{gap:6px}
+  .asw .row{width:auto;flex-direction:column;align-items:stretch;min-width:150px}
+}
 /* this tile is slid across, not tapped, so the browser must not treat the drag
    as a scroll and steal the pointer half way through */
 [data-gs="switch_app"]{touch-action:none}
@@ -854,7 +898,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .sheet{position:fixed;inset:0;z-index:800;display:none;align-items:flex-end;justify-content:center;
   background:rgba(4,6,10,.66);backdrop-filter:blur(3px)}
 .sheet.on{display:flex}
-.sheetin{width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:var(--bg2);
+.sheetin{width:100%;max-width:520px;max-height:88%;overflow-y:auto;background:var(--bg2);
   border:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px;
   padding-bottom:calc(18px + env(safe-area-inset-bottom));animation:up .24s var(--ease)}
 @media(min-width:640px){.sheet{align-items:center}.sheetin{border-radius:18px;animation:pop .2s var(--ease)}}
@@ -867,8 +911,18 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 /* reboot takes the USB device away and drops the socket - say so, and show the
    reconnect attempts, rather than looking dead */
 .boot{position:fixed;inset:0;z-index:950;display:none;flex-direction:column;align-items:center;justify-content:center;
-  gap:14px;background:rgba(5,7,12,.94);backdrop-filter:blur(6px);text-align:center;padding:24px}
+  gap:14px;background:rgba(5,7,12,.94);backdrop-filter:blur(6px);text-align:center;
+  padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right))
+          max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));
+  overflow-y:auto}
 .boot.on{display:flex}
+/* Short screens: drop the decoration so the new network's details and Reload stay
+   on screen; centring that never pushes the top off screen if it still overflows */
+@media(max-height:480px){
+  .boot{gap:8px;justify-content:safe center;padding-top:max(10px,env(safe-area-inset-top));
+        padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  .boot>.ic{display:none}
+}
 .boot .sp{width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.12);
   border-top-color:var(--acc);animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -1651,6 +1705,16 @@ function connect(){
     // Pushed by the board rather than answering anything, so it takes no slot.
     if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);return;}
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
+    // With a PIN set the board greets every new socket with a bare auth_required
+    // before it has been asked anything. That greeting answers no command, so it
+    // must not take a reply slot - when it did, every later reply on the socket
+    // went to the previous command's callback, and after a reconnect the vault,
+    // saved PCs and macros came up empty. A refusal always carries a message.
+    if(m.reply==='auth_required'&&!m.message){
+      authOK=false;
+      if(!sessionStorage.getItem('pin'))askPin();   // a kept PIN is already on its way
+      return;
+    }
     if(m.reply==='auth_required'){authOK=false;askPin();return settle(m);}
     if(m.reply==='lan_locked'){lanLocked();return settle(m);}
     if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();}
@@ -2093,17 +2157,23 @@ window.addEventListener('hashchange',()=>{
   let id=-1,x0=0,y0=0,t0=0,dead=true,moved=false;
   const main=$('main');
 
-  main.addEventListener('pointerdown',e=>{
-    if(id!==-1){dead=true;return;}                 // a second finger cancels it
-    if(e.pointerType!=='touch'){dead=true;return;} // mice drag, they do not swipe
-    if(e.target.closest(KEEP)){dead=true;return;}
-    id=e.pointerId;x0=e.clientX;y0=e.clientY;t0=performance.now();
+  // Touch events, not pointer events: the page allows panning (touch-action:
+  // manipulation), so the moment a finger travels sideways the browser claims it
+  // and sends pointercancel - the swipe could never finish. Touch events keep
+  // coming during a pan, and only fingers make them, so a mouse never swipes.
+  const at=(e,which)=>{for(const t of e[which])if(t.identifier===id)return t;return null;};
+  main.addEventListener('touchstart',e=>{
+    if(id!==-1||e.touches.length>1){dead=true;return;}   // a second finger cancels it
+    const t=e.changedTouches[0];
+    if(e.target.closest&&e.target.closest(KEEP)){dead=true;return;}
+    id=t.identifier;x0=t.clientX;y0=t.clientY;t0=performance.now();
     dead=false;moved=false;
   },{passive:true});
 
-  main.addEventListener('pointermove',e=>{
-    if(dead||e.pointerId!==id)return;
-    const dx=e.clientX-x0,dy=e.clientY-y0;
+  main.addEventListener('touchmove',e=>{
+    const t=at(e,'changedTouches');
+    if(dead||!t)return;
+    const dx=t.clientX-x0,dy=t.clientY-y0;
     if(moved)return;
     if(Math.abs(dx)<SLOP&&Math.abs(dy)<SLOP)return;
     moved=true;
@@ -2112,9 +2182,10 @@ window.addEventListener('hashchange',()=>{
     if(performance.now()-t0>HOLDMS||Math.abs(dx)<=Math.abs(dy))dead=true;
   },{passive:true});
 
-  const end=e=>{
-    if(e.pointerId!==id)return;
-    const dx=e.clientX-x0,dy=e.clientY-y0,dt=performance.now()-t0;
+  main.addEventListener('touchend',e=>{
+    const t=at(e,'changedTouches');
+    if(!t)return;
+    const dx=t.clientX-x0,dy=t.clientY-y0,dt=performance.now()-t0;
     id=-1;
     if(dead||!moved)return;
     // Never while the pad owns the host: a held button or key would be stranded.
@@ -2123,9 +2194,8 @@ window.addEventListener('hashchange',()=>{
     const i=VIEWS.findIndex(v=>v.id===curView)+(dx<0?1:-1);
     if(i<0||i>=VIEWS.length)return;   // stop at the ends rather than wrap around
     go(VIEWS[i].id);buzz(12);
-  };
-  main.addEventListener('pointerup',end,{passive:true});
-  main.addEventListener('pointercancel',e=>{if(e.pointerId===id){id=-1;dead=true;}},{passive:true});
+  },{passive:true});
+  main.addEventListener('touchcancel',e=>{if(at(e,'changedTouches')){id=-1;dead=true;}},{passive:true});
 })();
 
 // =====================================================================
@@ -2632,7 +2702,7 @@ function knobEditor(idx){
       opt('endless','Endless - like a keyboard volume knob',(k.mode||'endless')==='endless')+
       opt('ranged','Ranged 0 to 100 with end stops',k.mode==='ranged')+'</select>'+
       '<p class="hint" style="margin-top:6px">Endless only sends up and down ticks, so it can never drift out of step with the PC. Ranged shows a level, but the board cannot read the PC back, so it is only what you set here.</p></div>'+
-    '<div class="fld"><label>Degrees per step ('+(k.step||14)+')</label>'+
+    '<div class="fld"><label>Degrees per step (<span id="kn_sv">'+(k.step||14)+'</span>)</label>'+
       '<input type="range" id="kn_s" min="5" max="40" step="1" value="'+(k.step||14)+'"></div>'+
     '<div class="row" style="margin-top:14px">'+
       (isNew?'':'<button class="btn sm bad" id="kn_del">'+ico('trash','ic-sm')+'Delete</button>')+
@@ -2646,6 +2716,7 @@ function knobEditor(idx){
         $('kn_dn_k').style.display=t==='key'?'':'none';
       };
       $('kn_t').onchange=syncType;syncType();
+      $('kn_s').oninput=()=>{$('kn_sv').textContent=$('kn_s').value;};
       $('kn_ok').onclick=()=>{
         const t=$('kn_t').value;
         const o={n:$('kn_n').value||'Knob',i:$('kn_i').value,t:t,step:+$('kn_s').value,mode:$('kn_m').value,
@@ -2938,7 +3009,9 @@ const KROWS_SYM=[
 // Which layout the container is wide enough for. Measured on the keyboard, not
 // the window, because the deck inside the trackpad card is far narrower than
 // the page it sits on.
-const KB_TIERS=[['full',1300],['tkl',1010],['ansi',500],['compact',0]];
+// ANSI needs 620px: from 500 it was measured cutting Esc and F10-F12 to "F..."
+// and shrinking the side cluster's legends to 7px. Compact reaches every key.
+const KB_TIERS=[['full',1300],['tkl',1010],['ansi',620],['compact',0]];
 function kbTier(w){for(const t of KB_TIERS)if(w>=t[1])return t[0];return 'compact';}
 let KLAYER='abc';
 const mods=new Set();
@@ -3057,12 +3130,13 @@ function buildKbdIn(hostId){
       return;
     }
     const isMod=raw[0]==='#', key=isMod?raw.slice(1):raw;
-    let t0=0,usedWith=false;
+    let t0=0,usedWith=false,dropped=false;
 
     b.addEventListener('pointerdown',e=>{
       b.setPointerCapture(e.pointerId);
-      t0=performance.now();usedWith=false;
+      t0=performance.now();usedWith=false;dropped=false;
       if(isMod&&mods.has(key)){          // tap a latched modifier again to drop it
+        dropped=true;                    // and the lift that follows must not latch it again
         mods.delete(key);keyUp(key);b.classList.remove('dn');syncMods();buzz(5);e.preventDefault();return;
       }
       if(!isMod)mods.forEach(()=>{usedWith=true;});
@@ -3072,6 +3146,7 @@ function buildKbdIn(hostId){
 
     const up=e=>{
       b.classList.remove('dn');
+      if(dropped){dropped=false;e.preventDefault();return;}
       if(isMod){
         // short tap with nothing struck while held -> latch it for the next key
         if(performance.now()-t0<350&&!usedWith){mods.add(key);}
@@ -3284,7 +3359,12 @@ function applyHostOs(os,src,det){
   if(src)OS_SRC=src;
   if(det!==undefined)OS_DET=osTok(det);
   const n=osTok(os);
-  if(!n||n===OS){paintOsUi();return;}   // 'unknown'/'pending' -> keep what we have
+  if(!n||n===OS){                        // 'unknown'/'pending' -> keep what we have
+    // The shortcuts start from the phone's own OS, so a PC that matches the
+    // initial guess still has to take them over (an iPhone driving Windows).
+    if(n&&!scOsManual&&SC_OS!==n){SC_OS=n;if(typeof renderSC==='function')renderSC();}
+    paintOsUi();return;
+  }
   OS=n;
   ASW_MOD=(n==='mac')?'GUI':'ALT';
   if(!scOsManual){SC_OS=n;if(typeof renderSC==='function')renderSC();}
@@ -4199,7 +4279,7 @@ function bindAll(){
   };
   $('btnKnobNew').onclick=()=>knobEditor(-1);
   $('btnQuickNew').onclick=()=>quickEditor(-1);
-  $('btnPcNew').onclick=pcEditor;
+  $('btnPcNew').onclick=()=>pcEditor();   // not pcEditor itself: the click event is not a PC to edit
   $('btnVaultNew').onclick=()=>vaultEditor();
   $('btnVaultPin').onclick=vaultPinEditor;
   $('btnVaultWipe').onclick=vaultWipe;
@@ -4482,6 +4562,12 @@ function scanWifi(){
     wire();
   };
   const poll=()=>fetch('/api/scan',{headers:pinHeader()}).then(r=>r.json()).then(d=>{
+    // Refused over a home network without the PIN: say so, rather than "no networks".
+    if(d.reply==='lan_locked'){
+      l.innerHTML='<p class="hint">'+esc(d.message||'Set an access PIN before scanning over your home network.')+
+        ' Or scan from the board\u2019s own access point, where no PIN is needed.</p>'+again(null);
+      return wire();
+    }
     if(d.busy){l.innerHTML='<p class="hint">'+esc(d.message||'The board is busy.')+'</p>'+again(null);return wire();}
     if(d.scanning){
       if(++tries>15){l.innerHTML='<p class="hint">The scan is taking longer than expected.</p>'+again(null);return wire();}

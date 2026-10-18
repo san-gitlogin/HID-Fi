@@ -20,25 +20,6 @@ from support.ui import TABS, Dashboard
 # It is a STRICT expected failure: it shows up in every run, and the moment the
 # defect is fixed it fails, so the tag (and the docs entry) get removed.
 KNOWN_ISSUES = {
-    "knob_step_label": "the knob editor's 'Degrees per step (14)' label is written once when the sheet opens; "
-                       "#kn_s has no input handler, so it shows the old value while the slider moves",
-    "lan_binary": "SECURITY: with no PIN and the board on a home network, lan_locked only guards JSON commands. "
-                  "WStype_CONNECTED authorises every socket when no PIN is set (hid_fi.ino wsAuthed) and binary "
-                  "frames - keys, pointer, buttons, media - only check that flag, so any LAN device can type",
-    "lan_scan": "a scan refused with 403 lan_locked is painted as 'No networks found' - scanWifi() never looks "
-                "at the reply, so the phone is not told a PIN is what it needs",
-    "pc_new_event": "$('btnPcNew').onclick=pcEditor passes the click event as pcEditor's 'edit' argument, so "
-                    "the + button opens 'Edit saved PC', does not prefill the unlock password, and skips the "
-                    "password-required check",
-    "reconnect_lists": "with a PIN set the firmware greets every new socket with auth_required; the dashboard's "
-                       "onopen has already queued its commands, so settle() hands each reply to the previous "
-                       "command's callback and the vault, saved PCs and macros come up empty after a reconnect",
-    "shortcuts_os": "SC_OS starts from the PHONE's user agent; applyHostOs() returns early when the host equals "
-                    "the initial OS 'win', so an iPhone driving a Windows PC keeps macOS shortcuts (Copy = GUI+C)",
-    "latch_drop": "tapping a latched modifier releases it on the PC, but the pointerdown handler resets t0 "
-                  "before the latched check, so pointerup re-latches it on screen - docs/TESTING.md#known-issues",
-    "swipe_tabs": "sideways flick is claimed by the browser (touch-action: manipulation lets it pan), "
-                  "so the tab swipe never completes - docs/TESTING.md#known-issues",
 }
 
 

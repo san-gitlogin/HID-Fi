@@ -181,7 +181,6 @@ Feature: The Keys tab - the password vault and the shortcuts
       | iPhone        | Mac     | macOS   | GUI+C  |
       | iPhone        | Linux   | Linux   | CTRL+C |
 
-  @known_issue:shortcuts_os
   Scenario: An iPhone driving a Windows PC shows the Windows shortcuts
     Given the board is plugged into a Windows computer
     And the dashboard is open on a iPhone
@@ -226,7 +225,6 @@ Feature: The Keys tab - the password vault and the shortcuts
     When I open the "Keys" tab
     Then "#scNote" contains "macOS shortcut"
 
-  @known_issue:reconnect_lists
   Scenario: After a reconnect, a PIN-protected board's vault is still listed
     Given the vault holds a password "Netflix"
     And the dashboard is open and signed in with "4826"

@@ -148,7 +148,6 @@ Feature: The Media tab - knobs, playback and quick actions
     Then the board receives {"cmd": "media", "key": "play_pause"}
     And the board saved a layout whose quick action "Play it" is {"i": "play", "t": "media", "v": "play_pause"}
 
-  @known_issue:knob_step_label
   Scenario: The knob editor's step label follows the slider
     When I tap the "#knobAdd" control
     And I set "#kn_s" to 20

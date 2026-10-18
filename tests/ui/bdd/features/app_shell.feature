@@ -125,14 +125,13 @@ Feature: The dashboard shell - navigation, connection, the access PIN
     When I reload the dashboard
     Then the sidebar is collapsed
 
-  @known_issue:swipe_tabs
   Scenario: A quick sideways flick moves between tabs on a phone
     Given the dashboard is open
-    And I am on the "Keyboard" tab
+    And I am on the "Session" tab
     When I flick left across empty space
-    Then the "Keys" tab is shown
+    Then the "Settings" tab is shown
     When I flick right across empty space
-    Then the "Keyboard" tab is shown
+    Then the "Session" tab is shown
 
   Scenario: When the board cannot be reached at all, the link says so and the dashboard keeps trying
     Given the dashboard is open
@@ -147,3 +146,22 @@ Feature: The dashboard shell - navigation, connection, the access PIN
     And the page is hidden
     And the page is shown again
     Then the board was asked for its status over HTTP
+
+  Scenario Outline: Only a quick sideways flick on empty space changes tab
+    Given the dashboard is open
+    And I am on the "Session" tab
+    When I <gesture>
+    Then the "Session" tab is shown
+
+    Examples:
+      | gesture                                    |
+      | flick up across empty space                |
+      | flick left starting on a button            |
+      | drag slowly left across empty space        |
+      | flick left with two fingers                |
+
+  Scenario: A mouse drag never changes tab
+    Given the dashboard is open on a desktop
+    And I am on the "Session" tab
+    When I drag the mouse left across empty space
+    Then the "Session" tab is shown

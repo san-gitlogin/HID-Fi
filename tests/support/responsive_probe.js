@@ -62,6 +62,9 @@
 
   const scroller = state => {
     if (state.startsWith('sheet')) return document.getElementById('sheetin');
+    // The reboot and new-network overlays scroll as a last resort on tiny screens.
+    if (state === 'overlay boot') return document.getElementById('boot');
+    if (state === 'overlay apnew') return document.getElementById('apnew');
     if (state.startsWith('overlay') || state.startsWith('fullscreen') || state === 'toast') return null;
     return document.getElementById('main');
   };
@@ -131,7 +134,20 @@
         else if (hit) coveredBy.set(el, name(hit.closest(CONTROL + ',.tabbar,.topbar,.rail,.sheetin,.overlay,.toast') || hit));
       }
     }
-    if (sc) sc.scrollTop = startY;
+    // The steps can jump over the one position where a tall control fits between
+    // the top bar and the tab bar. Before calling anything unreachable, scroll it
+    // to the middle - which is what a person does - and look once more.
+    if (sc) {
+      for (const el of controls.filter(c => !ok.has(c)).slice(0, 300)) {
+        el.scrollIntoView({block: 'center', inline: 'nearest'});
+        const r = el.getBoundingClientRect();
+        if (r.top < 0 || r.left < 0 || r.bottom > H + 0.5 || r.right > W + 0.5) continue;
+        const hit = document.elementFromPoint(Math.min(r.left + r.width / 2, W - 1), Math.min(r.top + r.height / 2, H - 1));
+        if (hit && (hit === el || el.contains(hit))) { ok.add(el); coveredBy.delete(el); }
+        else if (hit) coveredBy.set(el, name(hit.closest(CONTROL + ',.tabbar,.topbar,.rail,.sheetin,.overlay,.toast') || hit));
+      }
+      sc.scrollTop = startY;
+    }
     const lost = controls.filter(el => !ok.has(el));
     // Keys are reported as one line per keyboard, everything else one per control.
     const lostKeys = lost.filter(el => el.hasAttribute('data-k'));
@@ -202,7 +218,9 @@
         if (missing.length) say('keyboard #' + k.id + ' is missing letters ' + missing.join(''));
       }
       const up = k.querySelector('[data-k="UP"]'), down = k.querySelector('[data-k="DOWN"]');
-      if (up && down && shown(up) && shown(down)) {
+      // Under 310px the compact rows wrap on purpose (web_ui.h: every key readable
+      // beats an inverted T there), so the arrows cannot line up by design.
+      if (up && down && shown(up) && shown(down) && !matchMedia('(max-width:309px)').matches) {
         const a = up.getBoundingClientRect(), b = down.getBoundingClientRect();
         if (b.top > a.top + 1 && Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2) > 1.5)
           say('keyboard #' + k.id + ' arrows out of line by ' + Math.round(Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2)) + 'px');
