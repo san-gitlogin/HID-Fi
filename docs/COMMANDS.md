@@ -539,6 +539,11 @@ from outside the AP subnet are refused:
 the PIN can actually be set from where the user is standing. Access-point clients
 are unaffected, and USB serial is never gated.
 
+The binary frames below (keys, pointer, buttons, media, gamepad) from such a client
+are dropped silently - they have no reply to carry an error. Before v3.9 they were
+not, so the gate could be walked around by anything that spoke the binary
+protocol. Only `0x04` ping is still answered.
+
 ---
 
 ## WebSocket binary opcodes

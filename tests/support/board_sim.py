@@ -256,6 +256,8 @@ class BoardSim:
             return sock["ws"].send(bytes([0x81]) + data[1:5])
         if not sock["authed"]:
             return
+        if self._lan_locked():                         # wsFromLan && no PIN && on a network
+            return
         with self.lock:
             if op == 1 and len(data) >= 7:
                 dx, dy, wh, pan = struct.unpack("<hhbb", data[1:7])
@@ -363,9 +365,9 @@ class BoardSim:
 
     def _lan_locked(self):
         """processCommand(): a phone reaching the board over the home network, with no
-        PIN set, is refused everything but reading and setting a PIN. Binary frames
-        never pass through processCommand, so they are NOT refused - modelled as is
-        (docs/TESTING.md#known-issues, lan_binary)."""
+        PIN set, is refused everything but reading and setting a PIN. Since v3.9 the
+        socket's binary frames (keys, pointer, buttons, media) are dropped the same
+        way (wsFromLan in onWsEvent); before, they went straight through."""
         return self.phone_on_lan and not self.pin and self.sta["phase"] == "online"
 
     def _dispatch(self, b, transport, sock):

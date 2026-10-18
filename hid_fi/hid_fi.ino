@@ -162,6 +162,10 @@ String   vaultPinCode  = "";             // empty = the access PIN guards the va
 uint8_t  vaultFails    = 0;
 uint32_t vaultLockUntil = 0;
 bool    wsAuthed[WS_MAX_CLIENTS];
+// Reached over the home network rather than the board's own access point. Set
+// once per connection - the client's address cannot change while it is open -
+// so the binary hot path pays for a bool, never an address lookup.
+bool    wsFromLan[WS_MAX_CLIENTS];
 unsigned long pendingRestartAt   = 0;    // deferred reboot so the reply can flush first
 unsigned long consumerReleaseAt  = 0;    // deferred media-key release, keeps the socket free
 Preferences preferences;
@@ -732,10 +736,10 @@ void setup() {
     
     COM_SERIAL.println();
     COM_SERIAL.println("========================================");
-    COM_SERIAL.println("HID-Fi v3.8 — ESP32-S3 USB HID + WiFi");
+    COM_SERIAL.printf("HID-Fi %s — ESP32-S3 USB HID + WiFi\n", FW_VERSION + 7);   // "v3.9", not "hid_fi_v3.9"
     COM_SERIAL.println("========================================");
 
-    for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = false;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; }
 
     preferences.begin("hid_cfg", true);
     absoluteMode   = preferences.getBool("abs", false);
@@ -3337,7 +3341,10 @@ static inline uint32_t rdU32(const uint8_t* p) {
 void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
     switch (type) {
         case WStype_CONNECTED:
-            if (num < WS_MAX_CLIENTS) wsAuthed[num] = (authToken.length() == 0);
+            if (num < WS_MAX_CLIENTS) {
+                wsAuthed[num]  = (authToken.length() == 0);
+                wsFromLan[num] = !clientIsAp(webSocket.remoteIP(num));
+            }
             noteActivity();
             COM_SERIAL.printf("[WS] client %u connected\n", num);
             if (authToken.length()) {
@@ -3346,7 +3353,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             break;
 
         case WStype_DISCONNECTED:
-            if (num < WS_MAX_CLIENTS) wsAuthed[num] = false;
+            if (num < WS_MAX_CLIENTS) { wsAuthed[num] = false; wsFromLan[num] = false; }
             // A dashboard can vanish mid-chord - phone locked, tab killed, WiFi
             // dropped - while it is holding Alt for the app switcher or the left
             // button for a drag. That would leave the host unusable, so once the
@@ -3366,6 +3373,11 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
                 break;
             }
             if (num < WS_MAX_CLIENTS && !wsAuthed[num]) break;
+            // The LAN gate in processCommand() covers JSON commands only. Without
+            // this, any device on the home network could still press keys, move
+            // the pointer and click while no PIN is set - exactly what the gate
+            // says it refuses. Same rule: on the LAN, no PIN, board on a network.
+            if (num < WS_MAX_CLIENTS && wsFromLan[num] && authToken.length() == 0 && wifiConnected) break;
             if (!hidReady) break;
             noteActivity();
             commandCount++;

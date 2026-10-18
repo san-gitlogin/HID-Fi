@@ -278,6 +278,13 @@ Deliberate exceptions, so the user is not locked out of fixing it:
 
 Access-point clients are unaffected. USB serial is never gated.
 
+**Binary frames are refused too** (since v3.9). Keys, pointer, buttons and media
+travel as binary WebSocket frames, which never passed through the command gate:
+until v3.9 a device on the network could not send `{"cmd":"type"}` but could still
+press every key one frame at a time. Each socket is now marked at connect as AP or
+network, and a network socket's binary frames are dropped while no PIN is set.
+`tests/board/test_lan_gate.py` checks it on a real board.
+
 This is not a substitute for a PIN — it *is* the demand for one. It cannot help
 you if you set `1234`, and it does nothing about traffic interception, because the
 link is still plain HTTP.
