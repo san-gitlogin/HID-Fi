@@ -5,7 +5,7 @@ that leaves HID-Fi's checks failing.
   every command documented, modelled and tested; the dashboard well formed.
 - The dashboard or its scenarios changed since the last good run: the ui tier
   runs too (about 5 minutes), which includes the coverage contract and the
-  441-screen responsive matrix.
+  500-screen responsive matrix.
 
 Failing, it exits 2: Claude Code shows the agent why and the agent keeps working.
 It never runs a tier that touches the board or the computer.

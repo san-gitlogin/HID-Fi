@@ -51,8 +51,8 @@ diagnose from the USB device list rather than from serial noise you are causing.
    syntax error means a blank white page diagnosable only by reflashing.
 5. **No emoji.** SVG sprite symbols only, 24×24, stroke 1.75. Judge new icons at
    16–24px, not at design size.
-6. **The keyboard is tiered**, not one layout stretched: compact (<500px) →
-   ANSI (500px) → TKL nav cluster (1010px) → numpad (1300px, 104 keys). **Every
+6. **The keyboard is tiered**, not one layout stretched: compact (<620px) →
+   ANSI (620px) → TKL nav cluster (1010px) → numpad (1300px, 104 keys). **Every
    tier must expose every key the tier below it reaches** — never hide a row that
    is the only way to reach its keys, and never let a wider screen offer fewer.
    Every block carries the same row count or the blocks stop lining up. ANSI is a

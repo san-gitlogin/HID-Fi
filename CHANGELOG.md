@@ -59,7 +59,7 @@ scenarios drive every tab in Chromium with real touch input against a model of
 the board that is itself checked against the firmware. A coverage contract fails
 the run if any control goes untouched or any dashboard code goes unrun (151/151
 controls, 95.6% of the script today). A responsive matrix read from the CSS draws
-every state on 441 screens - folded phones to 8K, upright and turned, browser
+every state on 500+ screens - folded phones to 8K, upright and turned, browser
 toolbars showing and hidden, notches included - and measures layout speed on a
 slowed phone, a tablet, 1080p and 4K. Every firmware command must be documented,
 modelled and tested, every sheet and overlay measured, and a Claude Code hook and
@@ -76,14 +76,35 @@ without opening a port, and a named port that is not a HID-Fi board is refused
 unless forced. On macOS one board seen under two names is counted once - before,
 that alone could stop the script with "several serial ports found".
 
-Found by them and **not yet fixed** (each one is a test that fails the day it is):
-with no access PIN on a home network, the LAN lock does not cover binary frames,
-so another device on that network can still press keys; after a reconnect with a
-PIN set, the vault, saved PCs and macros come up empty until Refresh; an iPhone
-driving a Windows PC shows Mac shortcuts; the "+" for saved PCs opens the edit
-sheet; on short landscape screens the app switcher's buttons fall off the screen;
-and a handful of labels and keys are cut or covered at particular sizes.
-docs/TESTING.md#known-issues has the full list.
+**Fixed, found by those tests.** Each is now a scenario that keeps it fixed.
+
+- **Security: the home-network lock now covers keys and the pointer.** With no
+  access PIN and the board on a home network, the lock refused JSON commands
+  but not the binary frames that carry keys, pointer, buttons and media - so any
+  device on that network could still type on the PC. The board now notes, once
+  per connection, whether a socket came over the home network, and drops its
+  binary frames under the same rule. No cost on the hot path: one stored flag.
+- **After a reconnect with a PIN set, the vault, saved PCs and macros came up
+  empty** until Refresh. The board's connect greeting took a reply slot and every
+  later reply went to the wrong callback. Fixed in the dashboard, so boards
+  already flashed with v3.8 benefit too.
+- An iPhone driving a Windows PC showed Mac shortcuts (Copy sent Cmd+C).
+- The + for saved PCs opened "Edit saved PC" instead of a new one.
+- Scanning over the home network without a PIN said "No networks found"; it
+  now says a PIN is needed.
+- Tapping a latched modifier released it but kept it lit.
+- The sideways swipe between tabs never completed (the browser cancelled it).
+- The knob editor's step label did not follow its slider.
+- The serial banner said v3.8.
+- **Layout: 736 of 737 problems the 500-screen matrix found.** The app switcher's
+  buttons fell off short landscape screens; controls sat under the iPhone notch;
+  Home and End hid under the deck's corner buttons; the help sheet ran off the top
+  of 4K and ultrawide screens; Esc, F10-F12, Home and PgUp were cut to "F..." on
+  foldables; Ctrl, Tab and ?123 lost a pixel or two on phones; "Performance" and
+  "Windows" were cut on the smallest screens. Visible on purpose: a keyboard
+  500-620px wide now uses the compact layout instead of a cramped ANSI one.
+  Measured cost of every fix together: about 3% more work at page load on a
+  slowed phone (~0.4 ms on the device); everything else unchanged.
 
 Fixed in the old suites: `test_mouse_led.py --skip-clicks` still pressed and
 released the left button (a click) and left the pointer ~870 px from where it

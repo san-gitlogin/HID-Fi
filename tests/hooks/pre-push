@@ -1,5 +1,5 @@
 #!/bin/sh
 # HID-Fi pre-push: every tier that needs no board, including the dashboard's
-# coverage contract (about six minutes: the dashboard on 441 screens). Installed by
+# coverage contract (about six minutes: the dashboard on 500+ screens). Installed by
 #   python tests/run.py install-hooks
 exec python3 "$(git rev-parse --show-toplevel)/tests/run.py"

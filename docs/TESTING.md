@@ -299,8 +299,9 @@ and points at the full command.
 
 ## Every screen: the responsive matrix
 
-`tests/ui/responsive/` draws the dashboard on **441 screens** and measures every
-state on each one - 13,671 screens in all, about four minutes of the ui tier.
+`tests/ui/responsive/` draws the dashboard on **517 screens** and measures every
+state on each one - 16,027 screens in all, about four minutes of the ui tier. The
+count follows the CSS: every new breakpoint adds its boundaries.
 
 **Which screens.** The matrix is read from `web_ui.h` itself
 (`tests/support/responsive.py`), so a new breakpoint is covered on the next run
@@ -351,19 +352,20 @@ work (script, style, layout), plus layout shift on load. Each has a budget a
 person would notice, and a per-OS baseline in
 `tests/golden/ui_responsive_perf.<os>.json` that fails anything more than twice as
 slow. The table lands in `tests/.reports/responsive_perf.md`. Today (macOS,
-Apple silicon):
+Apple silicon, with the crowded board's full saved layout loaded):
 
 | main-thread ms | phone, 4x slower | tablet, 2x slower | 1080p | 4K |
 |---|---|---|---|---|
-| load | 57 | 32 | 14 | 12 |
-| slowest tab switch | 17 | 12 | 7 | 40 |
-| all seven tabs | 59 | 36 | 20 | 54 |
-| keyboard deck | 8 | 6 | 3 | 14 |
-| rotate | 11 | 6 | 5 | 35 |
+| load | 60 | 34 | 15 | 13 |
+| slowest tab switch | 17 | 12 | 7 | 39 |
+| all seven tabs | 68 | 39 | 22 | 55 |
+| keyboard deck | 8 | 6 | 3 | 13 |
+| rotate | 12 | 6 | 5 | 3 |
 | layout shift on load | 0 | 0 | 0 | 0 |
 
 **Problems that exist today** are recorded per OS in
-`tests/golden/ui_responsive_known.<os>.json` (737 on macOS). It is a ratchet: a
+`tests/golden/ui_responsive_known.<os>.json` - one on macOS, down from 737 when
+the matrix first ran (see Known issues). It is a ratchet: a
 new problem fails the run with the screen and state that show it; a fixed one
 fails until it is taken off the list (`--update-golden`), so it cannot come back.
 `tests/.reports/responsive.md` groups them by kind. The ones that matter most
@@ -387,34 +389,47 @@ baseline. CI on Linux has none until one is recorded there
 
 ## Known issues
 
-Bugs found by the tests and not yet fixed. Each one is a scenario tagged
-`@known_issue:<key>` that runs as a **strict** xfail: it is expected to fail, and
-the day the bug is fixed it passes, the run fails, and the tag has to come off.
-`run.py` lists them under KNOWN ISSUES on every run.
+A bug the tests find and that is not fixed in the same change becomes a scenario
+tagged `@known_issue:<key>` (reason in `KNOWN_ISSUES`, `tests/ui/bdd/conftest.py`)
+that runs as a **strict** xfail: the day the bug is fixed the scenario passes, the
+run fails, and the tag has to come off. `run.py` lists them under KNOWN ISSUES.
 
-| Key | Severity | What happens |
+**There are none open.** Fixed in v3.9, each now an ordinary scenario that keeps
+it fixed:
+
+| Was | Severity | What it was, and the fix |
 |---|---|---|
-| `lan_binary` | **Security** | With no access PIN and the board on a home network, the LAN lock only guards JSON commands. Every socket is authorised on connect when no PIN is set (`wsAuthed`, `hid_fi.ino` WStype_CONNECTED), and binary frames - keys, pointer, buttons, media - only check that flag. Any device on the LAN can type on the PC. |
-| `reconnect_lists` | High | With a PIN set, the firmware greets every new socket with `auth_required`. The dashboard has already queued its start-up commands, so `settle()` hands each reply to the previous command's callback: after a reconnect the vault, saved PCs and macros come up empty until Refresh. |
-| `shortcuts_os` | Medium | Shortcuts start from the *phone's* OS. `applyHostOs()` returns early when the computer's OS equals the initial `'win'`, so an iPhone driving a Windows PC keeps macOS shortcuts (Copy sends Cmd+C). |
-| `pc_new_event` | Medium | `btnPcNew.onclick = pcEditor` passes the click event as `pcEditor`'s `edit` argument: the + button opens "Edit saved PC", does not prefill the unlock password, and skips the password-required check. |
-| `lan_scan` | Low | A scan refused with `lan_locked` is shown as "No networks found" instead of saying a PIN is needed. |
-| `latch_drop` | Low | Tapping a latched modifier releases it on the PC, but `t0` is reset before the latched check, so it re-latches on screen. |
-| `swipe_tabs` | Low | A sideways flick between tabs is claimed by the browser (`touch-action: manipulation` allows panning), so the swipe never completes. |
-| `knob_step_label` | Low | The knob editor's "Degrees per step (14)" label never follows the slider. |
+| `lan_binary` | **Security** | With no access PIN and the board on a home network, the LAN lock only guarded JSON commands; binary frames (keys, pointer, buttons, media) only checked `wsAuthed`, which is true for everyone without a PIN, so any device on the LAN could type. The board now records per socket whether it came over the LAN (`wsFromLan`, set once at connect) and drops its binary frames under the same rule. Firmware - `tests/board/test_lan_gate.py` proves it on hardware. |
+| `reconnect_lists` | High | The board greets a new socket with a bare `auth_required` when a PIN is set; the dashboard let it take a reply slot, so every later reply went to the previous command's callback and the vault, saved PCs and macros came up empty after a reconnect. A greeting carries no `message` (every refusal does), so it now takes no slot. Works with boards already flashed. |
+| `shortcuts_os` | Medium | An iPhone driving a Windows PC kept Mac shortcuts: `applyHostOs()` returned early when the PC matched its initial guess and never re-synced the shortcut OS. |
+| `pc_new_event` | Medium | The + for saved PCs passed the click event as the PC to edit: it opened "Edit saved PC", skipped prefilling and the password check. |
+| `lan_scan` | Low | A scan refused over the LAN read "No networks found"; it now says a PIN is needed. |
+| `latch_drop` | Low | Tapping a latched modifier released it on the PC but re-latched it on screen. |
+| `swipe_tabs` | Low | The tab swipe listened to pointer events, which the browser cancels once it claims a sideways pan; it uses touch events now. New scenarios check that a vertical scroll, a flick starting on a control, a slow drag, two fingers and a mouse drag never change tab. |
+| `knob_step_label` | Low | The knob editor's step label did not follow its slider. |
 
-Layout problems the responsive matrix found (each is in
-`ui_responsive_known.darwin.json`, so none can get worse unnoticed):
+The responsive matrix first found **737** layout problems on macOS. One is left, a
+deliberate trade-off: on a 653x224 screen (a Galaxy Fold cover screen on its
+side) the fullscreen deck's keys are 16px. Fixed:
 
-| Where | What |
-|---|---|
-| Phone on its side with the browser's toolbars (about 844x340), or any screen under ~400px tall | The app switcher's Cancel and "Switch to it" are pushed off the screen, and its title is cut |
-| Landscape iPhones | The fullscreen pad's Left and Grab buttons, and the switcher's buttons, sit under the notch |
-| Landscape phones, keyboard deck open (e.g. 900x360) | Home and End are under the pad's corner buttons |
-| Fullscreen deck on a narrow upright screen (~535px, foldables) | Esc, F10-F12, Home, PgUp, PgDn cut to "E...", "F...", "Ho...", "Pg..."; Delete's legend shrinks to 7.6px |
-| Short wide displays (ultrawide, 5000x1400) | The help sheet is taller than the screen and its top - with the close button - is off screen |
-| 310-430px wide | Ctrl, the 123 key and Tab cut by a pixel or two on the deck; "Performance" and "Windows" cut on Settings |
-| Under 310px (Galaxy Fold cover) | The keyboard wraps, so the arrow keys are no longer an inverted T |
+| Where | What it was | Fix |
+|---|---|---|
+| Phones on their side with the browser's toolbars, any screen under 480px tall | The app switcher's buttons fell off the screen | Pad and buttons side by side, no scrolling while Alt is held |
+| Landscape iPhones | Fullscreen bar, switcher and overlays under the notch | Padding from the safe-area insets |
+| Landscape phones, deck open, under 360px tall | Home and End under the corner buttons | The deck makes room beside them (above them on a narrow screen) |
+| Keyboards 500-620px wide (foldables, the fullscreen deck) | Esc, F10-F12, Home, PgUp cut; side legends at 7px | ANSI starts at 620px (was 500); compact below reaches every key |
+| Phones 310-520px | Ctrl, Alt, Tab, ?123 cut by 1-3px | Those caps' type 10% smaller; keys unchanged |
+| Large scaled displays (4K and up, ultrawide) | The help sheet ran off the top, close button unreachable | `max-height:88%` of the sheet, which follows root zoom - `88vh` did not |
+| Under 360px | "Performance", "Windows" cut | Less padding, 12px (11px under 310px) |
+| Very short screens | The reconnect overlay's Reload, the sticks and the knob tile off screen | Overlay can scroll; sticks and knobs capped by height |
+| Everywhere a ranged knob shows | MIN/MAX at 8.5px | 9px |
+
+What changed for people, on purpose: a keyboard 500-620px wide now uses the
+compact layout (digits row plus the `123` layer) instead of a cramped ANSI, and
+on a phone on its side with the browser's toolbars showing, the deck's keys make
+room beside the corner buttons. Measured cost of all the fixes: page load is
+about 3% more work on a phone slowed four times (about 1.5 ms, ~0.4 ms on the
+phone itself); every other action is unchanged within noise.
 
 Found but not tagged, because no person can hit them:
 
@@ -442,7 +457,7 @@ file; any difference fails with the exact entries that changed.
 | `ui_functions_unrun.json` | Dashboard functions no scenario can reach, each with the reason (a ratchet) | v3.9 |
 | `ui_js_coverage.json` | The floor for the share of the dashboard script the scenarios run (a ratchet) | v3.9 |
 | `ui_untouched_allowed.json` | Controls no scenario has to touch, with the reason - empty, and should stay so | v3.9 |
-| `ui_responsive_known.<os>.json` | Layout problems the 441-screen matrix finds today (a ratchet) | v3.9, per OS |
+| `ui_responsive_known.<os>.json` | Layout problems the responsive matrix finds today (a ratchet) | v3.9, per OS |
 | `ui_responsive_perf.<os>.json` | Layout speed per device profile (fails at 2x) | v3.9, per OS |
 | `ui_layout_known_issues.<os>.json` | Layout problems that already exist (a ratchet) | First run per OS |
 | `build_size.json`, `build_warnings.json` | Program size and HID-Fi's compiler warnings (ratchets) | v3.9 |

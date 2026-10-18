@@ -84,7 +84,7 @@ The last line of pytest's output is the contract:
 
 ## 5. Every screen
 
-The ui tier also draws the dashboard on 441 screens (`tests/ui/responsive`), from
+The ui tier also draws the dashboard on 500+ screens (`tests/ui/responsive`), from
 a folded phone to an 8K display, upright and turned, toolbars showing and
 hidden, notch included - and fails on any **new** layout problem. When it does,
 the message names the screen and the state; look at that frame before changing

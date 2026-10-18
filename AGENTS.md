@@ -41,7 +41,7 @@ tests/
                                firmware facts, Linux key derivation, perf budgets
   static/ unit/ ui/ compile/ hostsim/ board/ e2e/ perf/    one folder per tier
   ui/bdd/                      the dashboard, one feature file per tab, + the coverage contract
-  ui/responsive/               every state on 441 screens, turning and resizing, layout speed
+  ui/responsive/               every state on 500+ screens, turning and resizing, layout speed
   hooks/                       git pre-commit / pre-push, and the Claude Code Stop hook
   golden/                      what "unchanged" means - never edit to make a failure pass
   test_*.py                    the original standalone suites; the tiers run them
@@ -330,7 +330,7 @@ holds. The first four are enforced - the run fails without them:
 - [ ] the share of the dashboard script the scenarios run has not dropped below
       `tests/golden/ui_js_coverage.json`; the lines that never run are listed in
       `tests/.reports/ui_js_uncovered.txt` - read it, it is the to-do list;
-- [ ] the responsive matrix (441 screens, every tab, sheet and overlay, turning
+- [ ] the responsive matrix (500+ screens, every tab, sheet and overlay, turning
       and resizing, layout speed) shows no new problem - it is part of the ui
       tier; a new sheet or overlay is added to `tests/support/responsive_run.py`;
 - [ ] no golden file changed except for a stated, intended reason;
@@ -403,7 +403,8 @@ holds. The first four are enforced - the run fails without them:
   turns to mush in the tab bar.
 - **The keyboard is tiered, not one layout that stretches.** It grows by adding
   whole blocks as the measured container width allows, the way physical boards
-  do: `compact` (12 columns, `123` symbol layer, under 500px) → `ansi` (500px) →
+  do: `compact` (12 columns, `123` symbol layer, under 620px) → `ansi` (620px - from 500px
+  it cut Esc and F10-F12 and shrank the side legends to 7px) →
   `tkl` (1010px) → `full` (1300px, 104 keys with a numpad). Thresholds live in
   `KB_TIERS`.
   - **Every tier must expose every key the tier below it can reach.** Going *up*
