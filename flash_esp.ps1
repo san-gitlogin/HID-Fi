@@ -32,6 +32,15 @@
     Only say which board(s) would be flashed. Opens no port.
 
 .EXAMPLE
+    .\flash_esp.ps1 -Recover
+    Forgot the board's WiFi password or the access PIN? Show or set the WiFi
+    password, or reset the PIN - over the USB COM cable only, which is what
+    proves the board is yours. Stored passwords are kept if the vault has its
+    own vault PIN; otherwise you are told first and asked to type ERASE.
+    For scripts: -RecoverShow, -RecoverSetPassword <new>, -RecoverResetPin <1234|off>
+    with -EraseVault.
+
+.EXAMPLE
     .\flash_esp.ps1 -Identify
     Ask each HID-Fi board what firmware it runs. Opening a port can restart it.
 
@@ -59,6 +68,11 @@ param(
     [switch]$Which,
     [switch]$Identify,
     [switch]$ForcePort,
+    [switch]$Recover,
+    [switch]$RecoverShow,
+    [string]$RecoverSetPassword,
+    [string]$RecoverResetPin,
+    [switch]$EraseVault,
     [switch]$Compile,
     [switch]$Erase,
     [switch]$Force,
@@ -66,6 +80,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Inside a function $PSBoundParameters is that function's own; keep the script's.
+$ScriptArgs = $PSBoundParameters
 
 $base   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $sketch = Join-Path $base 'hid_fi'
@@ -323,13 +339,17 @@ function Test-Firmware([string]$p) {
                 $fw  = $Matches[1]
                 $hid = if ($line -match '"hid_ready"\s*:\s*true') { 'ready' } else { 'NOT ready' }
                 $ap  = if ($line -match '"ap_ssid"\s*:\s*"([^"]+)"') { $Matches[1] } else { '?' }
-                $sp.Close()
                 Ok "Running $fw, USB HID $hid"
-                # A factory-named access point is still on the built-in password.
-                # Anything else has been renamed, so its password is the user's.
-                $pw = if ($ap -match '^ESP32-HID-[0-9A-F]{6}$') { "password hid12345" }
-                      else { "the password you set" }
-                Ok "Dashboard: connect to WiFi '$ap' ($pw) then open http://192.168.4.1/"
+                # The board's own WiFi password, read over this cable. Each board
+                # makes its own (v3.10), so this is where a person first learns it.
+                $pw = $null
+                try { $pw = Send-Board $sp @{ cmd = 'ap_password' } 3 } catch { }
+                $sp.Close()
+                if ($pw -and $pw.status -eq 'ok' -and $pw.open) { Ok "Dashboard: join WiFi '$($pw.ssid)' (open, no password), then open http://192.168.4.1/" }
+                elseif ($pw -and $pw.status -eq 'ok') {
+                    Ok "Dashboard: join WiFi '$($pw.ssid)' with password  $($pw.password)"
+                    Ok '           then open http://192.168.4.1/   (forgot it later? .\flash_esp.ps1 -Recover)'
+                } else { Ok "Dashboard: join WiFi '$ap' then open http://192.168.4.1/" }
                 if ($hid -ne 'ready') {
                     Warn 'HID is not ready - check the second ("USB") cable and the USB-OTG solder pads.'
                 }
@@ -345,10 +365,141 @@ function Test-Firmware([string]$p) {
     }
 }
 
+# ---------------------------------------------------------------- recovery
+# Over the USB COM cable only: holding the board is ownership. The same choices,
+# words and safeguards as tools/recover.py (used by flash_esp.sh).
+function Open-Board([string]$p) {
+    $sp = New-Object System.IO.Ports.SerialPort $p, 115200, 'None', 8, 'One'
+    $sp.DtrEnable = $false; $sp.RtsEnable = $false      # DTR/RTS drive the board's reset
+    $sp.ReadTimeout = 400; $sp.NewLine = "`n"
+    $sp.Open()
+    $settle = if ($env:HIDFI_RECOVER_SETTLE) { [double]$env:HIDFI_RECOVER_SETTLE } else { 2.5 }
+    Start-Sleep -Milliseconds ([int]($settle * 1000))
+    $sp.DiscardInBuffer()
+    return $sp
+}
+
+function Send-Board($sp, [hashtable]$body, [double]$timeout = 6) {
+    $sp.WriteLine(($body | ConvertTo-Json -Compress))
+    $deadline = (Get-Date).AddSeconds($timeout)
+    while ((Get-Date) -lt $deadline) {
+        try { $line = $sp.ReadLine().Trim() } catch { continue }
+        if (-not $line.StartsWith('{')) { continue }
+        try { $d = $line | ConvertFrom-Json } catch { continue }
+        if ($null -ne $d.status -and -not $d.event) { return $d }
+    }
+    throw "no answer to $($body.cmd)"
+}
+
+function Get-VaultFate($vl) {
+    $n = @($vl.entries).Count
+    if (-not $vl.entries) { $n = 0 }
+    if ($n -eq 0) { return @{ Text = 'nothing stored, nothing to lose'; Erases = $false; Count = 0 } }
+    if ($vl.vault_pin_set) { return @{ Text = "$n stored password(s) kept - the vault has its own vault PIN"; Erases = $false; Count = $n } }
+    return @{ Text = "$n stored password(s) WILL BE ERASED - they were guarded by the access PIN"; Erases = $true; Count = $n }
+}
+
+function Show-ApPassword($ap) {
+    Say "   WiFi network:  $($ap.ssid)"
+    if ($ap.open) { Say '   Password:      none - the network is open' }
+    else {
+        Say "   Password:      $($ap.password)"
+        if ($ap.generated) { Say '   (This board made this password for itself. You can keep it or set your own.)' }
+    }
+    return 0
+}
+
+function Set-ApPassword($sp, $ap, [string]$new) {
+    $len = [Text.Encoding]::UTF8.GetByteCount($new)
+    if ($len -lt 8 -or $len -gt 63) { Say '   A WiFi password needs 8 to 63 characters. Nothing changed.'; return 1 }
+    # ap_configure restarts the access point and does not answer, by design.
+    $sp.WriteLine((@{ cmd = 'ap_configure'; ssid = $ap.ssid; password = $new; open = $false } | ConvertTo-Json -Compress))
+    Start-Sleep -Milliseconds 1500
+    $again = Send-Board $sp @{ cmd = 'ap_password' }
+    if ($again.password -ne $new) { Say '   The board did not take the new password. Nothing changed.'; return 1 }
+    Say "   Done. Join '$($again.ssid)' with the new password. Phones on it now will drop off."
+    return 0
+}
+
+function Reset-AccessPin($sp, $vl, [string]$new, [bool]$eraseOk, [bool]$interactive) {
+    $off = ($new -eq '' -or $new -eq 'off')
+    $pin = if ($off) { '' } else { $new }
+    if ($pin -and ($pin -notmatch '^\d{4}$')) { Say '   A PIN is four digits. Nothing changed.'; return 1 }
+    $fate = Get-VaultFate $vl
+    Say "   Stored passwords: $($fate.Text)."
+    if ($fate.Erases -and -not $eraseOk) {
+        if (-not $interactive) { Say '   Refusing: this would erase the vault. Pass -EraseVault if that is what you want.'; return 1 }
+        $a = Read-Host '   Type ERASE to reset the PIN and erase them, anything else to stop'
+        if ($a -cne 'ERASE') { Say '   Nothing changed.'; return 1 }
+    }
+    $r = Send-Board $sp @{ cmd = 'set_auth'; token = $pin }
+    if ($r.status -ne 'ok') { Say "   The board refused: $($r.message)"; return 1 }
+    $st = Send-Board $sp @{ cmd = 'status' }
+    if ([bool]$st.auth_set -ne [bool]$pin) { Say '   The board did not take it. Nothing changed.'; return 1 }
+    if ($off) { Say '   Access PIN turned off.' } else { Say '   Access PIN set. Phones will ask for it on their next connection.' }
+    if ($r.vault_wiped) { Say '   The stored passwords were erased, as warned.' }
+    return 0
+}
+
+function Invoke-Recover {
+    Say ''
+    Say '== HID-Fi recovery (USB COM cable)'
+    $sel = Select-Boards (Get-Ports)
+    $sel.Lines | ForEach-Object { Say "   $_" }
+    if ($sel.Code -eq 10 -and $sel.Candidates.Count -and -not $env:CI -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        $ans = Read-Host "   Which board? [1-$($sel.Candidates.Count), Enter = none]"
+        if ($ans -match '^\d+$' -and [int]$ans -ge 1 -and [int]$ans -le $sel.Candidates.Count) {
+            $sel.Targets = @($sel.Candidates[[int]$ans - 1]); $sel.Code = 0
+        } else { Say '   Nothing chosen, nothing changed.'; return 10 }
+    }
+    if ($sel.Code -ne 0) { return $sel.Code }
+    $b = $sel.Targets[0]
+    Say "   Board on $($b.Port) (serial $($b.Serial))"
+    try { $sp = Open-Board $b.Port }
+    catch { Say "   Could not open $($b.Port): $($_.Exception.Message)"; Say '   Close anything else using it (Arduino Serial Monitor, PuTTY) and try again.'; return 1 }
+    try {
+        $st = Send-Board $sp @{ cmd = 'status' }
+        $ap = Send-Board $sp @{ cmd = 'ap_password' }
+        $vl = Send-Board $sp @{ cmd = 'vault_list' }
+        if ($ap.status -ne 'ok') {
+            Say '   This board''s firmware is older than v3.10 and cannot show its WiFi password.'
+            Say '   Flash the current firmware first: it keeps every setting and stored password.'
+            return 1
+        }
+        if ($RecoverShow) { return (Show-ApPassword $ap) }
+        if ($ScriptArgs.ContainsKey('RecoverSetPassword')) { return (Set-ApPassword $sp $ap $RecoverSetPassword) }
+        if ($ScriptArgs.ContainsKey('RecoverResetPin')) { return (Reset-AccessPin $sp $vl $RecoverResetPin ([bool]$EraseVault) $false) }
+        if ([Console]::IsInputRedirected) { Say '   No choice given. Use -RecoverShow, -RecoverSetPassword or -RecoverResetPin, or run it in a console.'; return 1 }
+        $pinState = if ($st.auth_set) { 'set' } else { 'not set' }
+        Say "   Board: $($st.firmware)  WiFi: $($ap.ssid)  access PIN: $pinState"
+        Say "   Stored passwords: $((Get-VaultFate $vl).Text)"
+        Say ''
+        Say '   1  Show this board''s WiFi name and password'
+        Say '   2  Set a new WiFi password'
+        Say '   3  Reset the access PIN (or turn it off)'
+        Say '   4  Quit'
+        $c = Read-Host '   Choose 1-4'
+        switch ($c) {
+            '1' { return (Show-ApPassword $ap) }
+            '2' { $a = Read-Host '   New WiFi password (8-63 characters)'; $b2 = Read-Host '   Type it again'
+                  if ($a -cne $b2) { Say '   They did not match. Nothing changed.'; return 1 }
+                  return (Set-ApPassword $sp $ap $a) }
+            '3' { $p = Read-Host '   New 4 digit access PIN, or Enter to turn the PIN off'
+                  return (Reset-AccessPin $sp $vl $p.Trim() $false $true) }
+            default { Say '   Nothing changed.'; return 0 }
+        }
+    } catch { Say "   The board did not answer ($_). Is the cable in the board's COM port?"; return 1 }
+    finally { $sp.Close() }
+}
+
 # ---------------------------------------------------------------- run
 Say ''
 Say 'ESP32-S3 USB-HID firmware flasher'
 Say '---------------------------------'
+
+if ($Recover -or $RecoverShow -or $ScriptArgs.ContainsKey('RecoverSetPassword') -or $ScriptArgs.ContainsKey('RecoverResetPin')) {
+    exit (Invoke-Recover)
+}
 
 Step 'Finding the board'
 $sel = Select-Boards (Get-Ports)

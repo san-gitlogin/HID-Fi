@@ -15,6 +15,9 @@
 #     ./flash_esp.sh -a              flash every HID-Fi board that is plugged in
 #     ./flash_esp.sh -w              only say which board(s) would be flashed
 #     ./flash_esp.sh --identify      ask each board what it runs (restarts them)
+#     ./flash_esp.sh --recover       forgot the WiFi password or the access PIN?
+#                                    show or set the WiFi password, reset the PIN -
+#                                    over the USB COM cable only (see SECURITY.md)
 #     ./flash_esp.sh -e              wipe the chip completely, then flash
 #     ./flash_esp.sh -e -f           the same, without the confirmation prompt
 #     ./flash_esp.sh -n              skip the serial check at the end
@@ -40,7 +43,7 @@ SKETCH="$HERE/hid_fi"
 BUILD="${HIDFI_BUILD_DIR:-$SKETCH/build}"   # same as flash_esp.ps1, and covered by .gitignore
 
 COMPILE=0 ERASE=0 FORCE=0 VERIFY=1 PORT="${HIDFI_PORT:-}" SERIAL="${HIDFI_SERIAL:-}"
-ALL=0 WHICH=0 IDENTIFY=0 FORCE_PORT=0
+ALL=0 WHICH=0 IDENTIFY=0 FORCE_PORT=0 RECOVER=0 RECOVER_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -c|--compile)  COMPILE=1 ;;
@@ -53,6 +56,7 @@ while [ $# -gt 0 ]; do
     -w|--which)    WHICH=1 ;;
     --identify)    IDENTIFY=1 ;;
     --force-port)  FORCE_PORT=1 ;;
+    --recover)     RECOVER=1; shift; RECOVER_ARGS=("$@"); break ;;   # the rest goes to the tool
     -h|--help)     sed -n '2,42p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -90,6 +94,15 @@ pick_boards() {   # args for flash_ports.py; fills TARGETS / CANDIDATES, returns
   fi
   return "$code"
 }
+
+if [ "$RECOVER" -eq 1 ]; then
+  # Recovery needs nothing from the toolchain - only the cable and pyserial.
+  command -v python3 >/dev/null 2>&1 || { bad "Recovery needs Python 3 (python.org) and pyserial (pip install pyserial)."; exit 12; }
+  R=()
+  [ -n "$PORT" ]   && R+=(--port "$PORT")
+  [ -n "$SERIAL" ] && R+=(--serial "$SERIAL")
+  exec python3 "$HERE/tools/recover.py" ${R[@]+"${R[@]}"} ${RECOVER_ARGS[@]+"${RECOVER_ARGS[@]}"}
+fi
 
 step "Finding the board"
 ARGS=()
@@ -222,7 +235,24 @@ try:
         if d.get("firmware"):
             print(f'   Running {d["firmware"]}, USB HID {"ready" if d.get("hid_ready") else "not ready"}')
             if d.get("host_os"): print(f'   Host OS: {d["host_os"]} ({d.get("host_os_source","?")})')
-            print(f'   Dashboard: join WiFi \'{d.get("ap_ssid","ESP32-HID-XXXXXX")}\' then open http://192.168.4.1/')
+            # The board's own WiFi password, read over this cable. Each board makes
+            # its own (v3.10), so this is where a person first learns it.
+            s.write(b'{"cmd":"ap_password"}\n')
+            pw = None
+            end2 = time.time() + 3
+            while time.time() < end2:
+                l2 = s.readline().decode(errors="ignore").strip()
+                try: a = json.loads(l2)
+                except Exception: continue
+                if a.get("reply") == "ap_password": pw = a; break
+                if a.get("status") == "error": break
+            if pw and pw.get("open"):
+                print(f'   Dashboard: join WiFi \'{pw.get("ssid")}\' (open, no password), then open http://192.168.4.1/')
+            elif pw:
+                print(f'   Dashboard: join WiFi \'{pw.get("ssid")}\' with password  {pw.get("password")}')
+                print('              then open http://192.168.4.1/   (forgot it later? ./flash_esp.sh --recover)')
+            else:
+                print(f'   Dashboard: join WiFi \'{d.get("ap_ssid","ESP32-HID-XXXXXX")}\' then open http://192.168.4.1/')
             break
     s.close()
 except Exception as e:
