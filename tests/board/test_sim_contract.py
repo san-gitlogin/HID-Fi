@@ -36,6 +36,7 @@ READ_ONLY = [
     {"cmd": "pc_save", "name": "", "password": ""}, {"cmd": "vault_save", "label": "", "secret": ""},
     {"cmd": "macro_save", "slot": 9, "steps": ["text x"]}, {"cmd": "macro_save", "slot": 0, "steps": []},
     {"cmd": "system", "action": "bogus"},
+    {"cmd": "ap_password"},                                  # USB only: shape compared, never printed
 ]
 
 

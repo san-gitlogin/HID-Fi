@@ -62,15 +62,19 @@ class _Lock:
         self.fails, self.until = 0, 0.0
 
 
+LAN_FAIL_BUDGET, LAN_FAIL_WINDOW, LAN_LOCK = 20, 600.0, 600.0
+AP_IP, LAN_IP = "192.168.4.2", "192.168.1.50"
+
+
 class BoardSim:
     URL = URL
 
-    def __init__(self, pin="", host_os="mac", detected=None, firmware="hid_fi_v3.9"):
+    def __init__(self, pin="", host_os="mac", detected=None, firmware="hid_fi_v3.10"):
         self.lock = threading.RLock()
         self._offset = 0.0
         self.t0 = time.time()
         self.pin = pin
-        self.auth = _Lock(self)
+        self._reset_pin_guards()
         self.vault_pin = ""
         self.vlock = _Lock(self)
         self.vault = {}            # slot -> {label, type, secret}
@@ -82,7 +86,13 @@ class BoardSim:
         self.host_detected = detected or host_os
         self.unicode = {"mac": False, "linux": False}
         self.power_mode, self.ap_auto_off = "balanced", False
-        self.ap_ssid, self.ap_pass, self.ap_open = "ESP32-HID-DA1A2C", "hid12345", False
+        # v3.10: a board that was never given a password makes its own at first start.
+        self.ap_ssid, self.ap_pass, self.ap_open = "ESP32-HID-DA1A2C", "k7m2-x9qp-4tre", False
+        self.ap_gen = True
+        self.peer = None                   # who is asking: an IP, or None for USB serial
+        self.outbox = []                   # every text frame sent to a page
+        self.dropped_unsigned = 0
+        self.auth_deadline = 20.0          # seconds a socket has to sign in (WS_AUTH_DEADLINE_MS)
         self.pointer_mode, self.gamepad = "relative", False
         self.pc_state = "unknown"
         self.wiggle = None         # {"mode":..., "interval_ms":..., "since":...}
@@ -153,19 +163,25 @@ class BoardSim:
             "usb_set_idle": 1, "usb_ctrl_reqs": 2, "usb_led_reports": 0, "usb_str_reqs": 10, "usb_str_rereads": 5,
             "usb_str_seq": "0,0,0,0,0,0,2,2,1,1,3,3,4,4,0,0", "pointer_mode": self.pointer_mode,
             "gamepad": self.gamepad, "auth_set": bool(self.pin), "verbose": self.verbose,
+            "ap_open": self.ap_open, "ap_pass_generated": self.ap_gen and not self.ap_open,
+            "ap_pass_default": self.ap_pass == "hid12345",
             "wiggle_active": self.wiggle is not None, "wiggle_mode": self.wiggle["mode"] if self.wiggle else "idle",
             "led_on": False, "boot_button": "released",
         }
 
     # ---- Playwright wiring --------------------------------------------------------------
-    def attach(self, page, html):
+    def attach(self, page, html, ip=None):
         # Both ways a phone reaches a real board: a name on the home network, and
         # the board's own access point, where the page knows it is at 192.168.4.1.
+        # `ip` is this phone's address as the board sees it; by default an AP
+        # client, or a home-network one when phone_on_lan is set.
+        where = lambda: ip or (LAN_IP if self.phone_on_lan else AP_IP)
         for base, ws in ((URL, WS_URL), (AP_URL, AP_WS_URL)):
-            page.route(base + "**", lambda route, req: self._http(route, req, html))
-            page.route_web_socket(ws, self._ws)
+            page.route(base + "**", lambda route, req: self._http(route, req, html, where()))
+            page.route_web_socket(ws, lambda w: self._ws(w, where()))
 
-    def _http(self, route, req, html):
+    def _http(self, route, req, html, ip=AP_IP):
+        self.peer = ip
         from urllib.parse import urlsplit
         path = urlsplit(req.url).path or "/"
         if path in ("/", ""):
@@ -179,7 +195,7 @@ class BoardSim:
             # scanAllowed(): from the AP always; over the LAN only with the PIN, or
             # when the board is on no network at all.
             if self.phone_on_lan:
-                ok = (self._pin_check(req.headers.get("x-auth", "")) and not self.auth.locked()) if self.pin \
+                ok = (self._pin_check(req.headers.get("x-auth", "")) and not self.pin_locked()) if self.pin \
                     else self.sta["phase"] != "online"
                 if not ok:
                     return route.fulfill(status=403, json={"status": "error", "reply": "lan_locked",
@@ -194,17 +210,17 @@ class BoardSim:
                 self.log.append(("http", body))
             if self.pin and body.get("cmd") not in ("auth", "ping"):
                 tok = body.get("token", "")
-                ok = bool(tok) and not self.auth.locked() and self._pin_check(tok)
+                ok = bool(tok) and not self.pin_locked() and self._pin_check(tok)
                 if not ok:
                     r = {"status": "error", "reply": "auth_required", "message": "Access PIN required"}
-                    if self.auth.locked():
-                        r["retry_in"] = self.auth.remaining()
+                    if self.pin_locked():
+                        r["retry_in"] = self.pin_remaining()
                     return route.fulfill(json=r)
-            replies = self.handle(body, "http")
+            replies = self.handle(body, "http", ip=ip)
             return route.fulfill(json=replies[0] if replies else {})
         return route.fulfill(status=404, json={"status": "error", "message": "Not found. Dashboard at / or API at /api/command"})
 
-    def _ws(self, ws):
+    def _ws(self, ws, ip=AP_IP):
         if self.refusing:                  # e.g. the phone has not rejoined the new AP yet
             # A real network failure: hand the socket to the actual host, which
             # does not exist (hidfi.test), so the browser fails the connection
@@ -215,11 +231,37 @@ class BoardSim:
             except Exception:
                 pass
             return
-        sock = {"ws": ws, "authed": not self.pin, "open": True}
+        # Everything the board says to a page is kept, so a test can prove what
+        # never travels over WiFi (the board's WiFi password, a stored secret).
+        _send = ws.send
+
+        def recorded(m):
+            self.outbox.append(m if isinstance(m, str) else "")
+            return _send(m)
+        try:
+            ws.send = recorded
+        except Exception:
+            pass
+        sock = {"ws": ws, "authed": not self.pin, "open": True, "ip": ip, "opened": self.now()}
         with self.lock:
             self.sockets.append(sock)
         if self.pin:
             ws.send(json.dumps({"status": "error", "reply": "auth_required"}))
+            # dropUnsignedSockets(): not signed in by the deadline, the board closes it
+            def drop_if_unsigned():
+                if sock["open"] and not sock["authed"] and self.pin:
+                    sock["open"] = False
+                    self.dropped_unsigned += 1
+                    with self.lock:
+                        if sock in self.sockets:
+                            self.sockets.remove(sock)
+                    try:
+                        ws.close(code=1000, reason="did not sign in")
+                    except Exception:
+                        pass
+            t = threading.Timer(self.auth_deadline, drop_if_unsigned)
+            t.daemon = True
+            t.start()
 
         def on_message(msg):
             if not sock["open"]:
@@ -232,12 +274,13 @@ class BoardSim:
                 return ws.send(json.dumps({"status": "error", "message": "Invalid JSON"}))
             with self.lock:
                 self.log.append(("ws", body))
+                self.peer = ip
             if self.pin and not sock["authed"] and body.get("cmd") not in ("auth", "ping"):
                 r = {"status": "error", "reply": "auth_required", "message": "Access PIN required"}
-                if self.auth.locked():
-                    r["retry_in"] = self.auth.remaining()
+                if self.pin_locked():
+                    r["retry_in"] = self.pin_remaining()
                 return ws.send(json.dumps(r))
-            for r in self.handle(body, "ws", sock):
+            for r in self.handle(body, "ws", sock, ip=ip):
                 ws.send(json.dumps(r))
             self._after(body)
 
@@ -305,16 +348,45 @@ class BoardSim:
             self.refusing = True
         self.boots += 1
         self.t0 = self.now()
-        self.auth = _Lock(self)
+        self._reset_pin_guards()
         self.wiggle = None
         self.drop_all()
 
     # ---- the command surface ----------------------------------------------------------------
+    # Wrong-PIN lockout per device (the firmware's PinGuard table), plus a budget
+    # across the whole home network. The board's own AP is never under the budget.
+    def _reset_pin_guards(self):
+        self.guards, self.lan_fails, self.lan_window, self.lan_lock_until = {}, 0, 0.0, 0.0
+
+    def _guard(self, ip):
+        return self.guards.setdefault(ip or "", _Lock(self))
+
+    @staticmethod
+    def _on_ap(ip):
+        return bool(ip) and ip.startswith("192.168.4.")
+
+    def pin_locked(self, ip=None):
+        ip = self.peer if ip is None else ip
+        lan = not self._on_ap(ip) and self.lan_lock_until > self.now()
+        return lan or self._guard(ip).locked()
+
+    def pin_remaining(self, ip=None):
+        ip = self.peer if ip is None else ip
+        r = int(self.lan_lock_until - self.now()) + 1 if (not self._on_ap(ip) and self.lan_lock_until > self.now()) else 0
+        return max(r, self._guard(ip).remaining())
+
     def _pin_check(self, tok):
+        g = self._guard(self.peer)
         if self.pin and tok == self.pin:
-            self.auth.ok()
+            g.ok()
             return True
-        self.auth.fail()
+        g.fail()
+        if not self._on_ap(self.peer):
+            if self.now() - self.lan_window > LAN_FAIL_WINDOW:
+                self.lan_window, self.lan_fails = self.now(), 0
+            self.lan_fails += 1
+            if self.lan_fails >= LAN_FAIL_BUDGET:
+                self.lan_lock_until = self.now() + LAN_LOCK
         return False
 
     def _vault_gate(self):
@@ -354,8 +426,9 @@ class BoardSim:
                 s["phase"] = "failed"
                 s["error"] = "Wrong password, or the network refused the board"
 
-    def handle(self, b, transport="serial", sock=None):
+    def handle(self, b, transport="serial", sock=None, ip=None):
         with self.lock:
+            self.peer = ip if transport != "serial" else None
             self.cmd_count += 1
             self._tick_sta()
             r = self._dispatch(b, transport, sock)
@@ -392,20 +465,28 @@ class BoardSim:
         if c == "auth":
             if not self.pin:
                 return OK("auth_ok", message="No PIN configured")
-            if transport != "serial" and self.auth.locked():
-                return E("Too many wrong PINs", reply="auth_locked", retry_in=self.auth.remaining())
+            if transport != "serial" and self.pin_locked():
+                return E("Too many wrong PINs", reply="auth_locked", retry_in=self.pin_remaining())
             if self._pin_check(b.get("token", "")):
                 if sock:
                     sock["authed"] = True
                 return OK("auth_ok")
             r = E("Wrong PIN", reply="auth_failed")
-            if self.auth.locked():
-                r["retry_in"] = self.auth.remaining()
+            if self.pin_locked():
+                r["retry_in"] = self.pin_remaining()
             return r
         if c == "set_auth":
             tk = b.get("token", "")
             if 0 < len(tk) < 4:
                 return E("PIN must be at least 4 characters (or empty to disable)")
+            if transport != "serial" and not self.pin and tk:
+                given = b.get("ap_password", "")
+                ok = (given == self.ap_pass) if not self.ap_open else self._on_ap(self.peer)
+                if not ok:
+                    msg = (("That is not this board's WiFi password." if given else
+                            "Enter this board's WiFi password to set the first PIN.") if not self.ap_open else
+                           "This board's WiFi is open. Connect to it to set the first PIN.")
+                    return E(msg, reply="ap_password_required")
             wipe = not self.vault_pin and not (self.pin and b.get("old") == self.pin) and bool(self.vault)
             if wipe:
                 self.vault.clear()
@@ -738,9 +819,9 @@ class BoardSim:
                 return E("AP password can be at most 63 bytes")
             self.ap_ssid = ssid
             if open_:
-                self.ap_pass, self.ap_open = "", True
+                self.ap_pass, self.ap_open, self.ap_gen = "", True, False
             elif pw:
-                self.ap_pass, self.ap_open = pw, False
+                self.ap_pass, self.ap_open, self.ap_gen = pw, False, False
             self._ap_restart_pending = True
             return None                                   # the firmware sends no reply here (see docs)
         if c == "power_mode":
@@ -761,6 +842,11 @@ class BoardSim:
             self.host_manual = table[os_]
             return OK("host_os_set", host_os=self.host_os(), host_os_source="manual" if self.host_manual else "auto",
                       host_os_detected=self.host_detected)
+        if c == "ap_password":
+            if transport != "serial":
+                return E("The WiFi password is only shown over the USB cable.", reply="usb_only")
+            return OK("ap_password", ssid=self.ap_ssid, password="" if self.ap_open else self.ap_pass,
+                      open=self.ap_open, generated=self.ap_gen)
         if c == "set_verbose":
             self.verbose = bool(b.get("on"))
             return OK("verbose_set", verbose=self.verbose)

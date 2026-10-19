@@ -150,8 +150,23 @@ WebServer        webServer(80);
 WebSocketsServer webSocket(81);
 String  mdnsName  = "";
 String  authToken = "";                  // empty = no PIN; WiFi clients unrestricted
-uint8_t  authFails     = 0;              // consecutive wrong PINs, reset on success
-uint32_t authLockUntil = 0;              // millis() deadline; 0 = not locked out
+// Wrong-PIN lockout is kept PER DEVICE (by IP address), so a stranger guessing
+// PINs locks out only themselves, not the owner. A budget across the whole home
+// network stops the same guessing from being spread over many addresses; the
+// board's own access point and the USB cable are never subject to it.
+struct PinGuard { uint32_t ip; uint8_t fails; uint32_t lockUntil; uint32_t lastAt; };
+#define PIN_GUARDS        8
+#define LAN_FAIL_BUDGET   20                 // wrong PINs from the home network...
+#define LAN_FAIL_WINDOW   600000UL           // ...within ten minutes...
+#define LAN_LOCK_MS       600000UL           // ...lock the home network out for ten
+PinGuard pinGuards[PIN_GUARDS];
+uint16_t lanFails       = 0;
+uint32_t lanWindowStart = 0;
+uint32_t lanLockUntil   = 0;
+IPAddress pinPeer;                           // who is asking, set before every PIN check
+// A socket that has not signed in by this deadline is closed, so connections
+// that never authenticate cannot hold every slot and keep the owner out.
+#define WS_AUTH_DEADLINE_MS 20000UL
 // Vault state lives up here because set_auth and storage_info both consult it,
 // and those run well before the vault's own section. See PASSWORD VAULT.
 #define VAULT_SLOTS      12
@@ -166,6 +181,7 @@ bool    wsAuthed[WS_MAX_CLIENTS];
 // once per connection - the client's address cannot change while it is open -
 // so the binary hot path pays for a bool, never an address lookup.
 bool    wsFromLan[WS_MAX_CLIENTS];
+uint32_t wsOpenedAt[WS_MAX_CLIENTS];
 unsigned long pendingRestartAt   = 0;    // deferred reboot so the reply can flush first
 unsigned long consumerReleaseAt  = 0;    // deferred media-key release, keeps the socket free
 Preferences preferences;
@@ -182,7 +198,8 @@ bool wifiEnabled = false;       // STA attempted / in use
 String wifiIP = "";             // STA IP
 String apIP = "192.168.4.1";   // AP IP (always this)
 String apSSID = "ESP32-HID";   // AP SSID (configurable)
-String apPassword = "hid12345"; // AP password (min 8 chars for WPA2)
+String apPassword = "hid12345"; // AP password (min 8 chars for WPA2); replaced at first start
+bool   apPassGenerated = false;  // still the password this board made for itself
 unsigned long lastWifiCheck = 0;
 #define WIFI_CHECK_INTERVAL 10000   // check connection every 10s
 #define WIFI_CONNECT_TIMEOUT 15000  // 15s connection timeout
@@ -271,7 +288,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v3.9"
+#define  FW_VERSION "hid_fi_v3.10"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -693,6 +710,8 @@ bool pinCheck(const char* candidate);
 bool pinLocked();
 uint32_t pinLockRemaining();
 void handleSetAuth(const JsonDocument& inDoc);
+void handleApPassword();
+String makeApPassword();
 void handleSetVerbose(const JsonDocument& inDoc);
 void handleMacroSave(const JsonDocument& inDoc);
 void handleMacroGet(const JsonDocument& inDoc);
@@ -739,7 +758,7 @@ void setup() {
     COM_SERIAL.printf("HID-Fi %s — ESP32-S3 USB HID + WiFi\n", FW_VERSION + 7);   // "v3.9", not "hid_fi_v3.9"
     COM_SERIAL.println("========================================");
 
-    for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; }
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOpenedAt[i] = 0; }
 
     preferences.begin("hid_cfg", true);
     absoluteMode   = preferences.getBool("abs", false);
@@ -817,6 +836,24 @@ void setup() {
 // ==================== LOOP ====================
 // No fixed delay here: the pointer stream arrives on the WebSocket and every
 // millisecond spent sleeping in loop() is a millisecond of cursor lag.
+// Once a second: a socket that has not signed in within WS_AUTH_DEADLINE_MS of
+// opening is closed. Only while a PIN is set - without one every socket is
+// signed in from the start. The dashboard reconnects by itself and re-sends a
+// kept PIN, so a person typing a PIN slowly only sees a reconnect.
+void dropUnsignedSockets() {
+    static uint32_t last = 0;
+    if (millis() - last < 1000) return;
+    last = millis();
+    if (authToken.length() == 0) return;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+        if (wsAuthed[i] || !wsOpenedAt[i]) continue;
+        if (millis() - wsOpenedAt[i] > WS_AUTH_DEADLINE_MS) {
+            wsOpenedAt[i] = 0;
+            webSocket.disconnect(i);
+        }
+    }
+}
+
 void loop() {
     // Handle serial commands (primary)
     if (COM_SERIAL.available()) {
@@ -833,6 +870,7 @@ void loop() {
 
     if (wifiEnabled) {
         webSocket.loop();          // input hot path first
+        dropUnsignedSockets();
         webServer.handleClient();
         updateStaJoin();           // advances a join in progress, never blocks
         checkWifiConnection();
@@ -919,6 +957,18 @@ void loop() {
 }
 
 // ==================== WiFi SETUP ====================
+// Twelve characters from 31 that cannot be confused when read off a terminal
+// (no 0/o, 1/l/i), grouped in fours: about 59 bits, easy to type on a phone.
+String makeApPassword() {
+    static const char A[] = "23456789abcdefghjkmnpqrstuvwxyz";
+    String out;
+    for (int g = 0; g < 3; g++) {
+        if (g) out += '-';
+        for (int i = 0; i < 4; i++) out += A[esp_random() % (sizeof(A) - 1)];
+    }
+    return out;
+}
+
 void setupWifi() {
     // Load saved AP config
     preferences.begin("wifi_cfg", true);
@@ -951,6 +1001,25 @@ void setupWifi() {
     }
     if (savedApOpen)               apPassword = "";
     else if (savedApPass.length() >= 8) apPassword = savedApPass;
+    else {
+        // No password was ever set: make one for this board alone. A password
+        // shared by every board (the old "hid12345") let anyone in range join,
+        // and UK PSTI / ETSI EN 303 645 forbid universal defaults. It is random
+        // from the hardware RNG - never derived from the MAC, which the board
+        // broadcasts - and readable only over the USB cable (ap_password).
+        apPassword = makeApPassword();
+        preferences.begin("wifi_cfg", false);
+        preferences.putString("ap_pass", apPassword);
+        preferences.putBool("ap_open", false);
+        preferences.putBool("ap_gen", true);
+        preferences.end();
+        COM_SERIAL.println("[AP] This board made its own WiFi password - read it with ap_password over USB");
+    }
+    {
+        preferences.begin("wifi_cfg", true);
+        apPassGenerated = preferences.getBool("ap_gen", false) && apPassword.length() >= 8;
+        preferences.end();
+    }
     
     // Always start AP first — this is the primary access point
     startAP();
@@ -1285,7 +1354,8 @@ void checkWifiConnection() {
 // access point radio range is the limit, on a LAN a PIN is required, and the
 // dashboard sends it in a header rather than the URL so it stays out of logs.
 bool scanAllowed() {
-    if (clientIsAp(webServer.client().remoteIP())) return true;
+    pinPeer = webServer.client().remoteIP();
+    if (clientIsAp(pinPeer)) return true;
     if (authToken.length()) {
         String tok = webServer.header("X-Auth");
         return tok.length() && !pinLocked() && pinCheck(tok.c_str());
@@ -1418,6 +1488,8 @@ void handleWifiScan() {
 // ==================== COMMAND DISPATCH ====================
 void processCommand(const String& line, CmdSource src) {
     cmdSource = src;
+    pinPeer = (src == SRC_WS && wsClientNum >= 0) ? webSocket.remoteIP((uint8_t)wsClientNum)
+            : (src == SRC_HTTP) ? webServer.client().remoteIP() : IPAddress((uint32_t)0);
     const bool fromWifi = (src != SRC_SERIAL);
 
     commandCount++;
@@ -1624,6 +1696,9 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "set_auth") == 0) {
         handleSetAuth(inDoc);
+    }
+    else if (strcmp(cmd, "ap_password") == 0) {
+        handleApPassword();
     }
     else if (strcmp(cmd, "set_verbose") == 0) {
         handleSetVerbose(inDoc);
@@ -2470,6 +2545,9 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
     doc["gamepad"] = gamepadEnabled;
     doc["auth_set"] = (authToken.length() > 0);
+    doc["ap_open"] = (apPassword.length() == 0);
+    doc["ap_pass_generated"] = apPassGenerated;
+    doc["ap_pass_default"] = (apPassword == "hid12345");
     doc["verbose"] = verboseLog;
     doc["wiggle_active"] = (wiggleMode != WIGGLE_NONE);
     doc["wiggle_mode"] = wiggleModeStr();
@@ -2690,6 +2768,7 @@ void handleApConfigure(const JsonDocument& inDoc) {
     preferences.putString("ap_ssid", apSSID);
     preferences.putString("ap_pass", apPassword);
     preferences.putBool("ap_open", apPassword.length() == 0);
+    if (wantOpen || passLen > 0) { preferences.putBool("ap_gen", false); apPassGenerated = false; }
     preferences.end();
 
     // Restarting the AP drops every client on it, including the phone waiting
@@ -3344,6 +3423,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             if (num < WS_MAX_CLIENTS) {
                 wsAuthed[num]  = (authToken.length() == 0);
                 wsFromLan[num] = !clientIsAp(webSocket.remoteIP(num));
+                wsOpenedAt[num] = millis();
             }
             noteActivity();
             COM_SERIAL.printf("[WS] client %u connected\n", num);
@@ -3353,7 +3433,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             break;
 
         case WStype_DISCONNECTED:
-            if (num < WS_MAX_CLIENTS) { wsAuthed[num] = false; wsFromLan[num] = false; }
+            if (num < WS_MAX_CLIENTS) { wsAuthed[num] = false; wsFromLan[num] = false; wsOpenedAt[num] = 0; }
             // A dashboard can vanish mid-chord - phone locked, tab killed, WiFi
             // dropped - while it is holding Alt for the app switcher or the left
             // button for a drag. That would leave the host unusable, so once the
@@ -3708,27 +3788,74 @@ void handleGamepadCmd(const JsonDocument& inDoc) {
 //
 // Serial is exempt. Physical access is already game over, and it has to stay
 // usable as the way back in after locking yourself out.
+// Index of this address's guard, or -1. (An index rather than a pointer: the
+// Arduino build writes prototypes above the type, so the signature stays plain.)
+static int pinGuardFor(uint32_t ip, bool create) {
+    int oldest = 0;
+    for (int i = 0; i < PIN_GUARDS; i++) {
+        if (pinGuards[i].ip == ip && ip) return i;
+        if (pinGuards[i].lastAt < pinGuards[oldest].lastAt) oldest = i;
+    }
+    if (!create) return -1;
+    // A full table forgets the device it heard from longest ago - never one that
+    // is locked out right now, or an attacker could flush their own lock.
+    for (int i = 0; i < PIN_GUARDS; i++) if (!pinGuards[i].ip) { oldest = i; break; }
+    PinGuard& o = pinGuards[oldest];
+    if (o.ip && o.lockUntil && (int32_t)(millis() - o.lockUntil) < 0) {
+        for (int i = 0; i < PIN_GUARDS; i++) {
+            PinGuard& c = pinGuards[i];
+            if (!c.lockUntil || (int32_t)(millis() - c.lockUntil) >= 0) { oldest = i; break; }
+        }
+    }
+    pinGuards[oldest] = PinGuard{ ip, 0, 0, millis() };
+    return oldest;
+}
+
+static bool peerOnAp() { return (uint32_t)pinPeer != 0 && clientIsAp(pinPeer); }
+
+static bool lanLocked() {
+    return !peerOnAp() && lanLockUntil != 0 && (int32_t)(millis() - lanLockUntil) < 0;
+}
+
 bool pinLocked() {
-    return authLockUntil != 0 && (int32_t)(millis() - authLockUntil) < 0;
+    if (lanLocked()) return true;
+    int i = pinGuardFor((uint32_t)pinPeer, false);
+    return i >= 0 && pinGuards[i].lockUntil != 0 && (int32_t)(millis() - pinGuards[i].lockUntil) < 0;
 }
 
 uint32_t pinLockRemaining() {
-    return pinLocked() ? ((authLockUntil - millis()) / 1000) + 1 : 0;
+    uint32_t r = 0;
+    if (lanLocked()) r = (lanLockUntil - millis()) / 1000 + 1;
+    int i = pinGuardFor((uint32_t)pinPeer, false);
+    if (i >= 0 && pinGuards[i].lockUntil && (int32_t)(millis() - pinGuards[i].lockUntil) < 0) {
+        uint32_t own = (pinGuards[i].lockUntil - millis()) / 1000 + 1;
+        if (own > r) r = own;
+    }
+    return r;
 }
 
 bool pinCheck(const char* candidate) {
+    PinGuard* g = &pinGuards[pinGuardFor((uint32_t)pinPeer, true)];
+    g->lastAt = millis();
     if (authToken == candidate) {
-        authFails = 0;
-        authLockUntil = 0;
+        g->fails = 0;
+        g->lockUntil = 0;
         return true;
     }
-    if (authFails < 250) authFails++;
+    if (g->fails < 250) g->fails++;
     // one free retry, then 5s, 15s, 60s, 5min for every attempt after that
     static const uint32_t backoff[] = { 0, 0, 5000, 15000, 60000, 300000 };
-    uint32_t wait = backoff[authFails < 6 ? authFails : 5];
-    if (wait) authLockUntil = millis() + wait;
-    COM_SERIAL.printf("[AUTH] wrong PIN (%u consecutive, lock %lus)\n",
-                      authFails, (unsigned long)(wait / 1000));
+    uint32_t wait = backoff[g->fails < 6 ? g->fails : 5];
+    if (wait) g->lockUntil = millis() + wait;
+    if (!peerOnAp()) {
+        if (millis() - lanWindowStart > LAN_FAIL_WINDOW) { lanWindowStart = millis(); lanFails = 0; }
+        if (++lanFails >= LAN_FAIL_BUDGET) {
+            lanLockUntil = millis() + LAN_LOCK_MS;
+            COM_SERIAL.println("[AUTH] too many wrong PINs from the home network - locked there for 10 min (AP and USB still work)");
+        }
+    }
+    COM_SERIAL.printf("[AUTH] wrong PIN from %s (%u in a row, lock %lus)\n",
+                      pinPeer.toString().c_str(), g->fails, (unsigned long)(wait / 1000));
     return false;
 }
 
@@ -3763,6 +3890,25 @@ void handleSetAuth(const JsonDocument& inDoc) {
         d["status"]="error"; d["message"]="PIN must be at least 4 characters (or empty to disable)";
         sendJson(d); return;
     }
+    // Claiming the board. With no PIN yet, anyone who can reach it could set
+    // one - including someone else on the home network - and that PIN would then
+    // be theirs. So over WiFi the first PIN needs proof of ownership: the board's
+    // own WiFi password, which only someone given it, or someone holding the
+    // board (USB), can know. An open access point has no password to prove, so
+    // its first PIN can only be set from that access point. USB needs nothing.
+    if (cmdSource != SRC_SERIAL && authToken.length() == 0 && tk.length() > 0) {
+        const char* given = inDoc["ap_password"] | "";
+        bool ok = apPassword.length() ? (apPassword == given) : peerOnAp();
+        if (!ok) {
+            StaticJsonDocument<320> d;
+            d["status"]="error"; d["reply"]="ap_password_required";
+            d["message"] = apPassword.length()
+                ? (given[0] ? "That is not this board's WiFi password."
+                            : "Enter this board's WiFi password to set the first PIN.")
+                : "This board's WiFi is open. Connect to it to set the first PIN.";
+            sendJson(d); return;
+        }
+    }
     // The access PIN is what guards the vault unless a separate vault PIN was
     // set. Serial can call this without proving anything, so changing the PIN
     // has to destroy what it was guarding - otherwise anyone with the cable
@@ -3789,6 +3935,21 @@ void handleSetAuth(const JsonDocument& inDoc) {
     StaticJsonDocument<224> doc;
     doc["status"]="ok"; doc["reply"]="auth_set"; doc["auth_set"]=(authToken.length() > 0);
     doc["vault_wiped"]=wipeVault;
+    sendJson(doc);
+}
+
+// The board's WiFi password, over the USB cable only. Holding the board is
+// ownership; nothing that travels over WiFi ever carries this password.
+void handleApPassword() {
+    StaticJsonDocument<256> doc;
+    if (cmdSource != SRC_SERIAL) {
+        doc["status"]="error"; doc["reply"]="usb_only";
+        doc["message"]="The WiFi password is only shown over the USB cable.";
+        sendJson(doc); return;
+    }
+    doc["status"]="ok"; doc["reply"]="ap_password";
+    doc["ssid"]=apSSID; doc["password"]=apPassword;
+    doc["open"]=(apPassword.length() == 0); doc["generated"]=apPassGenerated;
     sendJson(doc);
 }
 
