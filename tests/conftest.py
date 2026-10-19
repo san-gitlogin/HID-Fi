@@ -63,6 +63,10 @@ def _have_cxx():
 TIER_ORDER = ("perf", "linux", "e2e", "board", "hostsim", "build", "ui", "unit", "static", "manual")
 
 
+# tryfirst: pytest-xdist turns the xdist_group marker into the item's group in its
+# own collection hook, so the marker has to be on the item before that runs -
+# otherwise the compile tiers spread across workers and race on tests/.build.
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
     reasons = {
         "ui": _have_playwright(),
