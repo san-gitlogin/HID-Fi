@@ -250,7 +250,8 @@ try:
                 print(f'   Dashboard: join WiFi \'{pw.get("ssid")}\' (open, no password), then open http://192.168.4.1/')
             elif pw:
                 print(f'   Dashboard: join WiFi \'{pw.get("ssid")}\' with password  {pw.get("password")}')
-                print('              then open http://192.168.4.1/   (forgot it later? ./flash_esp.sh --recover)')
+                print('              Write the password down now. Forgot it later? ./flash_esp.sh --recover shows it again.')
+                print('              then open http://192.168.4.1/')
             else:
                 print(f'   Dashboard: join WiFi \'{d.get("ap_ssid","ESP32-HID-XXXXXX")}\' then open http://192.168.4.1/')
             break

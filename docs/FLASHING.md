@@ -28,9 +28,15 @@ firmware, then asks the board what it is running and prints the answer. Expect:
 == Verifying COM13
    Running hid_fi_v3.10, USB HID ready
    Dashboard: join WiFi 'ESP32-HID-09F7C8' with password  k7m2-x9qp-4tre
-              then open http://192.168.4.1/   (forgot it later? .\flash_esp.ps1 -Recover)
+              Write the password down now. Forgot it later? .\flash_esp.ps1 -Recover shows it again.
+              then open http://192.168.4.1/
    Done.
 ```
+
+The password is made by your board for itself, so nobody else knows it. **Write it down
+or save it in a password manager now.** If an AI assistant flashed the board for you, it
+tells you the password once and does not keep it. Either way, the USB cable can always
+show it again.
 
 If PowerShell refuses to run the script, it is the execution policy, not you:
 

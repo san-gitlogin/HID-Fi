@@ -106,6 +106,11 @@ SECURITY.md and README, and a scenario for it in
 `tests/ui/bdd/features/ownership.feature`. Hardware tests use a temporary PIN on a
 board without one and remove it.
 
+Flashing or recovering a board for the user: show them its WiFi name and password
+once, say it is a one-time display to write down, point at `--recover` for later,
+and keep it out of memory, files, commits and later messages (AGENTS.md has the
+rule). That is the only secret an agent may display.
+
 ## 6. A bug you found but are not fixing now
 
 Tag the scenario that shows it: `@known_issue:<key>`, add `<key>` with a one-line

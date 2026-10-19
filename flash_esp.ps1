@@ -348,7 +348,8 @@ function Test-Firmware([string]$p) {
                 if ($pw -and $pw.status -eq 'ok' -and $pw.open) { Ok "Dashboard: join WiFi '$($pw.ssid)' (open, no password), then open http://192.168.4.1/" }
                 elseif ($pw -and $pw.status -eq 'ok') {
                     Ok "Dashboard: join WiFi '$($pw.ssid)' with password  $($pw.password)"
-                    Ok '           then open http://192.168.4.1/   (forgot it later? .\flash_esp.ps1 -Recover)'
+                    Ok '           Write the password down now. Forgot it later? .\flash_esp.ps1 -Recover shows it again.'
+                    Ok '           then open http://192.168.4.1/'
                 } else { Ok "Dashboard: join WiFi '$ap' then open http://192.168.4.1/" }
                 if ($hid -ne 'ready') {
                     Warn 'HID is not ready - check the second ("USB") cable and the USB-OTG solder pads.'

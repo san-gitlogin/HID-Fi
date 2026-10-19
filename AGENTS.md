@@ -536,6 +536,26 @@ Rules:
   must remove it and assert `auth_set` is false afterwards. Never print the WiFi
   password in test output.
 
+When an AI agent flashes or recovers a board FOR a person (the one exception to
+"never show a password"):
+- After a flash, or after `--recover --show-password` / `--set-password`, tell the
+  person the board's WiFi name and password in your reply, in plain text, once.
+  The flasher prints it on its last lines ("Dashboard: join WiFi ..."). They need it
+  to join the board's WiFi; without it the dashboard is unreachable.
+- Say in the same message that this is a one-time display: they should write it
+  down or save it in a password manager now, and if it is lost,
+  `./flash_esp.sh --recover` (Windows: `.\flash_esp.ps1 -Recover`) shows it again
+  over the USB cable.
+- Then forget it. Do not write it to memory, notes, files, commit messages, logs,
+  artifacts, issue trackers or test output, and do not repeat it later in the
+  conversation. If asked again, run the recovery tool rather than recalling it.
+- Never invent or "simplify" it. Do not suggest a weak shared password such as
+  `hid12345`; if the person wants their own, set it with `--set-password` (8 to 63
+  characters) and show it once in the same way.
+- This exception covers only the board's WiFi password, shown to the person who
+  holds the board. It never covers the access PIN, the vault PIN, vault secrets or
+  saved PC passwords - an agent never displays those.
+
 ## Text typing - the rule that came from a bug
 
 `Keyboard.press()` in the ESP32 core reads every byte **>= 0x88 as a raw HID

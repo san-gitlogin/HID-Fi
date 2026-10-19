@@ -102,6 +102,13 @@ Diagnose from the USB device list, not from serial output you are causing.
 - Wrong-PIN lockout is per device (`pinGuards`), with a home-network budget that
   never applies to access-point clients or serial.
 - Say "access PIN" or "vault PIN", never just "PIN", in user-facing text.
+- If you flash or recover a board for the user, tell them the board's WiFi name
+  and password once (the flasher's last "Dashboard: join WiFi ..." line). Say it
+  is a one-time display: write it down now; `./flash_esp.sh --recover` or
+  `.\flash_esp.ps1 -Recover` shows it again over USB. Then do not store it
+  anywhere or repeat it. Never suggest a shared weak password such as `hid12345`.
+  This is the only secret you may show - never an access PIN, vault PIN or vault
+  secret.
 - Full rules: AGENTS.md, "Ownership, PINs and recovery". Tests that guard them:
   `tests/ui/bdd/features/ownership.feature`, `tests/unit/test_recover.py`,
   `tests/board/test_ownership_hw.py`.

@@ -99,6 +99,14 @@ diagnose from the USB device list rather than from serial noise you are causing.
     a WiFi or button path. Lockout is per device. Read "Ownership, PINs and
     recovery" in AGENTS.md before touching auth, PINs, the vault or the access
     point.
+18. **Flashing for a person: show the WiFi password once, then forget it.** After
+    a flash or a USB recovery, tell the person the board's WiFi name and password
+    (the flasher's last "Dashboard: join WiFi ..." line), say it is a one-time
+    display to write down now, and that `./flash_esp.sh --recover` shows it again.
+    Never save it to memory, notes, files, commits or artifacts, and never repeat
+    it later. Never suggest a shared weak password like `hid12345`. This is the only
+    secret an agent may display - never a PIN or a vault secret. AGENTS.md has the
+    full rule.
 
 ## Expected working style
 
