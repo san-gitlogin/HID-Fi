@@ -45,7 +45,8 @@ function post(){
   st.textContent=f?('FOCUSED - mode '+mode+(locked?' - pointer locked':'')):'NOT focused - click Start';
   st.style.color=f?'#0c0':'#f80';
   const batch=evs; evs=[];
-  fetch('/state',{method:'POST',body:JSON.stringify({value:t.value,focused:f,locked,seq:++seq,ev:batch,cleared:clr,
+  const fl=flog; flog=[];
+  fetch('/state',{method:'POST',body:JSON.stringify({value:t.value,focused:f,locked,seq:++seq,ev:batch,cleared:clr,flog:fl,
     ua:navigator.userAgent,platform:navigator.platform})})
    .then(r=>r.json()).then(d=>{ if(d.mode) mode=d.mode;
       if(d.clear!==clr){clr=d.clear; t.value=''; evs=[]; post(); }
@@ -71,7 +72,15 @@ for(const ty of ['mousedown','mouseup']) document.addEventListener(ty,e=>{
 document.addEventListener('contextmenu',e=>{e.preventDefault(); rec({k:'contextmenu',ts:now(e)});},true);
 document.addEventListener('wheel',e=>{ if(!started) return; e.preventDefault();
   rec({k:'wheel',ts:now(e),dx:e.deltaX,dy:e.deltaY,mode:e.deltaMode}); post(); },{passive:false,capture:true});
-window.addEventListener('focus',post); window.addEventListener('blur',post);
+// Every focus change is logged with what has focus instead, so a stopped test can
+// say what took the focus rather than only that it went.
+let flog=[];
+function fnote(kind){ flog.push({k:kind,ts:performance.timeOrigin+performance.now(),hasFocus:document.hasFocus(),
+  active:document.activeElement?(document.activeElement.tagName+(document.activeElement.id?'#'+document.activeElement.id:'')):'',
+  visible:document.visibilityState}); if(flog.length>50) flog.shift(); post(); }
+window.addEventListener('focus',()=>fnote('window focus')); window.addEventListener('blur',()=>fnote('window blur'));
+t.addEventListener('blur',()=>fnote('box blur')); t.addEventListener('focus',()=>fnote('box focus'));
+document.addEventListener('visibilitychange',()=>fnote('visibility '+document.visibilityState));
 setInterval(post,150);
 </script>"""
 
@@ -80,6 +89,8 @@ class Sink:
     def __init__(self, port=0, bind="127.0.0.1"):
         self.state = {"value": None, "focused": False, "locked": False, "seq": 0, "ua": "", "platform": "", "cleared": 0}
         self.events = []
+        self.focus_log = []          # (page time, what happened, has focus, active element)
+        self.recent_keys = []        # the last keys the page saw, for a stopped test's message
         self.mode = "text"
         self._clear = 0
         self._unlock = False
@@ -106,8 +117,15 @@ class Sink:
                 n = int(self.headers.get("Content-Length", 0))
                 d = json.loads(self.rfile.read(n).decode("utf-8"))
                 with sink.lock:
-                    sink.state.update({k: d.get(k) for k in ("value", "focused", "locked", "seq", "ua", "platform", "cleared")})
+                    # Requests are served in parallel, so an older report can land
+                    # after a newer one; it must not put stale state back.
+                    if (d.get("seq") or 0) >= (sink.state.get("seq") or 0):
+                        sink.state.update({k: d.get(k) for k in ("value", "focused", "locked", "seq", "ua", "platform", "cleared")})
                     sink.events.extend(d.get("ev") or [])
+                    sink.focus_log.extend(d.get("flog") or [])
+                    del sink.focus_log[:-50]
+                    sink.recent_keys.extend(e for e in (d.get("ev") or []) if e.get("k") == "keydown")
+                    del sink.recent_keys[:-12]
                     reply = {"mode": sink.mode, "clear": sink._clear, "unlock": sink._unlock}
                 self._send(json.dumps(reply), "application/json")
 
@@ -146,7 +164,15 @@ class Sink:
         with self.lock:
             f = self.state["focused"]
         if not f:
-            raise SinkNotFocused("the test page lost focus - stopped before sending anything")
+            with self.lock:
+                last = [x for x in self.focus_log if x["k"] in ("window blur", "box blur", "visibility hidden")][-1:]
+                keys = [(k.get("mods") or "") + "+" + (k.get("code") or "") for k in self.recent_keys[-6:]]
+            why = ""
+            if last:
+                x = last[0]
+                why = (f" ({x['k']}; focus went to {x['active'] or 'another window'}"
+                       f"{'' if x['hasFocus'] else ', outside the browser'}; last keys before it: {', '.join(keys) or 'none'})")
+            raise SinkNotFocused("the test page lost focus - stopped before sending anything" + why)
 
     def set_mode(self, mode):
         with self.lock:
