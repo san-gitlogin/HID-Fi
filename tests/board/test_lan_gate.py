@@ -54,3 +54,31 @@ def test_binary_frames_from_the_lan_are_refused_without_a_pin(board, request):
     # The status read in between is itself one command.
     assert after - before <= 1, (f"{after - before - 1} zero-move frame(s) from the LAN reached the HID path - "
                                  f"the binary LAN gate (wsFromLan in onWsEvent) is not holding")
+
+    # The control: the same frames, from the same place, with a PIN set and the
+    # socket signed in, MUST be counted - otherwise the check above proves
+    # nothing. The PIN is temporary and removed again (the board had none; the
+    # vault is untouched because the old PIN is given back).
+    pin = "7316"
+    assert board.cmd({"cmd": "set_auth", "token": pin}).get("auth_set") is True
+    try:
+        conn = websocket.create_connection(url, timeout=5)
+        conn.settimeout(2)
+        conn.send(json.dumps({"cmd": "auth", "token": pin}))
+        authed = False
+        for _ in range(6):
+            m = conn.recv()
+            if isinstance(m, str) and json.loads(m).get("reply") in ("auth_ok", "auth_failed", "auth_locked"):
+                authed = json.loads(m).get("reply") == "auth_ok"
+                break
+        assert authed, "could not sign in with the temporary PIN"
+        before = board.status()["cmd_count"]
+        for _ in range(5):
+            conn.send_binary(struct.pack("<Bhhbb", 1, 0, 0, 0, 0))
+        time.sleep(0.6)
+        after = board.status()["cmd_count"]
+        conn.close()
+    finally:
+        board.cmd({"cmd": "set_auth", "token": "", "old": pin})
+        assert board.status().get("auth_set") is False, "the temporary PIN was not removed - remove it by hand"
+    assert after - before - 1 == 5, f"control: only {after - before - 1}/5 signed-in frames were counted"
