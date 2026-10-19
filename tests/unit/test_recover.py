@@ -102,6 +102,16 @@ def test_a_new_wifi_password_is_set_and_read_back(board, tool):
 
 
 @pytest.mark.parametrize("tool", TOOLS)
+def test_putting_the_boards_own_password_back_makes_it_its_own_again(board, tool):
+    # "Generated" describes the password in use; changing it and putting it back
+    # must not leave the board saying the person chose it.
+    fb, ports = board()
+    assert run(tool, ports, "--set-password", "a-temporary-one")[0] == 0 and fb.sim.ap_gen is False
+    code, out = run(tool, ports, "--set-password", "k7m2-x9qp-4tre")
+    assert code == 0 and fb.sim.ap_gen is True, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
 @pytest.mark.parametrize("bad", ["short", "x" * 64])
 def test_a_wifi_password_the_radio_cannot_use_is_refused(board, tool, bad):
     fb, ports = board()

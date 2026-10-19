@@ -73,7 +73,9 @@ tour of the dashboard.
 | **Keyboard** | On-screen keys with real press and release, so you can hold Ctrl with one thumb and strike another key with the other. It scales with the screen: a phone gets letters and a symbol layer, a laptop gets a full ANSI board, and a wide screen gets the function row, the navigation cluster and the numpad — all 104 keys. Type a whole string, or fire a custom combo. |
 | **Mouse** | Left, right and a scroll wheel you actually drag — each notch is a detent with a haptic tick, and a tap on it middle-clicks. |
 | **Passwords** | A vault on the board for the passwords and PINs you keep typing. It types them for you, so they never touch a keyboard that could be watched or logged. Guarded by a PIN that is asked for **every** time — including to type one — and optionally by a PIN of its own, separate from the one that unlocks the dashboard. |
-| **Shortcuts** | Hundreds of macOS, Windows and Linux shortcuts, grouped, searchable, and filtered to the OS you pick. Tap one and it fires on the PC. |
+| **Shortcuts** | 190 shortcuts - about 140 each for macOS and Windows and 120 for Linux (GNOME) - every one from the vendor's own shortcut page, grouped, searchable, and filtered to the OS you pick. Tap one and it fires on the PC. |
+| **Open an app** | Type a name, or tap one of the computer's usual apps, and the board opens it through the computer's own search - Start, Spotlight or GNOME's overview. |
+| **For AI agents** | Say `do copy` or `open Calculator` and the board presses the right keys for the computer it is in. One word per action, a list of about 80 that costs an agent a few hundred tokens, several steps in one call, and an MCP server. See [docs/AGENT_CONTROL.md](docs/AGENT_CONTROL.md). |
 | **App switcher** | Hold the tile and Alt stays down, so the host keeps its own switcher open. Slide to pick a window, let go to raise it. |
 | **Media** | Volume knobs you turn with a finger, playback keys, brightness, and editable quick actions for mic-mute and call keys. |
 | **Gamepad** | Optional second USB device: two sticks, D-pad, twelve buttons. |
@@ -475,6 +477,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
 | [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
+| [docs/AGENT_CONTROL.md](docs/AGENT_CONTROL.md) | Driving a computer from an AI agent: actions, steps, MCP |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |
 | [SECURITY.md](SECURITY.md) | Threat model, and what is deliberately not protected |
 | [docs/TESTING.md](docs/TESTING.md) | The one test command, every tier, testing on macOS, Windows and Linux, upgrading dependencies |

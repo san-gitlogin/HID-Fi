@@ -268,3 +268,41 @@ Feature: The Keys tab - the password vault and the shortcuts
     And I tap the "#vr_ok" control
     Then "#vr_msg" contains "PIN"
     And the board still holds 1 vault entry
+
+  # ---- open an app ----------------------------------------------------------------------
+
+  Scenario Outline: Open an app follows the computer and goes through its own search
+    Given the board is plugged into a <os> computer
+    And the dashboard is open
+    When I open the "Keys" tab
+    Then "#appHint" contains "<via>"
+    When I tap the app "<app>"
+    Then the board receives {"cmd": "open", "app": "<app>"}
+    And I see the message "Opening <app>"
+
+    Examples:
+      | os      | via                     | app         |
+      | Mac     | Spotlight               | TextEdit    |
+      | Windows | Start                   | Notepad     |
+      | Linux   | the Activities overview | Text Editor |
+
+  Scenario: Any app, by typing its name and pressing Enter
+    Given the dashboard is open
+    When I open the "Keys" tab
+    And I type "Visual Studio Code" into the app name and press Enter
+    Then the board receives {"cmd": "open", "app": "Visual Studio Code"}
+
+  Scenario: Open with no name sends nothing, and says what to do
+    Given the dashboard is open
+    When I open the "Keys" tab
+    And I tap the "#btnOpenApp" control
+    Then I see the message "Type the app's name"
+    And the board does not receive "open"
+
+  Scenario: A board that cannot open it says why
+    Given the board is plugged into a Windows computer
+    And the board will refuse the next "open" with "USB HID not initialized"
+    And the dashboard is open
+    When I open the "Keys" tab
+    And I tap the app "Notepad"
+    Then I see the message "USB HID not initialized"

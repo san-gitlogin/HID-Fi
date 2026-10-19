@@ -806,6 +806,51 @@
    "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
   ]
  ],
+ "1400|v-short||app=Activity Monitor|Activity Monitor": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Activity Monitor\"}"
+  ]
+ ],
+ "1400|v-short||app=Calculator|Calculator": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Calculator\"}"
+  ]
+ ],
+ "1400|v-short||app=Finder|Finder": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Finder\"}"
+  ]
+ ],
+ "1400|v-short||app=Notes|Notes": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Notes\"}"
+  ]
+ ],
+ "1400|v-short||app=Safari|Safari": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Safari\"}"
+  ]
+ ],
+ "1400|v-short||app=System Settings|System Settings": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"System Settings\"}"
+  ]
+ ],
+ "1400|v-short||app=Terminal|Terminal": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Terminal\"}"
+  ]
+ ],
+ "1400|v-short||app=TextEdit|TextEdit": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"TextEdit\"}"
+  ]
+ ],
+ "1400|v-short||sc=ALT+ESC|Cycle windows in open or": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+ESC\"}"
+  ]
+ ],
  "1400|v-short||sc=ALT+F2|Run dialogAlt+F2": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
@@ -857,11 +902,6 @@
    "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
   ]
  ],
- "1400|v-short||sc=ALT+`|Next window in this appA": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
-  ]
- ],
  "1400|v-short||sc=CTRL+,|PreferencesCtrl+,": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
@@ -887,19 +927,14 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
   ]
  ],
- "1400|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+ "1400|v-short||sc=CTRL+ALT+DELETE|Power off dialogCtrl+Alt": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
   ]
  ],
- "1400|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+ "1400|v-short||sc=CTRL+ALT+TAB|Top barCtrl+Alt+Tab": [
   [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
-  ]
- ],
- "1400|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+TAB\"}"
   ]
  ],
  "1400|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
@@ -908,6 +943,9 @@
   ]
  ],
  "1400|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
   ]
@@ -1002,6 +1040,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
   ]
  ],
+ "1400|v-short||sc=CTRL+L|Address bar / go to fold": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
  "1400|v-short||sc=CTRL+L|Address barCtrl+L": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
@@ -1013,6 +1056,9 @@
   ]
  ],
  "1400|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
   ]
@@ -1047,7 +1093,22 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
   ]
  ],
+ "1400|v-short||sc=CTRL+SHIFT+ALT+R|Start screen recordingCt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+ALT+R\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+C|Copy the pathCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
  "1400|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+C|Terminal copyCtrl+Shift+": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
   ]
@@ -1123,6 +1184,11 @@
   ]
  ],
  "1400|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "1400|v-short||sc=CTRL+SHIFT+V|Terminal pasteCtrl+Shift": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
   ]
@@ -1212,6 +1278,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
   ]
  ],
+ "1400|v-short||sc=GUI+A|All appsSuper+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+A\"}"
+  ]
+ ],
  "1400|v-short||sc=GUI+D|Show desktopSuper+D": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
@@ -1237,14 +1308,59 @@
    "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
   ]
  ],
+ "1400|v-short||sc=GUI+PAGEDOWN|Next desktopSuper+PgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEDOWN\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+PAGEUP|Previous desktopSuper+Pg": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEUP\"}"
+  ]
+ ],
  "1400|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
   ]
  ],
+ "1400|v-short||sc=GUI+SHIFT+LEFT|Move window to left scre": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+LEFT\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+SHIFT+PAGEDOWN|Move window to next desk": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEDOWN\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+SHIFT+PAGEUP|Move window to previous ": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEUP\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+SHIFT+RIGHT|Move window to right scr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+TAB|Switch windowsSuper+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+TAB\"}"
+  ]
+ ],
  "1400|v-short||sc=GUI+UP|Maximise / full screenSu": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+V|NotificationsSuper+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+V\"}"
+  ]
+ ],
+ "1400|v-short||sc=GUI+`|Next window in this appS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+`\"}"
   ]
  ],
  "1400|v-short||sc=GUI|Mission Control / Task v": [
@@ -1282,7 +1398,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
   ]
  ],
- "1400|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+ "1400|v-short||sc=PRINTSCREEN|Selected areaPrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
   ]
@@ -1307,7 +1423,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
   ]
  ],
- "1400|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+ "1400|v-short||sc=SHIFT+PRINTSCREEN|Whole screenShift+PrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
   ]
@@ -2059,6 +2175,51 @@
    "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
   ]
  ],
+ "390|v-short||app=Activity Monitor|Activity Monitor": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Activity Monitor\"}"
+  ]
+ ],
+ "390|v-short||app=Calculator|Calculator": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Calculator\"}"
+  ]
+ ],
+ "390|v-short||app=Finder|Finder": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Finder\"}"
+  ]
+ ],
+ "390|v-short||app=Notes|Notes": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Notes\"}"
+  ]
+ ],
+ "390|v-short||app=Safari|Safari": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Safari\"}"
+  ]
+ ],
+ "390|v-short||app=System Settings|System Settings": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"System Settings\"}"
+  ]
+ ],
+ "390|v-short||app=Terminal|Terminal": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Terminal\"}"
+  ]
+ ],
+ "390|v-short||app=TextEdit|TextEdit": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"TextEdit\"}"
+  ]
+ ],
+ "390|v-short||sc=ALT+ESC|Cycle windows in open or": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+ESC\"}"
+  ]
+ ],
  "390|v-short||sc=ALT+F2|Run dialogAlt+F2": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
@@ -2110,11 +2271,6 @@
    "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
   ]
  ],
- "390|v-short||sc=ALT+`|Next window in this appA": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
-  ]
- ],
  "390|v-short||sc=CTRL+,|PreferencesCtrl+,": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
@@ -2140,19 +2296,14 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
   ]
  ],
- "390|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+ "390|v-short||sc=CTRL+ALT+DELETE|Power off dialogCtrl+Alt": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
   ]
  ],
- "390|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+ "390|v-short||sc=CTRL+ALT+TAB|Top barCtrl+Alt+Tab": [
   [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
-  ]
- ],
- "390|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+TAB\"}"
   ]
  ],
  "390|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
@@ -2161,6 +2312,9 @@
   ]
  ],
  "390|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
   ]
@@ -2255,6 +2409,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
   ]
  ],
+ "390|v-short||sc=CTRL+L|Address bar / go to fold": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
  "390|v-short||sc=CTRL+L|Address barCtrl+L": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
@@ -2266,6 +2425,9 @@
   ]
  ],
  "390|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
   ]
@@ -2300,7 +2462,22 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
   ]
  ],
+ "390|v-short||sc=CTRL+SHIFT+ALT+R|Start screen recordingCt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+ALT+R\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+C|Copy the pathCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
  "390|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+C|Terminal copyCtrl+Shift+": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
   ]
@@ -2376,6 +2553,11 @@
   ]
  ],
  "390|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "390|v-short||sc=CTRL+SHIFT+V|Terminal pasteCtrl+Shift": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
   ]
@@ -2465,6 +2647,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
   ]
  ],
+ "390|v-short||sc=GUI+A|All appsSuper+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+A\"}"
+  ]
+ ],
  "390|v-short||sc=GUI+D|Show desktopSuper+D": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
@@ -2490,14 +2677,59 @@
    "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
   ]
  ],
+ "390|v-short||sc=GUI+PAGEDOWN|Next desktopSuper+PgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEDOWN\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+PAGEUP|Previous desktopSuper+Pg": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEUP\"}"
+  ]
+ ],
  "390|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
   ]
  ],
+ "390|v-short||sc=GUI+SHIFT+LEFT|Move window to left scre": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+LEFT\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+SHIFT+PAGEDOWN|Move window to next desk": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEDOWN\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+SHIFT+PAGEUP|Move window to previous ": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEUP\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+SHIFT+RIGHT|Move window to right scr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+TAB|Switch windowsSuper+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+TAB\"}"
+  ]
+ ],
  "390|v-short||sc=GUI+UP|Maximise / full screenSu": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+V|NotificationsSuper+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+V\"}"
+  ]
+ ],
+ "390|v-short||sc=GUI+`|Next window in this appS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+`\"}"
   ]
  ],
  "390|v-short||sc=GUI|Mission Control / Task v": [
@@ -2535,7 +2767,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
   ]
  ],
- "390|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+ "390|v-short||sc=PRINTSCREEN|Selected areaPrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
   ]
@@ -2560,7 +2792,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
   ]
  ],
- "390|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+ "390|v-short||sc=SHIFT+PRINTSCREEN|Whole screenShift+PrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
   ]
@@ -3354,6 +3586,51 @@
    "J{\"cmd\":\"set_unicode\",\"os\":\"mac\",\"on\":true}"
   ]
  ],
+ "820|v-short||app=Activity Monitor|Activity Monitor": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Activity Monitor\"}"
+  ]
+ ],
+ "820|v-short||app=Calculator|Calculator": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Calculator\"}"
+  ]
+ ],
+ "820|v-short||app=Finder|Finder": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Finder\"}"
+  ]
+ ],
+ "820|v-short||app=Notes|Notes": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Notes\"}"
+  ]
+ ],
+ "820|v-short||app=Safari|Safari": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Safari\"}"
+  ]
+ ],
+ "820|v-short||app=System Settings|System Settings": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"System Settings\"}"
+  ]
+ ],
+ "820|v-short||app=Terminal|Terminal": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"Terminal\"}"
+  ]
+ ],
+ "820|v-short||app=TextEdit|TextEdit": [
+  [
+   "J{\"cmd\":\"open\",\"app\":\"TextEdit\"}"
+  ]
+ ],
+ "820|v-short||sc=ALT+ESC|Cycle windows in open or": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"ALT+ESC\"}"
+  ]
+ ],
  "820|v-short||sc=ALT+F2|Run dialogAlt+F2": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"ALT+F2\"}"
@@ -3405,11 +3682,6 @@
    "J{\"cmd\":\"press\",\"keys\":\"ALT+UP\"}"
   ]
  ],
- "820|v-short||sc=ALT+`|Next window in this appA": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"ALT+`\"}"
-  ]
- ],
  "820|v-short||sc=CTRL+,|PreferencesCtrl+,": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+,\"}"
@@ -3435,19 +3707,14 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+9\"}"
   ]
  ],
- "820|v-short||sc=CTRL+ALT+DELETE|Security screenCtrl+Alt+": [
+ "820|v-short||sc=CTRL+ALT+DELETE|Power off dialogCtrl+Alt": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+DELETE\"}"
   ]
  ],
- "820|v-short||sc=CTRL+ALT+LEFT|Previous desktopCtrl+Alt": [
+ "820|v-short||sc=CTRL+ALT+TAB|Top barCtrl+Alt+Tab": [
   [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+LEFT\"}"
-  ]
- ],
- "820|v-short||sc=CTRL+ALT+RIGHT|Next desktopCtrl+Alt+Rig": [
-  [
-   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+RIGHT\"}"
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+ALT+TAB\"}"
   ]
  ],
  "820|v-short||sc=CTRL+ALT+T|TerminalCtrl+Alt+T": [
@@ -3456,6 +3723,9 @@
   ]
  ],
  "820|v-short||sc=CTRL+A|Select allCtrl+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+A\"}"
   ]
@@ -3550,6 +3820,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+LEFT\"}"
   ]
  ],
+ "820|v-short||sc=CTRL+L|Address bar / go to fold": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
+  ]
+ ],
  "820|v-short||sc=CTRL+L|Address barCtrl+L": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+L\"}"
@@ -3561,6 +3836,9 @@
   ]
  ],
  "820|v-short||sc=CTRL+N|New windowCtrl+N": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
+  ],
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+N\"}"
   ]
@@ -3595,7 +3873,22 @@
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+R\"}"
   ]
  ],
+ "820|v-short||sc=CTRL+SHIFT+ALT+R|Start screen recordingCt": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+ALT+R\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+C|Copy the pathCtrl+Shift+": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
  "820|v-short||sc=CTRL+SHIFT+C|Inspect elementCtrl+Shif": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+C|Terminal copyCtrl+Shift+": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+C\"}"
   ]
@@ -3671,6 +3964,11 @@
   ]
  ],
  "820|v-short||sc=CTRL+SHIFT+V|Paste without formatting": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
+  ]
+ ],
+ "820|v-short||sc=CTRL+SHIFT+V|Terminal pasteCtrl+Shift": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"CTRL+SHIFT+V\"}"
   ]
@@ -3760,6 +4058,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"F2\"}"
   ]
  ],
+ "820|v-short||sc=GUI+A|All appsSuper+A": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+A\"}"
+  ]
+ ],
  "820|v-short||sc=GUI+D|Show desktopSuper+D": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+D\"}"
@@ -3785,14 +4088,59 @@
    "J{\"cmd\":\"press\",\"keys\":\"GUI+L\"}"
   ]
  ],
+ "820|v-short||sc=GUI+PAGEDOWN|Next desktopSuper+PgDn": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEDOWN\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+PAGEUP|Previous desktopSuper+Pg": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+PAGEUP\"}"
+  ]
+ ],
  "820|v-short||sc=GUI+RIGHT|Snap window rightSuper+R": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+RIGHT\"}"
   ]
  ],
+ "820|v-short||sc=GUI+SHIFT+LEFT|Move window to left scre": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+LEFT\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+SHIFT+PAGEDOWN|Move window to next desk": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEDOWN\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+SHIFT+PAGEUP|Move window to previous ": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+PAGEUP\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+SHIFT+RIGHT|Move window to right scr": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+SHIFT+RIGHT\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+TAB|Switch windowsSuper+Tab": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+TAB\"}"
+  ]
+ ],
  "820|v-short||sc=GUI+UP|Maximise / full screenSu": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"GUI+UP\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+V|NotificationsSuper+V": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+V\"}"
+  ]
+ ],
+ "820|v-short||sc=GUI+`|Next window in this appS": [
+  [
+   "J{\"cmd\":\"press\",\"keys\":\"GUI+`\"}"
   ]
  ],
  "820|v-short||sc=GUI|Mission Control / Task v": [
@@ -3830,7 +4178,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"PAGEUP\"}"
   ]
  ],
- "820|v-short||sc=PRINTSCREEN|Whole screenPrtSc": [
+ "820|v-short||sc=PRINTSCREEN|Selected areaPrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"PRINTSCREEN\"}"
   ]
@@ -3855,7 +4203,7 @@
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+HOME\"}"
   ]
  ],
- "820|v-short||sc=SHIFT+PRINTSCREEN|Selected areaShift+PrtSc": [
+ "820|v-short||sc=SHIFT+PRINTSCREEN|Whole screenShift+PrtSc": [
   [
    "J{\"cmd\":\"press\",\"keys\":\"SHIFT+PRINTSCREEN\"}"
   ]

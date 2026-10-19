@@ -30,6 +30,7 @@ flash_esp.ps1                  build + flash + verify (Windows), auto-detects ev
 flash_esp.sh                   the same for macOS / Linux
 tools/flash_ports.py           which port is a HID-Fi board, among several (used by flash_esp.sh)
 tools/recover.py               USB-only recovery: WiFi password, access PIN (flash_esp.sh --recover)
+tools/hidfi.py                 agent client: CLI and MCP server for do/open/steps (docs/AGENT_CONTROL.md)
 hid_fi/
   hid_fi.ino           all firmware: transports, dispatch, HID, NVS
   web_ui.h                     the entire dashboard as one PROGMEM string
@@ -534,7 +535,10 @@ Rules:
   SECURITY.md has a scenario; a new rule needs a new row and a new scenario.
 - Hardware tests that need a PIN use a temporary PIN on a board that has none, and
   must remove it and assert `auth_set` is false afterwards. Never print the WiFi
-  password in test output.
+  password in test output - and remember who else prints: pytest shows the values
+  in a failed `assert a == b` (reduce it to a bool first), and Playwright's error
+  log shows what `fill()` was given (type secrets with an `eval_on_selector`
+  helper, as `tests/board/test_ownership_live.py` does).
 
 When an AI agent flashes or recovers a board FOR a person (the one exception to
 "never show a password"):
@@ -555,6 +559,35 @@ When an AI agent flashes or recovers a board FOR a person (the one exception to
 - This exception covers only the board's WiFi password, shown to the person who
   holds the board. It never covers the access PIN, the vault PIN, vault secrets or
   saved PC passwords - an agent never displays those.
+
+## Actions for agents - the rules
+
+The board turns a word into the right keys for the computer it is plugged into:
+`{"cmd":"do","a":"copy"}`, `open`, `steps`, `actions`. Human guide:
+docs/AGENT_CONTROL.md. Rules for changing it:
+
+- The action table is `ACTIONS` in `hid_fi.ino`. Each row is: name, label, macOS,
+  Windows, Linux (GNOME). An empty column means that OS has no equivalent; the
+  board refuses it there (`no_equivalent`). Never fill a column with a guess.
+- Every action row must equal a row of the dashboard's `SC` table in `web_ui.h`:
+  same label, same three combos. `tests/static` fails otherwise. Change both
+  together.
+- Only add a shortcut that the OS vendor documents: Apple's "Mac keyboard
+  shortcuts", Microsoft's "Keyboard shortcuts in Windows", GNOME's "Useful
+  keyboard shortcuts". If you cannot point to the line, do not add it. Note a
+  Windows 11-only shortcut as such in its label if it does nothing on Windows 10.
+- Action names are lower_snake words and never change once released - agents
+  and saved scripts depend on them. Add, do not rename.
+- `board_sim.py` reads the table from `hid_fi.ino`, so the model needs no edit
+  for a new row. A new step verb or command needs the model, a unit test in
+  `tests/unit/test_actions.py`, and a line in docs/COMMANDS.md.
+- Keep `actions` small: it is what an agent reads. It lists only names that work
+  on the detected OS. `tests/unit/test_actions.py` caps it at 1000 characters and
+  `tests/unit/test_hidfi_tool.py` caps the MCP tool list at 3.5 KB.
+- `steps` stays bounded: 32 steps, 5 s per wait, 10 s of waiting per call. These
+  block the board's loop, like `macro_run`.
+- These commands go through the same PIN and home-network gates as every other
+  command. Never add one to the LAN-safe list.
 
 ## Text typing - the rule that came from a bug
 

@@ -156,6 +156,18 @@ def advice(ctx, shows):
         assert title.startswith("Recommended") and "warnbox" not in (adv.get_attribute("class") or ""), title
 
 
+@then(parsers.parse('the PIN prompt says "{text}"'))
+def prompt_says(ctx, text):
+    ctx["ui"].page.wait_for_function(
+        "t => ((document.getElementById('pinAskMsg') || {}).textContent || '').includes(t)", arg=text, timeout=4000)
+
+
+@then("the page keeps no PIN to send again")
+def keeps_no_pin(ctx):
+    ctx["ui"].idle(200)
+    assert ctx["ui"].page.evaluate("sessionStorage.getItem('pin')") is None, "a refused PIN is kept and re-sent on reconnect"
+
+
 # ---- someone else trying ----------------------------------------------------------------
 @when(parsers.parse("a device on the home network tries {n:d} wrong PINs"))
 def lan_wrong(ctx, n):

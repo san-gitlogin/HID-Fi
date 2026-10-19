@@ -19,6 +19,7 @@ WebSocket code runs unchanged and talks to this object.
     sim.advance(60)                  # skip a lockout without waiting
 """
 import json
+import os
 import re
 import struct
 import threading
@@ -40,6 +41,21 @@ VAULT_SLOTS, PC_SLOTS, MACRO_SLOTS = 12, 8, 8
 MEDIA_MSG = ("Unknown media key (volume_up|volume_down|mute|play_pause|next|prev|stop|brightness_up|"
              "brightness_down|browser_back|browser_forward|search|home|calculator|sleep|power)")
 
+
+
+def _load_actions():
+    """The firmware's ACTIONS table, read from hid_fi.ino itself, so the model
+    can never drift from it: name -> (label, mac, windows, linux)."""
+    src = open(os.path.join(os.path.dirname(__file__), "..", "..", "hid_fi", "hid_fi.ino"), encoding="utf-8").read()
+    body = src[src.index("static const char* const ACTIONS[][5]"):]
+    body = body[:body.index("};")]
+    rows = re.findall(r'\{\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)"\s*\}', body)
+    return {r[0]: r[1:] for r in rows}
+
+
+ACTIONS = _load_actions()
+ACTION_COL = {"mac": 1, "windows": 2, "linux": 3}
+ALSO = "open <app> | run <command or url> | type <text> | key <combo> | wait <ms> | click left|right|middle"
 
 class _Lock:
     """The firmware's escalating lockout: one free retry, then 5s, 15s, 60s, 5 min."""
@@ -88,7 +104,7 @@ class BoardSim:
         self.power_mode, self.ap_auto_off = "balanced", False
         # v3.10: a board that was never given a password makes its own at first start.
         self.ap_ssid, self.ap_pass, self.ap_open = "ESP32-HID-DA1A2C", "k7m2-x9qp-4tre", False
-        self.ap_gen = True
+        self.ap_genpw = self.ap_pass       # the password this board made (apGenPassword)
         self.peer = None                   # who is asking: an IP, or None for USB serial
         self.outbox = []                   # every text frame sent to a page
         self.dropped_unsigned = 0
@@ -104,6 +120,7 @@ class BoardSim:
         self.refusing = False              # new sockets are turned away
         self.refused = 0                   # ...and how many have been
         self.fail_next = {}                # cmd -> error message, used once
+        self.actions_done = []             # (action, keys) the agent commands pressed, in order
         self.refuse_after_ap = False       # ...from the moment the AP restarts
         self.refuse_after_reboot = False   # ...from the moment it reboots          # the dashboard reached over the home network, not the AP   # host suspended the bus and did not arm USB wake
         self.sta = {"phase": "idle", "ssid": "", "ip": "", "error": "", "ip_mode": "dhcp", "since": 0.0, "want_ip": ""}
@@ -137,6 +154,16 @@ class BoardSim:
     def clear_log(self):
         with self.lock:
             self.log.clear()
+
+    # "Generated" is a fact about the password in use, not a flag: it is true while
+    # that password is the one the board made (apPassGenerated in the firmware).
+    @property
+    def ap_gen(self):
+        return len(self.ap_genpw) >= 8 and self.ap_pass == self.ap_genpw
+
+    @ap_gen.setter
+    def ap_gen(self, made_it):
+        self.ap_genpw = self.ap_pass if made_it else ""
 
     # ---- status ------------------------------------------------------------------------
     def host_os(self):
@@ -443,6 +470,79 @@ class BoardSim:
         way (wsFromLan in onWsEvent); before, they went straight through."""
         return self.phone_on_lan and not self.pin and self.sta["phase"] == "online"
 
+    # ---- actions for agents (handleDo / handleActions / handleOpen / handleSteps) ---------
+    def _os_of(self, b):
+        o = b.get("os", "")
+        return o if o in ACTION_COL else self.host_os()
+
+    @staticmethod
+    def _keys(name, os_):
+        row = ACTIONS.get(name)
+        return None if row is None else row[ACTION_COL.get(os_, 2)]   # unknown host: Windows keys
+
+    def _agent(self, c, b, OK, E):
+        os_ = self._os_of(b)
+        osname = os_ if os_ in ACTION_COL else "unknown"
+        if c == "actions":
+            col = ACTION_COL.get(os_, 2)
+            if b.get("keys"):
+                a = {n: r[col] for n, r in ACTIONS.items() if r[col]}
+            else:
+                a = " ".join(n for n, r in ACTIONS.items() if r[col])
+            return OK("actions", os=osname, a=a, also=ALSO)
+        if c == "do":
+            name = b.get("a") or b.get("action") or ""
+            k = self._keys(name, os_)
+            if k is None:
+                return E("Not an action. {\"cmd\":\"actions\"} lists them.", reply="unknown_action")
+            if not k:
+                return E("No equivalent on this computer's OS", reply="no_equivalent", os=osname)
+            self.actions_done.append((name, k))
+            return OK("done", a=name, keys=k, os=osname)
+        if c == "open":
+            if b.get("app"):
+                self.actions_done.append(("open", b["app"]))
+                return OK("opened", via={"mac": "spotlight", "linux": "overview"}.get(os_, "start"), os=osname)
+            if b.get("run"):
+                if os_ == "mac":
+                    return E("macOS has no run box - use app", reply="no_equivalent", os=osname)
+                self.actions_done.append(("run", b["run"]))
+                return OK("opened", via="run", os=osname)
+            return dict(E("Give app (a name, as in the OS's search) or run (a command or URL)"), os=osname)
+        # steps
+        st = b.get("s")
+        if not isinstance(st, list) or not 1 <= len(st) <= 32:
+            return E("s is an array of 1 to 32 steps")
+        waited = 0
+        for i, ln in enumerate(st):
+            verb, _, arg = str(ln).partition(" ")
+            bad = None
+            if verb == "do":
+                k = self._keys(arg, os_)
+                bad = "unknown action" if k is None else ("no equivalent on this OS" if not k else None)
+            elif verb == "open":
+                bad = None if arg else "open needs an app name"
+            elif verb == "run":
+                bad = None if (arg and os_ != "mac") else "run needs a line, and not on macOS"
+            elif verb == "key":
+                bad = None if arg else "key needs a combo"
+            elif verb in ("type", "click"):
+                pass
+            elif verb == "wait":
+                try:
+                    ms = max(0, min(5000, int(arg)))
+                except ValueError:
+                    ms = 0
+                if waited + ms > 10000:
+                    bad = "more than 10 s of waiting"
+                waited += ms
+            else:
+                bad = "unknown step"
+            if bad:
+                return E(bad, reply="steps_stopped", at=i, done=i)
+            self.actions_done.append(("step", ln))
+        return OK("steps_done", done=len(st), os=osname)
+
     def _dispatch(self, b, transport, sock):
         c = b.get("cmd")
         E = lambda msg, **kw: dict({"status": "error", "message": msg}, **kw)
@@ -509,6 +609,8 @@ class BoardSim:
         if c == "press":
             k = b.get("keys", "")
             return OK("pressed", keys=k) if k else E("No keys specified")
+        if c in ("do", "actions", "open", "steps"):
+            return self._agent(c, b, OK, E)
         if c in ("key_down", "key_up"):
             k = b.get("key", "")
             if not k or (len(k) > 1 and not re.fullmatch(r"[A-Za-z0-9_]+", k)):
@@ -783,10 +885,13 @@ class BoardSim:
         # --- network, power, settings ------------------------------------------------------
         if c == "wifi_status":
             s = self.sta
+            # Like handleWifiStatus(): the link details exist only while connected.
+            link = dict(sta_ssid=s["ssid"], sta_rssi=-52, sta_channel=6, sta_gateway="192.168.1.1",
+                        sta_subnet="255.255.255.0", sta_dns="192.168.1.1") if s["phase"] == "online" else {}
             return OK("wifi_status", sta_connected=s["phase"] == "online", sta_enabled=True, sta_ip=s["ip"],
                       sta_phase=s["phase"], sta_error=s["error"], sta_ip_mode=s["ip_mode"], sta_target=s["ssid"],
                       want_ip=s["want_ip"], ap_ssid=self.ap_ssid, ap_ip="192.168.4.1", ap_clients=1,
-                      mac="B8:1F:3F:DA:1A:2C", ap_mac="BA:1F:3F:DA:1A:2C", saved_ssid=s["ssid"])
+                      mac="B8:1F:3F:DA:1A:2C", ap_mac="BA:1F:3F:DA:1A:2C", saved_ssid=s["ssid"], **link)
         if c == "wifi_configure":
             ssid = b.get("ssid", "")
             if not ssid:
@@ -819,9 +924,9 @@ class BoardSim:
                 return E("AP password can be at most 63 bytes")
             self.ap_ssid = ssid
             if open_:
-                self.ap_pass, self.ap_open, self.ap_gen = "", True, False
+                self.ap_pass, self.ap_open = "", True
             elif pw:
-                self.ap_pass, self.ap_open, self.ap_gen = pw, False, False
+                self.ap_pass, self.ap_open = pw, False
             self._ap_restart_pending = True
             return None                                   # the firmware sends no reply here (see docs)
         if c == "power_mode":

@@ -42,6 +42,38 @@ can set, and recovery that needs the board in hand.
 - **Connections that never sign in are closed after 20 seconds**, so silent
   connections cannot hold every slot and keep the owner out.
 
+### Actions - for agents and scripts
+
+- **Say what to do, not which keys.** `{"cmd":"do","a":"copy"}` presses Cmd+C on a
+  Mac and Ctrl+C on Windows and Linux - the board knows which computer it is in.
+  82 actions, each taken from the OS vendor's own shortcut page and identical to
+  the dashboard's tile for it (a static test holds the two together).
+- `{"cmd":"actions"}` lists the ones that work on this computer in about 730
+  characters - a choice list for a typed-decision model, or a few hundred tokens
+  for an LLM.
+- `{"cmd":"open","app":"Calculator"}` opens an app through the computer's own
+  search (Start, Spotlight, GNOME's overview); `"run"` runs a command or URL
+  through Win+R or Alt+F2.
+- `{"cmd":"steps","s":[...]}` runs up to 32 steps in one call and says where it
+  stopped if one cannot be done.
+- `tools/hidfi.py`: a command line and an MCP server, so an agent gets five small
+  tools. See docs/AGENT_CONTROL.md.
+
+### Shortcuts
+
+- Corrected against the vendors' pages: Windows 11's Print Screen now selects an
+  area, so *Whole screen* is Win+PrtScn; GNOME's Print opens the screenshot tool
+  and Shift+Print takes the whole screen (they were the wrong way round); GNOME
+  switches windows of one app with Super+\` and workspaces with Super+PgUp/PgDn;
+  macOS *Paste and Match Style* is Option+Shift+Cmd+V; Ctrl+Alt+Del on GNOME is
+  the power-off dialog, not a security screen.
+- About 70 more, every one from the vendor's own page: Finder's folders and views,
+  hiding and minimising apps, Dock and menu-bar focus, Windows' notification,
+  widgets, snap layouts, cast and Game Bar, moving windows between screens and
+  workspaces, GNOME's app grid and notification list, and Mac text editing keys.
+- **Open an app** on the Keys tab: type a name or tap one of the computer's usual
+  apps, and the board opens it.
+
 ### Dashboard
 
 - Settings → Access PIN asks for the board's WiFi password for the first PIN, and
@@ -54,6 +86,15 @@ can set, and recovery that needs the board in hand.
 - The access point card advises on the password it has: recommends choosing your
   own while it is the board's generated one, warns while it is `hid12345`.
 - The space between a shortcut group's heading and its tiles.
+- A PIN refused because this device was locked out is no longer kept. It was
+  re-sent on every reconnect, so a wrong one silently spent another attempt the
+  moment the lock ran out, and the next lock was longer. Found by the live test
+  below on a real board.
+- **Turn off** and **Forgot the PIN?** are hidden while there is no access PIN to
+  turn off or forget.
+- "This board made this password" is now a fact about the password in use, not a
+  flag cleared by any change: change it and put it back, and the board says so
+  again. Boards from earlier v3.10 builds keep what they had.
 
 ### Tests
 
@@ -67,6 +108,19 @@ can set, and recovery that needs the board in hand.
   over WiFi, the first PIN needing it over the home network, the per-device
   lockout, and unsigned connections being closed - each using only a temporary
   PIN that is removed again.
+- The whole ownership story on a real board, in Chromium, through the dashboard
+  the board serves (`tests/board/test_ownership_live.py`): the first PIN with no,
+  a wrong and the right WiFi password; a reload and sign-in; a vault PIN and a
+  stored secret; a PIN change keeping it; this device locked out while the USB
+  cable is not; recovery over USB with and without a vault PIN; the WiFi password
+  changed over USB and from the page, each becoming the new proof. It runs only on
+  a board with no PIN and an empty vault, and puts everything back.
+- `tests/test_vault.py` stored a PIN-kind entry with letters in it, which the
+  board has refused since v3.8. The suite refuses to run on a board with a PIN, so
+  it had not run since; the live story above left a PIN-free board and it failed
+  at once. Its marker is now digits.
+- `test_sim_contract.py` models a board that is on a home network: `wifi_status`
+  then carries the link details (`sta_rssi`, `sta_gateway` ...).
 
 ---
 

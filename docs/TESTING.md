@@ -468,6 +468,23 @@ are tested at three levels, and each row of its two tables has a test:
   network parts, `--board-url ws://<board's home-network IP>:81`. It only ever uses
   a temporary PIN on a board that has none, removes it, and never prints the WiFi
   password.
+- **The whole story, live** - `tests/board/test_ownership_live.py` drives the
+  dashboard the board itself serves, in Chromium, through ten ordered steps: the
+  first PIN (no, wrong and right WiFi password), sign-in after a reload, a vault PIN
+  and a stored secret, a PIN change that keeps it, this device locked out while the
+  cable is not, USB recovery with and without a vault PIN, and the WiFi password
+  changed over USB and from the page. A failed step skips the rest. It needs a
+  bench board (no access PIN, empty vault) and the board's home-network address:
+
+  | Run it | Needs |
+  |---|---|
+  | `python tests/run.py --tier board --board --board-url ws://<board IP>:81` | the board on the COM cable and on your home network, no access PIN, empty vault |
+  | the same with `ws://192.168.4.1:81` | this machine joined to the board's own WiFi; the two WiFi-password steps skip, since they would drop it |
+
+  Afterwards the board has no PIN, an empty vault and its original WiFi password,
+  and the run fails if it cannot prove that. Secrets are typed into the page with a
+  helper that Playwright does not log, because its error log prints whatever
+  `fill()` was given.
 
 ---
 

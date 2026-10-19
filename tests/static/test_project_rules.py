@@ -168,3 +168,19 @@ def test_every_overlay_is_measured_on_every_screen():
     missing = sorted(o for o in overlays if starters.get(o, o) not in covered)
     assert not missing, (f"overlays the responsive matrix never shows: {missing} - add them to OVERLAY_STATES "
                          f"in tests/support/responsive_run.py")
+
+
+def test_every_board_action_matches_its_dashboard_shortcut():
+    """{"cmd":"do","a":NAME} and the dashboard's shortcut tiles must press the same
+    keys for the same thing on every OS. Each firmware ACTIONS row needs a dashboard
+    SC row with the same label and the same three combos."""
+    from support.board_sim import ACTIONS
+    ui = paths.WEB_UI.read_text(encoding="utf-8") if hasattr(paths, "WEB_UI") else \
+        (paths.TESTS.parent / "hid_fi" / "web_ui.h").read_text(encoding="utf-8")
+    sc = ui[ui.index("const SC=["):ui.index("const SC_COL=")]
+    rows = set(re.findall(r"\['([^']*)','([^']*)','([^']*)','([^']*)'\]", sc))
+    assert len(ACTIONS) >= 80, f"the firmware table parsed to {len(ACTIONS)} rows"
+    bad = [f"{name}: {row}" for name, row in ACTIONS.items() if tuple(row) not in rows]
+    assert not bad, "board actions that differ from the dashboard's shortcut table:\n  " + "\n  ".join(bad)
+    assert len(set(ACTIONS)) == len(ACTIONS)
+    assert all(re.fullmatch(r"[a-z_]+", n) for n in ACTIONS), "action names are lower_snake words"

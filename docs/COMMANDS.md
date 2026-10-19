@@ -115,6 +115,46 @@ report unknown keys. `key_down` does validate and will return an error.
 
 ---
 
+## Actions - for agents and scripts
+
+Say what to do; the board presses the keys for the computer it is plugged into.
+One call, one word, the same on macOS, Windows and Linux (GNOME).
+
+| Command | Parameters | Reply |
+|---|---|---|
+| `actions` | `os` *(optional)*, `keys: true` *(optional)* | `a`: the action names that work on this computer, space separated (about 730 characters). With `keys`, an object name → combo. `also`: the step verbs. |
+| `do` | `a` - an action name; `os` *(optional, to override detection)* | `done` with the `keys` it pressed and the `os`; or `unknown_action`, or `no_equivalent` when that OS has none |
+| `open` | `app` - the name as you would type it in the OS's search | `opened`, `via`: `start` (Windows), `spotlight` (macOS) or `overview` (GNOME) |
+| `open` | `run` - an exact command or URL | `opened`, `via: run` - Win+R on Windows, Alt+F2 on GNOME (a URL goes through `xdg-open`). `no_equivalent` on macOS, which has no run box |
+| `steps` | `s` - an array of 1 to 32 steps | `steps_done` with `done`; or `steps_stopped` with `at` (the step it could not do) and `message` |
+
+Steps, one per array item (an array, so text may contain any character):
+
+| Step | Does |
+|---|---|
+| `do NAME` | an action, as `do` |
+| `open APP` | as `open` with `app` |
+| `run LINE` | as `open` with `run` |
+| `type TEXT` | types the rest of the line |
+| `key COMBO` | presses a combo, as `press` |
+| `wait MS` | waits, up to 5000 per step and 10 s per call |
+| `click left` / `right` / `middle` | clicks |
+
+```json
+{"cmd":"do","a":"screenshot_area"}
+{"cmd":"open","app":"Calculator"}
+{"cmd":"steps","s":["open Notepad","wait 1500","type Hello from HID-Fi","do save"]}
+```
+
+Every action is also a row of the dashboard's shortcut table, with the same keys
+(`tests/static` checks it), and is taken from the vendor's own shortcut page.
+Opening an app types into a launcher, so it depends on the launcher finding the
+name: use the name the OS shows. The whole request must fit in about 900 bytes.
+These commands need the access PIN like any other over WiFi.
+See [AGENT_CONTROL.md](AGENT_CONTROL.md) for driving the board from an AI agent.
+
+---
+
 ## Mouse
 
 | Command | Parameters |

@@ -139,3 +139,19 @@ def press_local(ctx, key):
 @then(parsers.parse('the board\'s vault PIN is still "{pin}"'))
 def vault_pin_kept(ctx, pin):
     assert ctx["sim"].vault_pin == pin
+
+
+@when(parsers.parse('I tap the app "{name}"'))
+def tap_app(ctx, name):
+    ui = ctx["ui"]
+    ui.page.locator(f'#appChips [data-app="{name}"]').click()
+    ui.idle(200)
+
+
+@when(parsers.parse('I type "{text}" into the app name and press Enter'))
+def type_app(ctx, text):
+    ui = ctx["ui"]
+    ui.page.locator("#appName").click()
+    ui.page.keyboard.type(text)
+    ui.page.keyboard.press("Enter")
+    ui.idle(200)

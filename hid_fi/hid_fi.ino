@@ -200,6 +200,7 @@ String apIP = "192.168.4.1";   // AP IP (always this)
 String apSSID = "ESP32-HID";   // AP SSID (configurable)
 String apPassword = "hid12345"; // AP password (min 8 chars for WPA2); replaced at first start
 bool   apPassGenerated = false;  // still the password this board made for itself
+String apGenPassword;            // the one it made, so that is a fact, not a flag
 unsigned long lastWifiCheck = 0;
 #define WIFI_CHECK_INTERVAL 10000   // check connection every 10s
 #define WIFI_CONNECT_TIMEOUT 15000  // 15s connection timeout
@@ -718,6 +719,10 @@ void handleMacroGet(const JsonDocument& inDoc);
 void handleMacroList();
 void handleMacroRun(const JsonDocument& inDoc);
 void handleMacroDelete(const JsonDocument& inDoc);
+void handleDo(const JsonDocument& inDoc);
+void handleActions(const JsonDocument& inDoc);
+void handleOpen(const JsonDocument& inDoc);
+void handleSteps(const JsonDocument& inDoc);
 uint16_t mediaUsage(const char* key);
 void buildStatusDoc(JsonDocument& doc);
 void handleUiSave(const JsonDocument& inDoc);
@@ -1011,14 +1016,23 @@ void setupWifi() {
         preferences.begin("wifi_cfg", false);
         preferences.putString("ap_pass", apPassword);
         preferences.putBool("ap_open", false);
-        preferences.putBool("ap_gen", true);
+        preferences.putString("ap_genpw", apPassword);
         preferences.end();
         COM_SERIAL.println("[AP] This board made its own WiFi password - read it with ap_password over USB");
     }
     {
-        preferences.begin("wifi_cfg", true);
-        apPassGenerated = preferences.getBool("ap_gen", false) && apPassword.length() >= 8;
+        // "Generated" means the password in use IS the one this board made, so it
+        // stays true when someone changes it and puts it back. Boards from the first
+        // v3.10 builds kept only a flag; their password then is the generated one.
+        preferences.begin("wifi_cfg", false);
+        apGenPassword = preferences.getString("ap_genpw", "");
+        if (!apGenPassword.length() && preferences.getBool("ap_gen", false) && apPassword.length() >= 8) {
+            apGenPassword = apPassword;
+            preferences.putString("ap_genpw", apGenPassword);
+        }
+        preferences.remove("ap_gen");
         preferences.end();
+        apPassGenerated = apGenPassword.length() >= 8 && apPassword == apGenPassword;
     }
     
     // Always start AP first — this is the primary access point
@@ -1715,6 +1729,10 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "macro_run") == 0) {
         handleMacroRun(inDoc);
     }
+    else if (strcmp(cmd, "do") == 0)      handleDo(inDoc);
+    else if (strcmp(cmd, "actions") == 0) handleActions(inDoc);
+    else if (strcmp(cmd, "open") == 0)    handleOpen(inDoc);
+    else if (strcmp(cmd, "steps") == 0)   handleSteps(inDoc);
     else if (strcmp(cmd, "macro_delete") == 0) {
         handleMacroDelete(inDoc);
     }
@@ -2768,7 +2786,7 @@ void handleApConfigure(const JsonDocument& inDoc) {
     preferences.putString("ap_ssid", apSSID);
     preferences.putString("ap_pass", apPassword);
     preferences.putBool("ap_open", apPassword.length() == 0);
-    if (wantOpen || passLen > 0) { preferences.putBool("ap_gen", false); apPassGenerated = false; }
+    apPassGenerated = apGenPassword.length() >= 8 && apPassword == apGenPassword;
     preferences.end();
 
     // Restarting the AP drops every client on it, including the phone waiting
@@ -4080,6 +4098,276 @@ void handleMacroRun(const JsonDocument& inDoc) {
     doc["status"]="ok"; doc["reply"]="macro_done";
     doc["slot"]=slot; doc["name"]=name; doc["steps"]=executed;
     sendJson(doc);
+}
+
+// ==================== ACTIONS (for agents and scripts) ====================
+// One name per thing a person does - "copy", "lock", "screenshot_area" - and the
+// board presses the keys that do it on the computer it is plugged into. An agent
+// (or a typed-decision model choosing from a list) sends a word, not a key combo
+// it had to look up and get right per OS. {"cmd":"actions"} lists the names that
+// work on this computer. Every row is also a row of the dashboard's shortcut
+// table with the same label and the same keys - tests/static checks that, so the
+// two never disagree. An empty column: that OS has no equivalent, and the action
+// is refused there rather than faked.
+// Columns: name, label (as in the dashboard), macOS, Windows, Linux (GNOME).
+static const char* const ACTIONS[][5] = {
+    {"copy",              "Copy",                     "GUI+C",           "CTRL+C",          "CTRL+C"},
+    {"cut",               "Cut",                      "GUI+X",           "CTRL+X",          "CTRL+X"},
+    {"paste",             "Paste",                    "GUI+V",           "CTRL+V",          "CTRL+V"},
+    {"paste_plain",       "Paste without formatting", "GUI+ALT+SHIFT+V", "CTRL+SHIFT+V",    "CTRL+SHIFT+V"},
+    {"undo",              "Undo",                     "GUI+Z",           "CTRL+Z",          "CTRL+Z"},
+    {"redo",              "Redo",                     "GUI+SHIFT+Z",     "CTRL+Y",          "CTRL+SHIFT+Z"},
+    {"select_all",        "Select all",               "GUI+A",           "CTRL+A",          "CTRL+A"},
+    {"save",              "Save",                     "GUI+S",           "CTRL+S",          "CTRL+S"},
+    {"save_as",           "Save as",                  "GUI+SHIFT+S",     "CTRL+SHIFT+S",    "CTRL+SHIFT+S"},
+    {"new",               "New",                      "GUI+N",           "CTRL+N",          "CTRL+N"},
+    {"open_file",         "Open",                     "GUI+O",           "CTRL+O",          "CTRL+O"},
+    {"print",             "Print",                    "GUI+P",           "CTRL+P",          "CTRL+P"},
+    {"find",              "Find",                     "GUI+F",           "CTRL+F",          "CTRL+F"},
+    {"find_next",         "Find next",                "GUI+G",           "F3",              "CTRL+G"},
+    {"find_previous",     "Find previous",            "GUI+SHIFT+G",     "SHIFT+F3",        "CTRL+SHIFT+G"},
+    {"replace",           "Replace",                  "GUI+ALT+F",       "CTRL+H",          "CTRL+H"},
+    {"close_window",      "Close window",             "GUI+W",           "CTRL+W",          "CTRL+W"},
+    {"quit",              "Quit application",         "GUI+Q",           "ALT+F4",          "CTRL+Q"},
+    {"preferences",       "Preferences",              "GUI+,",           "CTRL+,",          "CTRL+,"},
+    {"bold",              "Bold",                     "GUI+B",           "CTRL+B",          "CTRL+B"},
+    {"italic",            "Italic",                   "GUI+I",           "CTRL+I",          "CTRL+I"},
+    {"underline",         "Underline",                "GUI+U",           "CTRL+U",          "CTRL+U"},
+    {"word_left",         "Word left",                "ALT+LEFT",        "CTRL+LEFT",       "CTRL+LEFT"},
+    {"word_right",        "Word right",               "ALT+RIGHT",       "CTRL+RIGHT",      "CTRL+RIGHT"},
+    {"line_start",        "Start of line",            "GUI+LEFT",        "HOME",            "HOME"},
+    {"line_end",          "End of line",              "GUI+RIGHT",       "END",             "END"},
+    {"doc_start",         "Start of document",        "GUI+UP",          "CTRL+HOME",       "CTRL+HOME"},
+    {"doc_end",           "End of document",          "GUI+DOWN",        "CTRL+END",        "CTRL+END"},
+    {"select_word_left",  "Select word left",         "ALT+SHIFT+LEFT",  "CTRL+SHIFT+LEFT", "CTRL+SHIFT+LEFT"},
+    {"select_word_right", "Select word right",        "ALT+SHIFT+RIGHT", "CTRL+SHIFT+RIGHT","CTRL+SHIFT+RIGHT"},
+    {"select_to_line_start","Select to start of line","GUI+SHIFT+LEFT",  "SHIFT+HOME",      "SHIFT+HOME"},
+    {"select_to_line_end","Select to end of line",    "GUI+SHIFT+RIGHT", "SHIFT+END",       "SHIFT+END"},
+    {"delete_word_left",  "Delete word left",         "ALT+BACKSPACE",   "CTRL+BACKSPACE",  "CTRL+BACKSPACE"},
+    {"delete_word_right", "Delete word right",        "ALT+DELETE",      "CTRL+DELETE",     "CTRL+DELETE"},
+    {"page_up",           "Page up",                  "PAGEUP",          "PAGEUP",          "PAGEUP"},
+    {"page_down",         "Page down",                "PAGEDOWN",        "PAGEDOWN",        "PAGEDOWN"},
+    {"switch_app",        "Switch app",               "GUI+TAB",         "ALT+TAB",         "ALT+TAB"},
+    {"switch_app_back",   "Switch app backwards",     "GUI+SHIFT+TAB",   "ALT+SHIFT+TAB",   "ALT+SHIFT+TAB"},
+    {"overview",          "Mission Control / Task view","CTRL+UP",       "GUI+TAB",         "GUI"},
+    {"show_desktop",      "Show desktop",             "F11",             "GUI+D",           "GUI+D"},
+    {"minimise",          "Minimise window",          "GUI+M",           "GUI+DOWN",        "GUI+H"},
+    {"maximise",          "Maximise / full screen",   "CTRL+GUI+F",      "GUI+UP",          "GUI+UP"},
+    {"snap_left",         "Snap window left",         "",                "GUI+LEFT",        "GUI+LEFT"},
+    {"snap_right",        "Snap window right",        "",                "GUI+RIGHT",       "GUI+RIGHT"},
+    {"next_desktop",      "Next desktop",             "CTRL+RIGHT",      "CTRL+GUI+RIGHT",  "GUI+PAGEDOWN"},
+    {"previous_desktop",  "Previous desktop",         "CTRL+LEFT",       "CTRL+GUI+LEFT",   "GUI+PAGEUP"},
+    {"close_app_window",  "Close the active window",  "GUI+W",           "ALT+F4",          "ALT+F4"},
+    {"lock",              "Lock the screen",          "CTRL+GUI+Q",      "GUI+L",           "GUI+L"},
+    {"search",            "Search",                   "GUI+SPACE",       "GUI+S",           "GUI"},
+    {"file_manager",      "File manager",             "",                "GUI+E",           "GUI+E"},
+    {"settings",          "Settings",                 "",                "GUI+I",           ""},
+    {"run_dialog",        "Run dialog",               "",                "GUI+R",           "ALT+F2"},
+    {"task_manager",      "Force quit / Task Manager","GUI+ALT+ESC",     "CTRL+SHIFT+ESC",  ""},
+    {"emoji",             "Emoji picker",             "CTRL+GUI+SPACE",  "GUI+.",           "CTRL+."},
+    {"clipboard_history", "Clipboard history",        "",                "GUI+V",           ""},
+    {"notifications",     "Notifications",            "",                "GUI+N",           "GUI+V"},
+    {"context_menu",      "Context menu (no Menu key)","",               "SHIFT+F10",       "SHIFT+F10"},
+    {"screenshot",        "Whole screen",             "GUI+SHIFT+3",     "GUI+PRINTSCREEN", "SHIFT+PRINTSCREEN"},
+    {"screenshot_area",   "Selected area",            "GUI+SHIFT+4",     "GUI+SHIFT+S",     "PRINTSCREEN"},
+    {"screenshot_window", "Active window",            "",                "ALT+PRINTSCREEN", "ALT+PRINTSCREEN"},
+    {"new_tab",           "New tab",                  "GUI+T",           "CTRL+T",          "CTRL+T"},
+    {"close_tab",         "Close tab",                "GUI+W",           "CTRL+W",          "CTRL+W"},
+    {"reopen_tab",        "Reopen closed tab",        "GUI+SHIFT+T",     "CTRL+SHIFT+T",    "CTRL+SHIFT+T"},
+    {"next_tab",          "Next tab",                 "CTRL+TAB",        "CTRL+TAB",        "CTRL+TAB"},
+    {"previous_tab",      "Previous tab",             "CTRL+SHIFT+TAB",  "CTRL+SHIFT+TAB",  "CTRL+SHIFT+TAB"},
+    {"address_bar",       "Address bar",              "GUI+L",           "CTRL+L",          "CTRL+L"},
+    {"reload",            "Reload",                   "GUI+R",           "CTRL+R",          "CTRL+R"},
+    {"back",              "Back",                     "GUI+LEFT",        "ALT+LEFT",        "ALT+LEFT"},
+    {"forward",           "Forward",                  "GUI+RIGHT",       "ALT+RIGHT",       "ALT+RIGHT"},
+    {"private_window",    "Private window",           "GUI+SHIFT+N",     "CTRL+SHIFT+N",    "CTRL+SHIFT+N"},
+    {"zoom_in",           "Zoom in",                  "GUI+EQUALS",      "CTRL+EQUALS",     "CTRL+EQUALS"},
+    {"zoom_out",          "Zoom out",                 "GUI+MINUS",       "CTRL+MINUS",      "CTRL+MINUS"},
+    {"zoom_reset",        "Reset zoom",               "GUI+0",           "CTRL+0",          "CTRL+0"},
+    {"full_screen",       "Full screen",              "CTRL+GUI+F",      "F11",             "F11"},
+    {"history",           "History",                  "GUI+Y",           "CTRL+H",          "CTRL+H"},
+    {"downloads",         "Downloads",                "GUI+SHIFT+J",     "CTRL+J",          "CTRL+J"},
+    {"bookmark",          "Bookmark this page",       "GUI+D",           "CTRL+D",          "CTRL+D"},
+    {"new_folder",        "New folder",               "GUI+SHIFT+N",     "CTRL+SHIFT+N",    "CTRL+SHIFT+N"},
+    {"rename",            "Rename",                   "ENTER",           "F2",              "F2"},
+    {"go_up",             "Go up a folder",           "GUI+UP",          "ALT+UP",          "ALT+UP"},
+    {"trash",             "Move to trash",            "GUI+BACKSPACE",   "DELETE",          "DELETE"},
+    {"properties",        "Get info / properties",    "GUI+I",           "ALT+ENTER",       "CTRL+I"},
+};
+static const int ACTION_COUNT = sizeof(ACTIONS) / sizeof(ACTIONS[0]);
+
+static int actionIndex(const char* name) {
+    for (int i = 0; i < ACTION_COUNT; i++) if (!strcmp(ACTIONS[i][0], name)) return i;
+    return -1;
+}
+// The column for an OS; an unknown host gets the Windows keys, which is also
+// what the rest of the firmware assumes before detection settles.
+static int actionCol(HostOS os) { return os == OS_MAC ? 2 : os == OS_LINUX ? 4 : 3; }
+
+static HostOS osFromDoc(const JsonDocument& inDoc) {
+    const char* o = inDoc["os"] | "";
+    if (!strcmp(o, "mac"))     return OS_MAC;
+    if (!strcmp(o, "windows")) return OS_WINDOWS;
+    if (!strcmp(o, "linux"))   return OS_LINUX;
+    return hostOs();
+}
+
+// The one place an action becomes keys. Returns nullptr when the name is not an
+// action, "" when it has no equivalent on this OS.
+static const char* actionKeys(const char* name, HostOS os) {
+    int i = actionIndex(name);
+    return i < 0 ? nullptr : ACTIONS[i][actionCol(os)];
+}
+
+// Open an app the way a person would: the OS's own search launcher, the name,
+// Enter. Windows Start and macOS Spotlight and GNOME's overview all take the name
+// you see ("Calculator", "System Settings", "Text Editor"). The pauses let the
+// launcher appear and find it; they are the slowest step, not the HID.
+static void openApp(const char* app, HostOS os) {
+    pressKeyCombo(os == OS_MAC ? "GUI+SPACE" : "GUI");
+    delay(os == OS_MAC ? 500 : 700);
+    typeString(app);
+    delay(os == OS_WINDOWS ? 900 : 700);
+    pressKeyCombo("ENTER");
+}
+
+// Run an exact command or URL through the run box (Windows Win+R, GNOME Alt+F2).
+// macOS has no run box, so it is refused there.
+static bool runLine(const char* line, HostOS os) {
+    if (os == OS_MAC) return false;
+    if (os == OS_LINUX) {
+        pressKeyCombo("ALT+F2");
+        delay(600);
+        // A URL is not a command: GNOME's box runs commands, so hand it to xdg-open.
+        if (strstr(line, "://")) typeString("xdg-open ");
+        typeString(line);
+    } else {
+        pressKeyCombo("GUI+R");
+        delay(500);
+        typeString(line);
+    }
+    delay(150);
+    pressKeyCombo("ENTER");
+    return true;
+}
+
+static bool needHid() {
+    if (hidReady) return true;
+    StaticJsonDocument<128> d; d["status"]="error"; d["message"]="USB HID not initialized"; sendJson(d);
+    return false;
+}
+
+void handleDo(const JsonDocument& inDoc) {
+    if (!needHid()) return;
+    const char* a = inDoc["a"] | (inDoc["action"] | "");
+    HostOS os = osFromDoc(inDoc);
+    const char* keys = actionKeys(a, os);
+    StaticJsonDocument<256> d;
+    if (!keys) {
+        d["status"]="error"; d["reply"]="unknown_action";
+        d["message"]="Not an action. {\"cmd\":\"actions\"} lists them.";
+    } else if (!keys[0]) {
+        d["status"]="error"; d["reply"]="no_equivalent";
+        d["message"]="No equivalent on this computer's OS";
+        d["os"]=hostOsName(os);
+    } else {
+        pressKeyCombo(keys);
+        d["status"]="ok"; d["reply"]="done"; d["a"]=a; d["keys"]=keys; d["os"]=hostOsName(os);
+    }
+    sendJson(d);
+}
+
+// The names that work on this computer, as one space-separated string: about a
+// kilobyte, and the cheapest form for a model to read or choose from. With
+// "keys":true, name -> keys instead.
+void handleActions(const JsonDocument& inDoc) {
+    HostOS os = osFromDoc(inDoc);
+    int col = actionCol(os);
+    bool withKeys = inDoc["keys"] | false;
+    DynamicJsonDocument d(withKeys ? 6144 : 2560);
+    d["status"]="ok"; d["reply"]="actions"; d["os"]=hostOsName(os);
+    if (withKeys) {
+        JsonObject m = d.createNestedObject("a");
+        for (int i = 0; i < ACTION_COUNT; i++) if (ACTIONS[i][col][0]) m[ACTIONS[i][0]] = ACTIONS[i][col];
+    } else {
+        String names;
+        for (int i = 0; i < ACTION_COUNT; i++) {
+            if (!ACTIONS[i][col][0]) continue;
+            if (names.length()) names += ' ';
+            names += ACTIONS[i][0];
+        }
+        d["a"] = names;
+    }
+    d["also"] = "open <app> | run <command or url> | type <text> | key <combo> | wait <ms> | click left|right|middle";
+    sendJson(d);
+}
+
+void handleOpen(const JsonDocument& inDoc) {
+    if (!needHid()) return;
+    HostOS os = osFromDoc(inDoc);
+    const char* app = inDoc["app"] | "";
+    const char* run = inDoc["run"] | "";
+    StaticJsonDocument<256> d;
+    if (app[0]) {
+        openApp(app, os);
+        d["status"]="ok"; d["reply"]="opened"; d["via"]= os == OS_MAC ? "spotlight" : os == OS_LINUX ? "overview" : "start";
+    } else if (run[0]) {
+        if (runLine(run, os)) { d["status"]="ok"; d["reply"]="opened"; d["via"]="run"; }
+        else { d["status"]="error"; d["reply"]="no_equivalent"; d["message"]="macOS has no run box - use app"; }
+    } else {
+        d["status"]="error"; d["message"]="Give app (a name, as in the OS's search) or run (a command or URL)";
+    }
+    d["os"]=hostOsName(os);
+    sendJson(d);
+}
+
+// Several steps in one call, so an agent does not pay a round trip per key.
+// "s" is an array of lines - an array, so text may hold any character.
+//   do NAME | open APP | run LINE | type TEXT | key COMBO | wait MS | click BUTTON
+// At most 32 steps and 10 s of waiting. It stops at the first step it cannot do
+// and says which.
+#define STEPS_MAX       32
+#define STEPS_WAIT_MAX  10000
+void handleSteps(const JsonDocument& inDoc) {
+    if (!needHid()) return;
+    JsonArrayConst s = inDoc["s"].as<JsonArrayConst>();
+    HostOS os = osFromDoc(inDoc);
+    StaticJsonDocument<320> d;
+    if (s.isNull() || s.size() == 0 || s.size() > STEPS_MAX) {
+        d["status"]="error"; d["message"]="s is an array of 1 to 32 steps"; sendJson(d); return;
+    }
+    uint32_t waited = 0;
+    int i = 0;
+    for (JsonVariantConst v : s) {
+        String ln = v.as<String>();
+        int sp = ln.indexOf(' ');
+        String verb = sp < 0 ? ln : ln.substring(0, sp);
+        String arg  = sp < 0 ? String("") : ln.substring(sp + 1);
+        const char* bad = nullptr;
+        if (verb == "do") {
+            const char* k = actionKeys(arg.c_str(), os);
+            if (!k) bad = "unknown action"; else if (!k[0]) bad = "no equivalent on this OS"; else pressKeyCombo(k);
+        }
+        else if (verb == "open")  { if (arg.length()) openApp(arg.c_str(), os); else bad = "open needs an app name"; }
+        else if (verb == "run")   { if (!arg.length() || !runLine(arg.c_str(), os)) bad = "run needs a line, and not on macOS"; }
+        else if (verb == "type")  typeString(arg.c_str());
+        else if (verb == "key")   { if (arg.length()) pressKeyCombo(arg.c_str()); else bad = "key needs a combo"; }
+        else if (verb == "click") hidMouseButtons(mapMouseButton(arg.length() ? arg.c_str() : "left"), 2, 1);
+        else if (verb == "wait") {
+            uint32_t ms = (uint32_t)constrain(arg.toInt(), 0, 5000);
+            if (waited + ms > STEPS_WAIT_MAX) bad = "more than 10 s of waiting";
+            else { delay(ms); waited += ms; }
+        }
+        else bad = "unknown step";
+        if (bad) {
+            d["status"]="error"; d["reply"]="steps_stopped"; d["at"]=i; d["message"]=bad; d["done"]=i;
+            sendJson(d); return;
+        }
+        i++;
+        delay(20);
+    }
+    d["status"]="ok"; d["reply"]="steps_done"; d["done"]=i; d["os"]=hostOsName(os);
+    sendJson(d);
 }
 
 void handleMacroDelete(const JsonDocument& inDoc) {

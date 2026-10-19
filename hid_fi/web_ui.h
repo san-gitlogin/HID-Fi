@@ -1282,6 +1282,16 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
         </div>
 
         <div class="card span">
+          <div class="ch"><svg class="ic"><use href="#i-bolt"/></svg><h2>Open an app</h2></div>
+          <div class="pwrow">
+            <input id="appName" placeholder="Name, as the computer's search shows it" autocomplete="off" spellcheck="false" enterkeyhint="go">
+            <button class="btn ok" id="btnOpenApp">Open</button>
+          </div>
+          <div class="chips" id="appChips" style="margin-top:12px"></div>
+          <p class="hint" id="appHint" style="margin-top:10px"></p>
+        </div>
+
+        <div class="card span">
           <div class="scbar">
             <div class="seg" id="osSeg">
               <button data-os="mac"><span>macOS</span></button>
@@ -1740,7 +1750,9 @@ function connect(){
     if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();}
     if(m.reply==='auth_failed'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,m.retry_in?('Wrong PIN. Locked for '+m.retry_in+'s.'):'That PIN was not right.');}
-    if(m.reply==='auth_locked'){authOK=false;
+    // Refused unchecked, so it may be wrong: kept, it would be re-sent on every
+    // reconnect and spend another attempt the moment the lock ran out.
+    if(m.reply==='auth_locked'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,'Too many wrong PINs. Try again in '+(m.retry_in||0)+'s.');}
     if(m.reply&&m.reply!=='mouse_moved')logline((m.status==='ok'?'ok ':'!! ')+(m.reply||m.message||''),m.status!=='ok');
     settle(m);
@@ -3252,7 +3264,7 @@ const SC=[
 ['Copy','GUI+C','CTRL+C','CTRL+C'],
 ['Cut','GUI+X','CTRL+X','CTRL+X'],
 ['Paste','GUI+V','CTRL+V','CTRL+V'],
-['Paste without formatting','GUI+SHIFT+V','CTRL+SHIFT+V','CTRL+SHIFT+V'],
+['Paste without formatting','GUI+ALT+SHIFT+V','CTRL+SHIFT+V','CTRL+SHIFT+V'],
 ['Undo','GUI+Z','CTRL+Z','CTRL+Z'],
 ['Redo','GUI+SHIFT+Z','CTRL+Y','CTRL+SHIFT+Z'],
 ['Select all','GUI+A','CTRL+A','CTRL+A'],
@@ -3294,7 +3306,7 @@ const SC=[
 ['Windows and desktops','appswitch',[
 ['Switch app','GUI+TAB','ALT+TAB','ALT+TAB'],
 ['Switch app backwards','GUI+SHIFT+TAB','ALT+SHIFT+TAB','ALT+SHIFT+TAB'],
-['Next window in this app','GUI+`','','ALT+`'],
+['Next window in this app','GUI+`','','GUI+`'],
 ['Mission Control / Task view','CTRL+UP','GUI+TAB','GUI'],
 ['Application windows','CTRL+DOWN','',''],
 ['Show desktop','F11','GUI+D','GUI+D'],
@@ -3302,11 +3314,28 @@ const SC=[
 ['Maximise / full screen','CTRL+GUI+F','GUI+UP','GUI+UP'],
 ['Snap window left','','GUI+LEFT','GUI+LEFT'],
 ['Snap window right','','GUI+RIGHT','GUI+RIGHT'],
-['Next desktop','CTRL+RIGHT','CTRL+GUI+RIGHT','CTRL+ALT+RIGHT'],
-['Previous desktop','CTRL+LEFT','CTRL+GUI+LEFT','CTRL+ALT+LEFT'],
+['Next desktop','CTRL+RIGHT','CTRL+GUI+RIGHT','GUI+PAGEDOWN'],
+['Previous desktop','CTRL+LEFT','CTRL+GUI+LEFT','GUI+PAGEUP'],
 ['New desktop','','CTRL+GUI+D',''],
 ['Close desktop','','CTRL+GUI+F4',''],
-['Close the active window','GUI+W','ALT+F4','ALT+F4']
+['Close the active window','GUI+W','ALT+F4','ALT+F4'],
+['Hide this app','GUI+H','',''],
+['Hide other apps','GUI+ALT+H','',''],
+['Minimise all windows','GUI+ALT+M','GUI+M',''],
+['Restore minimised windows','','GUI+SHIFT+M',''],
+['Minimise all but this window','','GUI+HOME',''],
+['Close all windows of this app','GUI+ALT+W','',''],
+['Restore window size','','GUI+SHIFT+DOWN',''],
+['Snap layouts','','GUI+Z',''],
+['Peek at the desktop','','GUI+,',''],
+['Move window to left screen','','GUI+SHIFT+LEFT','GUI+SHIFT+LEFT'],
+['Move window to right screen','','GUI+SHIFT+RIGHT','GUI+SHIFT+RIGHT'],
+['Move window to next desktop','','','GUI+SHIFT+PAGEDOWN'],
+['Move window to previous desktop','','','GUI+SHIFT+PAGEUP'],
+['Switch windows','','','GUI+TAB'],
+['Cycle windows in open order','','ALT+ESC','ALT+ESC'],
+['Window menu','','ALT+SPACE',''],
+['Show or hide the Dock','GUI+ALT+D','','']
 ]],
 ['System','cpu',[
 ['Lock the screen','CTRL+GUI+Q','GUI+L','GUI+L'],
@@ -3317,7 +3346,8 @@ const SC=[
 ['Run dialog','','GUI+R','ALT+F2'],
 ['Terminal','','','CTRL+ALT+T'],
 ['Force quit / Task Manager','GUI+ALT+ESC','CTRL+SHIFT+ESC',''],
-['Security screen','','CTRL+ALT+DELETE','CTRL+ALT+DELETE'],
+['Security screen','','CTRL+ALT+DELETE',''],
+['Power off dialog','','','CTRL+ALT+DELETE'],
 ['Quick link menu','','GUI+X',''],
 ['Clipboard history','','GUI+V',''],
 ['Emoji picker','CTRL+GUI+SPACE','GUI+.','CTRL+.'],
@@ -3328,14 +3358,31 @@ const SC=[
 ['Magnifier zoom in','GUI+ALT+EQUALS','GUI+PLUS',''],
 ['Magnifier zoom out','GUI+ALT+MINUS','GUI+MINUS',''],
 ['Context menu','','MENU','MENU'],
-['Context menu (no Menu key)','','SHIFT+F10','SHIFT+F10']
+['Context menu (no Menu key)','','SHIFT+F10','SHIFT+F10'],
+['All apps','','','GUI+A'],
+['Notifications','','GUI+N','GUI+V'],
+['Quick settings','','GUI+A',''],
+['Widgets','','GUI+W',''],
+['Cast to a display','','GUI+K',''],
+['Game Bar','','GUI+G',''],
+['Accessibility settings','','GUI+U',''],
+['Mute the microphone in a call','','GUI+ALT+K',''],
+['Start menu (no Win key)','','CTRL+ESC',''],
+['Menu bar','CTRL+F2','F10',''],
+['Dock','CTRL+F3','',''],
+['Top bar','','','CTRL+ALT+TAB'],
+['Help menu','GUI+SHIFT+/','',''],
+['Spotlight in a Finder window','GUI+ALT+SPACE','',''],
+['Log out','GUI+SHIFT+Q','',''],
+['Refresh','','F5','']
 ]],
 ['Screenshots','monitor',[
-['Whole screen','GUI+SHIFT+3','PRINTSCREEN','PRINTSCREEN'],
-['Selected area','GUI+SHIFT+4','GUI+SHIFT+S','SHIFT+PRINTSCREEN'],
+['Whole screen','GUI+SHIFT+3','GUI+PRINTSCREEN','SHIFT+PRINTSCREEN'],
+['Selected area','GUI+SHIFT+4','GUI+SHIFT+S','PRINTSCREEN'],
 ['Active window','','ALT+PRINTSCREEN','ALT+PRINTSCREEN'],
 ['Screenshot toolbar','GUI+SHIFT+5','',''],
-['Start screen recording','','GUI+ALT+R','']
+['Start screen recording','','GUI+ALT+R','CTRL+SHIFT+ALT+R'],
+['Copy the active window','','ALT+PRINTSCREEN','']
 ]],
 ['Browser','search',[
 ['New tab','GUI+T','CTRL+T','CTRL+T'],
@@ -3382,7 +3429,42 @@ const SC=[
 ['Copy the path','GUI+ALT+C','CTRL+SHIFT+C','CTRL+SHIFT+C'],
 ['Duplicate','GUI+D','',''],
 ['New window','GUI+N','CTRL+N','CTRL+N'],
-['Select all','GUI+A','CTRL+A','CTRL+A']
+['Select all','GUI+A','CTRL+A','CTRL+A'],
+['Address bar / go to folder','GUI+SHIFT+G','ALT+D','CTRL+L'],
+['Quick Look','SPACE','',''],
+['Preview pane','GUI+SHIFT+P','ALT+P',''],
+['Details pane','','ALT+SHIFT+P',''],
+['Refresh','','F5',''],
+['New tab','GUI+T','CTRL+T',''],
+['Empty the trash','GUI+SHIFT+BACKSPACE','',''],
+['Eject','GUI+E','',''],
+['Home folder','GUI+SHIFT+H','',''],
+['Desktop folder','GUI+SHIFT+D','',''],
+['Documents folder','GUI+SHIFT+O','',''],
+['Downloads folder','GUI+ALT+L','',''],
+['Recents','GUI+SHIFT+F','',''],
+['Utilities folder','GUI+SHIFT+U','',''],
+['iCloud Drive','GUI+SHIFT+I','',''],
+['AirDrop','GUI+SHIFT+R','',''],
+['Network','GUI+SHIFT+K','',''],
+['Connect to server','GUI+K','',''],
+['View as icons','GUI+1','',''],
+['View as list','GUI+2','',''],
+['View as columns','GUI+3','',''],
+['View as gallery','GUI+4','','']
+]],
+['More text tricks','keyboard',[
+['Start of line or paragraph','CTRL+A','',''],
+['End of line or paragraph','CTRL+E','',''],
+['Delete to end of paragraph','CTRL+K','',''],
+['Put back what Ctrl-K cut','CTRL+Y','',''],
+['Swap two characters','CTRL+T','',''],
+['Look up the word','CTRL+GUI+D','',''],
+['Check spelling','GUI+;','',''],
+['Copy style','GUI+ALT+C','',''],
+['Paste style','GUI+ALT+V','',''],
+['Terminal copy','','','CTRL+SHIFT+C'],
+['Terminal paste','','','CTRL+SHIFT+V']
 ]]
 ];
 const SC_COL={mac:1,win:2,linux:3};
@@ -3462,7 +3544,33 @@ function paintGestureLabels(){
 }
 // Reflects the current OS and its source in the Settings selector. Safe to call
 // before the Settings markup exists, since an early status can arrive first.
+// Open an app the way a person would: the computer's own search, the name, Enter.
+// The board does it ({cmd:'open'}), for the OS it is plugged into - so these
+// follow the computer, not the shortcut tab being browsed. Each name is what a
+// default install's launcher finds.
+const APPS={
+  win:['Notepad','Calculator','File Explorer','Settings','Task Manager','Command Prompt','Paint'],
+  mac:['Safari','Finder','Terminal','TextEdit','Calculator','Notes','Activity Monitor','System Settings'],
+  linux:['Terminal','Files','Settings','Text Editor','Calculator','Firefox']
+};
+const APP_VIA={win:'Start',mac:'Spotlight',linux:'the Activities overview'};
+function renderApps(){
+  const box=$('appChips');if(!box)return;
+  box.innerHTML=(APPS[OS]||APPS.win).map(a=>'<button class="chip" data-app="'+esc(a)+'">'+esc(a)+'</button>').join('');
+  box.querySelectorAll('[data-app]').forEach(b=>b.onclick=()=>openApp(b.dataset.app));
+  $('appHint').textContent='Opens through '+(APP_VIA[OS]||APP_VIA.win)+' on the '+SC_NAME[OS]+
+    ' computer: it types the name and presses Enter, so use the name its search shows.';
+}
+function openApp(name){
+  name=(name||'').trim();
+  if(!name)return toast('Type the app\'s name','bad');
+  send({cmd:'open',app:name},r=>{
+    if(r&&r.status==='ok'){toast('Opening '+name,'ok');buzz(8);}
+    else toast((r&&r.message)||'Could not open it','bad');
+  });
+}
 function paintOsUi(){
+  renderApps();
   const sel=document.getElementById('osSel');
   if(sel)sel.querySelectorAll('[data-os-set]').forEach(b=>
     b.classList.toggle('on', b.dataset.osSet===(OS_SRC==='manual'?OS:'auto')));
@@ -4085,6 +4193,8 @@ function applyStatus(d){
   if(d.ap_open!==undefined)AP_OPEN=!!d.ap_open;
   if(d.auth_set!==undefined){
     $('pinProof').style.display=(!d.auth_set&&!AP_OPEN)?'':'none';
+    // Nothing to turn off or forget until a PIN exists.
+    $('btnPinOff').style.display=$('btnPinForgot').style.display=d.auth_set?'':'none';
     $('authState').textContent=d.auth_set?'On':'Off';
     if(AUTH_SET!==null&&AUTH_SET!==!!d.auth_set){loadPcs();loadVault();}
     AUTH_SET=!!d.auth_set;
@@ -4188,7 +4298,8 @@ const HELP={
   ['command','Pick your OS','macOS, Windows and Linux use different keys. The choice is remembered on this phone.'],
   ['search','Search','Filters on the name or on the keys themselves. Matching groups open automatically.'],
   ['layers','Groups','Tap a heading to open or close it. Whatever you leave open is remembered.'],
-  ['bolt','Tap to send','Tapping a shortcut presses it on the PC straight away.']
+  ['bolt','Tap to send','Tapping a shortcut presses it on the PC straight away.'],
+  ['search','Open an app','Type a name, or tap one, and the board opens it through the computer\'s own search.']
  ],'Only combos this board can actually send are listed. Where an operating system has no equivalent, the shortcut is hidden for it rather than shown as a button that would do nothing.'],
 
  media:['Media and knobs',[
@@ -4364,6 +4475,8 @@ function bindAll(){
   $('btnKnobNew').onclick=()=>knobEditor(-1);
   $('btnQuickNew').onclick=()=>quickEditor(-1);
   $('btnPcNew').onclick=()=>pcEditor();   // not pcEditor itself: the click event is not a PC to edit
+  $('btnOpenApp').onclick=()=>openApp($('appName').value);
+  $('appName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();openApp($('appName').value);}});
   $('btnVaultNew').onclick=()=>vaultEditor();
   $('btnVaultPin').onclick=vaultPinEditor;
   $('btnVaultWipe').onclick=vaultWipe;

@@ -13,6 +13,20 @@ Feature: Who owns the board - the first PIN, recovery, and someone else trying
     Then "#pinProof" is visible
     And "#pinProofWhy" contains "proves the board is yours"
 
+  Scenario: Without a PIN there is nothing to turn off or forget
+    Given the board has no access PIN
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#btnPinOff" is hidden
+    And "#btnPinForgot" is hidden
+    And "#btnPin" is visible
+
+  Scenario: With a PIN, it can be turned off or recovered
+    Given the dashboard is open and signed in with "4826"
+    When I open the "Settings" tab
+    Then "#btnPinOff" is visible
+    And "#btnPinForgot" is visible
+
   Scenario: The first PIN without the WiFi password is stopped on the page
     Given the board has no access PIN
     And the dashboard is open
@@ -156,6 +170,19 @@ Feature: Who owns the board - the first PIN, recovery, and someone else trying
     When a device on the home network tries 3 wrong PINs
     Then that device is locked out
     And the owner's phone on the home network can still sign in with "4826"
+
+  # Found on a real board (tests/board/test_ownership_live.py): a PIN refused as
+  # "locked" was kept and re-sent on every reconnect, so a wrong one silently
+  # spent another attempt the moment the lock ran out.
+  Scenario: A PIN typed while this device is locked out is not kept
+    Given the board's access PIN is "4826"
+    When I open the dashboard without signing in
+    And I enter the PIN "0000"
+    And I enter the PIN "0001"
+    And I enter the PIN "0002"
+    And I enter the PIN "0003"
+    Then the PIN prompt says "Too many wrong PINs"
+    And the page keeps no PIN to send again
 
   Scenario: Many wrong PINs from the home network lock it, but not the board's own WiFi
     Given the board's access PIN is "4826"

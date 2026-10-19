@@ -33,7 +33,11 @@ import time
 import serial
 import serial.tools.list_ports
 
-MARKER = "zzVAULTsecret42!"
+# Digits only: the first entry is a PIN kind, and the board refuses a PIN with
+# letters in it (it has since v3.8 - this suite never ran on a PIN-free board
+# until v3.10, so nobody saw it fail). Thirteen digits never occur by chance in
+# a status reply, so the "does not leak" checks still mean something.
+MARKER = "4096173825173"
 ACCESS_PIN = "9137"
 VAULT_PIN = "4242"
 
