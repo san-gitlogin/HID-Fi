@@ -748,11 +748,12 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .scg.open .scgh .chev{transform:rotate(180deg)}
 /* 132px is the widest minimum that still gives two columns inside a card on a
    360px phone, once main, card and grid padding are taken out. */
-.scgrid{display:none;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;padding:0 10px 10px}
+/* The same 10px all round: the tiles never sit hard against the open heading. */
+.scgrid{display:none;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;padding:10px}
 .scg.open .scgrid{display:grid}
 /* label above, keys below - a wide row wastes most of a phone's width */
-.sck{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:8px;
-  min-height:70px;padding:10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);
+.sck{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:10px;
+  min-height:72px;padding:10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);
   text-align:left;transition:transform .12s var(--ease),background .16s,border-color .16s}
 .sck b{font-size:12.5px;font-weight:520;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
