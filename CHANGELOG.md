@@ -7,6 +7,69 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v3.10 - 2026-10-19
+
+Owning the board: a password unique to each board, a first PIN only its owner
+can set, and recovery that needs the board in hand.
+
+> **Upgrading from a board on the old shared password (`hid12345`)?** The first
+> time v3.10 starts it makes a password of its own, so phones have to rejoin with
+> it. The flasher prints it at the end of the flash. A password you chose is kept.
+
+### Security
+
+- **Each board makes its own WiFi password.** Every board used to ship with
+  `hid12345`, written in the README, so anyone in radio range who had seen the
+  project could join. A board without a password of its own now makes one from
+  the chip's hardware random number generator - twelve easy-to-type characters,
+  about 59 bits - as the UK PSTI Act and ETSI EN 303 645 require. It is never
+  derived from the MAC, which the board broadcasts. Both flashers print it after
+  flashing. Settings recommends choosing your own, and warns while a board still
+  uses `hid12345`.
+- **Only the owner can set the first PIN.** With no PIN, anyone on the home
+  network could set one and take the board over. Over WiFi the first PIN now needs
+  the board's WiFi password (`set_auth` with `ap_password`); an open access point's
+  first PIN can only be set from that access point. Over USB nothing is needed.
+- **Recovery is over the USB COM cable only:** `.\flash_esp.ps1 -Recover`,
+  `./flash_esp.sh --recover`. Show the WiFi password, set a new one, or reset the
+  access PIN - keeping the vault when it has its own vault PIN, and otherwise
+  erasing it only after a typed ERASE. Nothing can be recovered over WiFi, by a
+  stranger or by the owner. New serial-only command `ap_password`.
+- **Wrong PINs lock out the device that typed them**, not the whole board, so a
+  stranger guessing PINs can no longer lock the owner out. 20 wrong PINs from the
+  home network within 10 minutes lock the home network out for 10 minutes; the
+  board's own WiFi and the USB cable are never locked out.
+- **Connections that never sign in are closed after 20 seconds**, so silent
+  connections cannot hold every slot and keep the owner out.
+
+### Dashboard
+
+- Settings → Access PIN asks for the board's WiFi password for the first PIN, and
+  says why in one line. **ⓘ** opens *PIN, passwords and recovery*: the three
+  secrets and their jobs, what is needed where, what to do when you forget each
+  one, and what someone else can and cannot do.
+- **Forgot the PIN?** - on the Settings card and on the PIN prompt - gives the
+  exact recovery command for Windows and for macOS/Linux, and what happens to
+  stored passwords.
+- The access point card advises on the password it has: recommends choosing your
+  own while it is the board's generated one, warns while it is `hid12345`.
+- The space between a shortcut group's heading and its tiles.
+
+### Tests
+
+- Every row of the ownership tables (SECURITY.md) is a dashboard scenario
+  (`tests/ui/bdd/features/ownership.feature`), run against a board model that
+  implements the new rules exactly.
+- The recovery tool and `flash_esp.ps1 -Recover` run end to end against a
+  simulated board on a real serial device: every recovery case, the typed ERASE,
+  several boards, a non-HID-Fi device, older firmware (`tests/unit/test_recover.py`).
+- On hardware (`tests/board/test_ownership_hw.py`): the password over USB and never
+  over WiFi, the first PIN needing it over the home network, the per-device
+  lockout, and unsigned connections being closed - each using only a temporary
+  PIN that is removed again.
+
+---
+
 ## v3.9 - 2026-10-17
 
 Emoji and accents reach the computer, and phone text stops arriving garbled.

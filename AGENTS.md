@@ -29,6 +29,7 @@ Two things follow from that and shape every decision:
 flash_esp.ps1                  build + flash + verify (Windows), auto-detects everything
 flash_esp.sh                   the same for macOS / Linux
 tools/flash_ports.py           which port is a HID-Fi board, among several (used by flash_esp.sh)
+tools/recover.py               USB-only recovery: WiFi password, access PIN (flash_esp.sh --recover)
 hid_fi/
   hid_fi.ino           all firmware: transports, dispatch, HID, NVS
   web_ui.h                     the entire dashboard as one PROGMEM string
@@ -489,6 +490,51 @@ holds. The first four are enforced - the run fails without them:
   `.view`.
 
 ---
+
+## Ownership, PINs and recovery - security rules (v3.10)
+
+These rules protect the owner. Do not weaken any of them to make a feature or a
+test easier; if one blocks you, stop and ask the user.
+
+Definitions:
+- "WiFi password" means the board's own access-point password (`apPassword` in
+  `hid_fi.ino`). It is the proof of ownership.
+- "Access PIN" means `authToken`. It lets a phone use the board over WiFi.
+- "Vault PIN" means `vaultPinCode`. It guards the vault separately. Never call
+  either PIN just "the PIN" in user-facing text; name which one.
+
+Rules:
+- Never send the WiFi password over WiFi. Only `ap_password` returns it, and only
+  when `cmdSource == SRC_SERIAL`. Never add it to `status`, `storage_info`,
+  `/api/status` or any WebSocket reply.
+- Over WiFi, the first access PIN (no PIN set, `token` not empty) requires
+  `ap_password` to equal the WiFi password (`handleSetAuth`). If the access point
+  is open, require the requester to be an access-point client (`peerOnAp()`).
+  Serial requires nothing.
+- Never add a way to reset or recover a PIN or the WiFi password over WiFi. Not
+  with the WiFi password, not with a code, not with a button. Recovery is USB only:
+  `tools/recover.py` and `flash_esp.ps1 -Recover`.
+- Never add a physical-button reset or erase. A child pressing BOOT must not cost
+  anyone their vault.
+- A PIN reset without the old PIN erases the vault unless a vault PIN is set
+  (`handleSetAuth`, `vaultGuardedByAccessPin`). Keep that. Recovery tools must say
+  which will happen before changing anything, and require a typed ERASE (or
+  `--erase-vault` / `-EraseVault`) when the vault will be erased.
+- Every PIN check goes through `pinCheck()` with `pinPeer` set to the requester.
+  Lockout is per IP (`pinGuards`) plus the home-network budget (`LAN_FAIL_BUDGET`).
+  Never make access-point clients or serial subject to the home-network budget.
+- Keep `dropUnsignedSockets()`: an unauthenticated socket is closed after
+  `WS_AUTH_DEADLINE_MS` while a PIN is set.
+- A board without a stored WiFi password makes one with `makeApPassword()` from
+  `esp_random()`. Never derive it from the MAC, a serial number or anything the
+  board broadcasts. Never reintroduce a shared default.
+- Change `tests/support/board_sim.py` in the same commit as any of these rules, and
+  keep `tests/ui/bdd/features/ownership.feature`, `tests/unit/test_recover.py` and
+  `tests/board/test_ownership_hw.py` passing. Every row of the ownership tables in
+  SECURITY.md has a scenario; a new rule needs a new row and a new scenario.
+- Hardware tests that need a PIN use a temporary PIN on a board that has none, and
+  must remove it and assert `auth_set` is false afterwards. Never print the WiFi
+  password in test output.
 
 ## Text typing - the rule that came from a bug
 

@@ -93,6 +93,12 @@ diagnose from the USB device list rather than from serial noise you are causing.
     (`.claude/settings.json`) fail the turn otherwise - follow
     `.claude/skills/hidfi-feature`. A bug found and not fixed is tagged
     `@known_issue`, never deleted.
+17. **Ownership rules are fixed.** The board's WiFi password never travels over
+    WiFi (`ap_password` is USB only). The first access PIN over WiFi needs that
+    password. Recovery of a forgotten PIN or WiFi password is USB only - never add
+    a WiFi or button path. Lockout is per device. Read "Ownership, PINs and
+    recovery" in AGENTS.md before touching auth, PINs, the vault or the access
+    point.
 
 ## Expected working style
 

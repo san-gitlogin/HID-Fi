@@ -53,7 +53,7 @@ tour of the dashboard.
 - [What you need](#what-you-need)
 - [The two USB ports are not interchangeable](#the-two-usb-ports-are-not-interchangeable)
 - [Quick start](#quick-start)
-- [Change the password first](#change-the-password-first)
+- [Your board's password, PIN and recovery](#your-boards-password-pin-and-recovery)
 - [Recommended setup](#recommended-setup)
 - [Mac or PC, worked out for you](#mac-or-pc-worked-out-for-you)
 - [How it works](#how-it-works)
@@ -259,43 +259,71 @@ accessory prompt and the keyboard assistant — covered in
 
 **2. Plug the USB port** into the computer you want to control.
 
-**3. Connect your phone** to the WiFi network **`ESP32-HID-XXXXXX`**, password
-`hid12345`, then open **<http://192.168.4.1/>**.
+**3. Connect your phone** to the WiFi network **`ESP32-HID-XXXXXX`** with the
+password the flasher printed at the end, then open **<http://192.168.4.1/>**.
+
+```
+== Verifying COM13
+   Running hid_fi_v3.10, USB HID ready
+   Dashboard: join WiFi 'ESP32-HID-DA1A2C' with password  k7m2-x9qp-4tre
+```
 
 `XXXXXX` is the last three bytes of that board's MAC address, so several boards
-never collide.
+never collide. The password is **unique to your board**: it makes its own the
+first time it starts.
 
-**4. Change the password.** Read the next section — this one matters.
+**4. Set an access PIN** in Settings. Read the next section - it takes a minute.
 
 ---
 
-## Change the password first
+## Your board's password, PIN and recovery
 
-> [!WARNING]
-> Every board flashed with this firmware starts with the **same** access point
-> password, `hid12345`, and it is printed in this README. Until you change it,
-> anyone in WiFi range who has seen this project can type on your computer.
+| Thing | What it is for | Where you set it |
+|---|---|---|
+| **The board's WiFi password** | Joins a phone to the board's own network. Also your proof of ownership when the first PIN is set | Made by the board; change it in Settings → Access point |
+| **Access PIN** | Four digits that let a phone use the board | Settings → Access PIN |
+| **Vault PIN** (optional) | Guards stored passwords separately, so they survive a PIN reset | Keys → Passwords |
 
-Both settings are in the **Settings** tab:
+**Set the access PIN first thing.** Over your home network the first PIN asks for
+the board's WiFi password - that is what stops a stranger on the same network from
+claiming the board. Wrong PINs lock out only the phone that typed them.
 
-**1. Change the access point.**
-Settings → Access point → new name and password → *Change access point*.
-Minimum 8 characters. The access point restarts immediately, so your phone drops
-off the network. The dashboard shows a full-screen panel with the new name and
-password and reconnects by itself once you rejoin.
+**Recovery needs the board in hand.** Plug its **COM** port into any computer and run:
 
-**2. Set an access PIN.**
-Settings → Access PIN → four digits → *Set PIN*.
+```powershell
+.\flash_esp.ps1 -Recover        # Windows
+```
 
-The PIN gates every wireless request. Four digits is only 10,000 combinations, so
-the board **locks out for longer after each wrong guess** — one free retry, then
-5s, 15s, 60s, then five minutes per attempt. Walking the whole keyspace would take
-about a month.
+```bash
+./flash_esp.sh --recover        # macOS / Linux
+```
 
-**USB serial is never gated and never locked out.** If you forget the PIN or lock
-yourself out, plug into the COM port and set a new one over serial. That is the
-deliberate way back in. The one exception is reading a stored password back out
-of the vault — that asks for a PIN even over the cable.
+It shows the WiFi password, sets a new one, or resets the access PIN. Nothing can
+be recovered over WiFi - not by a stranger, and not by you.
+
+### If you forget something
+
+| Forgot | What to do | Stored passwords |
+|---|---|---|
+| The WiFi password | Sign in over your home network and change it in Settings, or `-Recover` and show it | Kept |
+| The access PIN | `-Recover` → reset the access PIN | Kept if the vault has its own vault PIN, otherwise erased (you are told and asked to type ERASE first) |
+| Both | `-Recover`: show the WiFi password, then reset the PIN | As above |
+| The vault PIN | Keys → Passwords → *Forgotten it?*, with the access PIN | Erased - that is what a vault PIN is for |
+| Nothing - you moved the board, or updated its firmware | Nothing to do | Kept |
+
+### If someone else tries
+
+| Who | What they can do |
+|---|---|
+| Someone on your home network, before you set a PIN | Nothing: everything is refused, and setting a PIN needs the board's WiFi password |
+| Someone on your home network, after | Nothing without the PIN. Their wrong guesses lock out their own device |
+| A neighbour in WiFi range | Nothing: the password is unique to your board |
+| Many devices guessing together | 20 wrong PINs from the home network lock it out for 10 minutes. The board's own WiFi and the cable keep working |
+| Someone who connects and never signs in | Disconnected after 20 seconds, so they cannot hold every connection |
+| A child pressing buttons on the board | Nothing: no button resets or erases anything |
+| Someone who takes the board | Can recover it, like anyone holding a house key. Keep it where you would keep one |
+
+Full detail, including what this does not protect against: [SECURITY.md](SECURITY.md).
 
 ### Joining your home network is not the same as using the access point
 
@@ -323,8 +351,8 @@ it says otherwise.
 
 | # | Do this | Why it matters |
 |---|---|---|
-| 1 | **Change the access point name and password** | Every board ships with `hid12345`, printed in this README. Until you change it, anyone in range who has seen this project can type on your computer. A distinctive name also stops you joining someone else's board by mistake. |
-| 2 | **Set a four digit access PIN** | It gates every wireless request, with an escalating lockout behind it. Nothing else on this list works without it — saving a PC password or a vault entry is refused until a PIN exists. |
+| 1 | **Set a four digit access PIN** | It gates every wireless request, with a lockout per device behind it. Nothing else on this list works without it — saving a PC password or a vault entry is refused until a PIN exists. Over your home network the first PIN asks for the board's WiFi password. |
+| 2 | **Choose your own access point name and password** *(optional)* | The board made a password unique to it, so keeping it is safe. One you choose is easier to remember, and a distinctive name stops you joining someone else's board by mistake. Boards that still use the old shared `hid12345` are told to change it. |
 | 3 | **Decide how you will reach it** | The board's **own access point** is the safer default: an attacker has to be in radio range. Joining your home network is more convenient and strictly more exposed — see below. |
 | 4 | **Give the vault its own PIN** *(Keys → Passwords)* | Then unlocking the dashboard stops being the same thing as unlocking your stored passwords, the way a browser asks again before showing one. |
 | 5 | **Turn the access point off when you are on a network** *(Power)* | An access point beacons whether anyone is listening or not. Holding **BOOT** for two seconds always brings it back. |
@@ -492,9 +520,11 @@ Anything the dashboard shows about the computer — volume, mute, lock state —
 what it *believes* it set, not what it observed.
 
 **Is it secure?**
-Out of the box, no — every board ships with the same access-point password.
-Change it and set a 4-digit PIN, both in Settings, before using it for anything
-that matters. See [SECURITY.md](SECURITY.md).
+Since v3.10, each board makes its own WiFi password, so a neighbour cannot join it.
+Set a 4-digit access PIN in Settings before using it for anything that matters.
+Forgotten passwords and PINs are recovered over the USB cable only. See
+[Your board's password, PIN and recovery](#your-boards-password-pin-and-recovery)
+and [SECURITY.md](SECURITY.md).
 
 **Can I type emoji and accents from my phone?**
 On a Mac and on Linux, yes. A USB keyboard sends keys, not characters, so the

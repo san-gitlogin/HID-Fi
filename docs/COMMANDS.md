@@ -29,12 +29,23 @@ curl -X POST http://192.168.4.1/api/command \
 | Command | Parameters | Notes |
 |---|---|---|
 | `auth` | `token` | Authenticates this WebSocket client |
-| `set_auth` | `token` | Sets the PIN; empty string disables it |
+| `set_auth` | `token`, `old`, `ap_password` | Sets the PIN; empty string disables it. Over WiFi, the **first** PIN also needs `ap_password`, the board's own WiFi password |
+| `ap_password` | — | **USB only.** The board's WiFi name and password: `{"ssid", "password", "open", "generated"}`. Over WiFi it answers `{"status":"error","reply":"usb_only"}` |
 
 HTTP requests may instead carry `token` inline in the body of any command.
 
-Wrong PINs are throttled: one free retry, then 5s, 15s, 60s, then 5 minutes per
-attempt. A locked-out reply carries `retry_in` in seconds. See
+**The first PIN over WiFi** (no PIN set yet, `token` not empty) is refused with
+`{"status":"error","reply":"ap_password_required","message":...}` unless
+`ap_password` matches the board's WiFi password. If the board's WiFi is open, the
+first PIN can only be set by a client on that WiFi. Over serial nothing is needed.
+Changing an existing PIN works as before, from a signed-in connection.
+
+Wrong PINs are throttled **per device** (by IP address): one free retry, then 5s,
+15s, 60s, then 5 minutes per attempt. A locked-out reply carries `retry_in` in
+seconds. 20 wrong PINs from the home network within 10 minutes lock the home
+network out for 10 minutes; clients of the board's own access point and the USB
+cable are never part of that. A WebSocket that has not authenticated within 20
+seconds of connecting (while a PIN is set) is closed. See
 [SECURITY.md](../SECURITY.md).
 
 ---
@@ -450,6 +461,9 @@ the same text back - a round-trip check for a transport.
   "pointer_mode": "relative",
   "gamepad": false,
   "auth_set": true,
+  "ap_open": false,
+  "ap_pass_generated": true,
+  "ap_pass_default": false,
   "pc_state": "unknown",
   "host_os": "mac",
   "host_os_source": "auto",
@@ -459,6 +473,10 @@ the same text back - a round-trip check for a transport.
 ```
 
 `usb_suspended: true` means the host is asleep and reading nothing.
+
+`ap_pass_generated` is true while the access point still uses the password the
+board made for itself (v3.10); `ap_pass_default` is true if it is the old shared
+`hid12345`. Neither ever carries the password - only `ap_password` over USB does.
 
 `channel` is the radio channel. There is only one radio, so the access point and
 the home network are always on the same one — joining a router drags the access

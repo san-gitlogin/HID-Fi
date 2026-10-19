@@ -213,6 +213,8 @@ install the packages above, plug in the board, run `sudo -E python tests/run.py 
 | Wheel, pan, buttons, drag, wiggle | | | accepted | yes | yes | yes | |
 | Absolute pointer, gamepad | | sends | accepted/rejected by mode | | | | |
 | Secrets never leave the board | | | yes | | | | |
+| Ownership: first PIN needs the WiFi password, per-device lockout, unsigned connections closed, password never over WiFi | | ownership.feature (21 scenarios) | test_ownership_hw.py | | | | |
+| Recovery over USB (both flashers): show/set the WiFi password, reset the access PIN, vault kept or erased after ERASE, several boards | test_recover.py, against a simulated board on a real serial device | | | | | | |
 | WiFi join, power modes, inventory | | | yes | | | | |
 | Dashboard: every tab, control, sheet, gesture and error path | | ~280 scenarios | model checked against the board | | | | |
 | Latency and throughput | | | serial | page timestamps | page timestamps | kernel timestamps | |
@@ -441,6 +443,31 @@ Found but not tagged, because no person can hit them:
 - `txAbs()` is never called. Not a defect: in absolute mode the firmware turns
   relative moves into absolute positions itself. It can go, or stay for a future
   touchscreen-style mode.
+
+---
+
+## Ownership and recovery
+
+The rules in [SECURITY.md](../SECURITY.md#ownership-who-can-claim-the-board-and-how-you-get-back-in)
+are tested at three levels, and each row of its two tables has a test:
+
+- **Dashboard** - `tests/ui/bdd/features/ownership.feature`: the first PIN on the
+  board's own WiFi and over the home network, with and without the right WiFi
+  password; an open access point; changing a known PIN; the WiFi password never
+  reaching the page; the explanation and *Forgot the PIN?* sheets; the password
+  advice; one device locked out while the owner signs in; the home-network budget
+  sparing the board's own WiFi; an unsigned connection closed and the dashboard
+  recovering.
+- **Recovery tools** - `tests/unit/test_recover.py` runs `flash_esp.sh --recover`
+  and `flash_esp.ps1 -Recover` against `support/fake_serial.py`: a simulated board
+  on a real pseudo-terminal, so the tools open it like any COM port. Every
+  recovery case, the typed ERASE (and anything else refusing), the WiFi password
+  typed twice, several boards, a device that is not a HID-Fi board, firmware older
+  than v3.10. The PowerShell half needs `pwsh` (Windows CI has it).
+- **Hardware** - `tests/board/test_ownership_hw.py`, with `--board` and, for the
+  network parts, `--board-url ws://<board's home-network IP>:81`. It only ever uses
+  a temporary PIN on a board that has none, removes it, and never prints the WiFi
+  password.
 
 ---
 

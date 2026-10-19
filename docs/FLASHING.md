@@ -26,8 +26,9 @@ firmware, then asks the board what it is running and prints the answer. Expect:
 == Flashing COM13
    Flashed COM13
 == Verifying COM13
-   Running hid_fi_v3.6, USB HID ready
-   Dashboard: connect to WiFi 'ESP32-HID-09F7C8' (password hid12345) then open http://192.168.4.1/
+   Running hid_fi_v3.10, USB HID ready
+   Dashboard: join WiFi 'ESP32-HID-09F7C8' with password  k7m2-x9qp-4tre
+              then open http://192.168.4.1/   (forgot it later? .\flash_esp.ps1 -Recover)
    Done.
 ```
 
@@ -220,6 +221,38 @@ doubt. On macOS and Linux the script needs `pyserial` to tell ports apart
 (`pip install pyserial`); without it, it falls back to the old rule: exactly one
 USB serial port, or name it.
 
+### Forgot the WiFi password or the access PIN?
+
+Plug the board's **COM** port into any computer and run:
+
+```powershell
+.\flash_esp.ps1 -Recover          # Windows
+```
+
+```bash
+./flash_esp.sh --recover          # macOS / Linux (needs Python 3 and pyserial)
+```
+
+It finds the board the same way the flasher does (several boards: it asks, or use
+`-Port` / `-Serial`) and offers:
+
+| Choice | What happens | Stored passwords |
+|---|---|---|
+| Show the WiFi name and password | Read over the cable, nothing changes | Kept |
+| Set a new WiFi password | 8-63 characters, typed twice. Phones on the board's WiFi drop off and rejoin with it | Kept |
+| Reset the access PIN | A new 4-digit PIN, or Enter to turn the PIN off | Kept if the vault has its own vault PIN. Otherwise erased - you are told first and must type ERASE |
+
+For scripts: `-RecoverShow`, `-RecoverSetPassword <new>`, `-RecoverResetPin <1234|off>`
+(add `-EraseVault` to allow erasing an unguarded vault); on macOS/Linux the same as
+`--show-password`, `--set-password`, `--reset-pin`, `--erase-vault` after `--recover`.
+
+Recovery works only over the cable, on purpose: over WiFi a stranger and the owner
+look the same. See [SECURITY.md](../SECURITY.md#ownership-who-can-claim-the-board-and-how-you-get-back-in).
+
+**Upgrading to v3.10 from a board on the old shared password** (`hid12345`): the board
+makes its own password the first time it starts, so your phone has to rejoin with the new
+one. The flasher prints it at the end of the flash.
+
 ### Your settings survive an upgrade
 
 A normal flash writes only the four firmware partitions and leaves **NVS** untouched, so the
@@ -246,8 +279,9 @@ partition table, `boot_app0` and the app in one pass.
 
 This is verified, not assumed: erasing all 16 MB leaves the board in a boot loop printing
 `invalid header: 0xffffffff`, and a plain `.\flash_esp.ps1` brings it straight back — after
-which the access point returns to its factory name, `ESP32-HID-XXXXXX` with the password
-`hid12345`. The same applies to a board carrying somebody else's firmware.
+which the access point returns to its factory name, `ESP32-HID-XXXXXX`, with a new
+password of the board's own making - the flasher prints it. The same applies to a board
+carrying somebody else's firmware.
 
 ---
 

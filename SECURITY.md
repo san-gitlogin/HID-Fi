@@ -7,36 +7,104 @@ straight description of what it does and does not protect.
 
 ## The short version
 
-Out of the box, **this is not secure**. Two settings make it reasonable, and both
-take about thirty seconds:
-
-1. **Change the access point password.** Settings → Access point.
-2. **Set a 4-digit access PIN.** Settings → Access PIN.
-
-Do both before you use the board for anything that matters.
+1. **Each board makes its own WiFi password** the first time it starts (since
+   v3.10). The flasher prints it. A neighbour cannot guess it.
+2. **Set a 4-digit access PIN** in Settings. Over your home network the first PIN
+   needs the board's WiFi password, so nobody else on that network can claim it.
+3. **Recovery is over the USB cable only** - `.\flash_esp.ps1 -Recover` or
+   `./flash_esp.sh --recover`. Holding the board is what proves you own it.
 
 ---
 
-## Why the defaults are not safe
+## Ownership: who can claim the board, and how you get back in
 
-Every board flashed with this firmware advertises an access point with the **same
-password**, `hid12345`, and that password is written in the README. Anyone who has
-seen this project and is within WiFi range can join and start typing on your
-computer.
+The board has no screen and no account, so it needs a rule for who its owner is.
+The rule is: **whoever holds it, or whoever was given its WiFi password.**
 
-Until you set a PIN, the dashboard is **completely unauthenticated**. Joining the
-network is the only barrier.
+| Secret | Who can know it | How it is recovered |
+|---|---|---|
+| The board's WiFi password | Whoever holds the board (it is readable over USB), and whoever they gave it to | `-Recover` shows it, or sets a new one. Signed in over your home network, Settings changes it too |
+| Access PIN | Whoever set it | `-Recover` resets it. Never over WiFi |
+| Vault PIN | Whoever set it | Reset with the access PIN; the vault is erased, which is the point of having one |
 
-This is a deliberate tradeoff for first-run usability — you have to be able to get
-in before you can lock it down — but it is only defensible if you actually lock it
-down.
+### Why the WiFi password is unique to each board, and random
+
+Until v3.10 every board shipped with `hid12345`, printed in the README, so anyone in
+radio range who had seen the project could join. The UK's Product Security and
+Telecommunications Infrastructure Act and ETSI EN 303 645 forbid exactly that: a
+default password must be unique per device and must not be derivable from public
+information. So a board with no password of its own makes one from the chip's
+hardware random number generator: twelve characters in three groups of four, from
+31 letters and digits that cannot be confused for each other (about 59 bits).
+
+It is deliberately **not** derived from the MAC address. The board broadcasts its
+MAC to everyone in range, and its network name already contains half of it, so a
+MAC-based password could be worked out by anyone standing nearby.
+
+**Upgrading.** A board whose password you chose keeps it. A board that was still
+on the old shared default never stored a password of its own, so the first time
+v3.10 starts it makes one - its phones have to rejoin with the new password, which
+the flasher prints. (If you had typed `hid12345` in yourself, it is kept, and
+Settings tells you to change it.)
+
+### Claiming the board: the first PIN
+
+With no PIN, anyone who can reach the board could set one, and that PIN would then
+be theirs. On the board's own WiFi that is only people you gave its password to. On
+your home network it is everyone. So over WiFi, **setting the first PIN requires
+the board's WiFi password** (`set_auth` with `ap_password`). If the board's WiFi is
+open there is no password to prove, and the first PIN can only be set from that
+WiFi. Over USB nothing is required: holding the board is the proof.
+
+Changing a PIN you know is unchanged: you are already signed in, and the dashboard
+sends the old PIN so the vault is kept.
+
+### Recovery: USB only
+
+There is no way to recover a forgotten WiFi password or access PIN over WiFi -
+not for a stranger, and not for the owner, because on a network the two look
+identical. The recovery tool talks to the board over its COM cable:
+
+- **Show the WiFi password** (`ap_password`, a serial-only command).
+- **Set a new WiFi password** (`ap_configure` over serial).
+- **Reset the access PIN** (`set_auth` over serial, which needs no old PIN). The
+  vault is kept if it has its own vault PIN; otherwise it is erased, because the
+  access PIN was what guarded it. The tool says which before changing anything,
+  and asks you to type ERASE (or pass `-EraseVault` / `--erase-vault`).
+
+No button on the board resets or erases anything. A child, or anyone who does not
+know the board, cannot lose your stored passwords by pressing BOOT.
+
+### If you forget something
+
+| Forgot | What to do | Stored passwords |
+|---|---|---|
+| The WiFi password | Sign in over your home network and change it in Settings, or `-Recover` | Kept |
+| The access PIN | `-Recover` → reset the access PIN | Kept with a vault PIN, otherwise erased after a typed confirmation |
+| Both | `-Recover`: show the WiFi password, then reset the PIN | As above |
+| The vault PIN | Keys → Passwords → *Forgotten it?*, with the access PIN | Erased |
+| Nothing - moved the board, changed computer or network, updated firmware | Nothing | Kept |
+
+### If someone else tries
+
+| Who | What they can do |
+|---|---|
+| On your home network, before a PIN is set | Nothing. Every command and every key is refused (the LAN lock), and setting a PIN needs the board's WiFi password |
+| On your home network, after | Nothing without the PIN. Their wrong guesses lock out their own device only |
+| In WiFi range | Nothing: the password is unique to the board |
+| Many devices guessing together | 20 wrong PINs from the home network in 10 minutes lock the home network out for 10 minutes. The board's own WiFi and the USB cable are never locked out |
+| Connects and never signs in | Disconnected after 20 seconds, so connections cannot be held open to keep you out |
+| Malware on the PC the board is plugged into | It already controls that PC. Through the cable it could reset the PIN; the vault survives if it has a vault PIN |
+| Holds the board | Can recover it, and can read its flash with standard tools - see "What this does not protect against" |
 
 ---
 
 ## The access PIN
 
 Four digits, gating every wireless request. That is only 10,000 combinations,
-which a script clears in minutes at socket speed. So the board throttles:
+which a script clears in minutes at socket speed. So the board throttles - **per
+device** (by IP address), so a stranger's wrong guesses lock out only the
+stranger, never the owner:
 
 | Consecutive wrong PINs | Lockout before the next attempt |
 |---|---|
@@ -46,7 +114,12 @@ which a script clears in minutes at socket speed. So the board throttles:
 | 4 | 60 seconds |
 | 5 and beyond | 5 minutes each |
 
-Walking the whole keyspace under that schedule takes roughly a month.
+Walking the whole keyspace under that schedule takes roughly a month from one
+device. Spreading the guesses over many devices does not help: **20 wrong PINs
+from the home network within 10 minutes lock the whole home network out for 10
+minutes.** The board's own WiFi and the USB cable are never part of that, so the
+owner always has a way in. A connection that has not signed in within 20 seconds
+is closed, so open-but-silent connections cannot fill every slot.
 
 **Every path that tests a PIN goes through one check.** The HTTP API accepts a PIN
 inline in the request body, and an earlier version of this firmware tested it
@@ -132,7 +205,7 @@ secret belongs.
 
 ## What never returns a secret
 
-Audited against the firmware, current as of v3.8:
+Audited against the firmware, current as of v3.10:
 
 | Command | What it gives back |
 |---|---|
@@ -146,8 +219,10 @@ Audited against the firmware, current as of v3.8:
 | `wifi_status` | The SSID. Never the WiFi password. |
 
 The board's **own access point password** is the exception, and deliberately so:
-it is printed on the serial console at boot, because you need a way to recover it
-when you have forgotten what you set. It protects the radio, not your data.
+it is printed on the serial console at boot and returned by `ap_password`, **over
+the USB cable only** - over WiFi `ap_password` answers `usb_only` and nothing else
+ever carries it. You need a way to recover it, and holding the board is the proof
+of ownership. It protects the radio, not your data.
 
 If you add a command, add it to this table or prove it belongs in it.
 
@@ -326,9 +401,12 @@ Being honest about the boundaries:
 
 ## Recommendations
 
-- Change the access point name and password. A distinctive name also stops you
-  connecting to someone else's board by accident.
 - Set a PIN, and do not use `1234`.
+- Give the vault its own vault PIN if you store passwords in it: then a forgotten
+  access PIN never costs you the vault.
+- Keep the board's WiFi password to yourself - it is the proof of ownership for the
+  first PIN. Choose your own if you prefer; a distinctive name also stops you
+  connecting to someone else's board by accident.
 - Prefer the board's own access point. If you do join a network, use a guest or
   IoT VLAN rather than the one your computers are on.
 - Turn on **ap_auto_off** if you are permanently on a network — it removes the

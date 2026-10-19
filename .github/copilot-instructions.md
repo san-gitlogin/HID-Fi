@@ -89,6 +89,23 @@ Diagnose from the USB device list, not from serial output you are causing.
 - **Do not change the shape of the existing serial commands** — other tools depend
   on them.
 
+## Ownership and recovery - do not weaken
+
+- The board's own WiFi password is the proof of ownership. Only the serial-only
+  command `ap_password` returns it. Never put it in any WiFi reply.
+- Over WiFi, the first access PIN requires `ap_password` in `set_auth`.
+- Recovery of a forgotten access PIN or WiFi password happens only over the USB
+  COM cable: `tools/recover.py`, `flash_esp.sh --recover`, `flash_esp.ps1 -Recover`.
+  Do not add a WiFi or button-based reset.
+- A PIN reset without the old PIN erases the vault unless a vault PIN is set; the
+  recovery tools must warn and require a typed ERASE first.
+- Wrong-PIN lockout is per device (`pinGuards`), with a home-network budget that
+  never applies to access-point clients or serial.
+- Say "access PIN" or "vault PIN", never just "PIN", in user-facing text.
+- Full rules: AGENTS.md, "Ownership, PINs and recovery". Tests that guard them:
+  `tests/ui/bdd/features/ownership.feature`, `tests/unit/test_recover.py`,
+  `tests/board/test_ownership_hw.py`.
+
 ## Already investigated, do not re-diagnose
 
 - **Host OS detection is passive** — do not reintroduce the old Num Lock
