@@ -203,6 +203,14 @@ def vault_kept(ctx, n):
     assert len(ctx["sim"].vault) == n
 
 
+@when(parsers.parse('I enter the board\'s WiFi password "{pw}"'))
+def enter_proof(ctx, pw):
+    f = ctx["ui"].page.locator("#pinProofPw")
+    f.evaluate("e => e.scrollIntoView({block: 'center'})")
+    f.click()
+    f.fill(pw)
+
+
 @when("the board becomes unreachable")
 def unreachable(ctx):
     sim, ui = ctx["sim"], _ui(ctx)

@@ -70,6 +70,8 @@ SHEET_STATES = [
     ("sheet pc", "pcEditor(PCS[0])"),
     ("sheet help", "go('setup');showHelp()"),
     ("sheet join", f"joinWifi('{SSID32}')"),
+    ("sheet security info", "secInfo()"),
+    ("sheet forgot pin", "forgotPin(false)"),
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),
 ]
 OVERLAY_STATES = [
@@ -106,8 +108,8 @@ def open_page(browser, vp, sim=None):
         t, r, b, l = vp.insets
         cdp.send("Emulation.setSafeAreaInsetsOverride", {"insets": {"top": t, "right": r, "bottom": b, "left": l}})
     sim.attach(page, dashboard.extract_html())
-    page.goto(sim.URL)
-    page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=10000)
+    page.goto(sim.URL, timeout=60000)          # generous: the whole ui tier runs at once
+    page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=20000)
     # The page re-sends the session PIN by itself; the lists are then loaded once
     # more on purpose, because of the reconnect_lists known issue.
     page.wait_for_timeout(300)
@@ -131,7 +133,8 @@ SETTLE_JS = """window.__hidfiSettle = async () => {
 };
 window.__hidfiState = async (name, enter, leave, waitFor) => {
   await (new Function(enter))();
-  if (waitFor) for (let i = 0; i < 60 && !document.querySelector(waitFor); i++) await new Promise(r => setTimeout(r, 50));
+  // Some sheets open on the board's reply; under a full parallel run that can take seconds.
+  if (waitFor) for (let i = 0; i < 120 && !document.querySelector(waitFor); i++) await new Promise(r => setTimeout(r, 50));
   await window.__hidfiSettle();
   // A message from an earlier step (the sign-in's "Unlocked") would sit over the
   // top bar and read as covering it; messages are measured in their own state.

@@ -44,7 +44,7 @@ Feature: The dashboard shell - navigation, connection, the access PIN
   Scenario: The dashboard connects and shows what it is talking to
     Given the dashboard is open
     Then "#ltext" reads "live"
-    And "#brandsub" reads "v3.9"
+    And "#brandsub" reads "v3.10"
     And "#connN" reads "1"
 
   Scenario: The latency pill shows the round trip to the board

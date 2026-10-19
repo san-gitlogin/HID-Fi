@@ -249,6 +249,7 @@ Feature: The Settings tab
     Given the board has no access PIN
     And the dashboard is open
     When I open the "Settings" tab
+    And I enter the board's WiFi password "k7m2-x9qp-4tre"
     Then "#authState" reads "Off"
     When I type the new PIN "1357"
     And I tap the "#btnPin" control
@@ -356,10 +357,10 @@ Feature: The Settings tab
   Scenario: The device card and the footer report the board
     Given the dashboard is open
     When I open the "Settings" tab
-    Then "#devInfo" contains "hid_fi_v3.9"
+    Then "#devInfo" contains "hid_fi_v3.10"
     And "#devInfo" contains "Free heap"
     And "#devInfo" contains "PSRAM"
-    And "#colVer" contains "v3.9"
+    And "#colVer" contains "v3.10"
     And "#netInfo" contains "192.168.4.1"
 
   Scenario: Connected clients
@@ -493,6 +494,7 @@ Feature: The Settings tab
     Given the board has no access PIN
     And the dashboard is open
     When I open the "Settings" tab
+    And I enter the board's WiFi password "k7m2-x9qp-4tre"
     And I type the new PIN "13"
     And I press "Backspace" in the PIN boxes
     And I type the rest of the PIN "579"
@@ -503,6 +505,7 @@ Feature: The Settings tab
     Given the board has no access PIN
     And the dashboard is open
     When I open the "Settings" tab
+    And I enter the board's WiFi password "k7m2-x9qp-4tre"
     And I type the new PIN "1a2b3c4"
     And I tap the "#btnPin" control
     Then the board receives {"cmd": "set_auth", "token": "1234"}
@@ -511,6 +514,7 @@ Feature: The Settings tab
     Given the board has no access PIN
     And the dashboard is open
     When I open the "Settings" tab
+    And I enter the board's WiFi password "k7m2-x9qp-4tre"
     And I paste "PIN: 24-68" into the PIN boxes
     Then the PIN boxes hold "2468"
     When I tap the "#btnPin" control

@@ -814,6 +814,14 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 }
 .pinrow .pinbox:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(0,210,255,.16)}
 .pwrow{display:flex;gap:8px;align-items:center}
+/* Explanations: short headed lists, readable at a glance on a phone */
+.explain h4{font-size:13px;font-weight:650;margin:16px 0 6px;color:var(--fg)}
+.explain h4:first-of-type{margin-top:4px}
+.explain ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.explain li{font-size:13px;line-height:1.5;color:var(--fg2)}
+.explain li b{color:var(--fg)}
+.explain code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:rgba(0,0,0,.34);
+  border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
 .pwrow input{flex:1 1 auto;width:0;min-width:0}
 .pwrow .btn{flex:0 0 auto}
 
@@ -1505,12 +1513,17 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
           <div class="fld"><label>Network name <span id="apBytes" style="float:right;font-weight:500;letter-spacing:0;text-transform:none"></span></label><input id="apSsid" autocomplete="off" data-nofill maxlength="32" placeholder="ESP32-HID-XXXXXX"></div>
           <div class="fld"><label>Password</label><input type="password" id="apPass" autocomplete="off" data-nofill placeholder="leave blank to keep the current password"></div>
           <div class="chips" style="margin-bottom:12px"><button class="chip" id="tApOpen">No password (open network)</button></div>
+          <div class="item" id="apAdvice" style="display:none;margin-bottom:12px"><svg class="ic"><use href="#i-shield"/></svg>
+            <div class="tx"><b id="apAdviceTitle"></b><span id="apAdviceText" style="white-space:normal"></span></div>
+          </div>
           <button class="btn ok blk" id="btnAp">Change access point</button>
-          <p class="hint" style="margin-top:10px">Leaving the password blank keeps the one already set, so you can rename the network without retyping it. Removing the password is a separate, deliberate choice &mdash; that is what the toggle is for. Emoji and accents work in the name, because a network name is raw bytes; the limit is 32 <b>bytes</b> though, and one emoji uses four. Every board ships with the same password, so anyone who has seen this project knows it. The access point restarts the moment you apply, so this phone will drop and you will have to reconnect.</p>
+          <p class="hint" style="margin-top:10px">This password is also the proof of ownership asked for when the first access PIN is set over your home network, so keep it to yourself. Forgot it? Plug the board's COM cable into a computer and run the recovery tool - holding the board is what makes you its owner. Leaving the password blank keeps the one already set, so you can rename the network without retyping it. Removing the password is a separate, deliberate choice &mdash; that is what the toggle is for. Emoji and accents work in the name, because a network name is raw bytes; the limit is 32 <b>bytes</b> though, and one emoji uses four. The access point restarts the moment you apply, so this phone will drop and you will have to reconnect.</p>
         </div>
 
         <div class="card">
-          <div class="ch"><svg class="ic"><use href="#i-shield"/></svg><h2>Access PIN</h2></div>
+          <div class="ch"><svg class="ic"><use href="#i-shield"/></svg><h2>Access PIN</h2>
+            <button class="iconbtn" id="btnSecInfo" aria-label="How the PIN and passwords work"><svg class="ic"><use href="#i-info"/></svg></button>
+          </div>
           <div class="item warnbox" id="lanWarn" style="display:none">
             <span class="dot bad"></span>
             <div class="tx"><b>Reachable from your whole network</b><span style="white-space:normal">This board is joined to a home network, so every device on it can reach this page, not just people in radio range. Wireless control is blocked until you set a PIN.</span></div>
@@ -1526,11 +1539,17 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
               <input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" aria-label="PIN digit 4">
             </div>
           </div>
+          <div class="fld" id="pinProof" style="display:none;margin:12px 0 0"><label>This board's WiFi password</label>
+            <div class="pwrow"><input type="password" id="pinProofPw" autocomplete="off" data-nofill aria-describedby="pinProofWhy">
+              <button type="button" class="btn sm" id="pinProofEye">Show</button></div>
+            <p class="hint" id="pinProofWhy" style="margin-top:6px">Needed once, to set the first PIN. It proves the board is yours: it is the password your phone uses to join the board's own WiFi, which someone else on your home network does not have.</p>
+          </div>
           <div class="row" style="margin-top:12px">
             <button class="btn sm bad" id="btnPinOff">Turn off</button>
+            <button class="btn sm" id="btnPinForgot">Forgot the PIN?</button>
             <button class="btn ok" id="btnPin">Set PIN</button>
           </div>
-          <p class="hint" style="margin-top:10px">Without a PIN, anyone in radio range of the access point can type on this PC. Four digits is only 10,000 guesses, so the board locks out for longer and longer after each wrong one, reaching five minutes a try. A USB cable is never locked out, so you can always get back in.</p>
+          <p class="hint" style="margin-top:10px">The access PIN lets a phone use this board. Without one, anyone who joins the board's own WiFi can type on this PC. Wrong PINs lock out only the phone that typed them, for longer each time, up to five minutes a try. The board's own WiFi and the USB cable are never locked out, so you can always get back in. The vault can have its own, separate vault PIN on the Keys tab.</p>
         </div>
 
         <div class="card">
@@ -1755,7 +1774,7 @@ function lanLocked(){
   sheet('A PIN is needed on this network',
     '<p class="hint">On the board\'s own access point an attacker has to be within radio range of you. On your home network every device can reach this page, including anything already compromised and anything a guest brought in. This board types into a logged-in PC, so wireless control stays blocked until a PIN is set.</p>'+
     '<div class="list" style="margin-top:12px">'+
-    item('shield','Set a PIN','Open Settings and enter four digits. That is all this needs.')+
+    item('shield','Set a PIN','Open Settings, choose four digits and enter this board\'s WiFi password - the one a phone uses to join the board\'s own network. It proves the board is yours.')+
     item('wifi','Or use the access point','Connect to the board\'s own network instead. No PIN is required there.')+
     item('cpu','Or use the USB cable','Serial is never gated, so it is always a way back in.')+
     '</div>'+
@@ -1938,8 +1957,10 @@ function askPin(){
       [0,1,2,3].map(i=>'<input class="pinbox" type="password" inputmode="numeric" pattern="[0-9]*" '+
         'maxlength="1" autocomplete="off" aria-label="PIN digit '+(i+1)+'">').join('')+
     '</div>'+
-    '<p class="hint" id="pinAskMsg" style="margin-top:12px"></p>',
+    '<p class="hint" id="pinAskMsg" style="margin-top:12px"></p>'+
+    '<button class="btn sm" id="pinAskForgot" style="margin-top:6px">Forgot the PIN?</button>',
     ()=>{
+      $('pinAskForgot').onclick=()=>{pinAsking=false;PIN_ASK=null;forgotPin(true);};
       const p=bindPin('pinAsk',v=>{
         sessionStorage.setItem('pin',v);
         send({cmd:'auth',token:v});
@@ -1948,6 +1969,53 @@ function askPin(){
     });
 }
 let PIN_ASK=null;
+// Recovery lives on the USB cable only: holding the board is ownership. Both
+// sheets say exactly what to run, for whichever computer is at hand.
+const RECOVER_CMD={win:'.\\flash_esp.ps1 -Recover',mac:'./flash_esp.sh --recover',linux:'./flash_esp.sh --recover'};
+function recoverSteps(){
+  return '<h4>On a computer, with the board\'s COM cable plugged in</h4><ul>'+
+    '<li>Plug the board\'s <b>COM</b> port into any computer - the one it types into is fine.</li>'+
+    '<li>Open a terminal in the HID-Fi folder and run:<br>Windows <code>'+esc(RECOVER_CMD.win)+'</code><br>'+
+      'macOS or Linux <code>'+esc(RECOVER_CMD.mac)+'</code></li>'+
+    '<li>It finds the board by itself and offers: show this board\'s WiFi password, set a new one, or reset the access PIN.</li></ul>';
+}
+function forgotPin(fromPrompt){
+  sheet('Forgot the access PIN',
+    '<div class="explain"><p class="hint">For safety a PIN can only be reset with the board in hand - over WiFi, no one can, not even you. That is what stops someone on your network taking the board over.</p>'+
+    recoverSteps()+
+    '<h4>What happens to stored passwords</h4><ul>'+
+    '<li>If the vault has its own <b>vault PIN</b>, every stored password is kept.</li>'+
+    '<li>If it does not, resetting the access PIN erases them - the access PIN was what guarded them. The tool says which before it changes anything, and asks you to type ERASE.</li></ul></div>'+
+    '<button class="btn blk" id="fpDone" style="margin-top:14px">'+ico('check','ic-sm')+(fromPrompt?'Back to the PIN':'Done')+'</button>',
+    ()=>{$('fpDone').onclick=()=>{closeSheet();if(fromPrompt)askPin();};});
+}
+function secInfo(){
+  sheet('PIN, passwords and recovery',
+    '<div class="explain">'+
+    '<h4>Three things, three jobs</h4><ul>'+
+    '<li><b>The board\'s WiFi password</b> - joins a phone to the board\'s own network. Each board makes its own; it is also your proof of ownership when the first access PIN is set.</li>'+
+    '<li><b>Access PIN</b> - four digits that let a phone use the board. Asked for on every new connection.</li>'+
+    '<li><b>Vault PIN</b> (optional, on the Keys tab) - guards stored passwords separately, so they survive a reset of the access PIN.</li></ul>'+
+    '<h4>Where you are decides what is needed</h4><ul>'+
+    '<li><b>On the board\'s own WiFi</b> - only people you gave its password to can be here.</li>'+
+    '<li><b>On your home network</b> - every device on it can reach the board, so nothing works until an access PIN is set, and setting the first one needs the board\'s WiFi password.</li>'+
+    '<li><b>On the USB COM cable</b> - holding the board makes you its owner. Recovery happens only here.</li></ul>'+
+    '<h4>If you forget something</h4><ul>'+
+    '<li><b>The WiFi password</b> - sign in over your home network and change it in Settings, or read it with the recovery tool over USB. Stored passwords are kept.</li>'+
+    '<li><b>The access PIN</b> - reset it with the recovery tool over USB. Stored passwords are kept if the vault has its own vault PIN; otherwise they are erased.</li>'+
+    '<li><b>Both</b> - the recovery tool does both, in that order.</li>'+
+    '<li><b>The vault PIN</b> - reset it on the Keys tab with the access PIN. The stored passwords are erased; that is what makes the vault PIN worth having.</li>'+
+    '<li><b>Moving the board</b> to another computer or network, or updating its firmware, changes nothing.</li></ul>'+
+    '<h4>If someone else tries</h4><ul>'+
+    '<li><b>Someone on your home network</b> cannot set a PIN without the board\'s WiFi password, and cannot use it without the PIN.</li>'+
+    '<li><b>Wrong PINs</b> lock out only the device that typed them. Many wrong PINs from the home network lock the home network out for ten minutes - the board\'s own WiFi and the USB cable keep working.</li>'+
+    '<li><b>A neighbour in WiFi range</b> does not know this board\'s password - it is unique to this board.</li>'+
+    '<li><b>Someone who joins and never signs in</b> is disconnected after 20 seconds, so they cannot hold every connection.</li>'+
+    '<li><b>Anyone holding the board</b> can recover it - keep it where you would keep a house key.</li></ul>'+
+    recoverSteps()+'</div>'+
+    '<button class="btn blk" id="siDone" style="margin-top:14px">'+ico('check','ic-sm')+'Got it</button>',
+    ()=>{$('siDone').onclick=closeSheet;});
+}
 function pinAskDone(ok,msg){
   if(!pinAsking)return;
   if(ok){pinAsking=false;PIN_ASK=null;closeSheet();return;}
@@ -3972,6 +4040,7 @@ function pcEditor(edit){
 // calls syncAll(); the status poll below catches changes made from another
 // phone, and applyStatus() rebuilds whatever a change to the PIN affects.
 let AUTH_SET=null;
+let AP_OPEN=false;
 function syncAll(){refresh();loadMacros();loadPcs();loadVault();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
@@ -4013,7 +4082,9 @@ function applyStatus(d){
   // can be turned on from Settings or from another phone entirely. Notice it
   // changing and rebuild whatever depended on it, rather than leaving the other
   // tabs showing a stale "set a PIN first".
+  if(d.ap_open!==undefined)AP_OPEN=!!d.ap_open;
   if(d.auth_set!==undefined){
+    $('pinProof').style.display=(!d.auth_set&&!AP_OPEN)?'':'none';
     $('authState').textContent=d.auth_set?'On':'Off';
     if(AUTH_SET!==null&&AUTH_SET!==!!d.auth_set){loadPcs();loadVault();}
     AUTH_SET=!!d.auth_set;
@@ -4021,6 +4092,18 @@ function applyStatus(d){
   // Being reachable from a whole network instead of only from radio range is a
   // real change in exposure, and it is invisible unless we say so.
   if(d.lan_exposed!==undefined)$('lanWarn').style.display=d.lan_exposed?'':'none';
+  if(d.ap_pass_default!==undefined||d.ap_pass_generated!==undefined){
+    const adv=$('apAdvice');
+    if(d.ap_pass_default){
+      adv.style.display='';adv.classList.add('warnbox');
+      $('apAdviceTitle').textContent='Change this password';
+      $('apAdviceText').textContent='This board still uses the password every board used to ship with, so anyone who has seen this project knows it. Choose your own below.';
+    }else if(d.ap_pass_generated){
+      adv.style.display='';adv.classList.remove('warnbox');
+      $('apAdviceTitle').textContent='Recommended: choose your own password';
+      $('apAdviceText').textContent='This board made its own WiFi password, unique to it. Keeping it is fine; one you choose is easier to remember. You can always read it back over the USB cable.';
+    }else adv.style.display='none';
+  }
   if(d.power_mode)paintPower(d);
   if(d.gamepad!==undefined&&d.gamepad!==GP.enabled){GP.enabled=d.gamepad;gpSync();}
   if(d.wiggle_mode!==undefined)$('wigState').textContent=d.wiggle_active?('Active - '+d.wiggle_mode):'Idle';
@@ -4373,15 +4456,26 @@ function bindAll(){
   // The board erases the vault when the access PIN is replaced by someone who
   // could not produce the old one. This page usually can, so it sends it and
   // the user keeps their passwords through an ordinary PIN change.
-  const applyPin=v=>send({cmd:'set_auth',token:v,old:sessionStorage.getItem('pin')||''},r=>{
+  const applyPin=v=>{
+    const m={cmd:'set_auth',token:v,old:sessionStorage.getItem('pin')||''};
+    // The first PIN needs the board's WiFi password (unless its WiFi is open).
+    if(v&&!AUTH_SET&&!AP_OPEN){
+      const pw=$('pinProofPw').value;
+      if(!pw){toast('Enter this board\'s WiFi password first','bad');$('pinProofPw').focus();pinSet.reject();return;}
+      m.ap_password=pw;
+    }
+    send(m,r=>{
+    if(r&&r.reply==='ap_password_required'){toast(r.message||'That is not this board\'s WiFi password','bad');pinSet.reject();return;}
     if(r&&r.status==='ok'){
+      $('pinProofPw').value='';
       v?sessionStorage.setItem('pin',v):sessionStorage.removeItem('pin');
       toast(v?'PIN set':'PIN turned off','ok');
       if(r.vault_wiped)toast('Stored passwords were erased with the old PIN','bad');
       pinSet.clear();
       syncAll();
     }else{toast((r&&r.message)||'Failed','bad');pinSet.reject();}
-  });
+    });
+  };
   $('btnPin').onclick=()=>{
     const v=pinSet.value();
     if(v.length!==4){toast('Enter all four digits','bad');pinSet.reject();return;}
@@ -4397,6 +4491,13 @@ function bindAll(){
     applyPin('');
   };
   $('btnTestHid').onclick=()=>send({cmd:'test_hid'});
+  $('btnSecInfo').onclick=secInfo;
+  $('btnPinForgot').onclick=()=>forgotPin(false);
+  $('pinProofEye').onclick=()=>{
+    const p=$('pinProofPw'), show=p.type==='password';
+    p.type=show?'text':'password';$('pinProofEye').textContent=show?'Hide':'Show';
+  };
+  guardAutofill($('pinProofPw'));
   $('btnWifiReset').onclick=()=>{if(confirm('Clear saved home-network credentials?'))send({cmd:'wifi_disconnect'});};
 
   $('btnPresPlay').onclick=()=>presToggle();

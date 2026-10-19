@@ -84,7 +84,7 @@ def _script_len():
 
 
 class Dashboard:
-    def __init__(self, browser, sim, device="phone", html=None, answers=None, init=()):
+    def __init__(self, browser, sim, device="phone", html=None, answers=None, init=(), ip=None):
         self.browser, self.sim, self.device = browser, sim, device
         d = DEVICES[device]
         extra = {"user_agent": d["ua"]} if d.get("ua") else {}
@@ -100,7 +100,7 @@ class Dashboard:
         for js in init:                  # what this browser is, before the page runs
             self.page.add_init_script(js)
         self.html = html or dashboard.extract_html()
-        sim.attach(self.page, self.html)
+        sim.attach(self.page, self.html, ip=ip)       # ip: this phone's address, as the board sees it
         self.cdp = self.ctx.new_cdp_session(self.page)
         self.cdp.send("Profiler.enable")
         self.cdp.send("Profiler.startPreciseCoverage", {"callCount": True, "detailed": True})
