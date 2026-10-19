@@ -221,7 +221,9 @@ def sink(request, _board_holder):
     remote = request.config.getoption("--sink") == "remote"
     board = _board_holder.get()
     st = board.wait_host()
-    s = Sink(bind="0.0.0.0" if remote else "127.0.0.1")
+    # HIDFI_SINK_PORT fixes the port, so the address can be given to the person at
+    # the other computer before the run starts.
+    s = Sink(port=int(os.environ.get("HIDFI_SINK_PORT") or 0), bind="0.0.0.0" if remote else "127.0.0.1")
     url = s.url(remote=remote)
     tw = request.config.get_terminal_writer()
     tw.line("")
