@@ -110,3 +110,38 @@ def mouse_drag(ctx):
     ui.page.mouse.move(x - 200, y, steps=5)
     ui.page.mouse.up()
     ui.idle(300)
+
+
+# ---- who is connected --------------------------------------------------------------------
+@when("a laptop on the home network opens the dashboard")
+def laptop_opens(ctx, browser):
+    from support.board_sim import LAN_IP
+    other = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], ip=LAN_IP)
+    other.page.goto(ctx["sim"].URL)
+    other.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)
+    ctx["laptop"] = other
+
+
+@when("the laptop closes its tab")
+def laptop_closes(ctx):
+    # A closing tab closes its socket. Done from the page because Playwright's
+    # routed socket drops a close that carries no code (its own listener raises
+    # KeyError: 'code'), so page.close() is never reported. 1000, since a script
+    # may not send 1001 ("going away") - only the browser can.
+    ctx["laptop"].page.evaluate("connect = () => {}; ws.close(1000, 'tab closed')")
+
+
+@then(parsers.parse("the count of dashboards becomes {n:d}"))
+def count_becomes(ctx, n):
+    page = ctx["ui"].page
+    # The header is refreshed by the status poll; ask now rather than wait for it.
+    page.evaluate("refresh()")
+    page.wait_for_function("n => document.getElementById('connN').textContent === String(n)", arg=n, timeout=8000)
+
+
+@when("I focus the dashboard count and press Enter")
+def count_by_keyboard(ctx):
+    page = ctx["ui"].page
+    page.locator("#connPill").focus()
+    page.keyboard.press("Enter")
+    ctx["ui"].idle(200)

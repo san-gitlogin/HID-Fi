@@ -2849,7 +2849,7 @@ void handleStorageInfo() {
 
 // ==================== CONNECTED CLIENTS ====================
 void handleClients() {
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(3072);
     doc["status"] = "ok";
     doc["reply"] = "clients";
     JsonArray arr = doc.createNestedArray("clients");
@@ -2905,6 +2905,20 @@ void handleClients() {
     }
     doc["count"]    = arr.size();
     doc["attached"] = WiFi.softAPgetStationNum();
+
+    // Every open dashboard, from either network - the number in the dashboard's
+    // header counts these, and a tab left open on a laptop over the home network
+    // is never in the access-point list above. "you" is the one asking.
+    JsonArray dash = doc.createNestedArray("dashboards");
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+        if (!webSocket.clientIsConnected((uint8_t)i)) continue;
+        IPAddress p = webSocket.remoteIP((uint8_t)i);
+        JsonObject o = dash.createNestedObject();
+        o["ip"]        = p.toString();
+        o["network"]   = clientIsAp(p) ? "board" : "home";
+        o["signed_in"] = authToken.length() > 0 && wsAuthed[i];
+        o["you"]       = (cmdSource == SRC_WS && wsClientNum == i);
+    }
     // Worth stating plainly: this is not a limitation that can be fixed here.
     doc["note"] = "Device names are not shown. A WiFi client is never required to tell the access point its name, and most phones now send a random MAC as well.";
     sendJson(doc);

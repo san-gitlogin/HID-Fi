@@ -183,7 +183,7 @@ class BoardSim:
             "wifi_connected": online, "wifi_ip": self.sta["ip"], "wifi_ssid": self.sta["ssid"] if online else "",
             "wifi_rssi": -48 if online else 0, "wifi_quality": "excellent" if online else "",
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
-            "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": len(self.sockets),
+            "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": sum(1 for k in self.sockets if k["open"]),
             "mdns": "esp-hid-da1a2c", "pc_state": self.pc_state, "host_os": self.host_os(),
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
             "detect_phase": "settled", "unicode_mac": self.unicode["mac"], "unicode_linux": self.unicode["linux"],
@@ -968,7 +968,11 @@ class BoardSim:
                       note="Macros are listed by macro_list, saved PCs by pc_list and vault entries by vault_list. "
                            "No password, secret or PIN is ever returned by any of them.")
         if c == "clients":
+            dash = [{"ip": k.get("ip") or AP_IP, "network": "board" if self._on_ap(k.get("ip") or AP_IP) else "home",
+                     "signed_in": bool(self.pin) and k["authed"], "you": k is sock}
+                    for k in self.sockets if k["open"]]
             return OK("clients", clients=list(self.ap_clients), count=len(self.ap_clients), attached=len(self.sockets),
+                      dashboards=dash,
                       note="Device names are not shown. A WiFi client is never required to tell the access point "
                            "its name, and most phones now send a random MAC as well.")
         if c in ("led_set", "led_blink", "led_status"):

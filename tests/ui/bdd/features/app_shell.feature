@@ -165,3 +165,37 @@ Feature: The dashboard shell - navigation, connection, the access PIN
     And I am on the "Session" tab
     When I drag the mouse left across empty space
     Then the "Session" tab is shown
+
+  # Found by a person: the header said 3 and nothing on the page said who. A tab
+  # left open on a laptop over the home network was never in any list.
+  Scenario: Tapping the count shows every dashboard, and which one is this phone
+    Given the dashboard is open and signed in with "4826"
+    When a laptop on the home network opens the dashboard
+    Then the count of dashboards becomes 2
+    When I tap the "#connPill" control
+    Then the dialog "Connected dashboards" is open
+    And "#dashList" contains "this device"
+    And "#dashList" contains "over your home network"
+    And "#dashList" contains "not signed in"
+    And "#dashList" contains "A browser tab left open anywhere counts"
+
+  Scenario: Settings lists dashboards on the home network too, not only the board's WiFi
+    Given the dashboard is open and signed in with "4826"
+    When a laptop on the home network opens the dashboard
+    And I open the "Settings" tab
+    And I tap the "#btnClients" control
+    Then "#clientList" contains "Dashboards open"
+    And "#clientList" contains "over your home network"
+    And "#clientList" contains "this device"
+
+  Scenario: A closed tab stops counting
+    Given the dashboard is open and signed in with "4826"
+    When a laptop on the home network opens the dashboard
+    Then the count of dashboards becomes 2
+    When the laptop closes its tab
+    Then the count of dashboards becomes 1
+
+  Scenario: The count opens from the keyboard too
+    Given the dashboard is open on a desktop
+    When I focus the dashboard count and press Enter
+    Then the dialog "Connected dashboards" is open

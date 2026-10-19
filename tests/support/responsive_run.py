@@ -72,6 +72,7 @@ SHEET_STATES = [
     ("sheet join", f"joinWifi('{SSID32}')"),
     ("sheet security info", "secInfo()"),
     ("sheet forgot pin", "forgotPin(false)"),
+    ("sheet dashboards", "showDashboards()"),
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),
 ]
 OVERLAY_STATES = [

@@ -92,6 +92,12 @@ can set, and recovery that needs the board in hand.
   below on a real board.
 - **Turn off** and **Forgot the PIN?** are hidden while there is no access PIN to
   turn off or forget.
+- **Who is connected.** Tap the dashboard count in the header to see every open
+  dashboard: its address, whether it came over the board's WiFi or the home
+  network, whether it is signed in, and which one is this device. Settings lists
+  them too - before, it only listed devices on the board's own WiFi, so a tab left
+  open on a laptop over the home network counted but appeared nowhere. The
+  `clients` reply gains `dashboards`.
 - "This board made this password" is now a fact about the password in use, not a
   flag cleared by any change: change it and put it back, and the board says so
   again. Boards from earlier v3.10 builds keep what they had.

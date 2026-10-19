@@ -572,6 +572,21 @@ The MAC and signal come from the WiFi driver. The IP is looked up in the ARP
 table, so it stays empty for a station that has associated but not yet spoken IP.
 `dashboard: true` means that address currently holds a WebSocket to the dashboard.
 
+`dashboards` lists every open dashboard socket, from either network - the number
+the dashboard's header shows counts these:
+
+| Field | Meaning |
+|---|---|
+| `ip` | the browser's address |
+| `network` | `board` (its own WiFi) or `home` (the home network) |
+| `signed_in` | signed in with the access PIN; always `false` while no PIN is set |
+| `you` | this is the socket that asked |
+
+A tab left open anywhere counts, and reconnects by itself within seconds of the
+board restarting - so restarting the board does not clear the count; closing the
+tab does. A socket whose device vanished is dropped by the heartbeat within about
+40 seconds.
+
 **Device names are not available, and that is not a bug we can fix.** A WiFi client
 is never obliged to tell an access point its name, and modern phones deliberately
 present a randomised MAC as well — so the address you see may not match the one

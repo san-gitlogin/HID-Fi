@@ -169,6 +169,7 @@ body.rail-slim .railtoggle .ic{transform:rotate(180deg)}
 /* More than one dashboard is normal - every phone that opens it is one - but it
    is also the first thing to check when the pointer feels slow, so it is worth
    noticing rather than hunting for in Settings. */
+.pill.conn{cursor:pointer}
 .pill.conn.multi .ic,.pill.conn.multi b{color:var(--warn)}
 .dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:var(--fg3)}
 .dot.ok{background:var(--ok);box-shadow:0 0 0 3px rgba(34,211,154,.15)}
@@ -1131,7 +1132,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
       <div class="tmark" aria-hidden="true"><svg class="ic"><use href="#i-logo"/></svg></div>
       <h1 id="vtitle">Trackpad</h1>
       <div class="pill" title="round trip over the socket"><span class="dot" id="tdot"></span><b id="trtt">--</b></div>
-      <div class="pill conn" id="connPill" title="dashboards connected to this board"><svg class="ic"><use href="#i-devices"/></svg><b id="connN">--</b></div>
+      <div class="pill conn" id="connPill" role="button" tabindex="0" aria-label="Connected dashboards" title="dashboards connected to this board"><svg class="ic"><use href="#i-devices"/></svg><b id="connN">--</b></div>
       <button class="iconbtn" id="btnInfo" aria-label="Gestures"><svg class="ic"><use href="#i-info"/></svg></button>
       <button class="iconbtn" id="btnRefresh" aria-label="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
     </header>
@@ -4553,6 +4554,8 @@ function bindAll(){
                               :'leave blank to keep the current password';
   };
   $('btnClients').onclick=loadClients;
+  $('connPill').onclick=showDashboards;
+  $('connPill').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showDashboards();}};
   $('btnStorage').onclick=loadStorage;
   // Live byte count, because "how long is my name" has a surprising answer once
   // an emoji is in it.
@@ -4692,16 +4695,39 @@ function bindWheel(el){
 // =====================================================================
 //  connected clients + what is stored on the board
 // =====================================================================
+// Every open dashboard, whichever network it came over. The header's number
+// counts these, so this is what answers "why does it say 3?" - usually a tab
+// left open on a laptop, which reconnects by itself whenever the board restarts.
+function dashListHtml(r){
+  const d=(r&&r.dashboards)||[];
+  if(!d.length)return '<p class="hint">No dashboards are open.</p>';
+  return d.map(x=>
+    '<div class="item" data-dash="'+esc(x.ip)+'">'+ico(x.network==='board'?'wifi':'devices')+
+    '<div class="tx"><b>'+esc(x.ip)+(x.you?' <span class="tag">this device</span>':'')+'</b>'+
+    '<span>'+(x.network==='board'?'on the board\u2019s own WiFi':'over your home network')+
+    (AUTH_SET?(x.signed_in?' \u00b7 signed in':' \u00b7 not signed in'):'')+'</span></div></div>').join('')+
+    '<p class="hint" style="margin-top:10px">A browser tab left open anywhere counts, and reconnects by itself '+
+    'when the board restarts. Close the tab to remove it.'+(AUTH_SET?'':' Set an access PIN so only devices that know it can connect.')+'</p>';
+}
+function showDashboards(){
+  sheet('Connected dashboards','<div class="list" id="dashList"><p class="hint">Asking the board...</p></div>');
+  send({cmd:'clients'},r=>{
+    const l=$('dashList');if(!l)return;
+    l.innerHTML=(r&&r.status==='ok')?dashListHtml(r):'<p class="hint">Could not read the list.</p>';
+  });
+}
 function loadClients(){
   const l=$('clientList');
   l.innerHTML='<p class="hint">Asking the board...</p>';
   send({cmd:'clients'},r=>{
     if(!r||r.status!=='ok'){l.innerHTML='<p class="hint">Could not read the client list.</p>';return;}
+    const dash='<p class="hint" style="margin:0 0 8px"><b>Dashboards open</b></p>'+dashListHtml(r)+
+      '<p class="hint" style="margin:14px 0 8px"><b>On the board\u2019s own WiFi</b></p>';
     if(!r.clients||!r.clients.length){
-      l.innerHTML='<p class="hint">Nothing is connected to the board\u2019s access point right now. If you are reading this over your home network, you are not on the AP.</p>';
+      l.innerHTML=dash+'<p class="hint">Nothing is connected to the board\u2019s access point right now.</p>';
       return;
     }
-    l.innerHTML=r.clients.map(c=>
+    l.innerHTML=dash+r.clients.map(c=>
       '<div class="item">'+ico('wifi')+
       '<div class="tx"><b>'+esc(c.ip||'no address yet')+
       (c.dashboard?' <span class="tag">dashboard open</span>':'')+
