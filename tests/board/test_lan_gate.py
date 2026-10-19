@@ -25,7 +25,8 @@ pytestmark = pytest.mark.board
 
 
 def test_binary_frames_from_the_lan_are_refused_without_a_pin(board, request):
-    url = request.config.getoption("--board-url")
+    from support.board import lan_url
+    url = lan_url(request.config.getoption("--board-url"), board)
     if not url:
         pytest.skip("needs --board-url ws://<board's home-network IP>:81 from a machine on that network")
     if "//192.168.4." in url:

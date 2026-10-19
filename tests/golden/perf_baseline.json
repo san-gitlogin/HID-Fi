@@ -6,5 +6,7 @@
  "mac/serial_cmds_per_s": 58.813,
  "mac/serial_rtt_p95": 17.222,
  "mac/soak_heap_lost": 0,
- "mac/typing_chars_per_s": 50.097
+ "mac/typing_chars_per_s": 50.097,
+ "mac/wifi_ping_p95": 13.565,
+ "mac/wifi_ping_under_stream_p95": 20.15
 }

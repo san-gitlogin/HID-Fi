@@ -73,6 +73,7 @@ SHEET_STATES = [
     ("sheet security info", "secInfo()"),
     ("sheet forgot pin", "forgotPin(false)"),
     ("sheet dashboards", "showDashboards()"),
+    ("sheet lost board", "MDNS_NAME='esp-hid-da1a2c';wsUp=false;lostAt=1;lostTold=false;lostHelp();wsUp=true"),
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),
 ]
 OVERLAY_STATES = [

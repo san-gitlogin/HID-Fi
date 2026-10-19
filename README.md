@@ -371,6 +371,23 @@ it says otherwise.
 - Remember there is **no TLS**. Anyone already on that network can read the
   traffic, including a password as you type it into the unlock field. Treat the
   network itself as the security boundary.
+- **Bookmark its name, not its number:** `http://esp-hid-XXXXXX.local/` (Settings
+  shows yours). A router restart can give the board a new address; the name
+  follows it. Or reserve the address on your router for the board's MAC.
+
+**When the home network has a bad night**, the board looks after itself:
+
+| What happens | What the board does | How you find it |
+|---|---|---|
+| Router restarts or drops it | Rejoins by itself - within seconds, or within 30 s of the router coming back | Same address, nothing to do |
+| Router hands it a new address | Rejoins, notices, and tells any open dashboard | Its `.local` name, or `python3 tools/hidfi.py find` |
+| Router is off when the board starts | Keeps trying until the router is up | As above |
+| Home network gone for a while | Its own WiFi stays up - and comes back on its own if you had switched it off | Join `ESP32-HID-...`, open `http://192.168.4.1/` |
+| You forgot the address | - | Settings on the board's own WiFi, `hidfi.py find`, or `./flash_esp.sh --recover` over USB |
+| A phone on the board's own WiFi has no internet | That is normal: the board is not a router | Better: stay on home WiFi and use the board's name. Or switch on **Share the home internet** (Settings, off by default) |
+
+A dashboard opened at an address that stopped answering says all of this itself.
+Every row is rehearsed on a real board by `tests/board/test_home_network.py`.
 
 **What the board will never do**, whichever route you use: hand a saved PC
 password back, or hand a vault secret back without the PIN for that specific

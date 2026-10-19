@@ -107,13 +107,26 @@ def vault_fate(vl, entries):
     return f"{entries} stored password(s) WILL BE ERASED - they were guarded by the access PIN"
 
 
-def show_password(ap):
+def home_line(st):
+    """Where the board is on the home network - the answer to "what was its address
+    again?", which is the other thing people come to this tool for."""
+    name = f"http://{st['mdns']}.local/" if st.get("mdns") else ""
+    if st.get("wifi_connected") and st.get("wifi_ip"):
+        return f"Home network:  {st.get('wifi_ssid') or 'joined'} at http://{st['wifi_ip']}/" + (f"  or  {name}" if name else "")
+    if st.get("sta_last_ip"):
+        return f"Home network:  away - it was at http://{st['sta_last_ip']}/" + (f"; {name} finds it when it is back" if name else "")
+    return ""
+
+
+def show_password(ap, st=None):
     if ap.get("open"):
         say(f"WiFi network:  {ap.get('ssid')}", "Password:      none - the network is open")
     else:
         say(f"WiFi network:  {ap.get('ssid')}", f"Password:      {ap.get('password')}")
         if ap.get("generated"):
             say("(This board made this password for itself. You can keep it or set your own.)")
+    if st and home_line(st):
+        say(home_line(st))
     return 0
 
 
@@ -165,6 +178,8 @@ def reset_pin(link, vl, entries, new, erase_ok, interactive):
 def menu(link, st, ap, vl, entries):
     say(f"Board: {st.get('firmware')}  WiFi: {ap.get('ssid')}  access PIN: {'set' if st.get('auth_set') else 'not set'}",
         f"Stored passwords: {vault_fate(vl, entries)}")
+    if home_line(st):
+        say(home_line(st))
     print()
     print("   1  Show this board's WiFi name and password")
     print("   2  Set a new WiFi password")
@@ -172,7 +187,7 @@ def menu(link, st, ap, vl, entries):
     print("   4  Quit")
     choice = input("   Choose 1-4: ").strip()
     if choice == "1":
-        return show_password(ap)
+        return show_password(ap, st)
     if choice == "2":
         a = input("   New WiFi password (8-63 characters): ")
         if input("   Type it again: ") != a:
@@ -214,7 +229,7 @@ def main(argv=None):
                 "Flash the current firmware first: it keeps every setting and stored password.")
             return 1
         if a.show_password:
-            return show_password(ap)
+            return show_password(ap, st)
         if a.set_password is not None:
             return set_password(link, ap, a.set_password)
         if a.reset_pin is not None:

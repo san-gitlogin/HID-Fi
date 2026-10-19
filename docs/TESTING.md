@@ -488,6 +488,24 @@ are tested at three levels, and each row of its two tables has a test:
 
 ---
 
+## The home network
+
+`tests/board/test_home_network.py` rehearses a bad night for the router on a real
+board, through the USB cable only (`net_fault`), so the router is never touched:
+
+| Case | Staged | Must happen |
+|---|---|---|
+| kicked | the router lets the board go | back within 15 s, same address, reachable over the network |
+| router off | network gone 40 s | own WiFi stays up, `reconnecting`, back within 40 s of the router |
+| off at boot | board restarts with the router off | keeps trying, joins when it is back |
+| new address | the board last held another address | `sta_prev_ip`, `sta_online` event with `changed` and the mDNS name |
+| auto-off | AP off, then the network goes | AP back within 35 s |
+| name | - | `esp-hid-XXXXXX.local` resolves to the board |
+| USB only | `net_fault` over WiFi | refused |
+
+Run it with `--board`; it takes about four minutes and puts everything back. The
+dashboard side is `tests/ui/bdd/features/home_network.feature`.
+
 ## Golden files and baselines
 
 `tests/golden/` holds what "unchanged" means. A test compares against its golden

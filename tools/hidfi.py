@@ -7,6 +7,7 @@
     python3 tools/hidfi.py steps "open Notepad" "wait 1500" "type Hi" "do save"
     python3 tools/hidfi.py actions                        (what works on this computer)
     python3 tools/hidfi.py status
+    python3 tools/hidfi.py find                           (where is it? every board on this network)
     python3 tools/hidfi.py mcp                            (an MCP server on stdin/stdout)
 
 Where the board is:
@@ -25,6 +26,8 @@ Exit codes: 0 done | 1 the board refused (its message is printed) | 2 usage |
 """
 import json
 import os
+import socket
+import struct
 import sys
 import time
 import urllib.error
@@ -91,6 +94,109 @@ def short(r):
     return "ok " + json.dumps({k: v for k, v in r.items() if k not in ("status",)}, separators=(",", ":"))
 
 
+# ---- finding the board when its address changed --------------------------------------------------
+# A router restart can give the board a new address. It answers to its .local
+# name wherever it is, and advertises _hidfi._tcp over mDNS, so this asks the
+# local network who offers that - standard library only, so it runs anywhere.
+MDNS_GROUP, MDNS_PORT = "224.0.0.251", 5353
+SERVICE = "_hidfi._tcp.local"
+
+
+def _qname(name):
+    return b"".join(bytes([len(p)]) + p.encode() for p in name.split(".")) + b"\0"
+
+
+def mdns_query(name=SERVICE, qtype=12):
+    """A one-question mDNS query. Sent from an ordinary port, so responders answer
+    straight back to it (RFC 6762 section 6.7) instead of to the whole group."""
+    return struct.pack(">HHHHHH", 0, 0, 1, 0, 0, 0) + _qname(name) + struct.pack(">HH", qtype, 1)
+
+
+def _name(buf, off, depth=0):
+    labels = []
+    while True:
+        if off >= len(buf) or depth > 20:
+            raise ValueError("bad name")
+        n = buf[off]
+        if n == 0:
+            return ".".join(labels), off + 1
+        if n & 0xC0 == 0xC0:                       # a pointer to a name earlier in the packet
+            ptr = ((n & 0x3F) << 8) | buf[off + 1]
+            rest, _ = _name(buf, ptr, depth + 1)
+            labels.append(rest)
+            return ".".join(l for l in labels if l), off + 2
+        labels.append(buf[off + 1:off + 1 + n].decode(errors="replace"))
+        off += 1 + n
+
+
+def parse_mdns(buf):
+    """Every record in a reply: [(name, type, data)]. PTR/SRV/A are decoded."""
+    _, _, qd, an, ns, ar = struct.unpack(">HHHHHH", buf[:12])
+    off = 12
+    for _ in range(qd):
+        _, off = _name(buf, off)
+        off += 4
+    out = []
+    for _ in range(an + ns + ar):
+        name, off = _name(buf, off)
+        rtype, _, _, rdlen = struct.unpack(">HHIH", buf[off:off + 10])
+        off += 10
+        rd = buf[off:off + rdlen]
+        if rtype == 12:
+            data = _name(buf, off)[0]
+        elif rtype == 33:
+            _, _, port = struct.unpack(">HHH", rd[:6])
+            data = (_name(buf, off + 6)[0], port)
+        elif rtype == 1 and rdlen == 4:
+            data = socket.inet_ntoa(rd)
+        else:
+            data = rd
+        out.append((name.lower(), rtype, data))
+        off += rdlen
+    return out
+
+
+def boards_from(records):
+    """name.local -> address, from whatever records the boards sent."""
+    hosts, addrs = set(), {}
+    for name, rtype, data in records:
+        if rtype == 33:
+            hosts.add(data[0].lower())
+        elif rtype == 1:
+            addrs[name] = data
+    for name, rtype, data in records:
+        if rtype == 1 and name.startswith("esp-hid-"):
+            hosts.add(name)
+    return {h: addrs.get(h, "") for h in hosts}
+
+
+def find(timeout=2.5):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    s.settimeout(0.3)
+    found = {}
+    try:
+        for _ in range(2):                          # UDP: ask twice
+            s.sendto(mdns_query(), (MDNS_GROUP, MDNS_PORT))
+        end = time.time() + timeout
+        while time.time() < end:
+            try:
+                buf, _ = s.recvfrom(9000)
+            except socket.timeout:
+                continue
+            try:
+                found.update({k: v or found.get(k, "") for k, v in boards_from(parse_mdns(buf)).items()})
+            except (ValueError, struct.error, IndexError):
+                continue
+    finally:
+        s.close()
+    for host in [h for h, ip in found.items() if not ip]:
+        try:
+            found[host] = socket.gethostbyname(host)
+        except OSError:
+            pass
+    return found
+
+
 # ---- the command line ---------------------------------------------------------------------------
 def body_for(argv):
     if not argv:
@@ -119,6 +225,16 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["mcp"]:
         return serve_mcp(Board())
+    if argv[:1] == ["find"]:
+        # A board that just rejoined takes a few seconds to announce itself again.
+        found = find() or find(timeout=4.0)
+        if not found:
+            print("No board answered on this network. On the board's own WiFi it is http://192.168.4.1/;")
+            print("over USB, ./flash_esp.sh --recover shows its address.")
+            return 3
+        for host, ip in sorted(found.items()):
+            print(f"{ip or '?':<16} http://{host}/   (the name follows the board if its address changes)")
+        return 0
     body = body_for(argv)
     if body is None:
         print(__doc__.strip().split("\n\n")[1])

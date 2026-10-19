@@ -1523,7 +1523,9 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
           <div class="ch"><svg class="ic"><use href="#i-shield"/></svg><h2>Access point</h2></div>
           <div class="fld"><label>Network name <span id="apBytes" style="float:right;font-weight:500;letter-spacing:0;text-transform:none"></span></label><input id="apSsid" autocomplete="off" data-nofill maxlength="32" placeholder="ESP32-HID-XXXXXX"></div>
           <div class="fld"><label>Password</label><input type="password" id="apPass" autocomplete="off" data-nofill placeholder="leave blank to keep the current password"></div>
-          <div class="chips" style="margin-bottom:12px"><button class="chip" id="tApOpen">No password (open network)</button></div>
+          <div class="chips" style="margin-bottom:12px"><button class="chip" id="tApOpen">No password (open network)</button>
+            <button class="chip" id="tShare">Share the home internet</button></div>
+          <p class="hint" id="shareHint" style="margin:-4px 0 12px"></p>
           <div class="item" id="apAdvice" style="display:none;margin-bottom:12px"><svg class="ic"><use href="#i-shield"/></svg>
             <div class="tx"><b id="apAdviceTitle"></b><span id="apAdviceText" style="white-space:normal"></span></div>
           </div>
@@ -1716,11 +1718,13 @@ function connect(){
   sock.binaryType='arraybuffer';
   const live=()=>ws===sock;
   sock.onopen=()=>{if(!live())return;
+    lostAt=0;lostTold=false;
     wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();};
   sock.onclose=()=>{if(!live())return;
+    if(!lostAt)lostAt=Date.now();
     wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
   sock.onerror=()=>{try{sock.close();}catch(e){}};
   sock.onmessage=ev=>{
@@ -1734,7 +1738,10 @@ function connect(){
     }
     let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     // Pushed by the board rather than answering anything, so it takes no slot.
-    if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);return;}
+    if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);
+      else if(m.event==='sta_online'){if(m.mdns)MDNS_NAME=m.mdns;noteHomeIp(m.ip);refresh();}
+      else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
+      return;}
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
     // With a PIN set the board greets every new socket with a bare auth_required
     // before it has been asked anything. That greeting answers no command, so it
@@ -1759,6 +1766,36 @@ function connect(){
     settle(m);
   };
 }
+// ---- when the home network has a bad night --------------------------------------
+// A router reboot can hand the board a new address. A page opened at the old one
+// then has nothing to reconnect to, so after a while it says how to find the
+// board instead of spinning: its .local name (which follows it), its own WiFi,
+// or the USB cable. And the first time this phone sees a new address, it says so.
+let MDNS_NAME='',AP_SSID='',lostAt=0,lostTold=false;
+const onBoardAp=()=>/^192\.168\.4\./.test(location.hostname);
+const byName=()=>/\.local$/i.test(location.hostname);
+function noteHomeIp(ip){
+  if(!ip)return;
+  let was='';try{was=localStorage.getItem('homeIp')||'';localStorage.setItem('homeIp',ip);}catch(e){}
+  if(was&&was!==ip){
+    toast('The board\'s home-network address changed to '+ip,'ok');
+    logline('home address '+was+' -> '+ip);
+  }
+}
+function lostHelp(){
+  if(lostTold||wsUp||!lostAt||Date.now()-lostAt<12000||onBoardAp())return;
+  lostTold=true;
+  const nm=MDNS_NAME?MDNS_NAME+'.local':'';
+  sheet('Cannot reach the board',
+    '<p class="hint">Nothing has answered at '+esc(location.hostname)+' for a while. The board may be restarting, or your router may have given it a new address after a restart of its own. This page keeps trying.</p>'+
+    '<div class="list" style="margin-top:12px">'+
+    (nm&&!byName()?'<div class="item">'+ico('wifi')+'<div class="tx"><b>Open it by name</b><span style="white-space:normal">'+
+      '<a href="http://'+esc(nm)+'/" id="lostByName">http://'+esc(nm)+'/</a> follows the board to its new address. Bookmark that one.</span></div></div>':'')+
+    item('shield','Or join its own WiFi','Connect to the board\'s network ('+esc(AP_SSID||'ESP32-HID-...')+') and open http://192.168.4.1/. Settings shows its home address.')+
+    item('cpu','Or use the USB cable','python3 tools/hidfi.py find lists it, or ./flash_esp.sh --recover shows the address.')+
+    '</div>',null);
+}
+setInterval(lostHelp,2000);
 function link(up){
   $('ldot').className='dot '+(up?'ok':'bad');
   $('ltext').textContent=up?'live':'offline';
@@ -4158,7 +4195,18 @@ function refresh(){
 function paintUni(d){
   document.querySelectorAll('[data-uni]').forEach(b=>b.classList.toggle('on',!!d['unicode_'+b.dataset.uni]));
 }
+function paintShare(on,active,waiting){
+  const b=$('tShare');if(!b)return;
+  b.classList.toggle('on',!!on);
+  $('shareHint').textContent=!on?'':active
+    ?'Phones on the board\'s WiFi have internet. Rejoin the board\'s WiFi on a phone that was already on it.'
+    :'Waiting for '+(waiting||'the home network')+' - sharing starts by itself.';
+}
 function applyStatus(d){
+  if(d.ap_share!==undefined)paintShare(d.ap_share,d.ap_share_active,d.wifi_connected?'the access point':'the home network');
+  if(d.mdns)MDNS_NAME=d.mdns;
+  if(d.ap_ssid)AP_SSID=d.ap_ssid;
+  if(d.wifi_connected&&d.wifi_ip)noteHomeIp(d.wifi_ip);
   if(!d)return;
   if(d.host_os)applyHostOs(d.host_os,d.host_os_source,d.host_os_detected);  // The evidence behind the verdict, in the UI rather than only on the serial
   // port: a detection argument is settled by reading these, not by guessing at
@@ -4238,8 +4286,14 @@ function applyStatus(d){
       row('mDNS',d.mdns?d.mdns+'.local':'-')+
       row('Home network',d.wifi_connected
         ? (d.wifi_ssid+'  '+sig(d.wifi_rssi)+' ('+d.wifi_rssi+' dBm)')
-        : (d.sta_phase==='failed'?'join failed':'not connected'))+
-      (d.wifi_connected?row('Address on it',d.wifi_ip+(d.sta_ip_mode==='static'?'  fixed':d.sta_ip_mode==='dhcp_fallback'?'  from router':'')):'')+
+        : d.sta_phase==='reconnecting'
+          ? ('reconnecting to '+(d.sta_target||'it')+(d.sta_down_s!=null?' \u00b7 away '+upt(d.sta_down_s):'')+(d.sta_reason?' \u00b7 '+d.sta_reason:''))
+          : (d.sta_phase==='failed'?'join failed':'not connected'))+
+      (d.wifi_connected?row('Address on it',d.wifi_ip+(d.sta_ip_mode==='static'?'  fixed':d.sta_ip_mode==='dhcp_fallback'?'  from router':'')):
+        (d.sta_last_ip?row('Last address',d.sta_last_ip):''))+
+      (d.sta_prev_ip?row('Address before',d.sta_prev_ip+'  (changed '+d.sta_ip_changes+'\u00d7 since start)'):'')+
+      (d.sta_drops?row('Dropped since start',d.sta_drops+'\u00d7, rejoined by itself'+(d.wifi_connected?'':' when it can')):'')+
+      (d.mdns&&d.wifi_connected?row('Bookmark this','http://'+d.mdns+'.local/ \u2014 follows the board if its address changes'):'')+
       row('Channel',chan)+
       (d.mac?row('MAC (home network)',d.mac):'')+
       (d.ap_mac?row('MAC (access point)',d.ap_mac):'')+
@@ -4545,6 +4599,19 @@ function bindAll(){
     });
     apStart(s,open?'':p);
     $('apPass').value='';
+  };
+  // Phones on the board's own WiFi lose the internet. Sharing gives it back, at a
+  // price worth stating before it is paid.
+  $('tShare').onclick=()=>{
+    const on=!$('tShare').classList.contains('on');
+    if(on&&!confirm('Share your home internet with phones on the board\'s WiFi?\n\n'+
+      '- Anything that joins the board\'s WiFi can then reach your home network.\n'+
+      '- Web traffic shares the radio with the pointer, so both can feel slower.\n\n'+
+      'Usually better: stay on your home WiFi and open the board by its address.'))return;
+    send({cmd:'internet_share',on:on},r=>{
+      if(r&&r.status==='ok'){paintShare(r.on,r.active,r.waiting_for);toast(on?'Sharing the home internet':'Not sharing','ok');}
+      else toast((r&&r.message)||'Could not change it','bad');
+    });
   };
   $('tApOpen').onclick=()=>{
     const on=!$('tApOpen').classList.contains('on');

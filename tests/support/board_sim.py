@@ -124,6 +124,9 @@ class BoardSim:
         self.refuse_after_ap = False       # ...from the moment the AP restarts
         self.refuse_after_reboot = False   # ...from the moment it reboots          # the dashboard reached over the home network, not the AP   # host suspended the bus and did not arm USB wake
         self.sta = {"phase": "idle", "ssid": "", "ip": "", "error": "", "ip_mode": "dhcp", "since": 0.0, "want_ip": ""}
+        # The supervisor's record of the home network (checkWifiConnection / staCameOnline).
+        self.net = {"last_ip": "", "prev_ip": "", "changes": 0, "drops": 0, "down_since": None, "reason": ""}
+        self.ap_share = False              # internet_share: NAPT on the board's own WiFi
         self.networks = [{"ssid": "HomeNet", "rssi": -48, "quality": "excellent", "channel": 6, "encryption": "WPA2"},
                          {"ssid": "Cafe Guest", "rssi": -71, "quality": "fair", "channel": 11, "encryption": "Open"}]
         self.join_succeeds = {"HomeNet"}
@@ -177,10 +180,17 @@ class BoardSim:
             "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "total_psram": 8388608,
             "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": True,
             "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
-            "ap_auto_off": self.ap_auto_off, "ap_running": True, "lan_exposed": online and not self.pin,
+            "ap_auto_off": self.ap_auto_off, "ap_running": True,
+            "ap_share": self.ap_share, "ap_share_active": self.ap_share and online, "lan_exposed": online and not self.pin,
             "sta_phase": self.sta["phase"], "sta_error": self.sta["error"], "sta_ip_mode": self.sta["ip_mode"],
             "sta_target": self.sta["ssid"], "cmd_count": self.cmd_count, "wifi_cmd_count": self.cmd_count,
-            "wifi_connected": online, "wifi_ip": self.sta["ip"], "wifi_ssid": self.sta["ssid"] if online else "",
+            "wifi_connected": online, "wifi_ip": self.sta["ip"],
+            "sta_last_ip": self.net["last_ip"], "sta_ip_changes": self.net["changes"], "sta_drops": self.net["drops"],
+            **({"sta_prev_ip": self.net["prev_ip"]} if self.net["prev_ip"] else {}),
+            **({"sta_down_s": int(self.now() - self.net["down_since"])} if self.net["down_since"] is not None else {}),
+            **({"sta_retry_in_s": 3} if self.sta["phase"] == "reconnecting" else {}),
+            **({"sta_reason": self.net["reason"]} if self.net["reason"] and not online else {}),
+            "wifi_ssid": self.sta["ssid"] if online else "",
             "wifi_rssi": -48 if online else 0, "wifi_quality": "excellent" if online else "",
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
             "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": sum(1 for k in self.sockets if k["open"]),
@@ -449,9 +459,39 @@ class BoardSim:
             if s["ssid"] in self.join_succeeds:
                 s["phase"] = "online"
                 s["ip"] = s["want_ip"] or "192.168.1.77"
+                self.net["last_ip"] = s["ip"]
             else:
                 s["phase"] = "failed"
                 s["error"] = "Wrong password, or the network refused the board"
+
+    # ---- the home network having a bad night (scenarios drive these) -----------------
+    def _push(self, ev):
+        for k in list(self.sockets):
+            if k["open"]:
+                try:
+                    k["ws"].send(json.dumps(ev))
+                except Exception:
+                    pass
+
+    def net_drop(self, reason="BEACON_TIMEOUT"):
+        """staWentAway(): the router let the board go; it keeps the AP up and rejoins."""
+        with self.lock:
+            self.sta.update(phase="reconnecting", ip="")
+            self.net.update(drops=self.net["drops"] + 1, down_since=self.now(), reason=reason)
+
+    def net_back(self, ip=None):
+        """staCameOnline(): back on the network - at the same address, or a new one."""
+        with self.lock:
+            ip = ip or self.net["last_ip"] or "192.168.1.77"
+            changed = bool(self.net["last_ip"]) and ip != self.net["last_ip"]
+            if changed:
+                self.net.update(prev_ip=self.net["last_ip"], changes=self.net["changes"] + 1)
+            self.net.update(last_ip=ip, down_since=None, reason="")
+            self.sta.update(phase="online", ip=ip)
+            ev = {"event": "sta_online", "ip": ip, "changed": changed, "mdns": "esp-hid-da1a2c"}
+            if changed:
+                ev["prev_ip"] = self.net["prev_ip"]
+        self._push(ev)
 
     def handle(self, b, transport="serial", sock=None, ip=None):
         with self.lock:
@@ -609,6 +649,27 @@ class BoardSim:
         if c == "press":
             k = b.get("keys", "")
             return OK("pressed", keys=k) if k else E("No keys specified")
+        if c == "internet_share":
+            online = self.sta["phase"] == "online"
+            if "on" in b:
+                if b["on"] and transport != "serial" and not self.pin:
+                    return E("Set an access PIN first: sharing lets anything on the board's WiFi reach your "
+                             "home network.", reply="pin_required")
+                self.ap_share = bool(b["on"])
+            r = OK("internet_share", on=self.ap_share, active=self.ap_share and online)
+            if self.ap_share and not online:
+                r["waiting_for"] = "the home network"
+            return r
+        if c == "net_fault":
+            if transport != "serial":
+                return E("Network tests run over the USB cable only", reply="usb_only")
+            kind = b.get("kind", "")
+            if kind not in ("drop", "vanish", "ap_off", "ip_was", "clear"):
+                return E("kind is drop, vanish, ap_off, ip_was or clear")
+            r = OK("net_fault", kind=kind)
+            if kind == "vanish":
+                r["s"] = max(5, min(600, int(b.get("s", 30))))
+            return r
         if c in ("do", "actions", "open", "steps"):
             return self._agent(c, b, OK, E)
         if c in ("key_down", "key_up"):

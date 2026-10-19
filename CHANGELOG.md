@@ -42,6 +42,32 @@ can set, and recovery that needs the board in hand.
 - **Connections that never sign in are closed after 20 seconds**, so silent
   connections cannot hold every slot and keep the owner out.
 
+### Home network - built to stay up
+
+- **It never gives up on a network that has worked.** A board that started before
+  the router (a power cut brings both back at once) used to try once and stop for
+  good; the core library treated our timed-out join as "stay off". One supervisor
+  now owns reconnecting: 1 s after a drop, backing off to every 30 s, forever.
+- **A new address is noticed and told.** The board records the previous address,
+  moves its `.local` name to the new one, and tells every open dashboard, which
+  says "address changed". Settings shows the address before, the drops since
+  start, why the router let go, and which address to bookmark.
+- **It is never unreachable.** With the home network gone for 20 s the board's
+  own WiFi comes back even if auto-off had switched it off.
+- **A dashboard that lost the board says how to find it**: its `.local` name, its
+  own WiFi, or the USB cable - instead of spinning forever.
+- **Optional: share the home internet** with phones on the board's own WiFi
+  (Settings → Access point). Off by default, warns first, needs an access PIN to
+  switch on over WiFi, and runs only while the board is on its home network.
+- `python3 tools/hidfi.py find` lists the boards on your network and their
+  addresses (mDNS, `_hidfi._tcp`).
+- A password the router refuses three times on a known network slows retries to
+  every 5 minutes and says so; a new network with a wrong password stops at once.
+- Rehearsed on a real board without touching the router (`net_fault`, USB only):
+  dropped, router off for 40 s, router off at boot, new address, AP auto-off -
+  `tests/board/test_home_network.py`. During those runs the real router really did
+  move the board from .107 to .100; network tests now ask the board where it is.
+
 ### Actions - for agents and scripts
 
 - **Say what to do, not which keys.** `{"cmd":"do","a":"copy"}` presses Cmd+C on a

@@ -254,6 +254,9 @@ try:
                 print('              then open http://192.168.4.1/')
             else:
                 print(f'   Dashboard: join WiFi \'{d.get("ap_ssid","ESP32-HID-XXXXXX")}\' then open http://192.168.4.1/')
+            if d.get("wifi_connected") and d.get("wifi_ip"):
+                nm = f'  or  http://{d["mdns"]}.local/' if d.get("mdns") else ""
+                print(f'   On your home network: http://{d["wifi_ip"]}/{nm}')
             break
     s.close()
 except Exception as e:

@@ -119,3 +119,39 @@ def test_unknown_methods_and_bad_json():
     hidfi.serve_mcp(SimLink(), io.StringIO('not json\n{"jsonrpc":"2.0","id":9,"method":"resources/list"}\n'), out)
     a, b = [json.loads(l) for l in out.getvalue().splitlines()]
     assert a["error"]["code"] == -32700 and b["error"]["code"] == -32601
+
+
+# ---- find: the board after its address changed -------------------------------------------
+def _rr(name_bytes, rtype, rdata):
+    return name_bytes + __import__("struct").pack(">HHIH", rtype, 0x8001, 120, len(rdata)) + rdata
+
+
+def test_find_reads_a_boards_mdns_answer_including_compressed_names():
+    import struct
+    q = hidfi._qname
+    head = struct.pack(">HHHHHH", 0, 0x8400, 0, 3, 0, 0)
+    svc = q("_hidfi._tcp.local")
+    svc_off = len(head)                                   # the first answer's name starts here
+    inst = b"\x0eesp-hid-da1a2c" + struct.pack(">H", 0xC000 | svc_off)      # instance -> pointer to service
+    host = q("esp-hid-da1a2c.local")
+    a1 = _rr(svc, 12, inst)
+    a2 = _rr(inst_name := b"\x0eesp-hid-da1a2c" + struct.pack(">H", 0xC000 | svc_off), 33,
+             struct.pack(">HHH", 0, 0, 80) + host)
+    a3 = _rr(host, 1, bytes([192, 168, 1, 100]))
+    recs = hidfi.parse_mdns(head + a1 + a2 + a3)
+    assert ("_hidfi._tcp.local", 12, "esp-hid-da1a2c._hidfi._tcp.local") in recs
+    assert hidfi.boards_from(recs) == {"esp-hid-da1a2c.local": "192.168.1.100"}
+
+
+def test_find_ignores_other_devices_and_junk():
+    import struct
+    head = struct.pack(">HHHHHH", 0, 0x8400, 0, 1, 0, 0)
+    printer = _rr(hidfi._qname("printer.local"), 1, bytes([192, 168, 1, 9]))
+    assert hidfi.boards_from(hidfi.parse_mdns(head + printer)) == {}
+    with pytest.raises((ValueError, IndexError, struct.error)):
+        hidfi.parse_mdns(head + b"\x05ab")
+
+
+def test_the_query_asks_for_the_hidfi_service():
+    pkt = hidfi.mdns_query()
+    assert b"\x06_hidfi\x04_tcp\x05local\x00" in pkt and pkt.endswith(b"\x00\x0c\x00\x01")

@@ -160,8 +160,9 @@ def test_pointer_to_host_latency(board, sink, perf, request):
 
 # ---- the WiFi hot path ----------------------------------------------------------------------------
 @pytest.fixture
-def ws(request):
-    url = request.config.getoption("--board-url")
+def ws(request, board):
+    from support.board import lan_url
+    url = lan_url(request.config.getoption("--board-url"), board)
     if not url:
         pytest.skip("WiFi tests need --board-url ws://<board-ip>:81 and this machine on the board's network")
     websocket = pytest.importorskip("websocket", reason="pip install websocket-client")

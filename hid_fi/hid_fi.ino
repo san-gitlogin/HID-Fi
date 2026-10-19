@@ -219,7 +219,8 @@ enum StaPhase : uint8_t {
     STA_IDLE,        // nothing in progress
     STA_CONNECTING,  // association under way
     STA_ONLINE,      // associated and holding an IP
-    STA_FAILED       // gave up - staError says why
+    STA_FAILED,      // gave up - staError says why
+    STA_RECONNECTING // a network that has worked before is gone; retrying until it is back
 };
 StaPhase staPhase   = STA_IDLE;
 uint32_t staPhaseAt = 0;          // millis() when this phase started
@@ -238,6 +239,47 @@ String staWantDns  = "";
 //   dhcp_fallback - a static address was asked for, did not work, DHCP rescued us
 String staIpMode      = "dhcp";
 bool   staStaticTried = false;    // a static attempt is in flight, fallback still possible
+
+// ---- Keeping the home network -------------------------------------------------
+// Routers reboot, kick clients, and hand out a different address after a power
+// cut. The core library retries some of that by itself and not the rest - and a
+// join that timed out (a board that booted before the router did) ended with
+// disconnect(), which it reads as "stay off". So one supervisor owns it: while a
+// network is saved and we are not on it, try again - at once, then backing off
+// to every 30 s - forever for a network that has worked before. The core's own
+// auto-reconnect is switched off so the two never fight over the radio.
+#define STA_RETRY_FIRST     1000     // first retry after a drop
+#define STA_RETRY_MAX       30000    // back-off ceiling for a network that has worked
+#define STA_RETRY_UNPROVEN  60000    // a network that never has: slowly
+#define STA_RETRY_BADPASS   300000   // a worked-before network now refusing the password
+#define AP_FALLBACK_MS      20000    // home network gone this long: bring the AP back
+String   staSavedSsid = "", staSavedPass = "";   // what the supervisor rejoins
+uint32_t staRetryAt   = 0;
+uint32_t staRetryGap  = STA_RETRY_FIRST;
+bool     staSupervised = false;   // the join in flight was started by the supervisor or at boot
+bool     staProven     = false;   // these credentials have been online at least once
+uint32_t staDrops      = 0;       // times the home network went away since boot
+uint32_t staTries      = 0;       // rejoin attempts since boot
+uint8_t  staAuthFails  = 0;       // consecutive refusals of the password
+uint32_t staDownSince  = 0;       // millis() it went away; 0 while online or never joined
+uint32_t staOnlineSince = 0;
+String   staLastIp     = "";      // the last address we held - kept while offline, and across reboots
+String   staPrevIp     = "";      // the one before it, once it changes
+uint32_t staIpChanges  = 0;
+volatile uint8_t staLastReason = 0;   // 802.11 reason the router gave for letting us go
+// Test fault (serial only, net_fault): until this time the network "vanishes" -
+// the supervisor joins a name that does not exist, which is exactly what a
+// powered-off router looks like. The boot variant survives the restart in RTC RAM.
+uint32_t netFaultUntil = 0;
+// Sharing the home internet with phones on the board's own WiFi (NAPT). Off by
+// default: it lets anything on the board's WiFi reach the home network, and the
+// traffic shares the radio with the pointer. Active only while both are up.
+bool apShare = false;
+bool apShareActive = false;
+RTC_NOINIT_ATTR uint32_t rtcFaultMagic;
+RTC_NOINIT_ATTR uint32_t rtcFaultSecs;
+#define NET_FAULT_MAGIC 0x4E46A17Cu
+#define NET_FAULT_SSID  "hidfi-test-no-such-network"
 
 // ---- Power ------------------------------------------------------------------
 // Nearly all of this board's draw is the radio, not the processor: roughly
@@ -651,6 +693,13 @@ const char* staPhaseStr();
 const char* wlStatusStr(int s);
 void setupWebRoutes();
 void checkWifiConnection();
+void staCameOnline(const String& ip);
+void onStaEvent(arduino_event_id_t event, arduino_event_info_t info);
+void staWentAway();
+void staScheduleRetry();
+void handleNetFault(const JsonDocument& inDoc);
+void handleInternetShare(const JsonDocument& inDoc);
+void applyInternetShare();
 void handleWifiScan();
 
 // Power + exposure (v3.4)
@@ -1041,9 +1090,27 @@ void setupWifi() {
     // Then try STA if credentials are saved. This starts the join and returns -
     // boot used to sit in a busy-wait here, which left the access point and the
     // web server up but unable to answer anything until the join timed out.
+    WiFi.onEvent(onStaEvent);
+    WiFi.setAutoReconnect(false);       // the supervisor owns reconnecting (checkWifiConnection)
+    staSavedSsid = savedSSID;
+    staSavedPass = savedPass;
+    {
+        preferences.begin("wifi_cfg", true);
+        staProven = preferences.getBool("sta_ok", false);
+        apShare   = preferences.getBool("ap_share", false);
+        staLastIp = preferences.getString("last_ip", "");
+        preferences.end();
+    }
+    if (rtcFaultMagic == NET_FAULT_MAGIC) {     // net_fault at_boot: the router is "off" as we start
+        rtcFaultMagic = 0;
+        netFaultUntil = millis() + constrain(rtcFaultSecs, 5u, 600u) * 1000UL;
+        COM_SERIAL.printf("[NET] Test fault: home network gone for %us from boot\n", (unsigned)rtcFaultSecs);
+    }
     if (savedSSID.length() > 0) {
         COM_SERIAL.printf("[WIFI] Saved network: %s - joining in the background\n", savedSSID.c_str());
-        staBeginJoin(savedSSID, savedPass, true);
+        staSupervised = true;
+        staBeginJoin(netFaultUntil ? String(NET_FAULT_SSID) : savedSSID, savedPass, true);
+        staSsid = savedSSID;
     } else {
         COM_SERIAL.println("[WIFI] No STA credentials. AP-only mode.");
         COM_SERIAL.println("[WIFI] Connect to AP and use dashboard to configure STA network.");
@@ -1095,6 +1162,7 @@ void startMdns(const String& suffix) {
     if (MDNS.begin(mdnsName.c_str())) {
         MDNS.addService("http", "tcp", 80);
         MDNS.addService("ws", "tcp", 81);
+        MDNS.addService("hidfi", "tcp", 80);     // tools/hidfi.py find looks for this
         COM_SERIAL.printf("[MDNS] http://%s.local/\n", mdnsName.c_str());
     } else {
         COM_SERIAL.println("[MDNS] start failed");
@@ -1166,6 +1234,7 @@ void updatePower() {
 void stopAP() {
     WiFi.softAPdisconnect(true);
     apRunning = false;
+    apShareActive = false;
     COM_SERIAL.println("[PWR] AP stopped to save power. Hold BOOT for 2s to bring it back.");
 }
 
@@ -1177,6 +1246,7 @@ void restartAP() {
     apIP = WiFi.softAPIP().toString();
     apRunning = true;
     apIdleSince = millis();
+    apShareActive = false;      // a fresh AP: sharing is applied again on the next tick
     COM_SERIAL.printf("[AP] Back up: %s at %s\n", apSSID.c_str(), apIP.c_str());
 }
 
@@ -1230,6 +1300,7 @@ const char* staPhaseStr() {
         case STA_CONNECTING: return "connecting";
         case STA_ONLINE:     return "online";
         case STA_FAILED:     return "failed";
+        case STA_RECONNECTING: return "reconnecting";
         default:             return "idle";
     }
 }
@@ -1303,7 +1374,7 @@ void updateStaJoin() {
             staIpMode = "dhcp_fallback";
             staError  = "The router did not honour " + staWantIp + ", it assigned " + wifiIP + " instead.";
         }
-        staPhase = STA_ONLINE;
+        staCameOnline(wifiIP);
         COM_SERIAL.printf("[STA] Online as %s (%s), RSSI %d dBm\n",
                           wifiIP.c_str(), staIpMode.c_str(), WiFi.RSSI());
         return;
@@ -1327,38 +1398,238 @@ void updateStaJoin() {
 
     wifiConnected = false;
     wifiIP = "";
-    staPhase = STA_FAILED;
-    if (staError.length() == 0) staError = wlStatusStr(WiFi.status());
-    COM_SERIAL.printf("[STA] Join failed: %s\n", staError.c_str());
+    // A network that has worked before is not "failed" because it is away: the
+    // supervisor keeps trying. A new one the user just typed in is.
+    staPhase = (staSupervised && staProven) ? STA_RECONNECTING : STA_FAILED;
+    if (staError.length() == 0 || staPhase == STA_RECONNECTING) staError = wlStatusStr(WiFi.status());
+    COM_SERIAL.printf("[STA] Join %s: %s\n", staPhase == STA_FAILED ? "failed" : "attempt missed", staError.c_str());
+    if (!staDownSince) staDownSince = millis();
+    // Decide on the router's reason before our own disconnect replaces it.
+    staScheduleRetry();
     WiFi.disconnect(false);   // keep the AP running no matter what
 }
 
-void checkWifiConnection() {
-    // A join in flight owns the radio - let updateStaJoin() finish before the
-    // watchdog starts second-guessing it, or the two fight each other.
-    if (staPhase == STA_CONNECTING) return;
-    if (millis() - lastWifiCheck < WIFI_CHECK_INTERVAL) return;
-    lastWifiCheck = millis();
-    
-    // Only check STA connection — AP is always running
-    if (WiFi.status() != WL_CONNECTED) {
-        if (wifiConnected) {
-            COM_SERIAL.println("[STA] Connection lost — AP still active, auto-reconnecting...");
-            wifiConnected = false;
-            wifiIP = "";
-        }
-        // Try reconnecting if we have saved creds
-        preferences.begin("wifi_cfg", true);
-        String ssid = preferences.getString("ssid", "");
-        preferences.end();
-        if (ssid.length() > 0 && WiFi.status() == WL_DISCONNECTED) {
-            WiFi.reconnect();
-        }
-    } else if (!wifiConnected) {
-        wifiConnected = true;
-        wifiIP = WiFi.localIP().toString();
-        COM_SERIAL.printf("[STA] Reconnected! IP: %s\n", wifiIP.c_str());
+// The router told us why it let go. Runs on the WiFi task: store, nothing else.
+void onStaEvent(arduino_event_id_t event, arduino_event_info_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) staLastReason = info.wifi_sta_disconnected.reason;
+}
+
+static bool staReasonIsPassword(uint8_t r) {
+    return r == WIFI_REASON_AUTH_FAIL || r == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
+           r == WIFI_REASON_HANDSHAKE_TIMEOUT || r == WIFI_REASON_MIC_FAILURE;
+}
+
+void staScheduleRetry() {
+    if (!staSavedSsid.length()) return;
+    if (staReasonIsPassword(staLastReason)) {
+        if (staAuthFails < 255) staAuthFails++;
+    } else {
+        staAuthFails = 0;
     }
+    uint32_t gap;
+    if (!staProven) {
+        // Never worked, and the router says the password is wrong: stop, and say so.
+        if (staAuthFails) { staRetryAt = 0; staPhase = STA_FAILED;
+            staError = "The router refused the password. Enter it again in Settings."; return; }
+        gap = STA_RETRY_UNPROVEN;
+    } else if (staAuthFails >= 3) {
+        gap = STA_RETRY_BADPASS;      // still try: routers misreport, and it costs nothing to ask
+        staError = "The router no longer accepts the saved password. If you changed it, enter it again in Settings.";
+    } else {
+        gap = staRetryGap;
+        staRetryGap = min<uint32_t>(staRetryGap * 2 + 1000, STA_RETRY_MAX);
+    }
+    staRetryAt = millis() + gap;
+    if (!staRetryAt) staRetryAt = 1;
+}
+
+static void broadcastJson(const JsonDocument& doc) {
+    String out;
+    serializeJson(doc, out);
+    if (wifiEnabled) webSocket.broadcastTXT(out);
+    COM_SERIAL.println(out);
+}
+
+// On the network: either a join just finished, or the address changed under us.
+void staCameOnline(const String& ip) {
+    bool changed = staLastIp.length() && ip != staLastIp;
+    if (changed) {
+        staPrevIp = staLastIp;
+        staIpChanges++;
+        COM_SERIAL.printf("[NET] Address changed: %s -> %s\n", staPrevIp.c_str(), ip.c_str());
+    }
+    bool wasDown = staDownSince != 0;
+    wifiConnected  = true;
+    wifiIP         = ip;
+    staPhase       = STA_ONLINE;
+    staDownSince   = 0;
+    staOnlineSince = millis();
+    staRetryAt     = 0;
+    staRetryGap    = STA_RETRY_FIRST;
+    staAuthFails   = 0;
+    if (!staStaticTried && staIpMode != "dhcp_fallback") staError = "";
+    // Remember the address across reboots too: after a power cut the router may
+    // hand out a different one, and that is exactly when the owner needs telling.
+    if (ip != staLastIp || !staProven) {
+        preferences.begin("wifi_cfg", false);
+        if (ip != staLastIp) preferences.putString("last_ip", ip);
+        if (!staProven) preferences.putBool("sta_ok", true);
+        preferences.end();
+    }
+    staLastIp = ip;
+    staProven = true;
+    // mDNS answers on the new address, not the old one.
+    if (changed && mdnsName.length()) {
+        MDNS.end();
+        if (MDNS.begin(mdnsName.c_str())) {
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addService("ws", "tcp", 81);
+            MDNS.addService("hidfi", "tcp", 80);
+        }
+    }
+    if (wasDown || changed) {
+        StaticJsonDocument<256> ev;
+        ev["event"]   = "sta_online";
+        ev["ip"]      = ip;
+        ev["changed"] = changed;
+        if (changed) ev["prev_ip"] = staPrevIp;
+        ev["mdns"]    = mdnsName;
+        broadcastJson(ev);
+    }
+}
+
+void staWentAway() {
+    wifiConnected = false;
+    wifiIP = "";
+    staDrops++;
+    staDownSince = millis();
+    staPhase = staProven ? STA_RECONNECTING : STA_FAILED;
+    staRetryGap = STA_RETRY_FIRST;
+    COM_SERIAL.printf("[NET] Home network lost (reason %u) - access point still up, rejoining\n",
+                      (unsigned)staLastReason);
+    staScheduleRetry();
+}
+
+// Bring sharing in line with what is wanted and what is possible. The DHCP
+// server must offer the home network's DNS, or phones connect and resolve nothing.
+void applyInternetShare() {
+    bool want = apShare && wifiConnected && apRunning;
+    if (want == apShareActive) return;
+    IPAddress apip(192, 168, 4, 1), mask(255, 255, 255, 0);
+    if (want) {
+        WiFi.softAPConfig(apip, apip, mask, IPAddress(192, 168, 4, 2), WiFi.dnsIP());
+        apShareActive = WiFi.AP.enableNAPT(true);
+        COM_SERIAL.printf("[NET] Sharing the home internet on the board's WiFi: %s\n", apShareActive ? "on" : "FAILED");
+    } else {
+        if (apRunning) {
+            WiFi.AP.enableNAPT(false);
+            WiFi.softAPConfig(apip, apip, mask);           // no DNS offered: nothing to resolve with
+        }
+        apShareActive = false;
+        COM_SERIAL.println("[NET] Sharing the home internet: off");
+    }
+}
+
+void handleInternetShare(const JsonDocument& inDoc) {
+    StaticJsonDocument<320> d;
+    if (!inDoc["on"].isNull()) {
+        bool on = inDoc["on"].as<bool>();
+        // Sharing opens the home network to anyone on the board's WiFi, so it is
+        // never switched on over WiFi by someone who could not set a PIN.
+        if (on && cmdSource != SRC_SERIAL && authToken.length() == 0) {
+            d["status"]="error"; d["reply"]="pin_required";
+            d["message"]="Set an access PIN first: sharing lets anything on the board's WiFi reach your home network.";
+            sendJson(d); return;
+        }
+        apShare = on;
+        preferences.begin("wifi_cfg", false);
+        preferences.putBool("ap_share", apShare);
+        preferences.end();
+        applyInternetShare();
+    }
+    d["status"]="ok"; d["reply"]="internet_share";
+    d["on"] = apShare;
+    d["active"] = apShareActive;
+    if (apShare && !apShareActive) d["waiting_for"] = wifiConnected ? "the access point" : "the home network";
+    sendJson(d);
+}
+
+void checkWifiConnection() {
+    if (millis() - lastWifiCheck < 500) return;
+    lastWifiCheck = millis();
+
+    if (netFaultUntil && (long)(millis() - netFaultUntil) >= 0) {
+        netFaultUntil = 0;
+        staRetryAt = millis();                 // the "router" is back: try now
+        staRetryGap = STA_RETRY_FIRST;
+        COM_SERIAL.println("[NET] Test fault over - the network is back");
+    }
+    applyInternetShare();
+    // The board must never be unreachable: with the home network gone, the access
+    // point comes back even if it was switched off to save power. Checked before
+    // the join guard below - a rejoin attempt lasts 15 s and must not hold it up.
+    if (apAutoOff && !apRunning && staDownSince && millis() - staDownSince > AP_FALLBACK_MS) {
+        restartAP();
+        StaticJsonDocument<160> ev;
+        ev["event"] = "ap_restored"; ev["ap_ssid"] = apSSID; ev["ap_ip"] = apIP; ev["why"] = "home network lost";
+        broadcastJson(ev);
+    }
+    // A join in flight owns the radio; updateStaJoin() resolves it.
+    if (staPhase == STA_CONNECTING) return;
+
+    bool up = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0 && !netFaultUntil;
+    if (up) {
+        String ip = WiFi.localIP().toString();
+        if (!wifiConnected || ip != wifiIP) staCameOnline(ip);
+        return;
+    }
+    if (wifiConnected) staWentAway();
+    if (!staSavedSsid.length()) return;
+
+    if (!staRetryAt || (long)(millis() - staRetryAt) < 0) return;
+    staRetryAt = 0;
+    staTries++;
+    staSupervised = true;
+    staBeginJoin(netFaultUntil ? String(NET_FAULT_SSID) : staSavedSsid, staSavedPass, true);
+    staSsid = staSavedSsid;
+    if (staPhase == STA_CONNECTING && !staDownSince) staDownSince = millis();
+}
+
+// Serial only: rehearse a bad night for the home network without touching the
+// router. drop - the router lets us go; vanish - it is off for s seconds;
+// at_boot - and it was off when the board started; ap_off - auto-off fired;
+// ip_was - pretend we last
+// held that address, so the next join proves the change is noticed; clear.
+void handleNetFault(const JsonDocument& inDoc) {
+    StaticJsonDocument<224> d;
+    if (cmdSource != SRC_SERIAL) {
+        d["status"]="error"; d["reply"]="usb_only"; d["message"]="Network tests run over the USB cable only";
+        sendJson(d); return;
+    }
+    const char* kind = inDoc["kind"] | "";
+    uint32_t secs = constrain((uint32_t)(inDoc["s"] | 30), 5u, 600u);
+    if (!strcmp(kind, "drop")) {
+        WiFi.disconnect(false);
+    } else if (!strcmp(kind, "vanish")) {
+        if (inDoc["at_boot"] | false) {
+            rtcFaultMagic = NET_FAULT_MAGIC; rtcFaultSecs = secs;
+            pendingRestartAt = millis() + 300;
+        } else {
+            netFaultUntil = millis() + secs * 1000UL;
+            WiFi.disconnect(false);
+        }
+    } else if (!strcmp(kind, "ap_off")) {
+        stopAP();                                   // as auto-off would, without the 10 minute wait
+    } else if (!strcmp(kind, "ip_was")) {
+        staLastIp = String(inDoc["ip"] | "");
+    } else if (!strcmp(kind, "clear")) {
+        netFaultUntil = 0; rtcFaultMagic = 0; staRetryAt = millis();
+    } else {
+        d["status"]="error"; d["message"]="kind is drop, vanish, ap_off, ip_was or clear"; sendJson(d); return;
+    }
+    d["status"]="ok"; d["reply"]="net_fault"; d["kind"]=kind;
+    if (!strcmp(kind, "vanish")) d["s"] = secs;
+    sendJson(d);
 }
 
 // ==================== WEB ROUTES ====================
@@ -1402,7 +1673,7 @@ void setupWebRoutes() {
     
     // GET /api/status — quick status (includes AP info)
     webServer.on("/api/status", HTTP_GET, []() {
-        StaticJsonDocument<1536> doc;
+        DynamicJsonDocument doc(2560);
         buildStatusDoc(doc);
         String resp;
         serializeJson(doc, resp);
@@ -1730,6 +2001,8 @@ void processCommand(const String& line, CmdSource src) {
         handleMacroRun(inDoc);
     }
     else if (strcmp(cmd, "do") == 0)      handleDo(inDoc);
+    else if (strcmp(cmd, "net_fault") == 0) handleNetFault(inDoc);
+    else if (strcmp(cmd, "internet_share") == 0) handleInternetShare(inDoc);
     else if (strcmp(cmd, "actions") == 0) handleActions(inDoc);
     else if (strcmp(cmd, "open") == 0)    handleOpen(inDoc);
     else if (strcmp(cmd, "steps") == 0)   handleSteps(inDoc);
@@ -2499,6 +2772,8 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["radio_awake"] = radioAwake;
     doc["ap_auto_off"] = apAutoOff;
     doc["ap_running"] = apRunning;
+    doc["ap_share"] = apShare;
+    doc["ap_share_active"] = apShareActive;
     // Exposure. lan_open true means the board is on a home network with no PIN,
     // which the dashboard turns into a warning rather than leaving it implicit.
     doc["lan_exposed"] = (wifiConnected && authToken.length() == 0);
@@ -2516,6 +2791,15 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["wifi_cmd_count"] = wifiCommandCount;
     doc["wifi_connected"] = wifiConnected;
     doc["wifi_ip"] = wifiIP;
+    // How the home network has behaved: enough to answer "did it drop, and where
+    // did it go" without a serial log.
+    doc["sta_last_ip"] = staLastIp;
+    if (staPrevIp.length()) doc["sta_prev_ip"] = staPrevIp;
+    doc["sta_ip_changes"] = staIpChanges;
+    doc["sta_drops"] = staDrops;
+    if (staDownSince) doc["sta_down_s"] = (millis() - staDownSince) / 1000;
+    if (staRetryAt && !wifiConnected) doc["sta_retry_in_s"] = (long)(staRetryAt - millis()) > 0 ? (staRetryAt - millis()) / 1000 : 0;
+    if (staLastReason && !wifiConnected) doc["sta_reason"] = WiFi.STA.disconnectReasonName((wifi_err_reason_t)staLastReason);
     doc["wifi_ssid"] = wifiConnected ? WiFi.SSID() : "";
     doc["wifi_rssi"] = wifiConnected ? WiFi.RSSI() : 0;
     doc["wifi_quality"] = wifiConnected ? linkQuality(WiFi.RSSI()) : "";
@@ -2573,7 +2857,7 @@ void buildStatusDoc(JsonDocument& doc) {
 }
 
 void handleDeviceStatus(bool fromWifi) {
-    StaticJsonDocument<1536> doc;
+    DynamicJsonDocument doc(2560);
     buildStatusDoc(doc);
     doc["boot_button"] = (digitalRead(BOOT_BUTTON) == LOW) ? "pressed" : "released";
     
@@ -2637,8 +2921,14 @@ void handleWifiConfigure(const JsonDocument& inDoc) {
     preferences.putString("mask", staWantMask);
     preferences.putString("dns",  staWantDns);
     preferences.end();
+    preferences.begin("wifi_cfg", false);
+    preferences.putBool("sta_ok", false);
+    preferences.end();
     COM_SERIAL.printf("[STA] Credentials saved for: %s\n", ssid);
 
+    staSavedSsid = ssid; staSavedPass = pass;
+    staProven = false; staAuthFails = 0; staLastReason = 0;
+    staSupervised = false; staRetryAt = 0; staDownSince = 0;
     wifiConnected = false;
     wifiIP = "";
     staBeginJoin(String(ssid), String(pass), true);
@@ -2700,6 +2990,8 @@ void handleWifiDisconnect() {
     staSsid = "";
     staIpMode = "dhcp";
     staWantIp = staWantGw = staWantMask = staWantDns = "";
+    staSavedSsid = staSavedPass = "";
+    staProven = false; staRetryAt = 0; staDownSince = 0;
     WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);   // back to DHCP for next time
 
     preferences.begin("wifi_cfg", false);
@@ -2709,6 +3001,7 @@ void handleWifiDisconnect() {
     preferences.remove("gw");
     preferences.remove("mask");
     preferences.remove("dns");
+    preferences.remove("sta_ok");
     preferences.end();
     
     COM_SERIAL.println("[STA] Disconnected and STA credentials cleared. AP still active.");
@@ -4042,7 +4335,7 @@ void handleMacroGet(const JsonDocument& inDoc) {
     String body = preferences.getString(sk, "");
     preferences.end();
 
-    StaticJsonDocument<1536> doc;
+    DynamicJsonDocument doc(2560);
     doc["status"]="ok"; doc["reply"]="macro"; doc["slot"]=slot; doc["name"]=name;
     JsonArray arr = doc.createNestedArray("steps");
     int start = 0;

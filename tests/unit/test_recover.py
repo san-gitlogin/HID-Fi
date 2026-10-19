@@ -86,6 +86,25 @@ def test_forgot_the_wifi_password_it_is_shown_over_the_cable(board, tool):
 
 
 @pytest.mark.parametrize("tool", TOOLS)
+def test_forgot_the_boards_home_address_it_is_shown_too(board, tool):
+    sim = sim_with()
+    sim.sta.update(phase="online", ssid="HomeNet", ip="192.168.1.100")
+    fb, ports = board(sim)
+    code, out = run(tool, ports, "--show-password")
+    assert code == 0 and "http://192.168.1.100/" in out and "esp-hid-da1a2c.local" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_with_the_home_network_away_it_says_where_the_board_was(board, tool):
+    sim = sim_with()
+    sim.sta.update(phase="reconnecting", ssid="HomeNet", ip="")
+    sim.net["last_ip"] = "192.168.1.107"
+    fb, ports = board(sim)
+    code, out = run(tool, ports, "--show-password")
+    assert code == 0 and "away - it was at http://192.168.1.107/" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
 def test_an_open_network_says_so(board, tool):
     fb, ports = board(sim_with(ap_open=True, ap_pass=""))
     code, out = run(tool, ports, "--show-password")

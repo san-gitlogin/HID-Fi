@@ -351,6 +351,11 @@ function Test-Firmware([string]$p) {
                     Ok '           Write the password down now. Forgot it later? .\flash_esp.ps1 -Recover shows it again.'
                     Ok '           then open http://192.168.4.1/'
                 } else { Ok "Dashboard: join WiFi '$ap' then open http://192.168.4.1/" }
+                if ($line -match '"wifi_connected"\s*:\s*true' -and $line -match '"wifi_ip"\s*:\s*"([^"]+)"') {
+                    $hip = $Matches[1]
+                    $nm = if ($line -match '"mdns"\s*:\s*"([^"]+)"') { "  or  http://$($Matches[1]).local/" } else { '' }
+                    Ok "On your home network: http://$hip/$nm"
+                }
                 if ($hid -ne 'ready') {
                     Warn 'HID is not ready - check the second ("USB") cable and the USB-OTG solder pads.'
                 }
@@ -400,13 +405,30 @@ function Get-VaultFate($vl) {
     return @{ Text = "$n stored password(s) WILL BE ERASED - they were guarded by the access PIN"; Erases = $true; Count = $n }
 }
 
-function Show-ApPassword($ap) {
+# Where the board is on the home network - the answer to "what was its address
+# again?". Same wording as tools/recover.py.
+function Get-HomeLine($st) {
+    if (-not $st) { return '' }
+    $name = if ($st.mdns) { "http://$($st.mdns).local/" } else { '' }
+    if ($st.wifi_connected -and $st.wifi_ip) {
+        $ssid = if ($st.wifi_ssid) { $st.wifi_ssid } else { 'joined' }
+        return "Home network:  $ssid at http://$($st.wifi_ip)/" + $(if ($name) { "  or  $name" } else { '' })
+    }
+    if ($st.sta_last_ip) {
+        return "Home network:  away - it was at http://$($st.sta_last_ip)/" + $(if ($name) { "; $name finds it when it is back" } else { '' })
+    }
+    return ''
+}
+
+function Show-ApPassword($ap, $st) {
     Say "   WiFi network:  $($ap.ssid)"
     if ($ap.open) { Say '   Password:      none - the network is open' }
     else {
         Say "   Password:      $($ap.password)"
         if ($ap.generated) { Say '   (This board made this password for itself. You can keep it or set your own.)' }
     }
+    $h = Get-HomeLine $st
+    if ($h) { Say "   $h" }
     return 0
 }
 
@@ -467,13 +489,15 @@ function Invoke-Recover {
             Say '   Flash the current firmware first: it keeps every setting and stored password.'
             return 1
         }
-        if ($RecoverShow) { return (Show-ApPassword $ap) }
+        if ($RecoverShow) { return (Show-ApPassword $ap $st) }
         if ($ScriptArgs.ContainsKey('RecoverSetPassword')) { return (Set-ApPassword $sp $ap $RecoverSetPassword) }
         if ($ScriptArgs.ContainsKey('RecoverResetPin')) { return (Reset-AccessPin $sp $vl $RecoverResetPin ([bool]$EraseVault) $false) }
         if ([Console]::IsInputRedirected) { Say '   No choice given. Use -RecoverShow, -RecoverSetPassword or -RecoverResetPin, or run it in a console.'; return 1 }
         $pinState = if ($st.auth_set) { 'set' } else { 'not set' }
         Say "   Board: $($st.firmware)  WiFi: $($ap.ssid)  access PIN: $pinState"
         Say "   Stored passwords: $((Get-VaultFate $vl).Text)"
+        $h = Get-HomeLine $st
+        if ($h) { Say "   $h" }
         Say ''
         Say '   1  Show this board''s WiFi name and password'
         Say '   2  Set a new WiFi password'
@@ -481,7 +505,7 @@ function Invoke-Recover {
         Say '   4  Quit'
         $c = Read-Host '   Choose 1-4'
         switch ($c) {
-            '1' { return (Show-ApPassword $ap) }
+            '1' { return (Show-ApPassword $ap $st) }
             '2' { $a = Read-Host '   New WiFi password (8-63 characters)'; $b2 = Read-Host '   Type it again'
                   if ($a -cne $b2) { Say '   They did not match. Nothing changed.'; return 1 }
                   return (Set-ApPassword $sp $ap $a) }

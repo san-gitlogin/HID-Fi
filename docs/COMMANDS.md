@@ -427,6 +427,69 @@ things are checked instead:
 
 `sta_ip_mode` reports which happened: `static`, `dhcp` or `dhcp_fallback`.
 
+### Staying on the network
+
+Once a network has worked (the board remembers that), the board never gives up
+on it. Whenever it is saved and the board is not on it, the board rejoins: one
+second after a drop, then backing off to every 30 seconds, for as long as it
+takes. The core library's own auto-reconnect is switched off so only one thing
+drives the radio.
+
+| What happens | What the board does |
+|---|---|
+| the router drops the board | rejoins within seconds; `sta_drops` counts it |
+| the router is off for a while | keeps its own WiFi up, `sta_phase` is `reconnecting`, rejoins within 30 s of the router coming back |
+| the board starts before the router | keeps trying from boot - it no longer gives up after the first attempt |
+| the router gives it a new address | `sta_prev_ip` and `sta_ip_changes` say so, an `sta_online` event announces it, mDNS moves to the new address |
+| the access point was switched off to save power | it comes back 20 s after the home network goes, so the board is always reachable |
+| the saved password stops working | after three refusals it asks every 5 minutes instead, and says so in `sta_error` |
+| a new network's password is wrong | stops and says so: nothing to keep trying |
+
+`status` carries the record:
+
+| Field | Meaning |
+|---|---|
+| `sta_last_ip` | the last address held, kept while offline and across restarts |
+| `sta_prev_ip` | the address before that, once it changed |
+| `sta_ip_changes` / `sta_drops` | since the board started |
+| `sta_down_s` | seconds without the home network, while it is away |
+| `sta_retry_in_s` | seconds to the next attempt |
+| `sta_reason` | why the router let the board go, e.g. `BEACON_TIMEOUT` (router gone) or `AUTH_FAIL` |
+
+Pushed to every open dashboard: `{"event":"sta_online","ip":...,"changed":true,"prev_ip":...,"mdns":...}`
+when the board is back (or at a new address), and `{"event":"ap_restored","why":"home network lost"}`.
+
+**Finding the board after its address changed.** It always answers at
+`http://esp-hid-XXXXXX.local/` (shown in Settings - bookmark that), it advertises
+`_hidfi._tcp` so `python3 tools/hidfi.py find` lists it, its own WiFi is at
+`http://192.168.4.1/`, and over USB `status` has `wifi_ip`. To keep the same
+address, reserve it on your router for the MAC in Settings (`mac`). The board
+cannot ask for its old address back after a restart: that option is compiled out
+of the ESP32 core it is built on.
+
+**Internet on the board's own WiFi.** A phone on the board's WiFi has no internet.
+`{"cmd":"internet_share","on":true}` shares the home connection with it (NAPT),
+and hands out the home network's DNS server so names resolve. It is off by default
+and stored. Turning it on over WiFi needs an access PIN (`pin_required`
+otherwise), because anything on the board's WiFi can then reach your home
+network. It is active only while the board is on its home network
+(`ap_share_active` in `status`; `waiting_for` in the reply says what it waits
+for), stops during an outage, and resumes by itself. Phones already on the
+board's WiFi must rejoin to receive the DNS server. The better habit is usually
+to stay on the home WiFi and open the board by its address.
+
+**Rehearsing it.** `net_fault` (USB only - refused over WiFi with `usb_only`)
+makes the board behave as if the router misbehaved, without touching the router.
+`tests/board/test_home_network.py` uses it.
+
+| `kind` | Staged |
+|---|---|
+| `drop` | the router lets the board go |
+| `vanish` with `s` (5-600) | the network is gone for `s` seconds; with `at_boot: true` the board restarts as if the router were off when it started |
+| `ap_off` | the access point switched off, as auto-off does |
+| `ip_was` with `ip` | the board believes it last held `ip`, so the next join is a change |
+| `clear` | ends a staged fault now |
+
 ### Power
 
 ```json

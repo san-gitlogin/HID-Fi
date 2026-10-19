@@ -30,8 +30,14 @@ firmware, then asks the board what it is running and prints the answer. Expect:
    Dashboard: join WiFi 'ESP32-HID-09F7C8' with password  k7m2-x9qp-4tre
               Write the password down now. Forgot it later? .\flash_esp.ps1 -Recover shows it again.
               then open http://192.168.4.1/
+   On your home network: http://192.168.1.100/  or  http://esp-hid-09f7c8.local/
    Done.
 ```
+
+The last line appears once the board has joined your home network. Bookmark the
+`.local` one: it follows the board if your router gives it a new address.
+`python3 tools/hidfi.py find` and `./flash_esp.sh --recover` (or
+`.\flash_esp.ps1 -Recover`) show it again later.
 
 The password is made by your board for itself, so nobody else knows it. **Write it down
 or save it in a password manager now.** If an AI assistant flashed the board for you, it

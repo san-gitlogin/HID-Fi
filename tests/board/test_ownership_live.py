@@ -62,7 +62,8 @@ def _step(story):
 
 @pytest.fixture(scope="module")
 def story(request, _board_holder):
-    url = request.config.getoption("--board-url")
+    from support.board import lan_url
+    url = lan_url(request.config.getoption("--board-url"), _board_holder.get())
     if not url:
         pytest.skip("needs --board-url ws://<board>:81 (home-network address, or 192.168.4.1 on its WiFi)")
     pytest.importorskip("playwright.sync_api", reason="pip install playwright && playwright install chromium")

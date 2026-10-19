@@ -589,6 +589,32 @@ docs/AGENT_CONTROL.md. Rules for changing it:
 - These commands go through the same PIN and home-network gates as every other
   command. Never add one to the LAN-safe list.
 
+## The home network - the rules
+
+The board must survive a router that restarts, drops it, is off at boot, or
+gives it a new address. `checkWifiConnection()` is the supervisor:
+
+- It alone reconnects. `WiFi.setAutoReconnect(false)` stays: the core retries
+  some reasons and not others, and a timed-out join ended with `disconnect()`,
+  which the core read as "stay off" - a board that booted before the router
+  never joined. Never re-enable it, and never add a second reconnect path.
+- A network that has worked (`sta_ok` in NVS) is retried forever: 1 s after a
+  drop, backing off to 30 s. A new network whose password the router refused is
+  not retried. Do not add a give-up for a proven network.
+- With the home network gone for `AP_FALLBACK_MS`, the access point comes back
+  even when auto-off switched it off. That check sits before the join guard; a
+  15 s join must not delay it (it did once: 36 s).
+- `staCameOnline()` is the one place that marks the board online. It records an
+  address change (`sta_prev_ip`), persists `last_ip`, restarts mDNS on the new
+  address, and pushes `sta_online`.
+- `net_fault` is serial-only test staging. Keep it USB-only; never reachable
+  over WiFi. `tests/board/test_home_network.py` must pass on a real board after
+  any change here, and `tests/ui/bdd/features/home_network.feature` covers the
+  dashboard.
+- Tests that talk to the board over the network take its address from
+  `support.board.lan_url()`, not from the command line: the address can change
+  mid-run (it did, .107 to .100).
+
 ## Text typing - the rule that came from a bug
 
 `Keyboard.press()` in the ESP32 core reads every byte **>= 0x88 as a raw HID
