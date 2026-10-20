@@ -162,11 +162,23 @@ def main():
     # Board-free tiers run in parallel when pytest-xdist is installed. Anything
     # that touches the board or the computer never does: one board, one desktop.
     hardware = {"board", "e2e", "linux", "perf"} & set(tiers)
-    if not hardware and not args.serial and _have_xdist():
+    parallel = not hardware and not args.serial and _have_xdist()
+    timed_args = None
+    if parallel:
         # HIDFI_WORKERS caps it on a small VM or sandbox, where one Chromium per
         # CPU runs out of memory and timer-driven scenarios starve.
+        # Speed measurements (marker "timing") never share the machine with the
+        # parallel workers: they measured the load, not the code. They run after,
+        # alone, into the same table.
+        timed_args = list(pyargs)
+        timed_args[2] = f"({pyargs[2]}) and timing"
+        timed_args[timed_args.index(f"--junitxml={HERE / '.reports' / 'junit.xml'}")] = \
+            f"--junitxml={HERE / '.reports' / 'junit_timing.xml'}"
+        pyargs[2] = f"({pyargs[2]}) and not timing"
         pyargs += ["-n", os.environ.get("HIDFI_WORKERS") or "auto", "--dist", "loadgroup"]
     pyargs += passthrough
+    if timed_args is not None:
+        timed_args += passthrough
 
     print(f"\nHID-Fi tests - tiers: {', '.join(tiers)}"
           + ("" if args.board else "   (board tiers off: add --board / --e2e / --perf)") + "\n")
@@ -174,6 +186,11 @@ def main():
     col = Collector()
     t0 = time.time()
     code = pytest.main(pyargs, plugins=[col])
+    if timed_args is not None:
+        print("\n-- timing tests, alone on a quiet machine --")
+        timed = pytest.main(timed_args, plugins=[col])
+        if timed not in (0, 5):                 # 5: none selected for these tiers
+            code = timed if code in (0, 5) else code
     report(col.rows, tiers, time.time() - t0, code)
     if code == 5:            # nothing collected/selected
         print("  Nothing ran for these tiers on this machine.")

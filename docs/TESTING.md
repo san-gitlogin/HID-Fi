@@ -651,6 +651,13 @@ remove it from the known-issues file, so it can never quietly come back.
 
 ## Performance
 
+**Speed is measured on a quiet machine.** Tests marked `timing` (the dashboard's
+layout speed) are left out of the parallel phase and run afterwards, alone:
+beside three Chromium workers they measured 2-2.6x slower and failed on load,
+not code. New speed tests get the `timing` marker. Over WiFi, regressions are
+judged on the median and the tail only against its budget - a p95 over WiFi
+swings 3x between identical runs.
+
 Budgets are product requirements; baselines catch a slowdown that is still
 inside budget (more than 1.5x worse than this OS's baseline fails).
 

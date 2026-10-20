@@ -16,8 +16,8 @@
     "playwright": "1.40.0"
   },
   "verified": {
-    "date": "2026-10-17",
-    "firmware": "hid_fi_v3.9",
+    "date": "2026-10-20",
+    "firmware": "hid_fi_v3.10",
     "on": [
       "macOS 15 (Darwin 24.6), Apple Silicon - board on COM + USB",
       "Windows 10/11 (Chrome reports NT 10.0) - board USB, COM on a Mac",

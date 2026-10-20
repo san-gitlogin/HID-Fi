@@ -22,7 +22,9 @@ import pytest
 from support import paths, responsive as R, responsive_run as RR
 
 # One profile at a time, never alongside each other: they share the GPU.
-pytestmark = [pytest.mark.ui, pytest.mark.xdist_group("ui-perf")]
+# timing: run.py runs these after the parallel phase, alone - with three other
+# workers driving Chromium they measured 2-2.6x slower and failed on load alone.
+pytestmark = [pytest.mark.ui, pytest.mark.timing, pytest.mark.xdist_group("ui-perf")]
 
 PROFILES = {
     "phone (4x slower CPU)": (R.Viewport("iPhone 14", 390, 844, True, 3, (47, 0, 34, 0)), 4),
