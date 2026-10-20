@@ -21,7 +21,8 @@
     "on": [
       "macOS 15 (Darwin 24.6), Apple Silicon - board on COM + USB",
       "Windows 10/11 (Chrome reports NT 10.0) - board USB, COM on a Mac",
-      "Debian 12 VM (kernel 6.1, IBus 1.5.27) - recorded HID reports, no USB"
+      "Debian 12 VM (kernel 6.1, IBus 1.5.27) - recorded HID reports, no USB",
+      "Ubuntu 24.04 container (arm64, colima VM on an external SSD) - hostsim 312/312; tests/setup_linux.sh as root and as a sudo user"
     ]
   }
 }
