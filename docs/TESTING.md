@@ -189,8 +189,23 @@ HIDFI_HOSTSIM_CASES=cases.json python tests/run.py --tier hostsim  # on the Linu
 
 ### No Linux machine?
 
-A live USB stick of any GNOME distribution (Ubuntu, Fedora) is enough: boot it,
-install the packages above, plug in the board, run `sudo -E python tests/run.py --e2e`.
+**For the tiers that need no board** - `hostsim` (the Linux text-input replay) and
+the Linux layout baselines - Docker on any Mac or PC is enough:
+
+```bash
+tests/docker/run.sh            # static, unit, ui, hostsim in Ubuntu 24.04, as CI runs them
+tests/docker/run.sh hostsim    # only the Linux text-input replay
+```
+
+Your checkout is mounted read-only; results land in `tests/.reports/linux/`,
+with any golden file the run created for Linux there for review. The image is
+about 1.5 GB; Docker Desktop can keep it on an external drive (Settings >
+Resources > Advanced > Disk image location). CI runs the same tiers free on
+every push of this public repository.
+
+**For the board on a Linux host** (`--e2e`, the evdev latency tests), a live USB
+stick of any GNOME distribution (Ubuntu, Fedora) is enough: boot it, install the
+packages above, plug in the board, run `sudo -E python tests/run.py --e2e`.
 
 ---
 

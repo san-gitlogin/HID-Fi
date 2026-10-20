@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Run the tiers that need Linux, in Docker, on this Mac (or any machine with Docker).
+#
+#   tests/docker/run.sh                 static, unit, ui, hostsim - what CI runs, minus the firmware build
+#   tests/docker/run.sh hostsim         only the Linux text-input replay
+#   TIERS=ui tests/docker/run.sh        any tiers, comma separated
+#
+# The repository is mounted read-only and copied inside, so nothing the run
+# writes (reports, caches, new golden files) lands in your working tree as root.
+# Results go to tests/.reports/linux/; golden files the run created for Linux
+# (e.g. ui_responsive_known.linux.json) go there too, for review before copying
+# them into tests/golden/.
+#
+# The build tier is left out: it needs the ESP32 core (~1 GB) and runs the same
+# on macOS. Docker's disk can live on an external drive (Docker Desktop:
+# Settings > Resources > Advanced > Disk image location).
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+TIERS="${1:-${TIERS:-static,unit,ui,hostsim}}"
+IMAGE=hidfi-linux-tests
+OUT="$PWD/tests/.reports/linux"
+
+docker info >/dev/null 2>&1 || { echo "Docker is not running. Start Docker Desktop (or colima) and try again."; exit 2; }
+docker build -q -t "$IMAGE" -f tests/docker/Dockerfile tests >/dev/null
+rm -rf "$OUT" && mkdir -p "$OUT"
+echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}}'))"
+set +e
+docker run --rm --init --shm-size=1g \
+    -v "$PWD":/src:ro -v "$OUT":/out \
+    -e TIERS="$TIERS" \
+    "$IMAGE" bash -c '
+        rsync -a --exclude .git --exclude tests/.build --exclude "hid_fi/build" /src/ /work/ && cd /work &&
+        ls tests/golden > /tmp/before &&
+        python3 tests/run.py --tier "$TIERS"; code=$?
+        cp -r tests/.reports/. /out/ 2>/dev/null
+        for f in tests/golden/*; do grep -qx "$(basename "$f")" /tmp/before || cp "$f" /out/; done
+        exit $code'
+code=$?
+set -e
+new=$(cd "$OUT" && ls *.linux.json 2>/dev/null || true)
+[ -n "$new" ] && echo "   New Linux golden files (review, then copy to tests/golden/): $new"
+echo "   Reports: tests/.reports/linux/"
+exit $code

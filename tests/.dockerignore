@@ -1,0 +1,4 @@
+# The image needs only these; tests/.build and the reports are large.
+*
+!requirements.txt
+!docker/Dockerfile
