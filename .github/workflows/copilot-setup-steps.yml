@@ -1,0 +1,23 @@
+# GitHub Copilot's coding agent runs this before it starts work on an issue, so it
+# begins with the whole test suite installed instead of guessing at dependencies.
+# The job name must stay copilot-setup-steps. It uses the same package list as
+# every other Linux route: tests/setup_linux.sh.
+name: Copilot setup steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml, tests/setup_linux.sh, tests/requirements.txt]
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test suite dependencies (tests/setup_linux.sh)
+        run: tests/setup_linux.sh
+      - name: Check the setup
+        run: python3 tests/run.py doctor

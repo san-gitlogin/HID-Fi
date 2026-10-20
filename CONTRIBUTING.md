@@ -59,6 +59,14 @@ python tests/run.py            # no board needed - run this before every commit
 python tests/run.py --all      # with a board on COM and USB - run this after any firmware change
 ```
 
+**The Linux-only tier, on any machine.** On Linux, `tests/setup_linux.sh`
+installs everything. On Windows, the same runs inside WSL, Windows' built-in
+Linux - no Docker needed. On macOS, `tests/docker/run.sh` uses Docker, or
+`tests/docker/vm.sh` sets up a small Linux VM in one folder of your choosing,
+an external drive included. No virtualization at all? Push to your fork: CI runs
+it free. Every step is in
+[docs/TESTING.md](docs/TESTING.md#testing-locally-from-nothing).
+
 It runs every test your machine can run, skips the rest with the reason, and
 ends with a pass/fail/skip table per tier. **[docs/TESTING.md](docs/TESTING.md)**
 is the full guide: what each tier needs and proves, testing on macOS, Windows and

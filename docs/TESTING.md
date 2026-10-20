@@ -21,6 +21,7 @@ result the same way. Reports land in `tests/.reports/` (`junit.xml`,
 
 ## Contents
 
+- [Testing locally, from nothing](#testing-locally-from-nothing) - including the Linux tiers on Windows, macOS, ChromeOS or a cloud sandbox
 - [Set up once](#set-up-once)
 - [Tiers](#tiers)
 - [What the tests do to your computer](#what-the-tests-do-to-your-computer)
@@ -30,6 +31,8 @@ result the same way. Reports land in `tests/.reports/` (`junit.xml`,
 - [The dashboard coverage contract](#the-dashboard-coverage-contract)
 - [Every screen: the responsive matrix](#every-screen-the-responsive-matrix)
 - [Known issues](#known-issues)
+- [Ownership and recovery](#ownership-and-recovery)
+- [The home network](#the-home-network)
 - [Golden files and baselines](#golden-files-and-baselines)
 - [Performance](#performance)
 - [Upgrading a dependency](#upgrading-a-dependency)
@@ -39,6 +42,114 @@ result the same way. Reports land in `tests/.reports/` (`junit.xml`,
 - [When it goes wrong](#when-it-goes-wrong)
 
 ---
+
+## Testing locally, from nothing
+
+Everything below runs on your own machine, costs nothing, and needs no board
+unless it says so. (CI runs the same on every push, also free: the repository is
+public.)
+
+| Step | macOS | Windows | Linux |
+|---|---|---|---|
+| 1. Python 3.10+ and Node 18+ | `brew install python node` | python.org and nodejs.org installers | `tests/setup_linux.sh` does steps 1-4 |
+| 2. A C++ compiler (unit tier) | `xcode-select --install` | Visual Studio Build Tools, or MinGW | `build-essential` |
+| 3. Test packages | `pip install -r tests/requirements.txt` | same | same |
+| 4. The browser for the dashboard tests | `python -m playwright install chromium` | same | `python -m playwright install --with-deps chromium` |
+| 5. Firmware toolchain (build tier) | [FLASHING.md](FLASHING.md#install-the-tools-first-time-only) | same | same |
+| 6. Check | `python tests/run.py doctor` | same | same |
+| 7. Run | `python tests/run.py` | same | same |
+
+Step 7 runs every tier this machine can, and prints a table: passed, failed,
+skipped *and why*. The board-free tiers run in parallel, one worker per CPU; on
+a machine with little memory (a small VM, WSL, a cloud sandbox) set
+`HIDFI_WORKERS=2`, or Chromium runs out of memory and timer-driven scenarios
+fail for want of CPU. What you cannot run here is skipped, not failed:
+
+| Tier | Needs | Without it |
+|---|---|---|
+| static, unit, ui | steps 1-4 | - |
+| build | step 5 | skipped |
+| hostsim (Linux text input) | Linux with Xvfb + IBus + GTK | skipped - see the Linux tiers, below |
+| board, perf | a board on the COM cable (`--board`, `--perf`) | skipped |
+| e2e | a board on both cables, and you at the screen (`--e2e`) | skipped |
+
+### The Linux tiers, whatever machine you have
+
+The `hostsim` tier types into a real Linux input stack, and CI's layout
+baselines come from Linux, so these need Linux somewhere. Every route below uses
+the same package list, `tests/setup_linux.sh`, so they cannot drift apart.
+
+| Your machine | Route | Do |
+|---|---|---|
+| **Linux** (Ubuntu 22.04+, Debian 12+) | native | `tests/setup_linux.sh`, then `python3 tests/run.py` |
+| **Windows 10 (2004+) or 11**, Intel or ARM | WSL, Windows' built-in Linux - no Docker needed | below |
+| **macOS** with Docker Desktop | Docker | `tests/docker/run.sh` |
+| **macOS** without Docker Desktop | a small VM, nothing installed system-wide | below |
+| **ChromeOS** | Settings > Developers > Linux development environment (Debian) | then as Linux |
+| **A cloud agent's sandbox** (Codex, Copilot, Jules, Devin...) | it already is Linux | `tests/setup_linux.sh`, then `python3 tests/run.py`. Copilot's coding agent does it before it starts (`.github/workflows/copilot-setup-steps.yml`) |
+| **Any machine with Docker** | Docker | `tests/docker/run.sh` (on Windows: from inside WSL) |
+| **None of these work** (virtualization switched off, a locked-down work laptop) | CI on your fork, free | push a branch to your fork and open its Actions tab - the same tiers run there |
+
+#### Windows: WSL
+
+Once, in PowerShell as administrator:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+# or onto another drive, keeping C: free:
+wsl --install -d Ubuntu-24.04 --location D:\WSL\HIDFi
+```
+
+Then, in the Ubuntu window it opens:
+
+```bash
+git clone https://github.com/san-gitlogin/HID-Fi.git ~/HID-Fi   # inside Linux, not under /mnt/c
+cd ~/HID-Fi && tests/setup_linux.sh && python3 tests/run.py
+```
+
+Clone inside WSL, not into a Windows folder: under `/mnt/c` the scripts lose
+their executable bit and gain Windows line endings, and every file access is
+slower. The flasher's PowerShell tests run on Windows itself - `python
+tests\run.py` from a normal PowerShell window covers them.
+
+#### macOS: Docker Desktop, or a self-contained VM
+
+With Docker Desktop running: `tests/docker/run.sh`. To keep its disk off the
+internal drive: Settings > Resources > Advanced > Disk image location.
+
+Without it, `tests/docker/vm.sh` runs colima + lima on Apple's own
+virtualization (macOS 13+, Apple Silicon or Intel). Tools, the VM disk, images
+and caches all live in one folder, `HIDFI_VM_HOME`; nothing goes to `~/Library`
+or `/Applications`. Only the `docker` command itself is needed (`brew install
+docker`: the 30 MB client, no daemon).
+
+```bash
+# On an external drive - even an exFAT one, which cannot hold a VM directly:
+# this makes a growable APFS disk image on it.
+tests/docker/vm.sh image "/Volumes/<your drive>"
+export HIDFI_VM_HOME=/Volumes/HIDFi-Linux      # or any APFS folder, e.g. ~/hidfi-linux
+
+tests/docker/vm.sh setup     # once: downloads colima, lima, buildx; checks each one's SHA-256
+tests/docker/vm.sh up        # start the VM (4 CPUs, 4 GB; HIDFI_VM_CPUS / HIDFI_VM_MEMORY_GB)
+tests/docker/run.sh          # hostsim, the Linux-only tier (minutes); results in $HIDFI_VM_HOME/reports
+tests/docker/run.sh ui       # only after a layout change: the dashboard on Linux (about an hour)
+tests/docker/vm.sh down      # stop it and give the memory back
+```
+
+| Question | Answer |
+|---|---|
+| How much space? | About 20 GB once the test image is built - most of it the ESP32 toolchain, which hostsim compiles the board's typing code with. Written once; the disk image grows only as needed (200 GB cap) |
+| Is it heavy? | The first build writes those 20 GB in tens of thousands of small files - a portable SSD gets warm doing it, once. A `hostsim` run after that takes minutes and little disk; `run.sh ui` renders 18,000 screens and keeps the CPU busy for about an hour |
+| The drive was unplugged | Plug it in; `vm.sh up` mounts the image again by itself |
+| Remove it all | `vm.sh down`, eject `HIDFi-Linux`, delete `HIDFi-Linux.sparsebundle` from the drive |
+| New Linux golden files appeared | They are copied to the reports folder. Read them, then copy into `tests/golden/` and commit |
+
+#### The PowerShell flasher tests
+
+`flash_esp.ps1` is tested on every OS when PowerShell 7 (`pwsh`) is installed:
+built into Windows' installers, `brew install powershell` on macOS, Microsoft's
+packages on Linux. Without it those tests are skipped, and CI runs them on
+Windows.
 
 ## Set up once
 
@@ -189,19 +300,8 @@ HIDFI_HOSTSIM_CASES=cases.json python tests/run.py --tier hostsim  # on the Linu
 
 ### No Linux machine?
 
-**For the tiers that need no board** - `hostsim` (the Linux text-input replay) and
-the Linux layout baselines - Docker on any Mac or PC is enough:
-
-```bash
-tests/docker/run.sh            # static, unit, ui, hostsim in Ubuntu 24.04, as CI runs them
-tests/docker/run.sh hostsim    # only the Linux text-input replay
-```
-
-Your checkout is mounted read-only; results land in `tests/.reports/linux/`,
-with any golden file the run created for Linux there for review. The image is
-about 1.5 GB; Docker Desktop can keep it on an external drive (Settings >
-Resources > Advanced > Disk image location). CI runs the same tiers free on
-every push of this public repository.
+**For the tiers that need no board** - `hostsim` and the Linux layout baselines -
+see [The Linux tiers, whatever machine you have](#the-linux-tiers-whatever-machine-you-have).
 
 **For the board on a Linux host** (`--e2e`, the evdev latency tests), a live USB
 stick of any GNOME distribution (Ubuntu, Fedora) is enough: boot it, install the

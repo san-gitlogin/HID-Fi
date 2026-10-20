@@ -1,7 +1,9 @@
 # AI agent instructions — ESP32-S3 USB-HID Remote
 
-This file is the shared brief for any AI assistant working in this repository.
-`.github/copilot-instructions.md` and `.claude/CLAUDE.md` both point here.
+This file is the shared brief for any AI assistant working in this repository:
+Codex, Copilot, Claude, Gemini, Cursor, Windsurf, Jules and the rest. The short
+per-tool files all point here: `.github/copilot-instructions.md`,
+`.claude/CLAUDE.md`, `GEMINI.md`.
 
 Read it before changing anything. Most of it exists because something went wrong
 once.
@@ -148,6 +150,49 @@ path does not have, so the board stays in the bootloader and no HID appears.
 ---
 
 ## Testing
+
+### Setting up and running tests, as an agent
+
+Do these in order. Stop and ask the user at any step marked ASK.
+
+1. `python tests/run.py doctor` - shows what is installed against what is pinned.
+2. If test packages are missing: `pip install -r tests/requirements.txt` and
+   `python -m playwright install chromium`. Prefer a virtualenv if the user has one.
+3. `python tests/run.py` - every tier this machine can run, no board needed. This
+   is the gate before saying "done". Read the table it prints; report skips with
+   their reasons. In a sandbox or VM with under 8 GB of memory, set
+   `HIDFI_WORKERS=2`: with one Chromium per CPU, browser crashes and timing
+   failures appear that are not bugs - and a "Target crashed" failure is never
+   evidence about the code until it reproduces with fewer workers.
+4. The `hostsim` tier and the Linux layout baselines need Linux. Find out where
+   you are (`uname -s`; on Windows, `wsl -l -v`) and take the matching route:
+   - Linux, or a cloud sandbox (Codex, Copilot, Jules - these are Linux):
+     `tests/setup_linux.sh`, then `python3 tests/run.py`. You may run it there
+     without asking when it is your own sandbox; on a user's machine it uses
+     sudo - ASK.
+   - Windows: the tiers run in WSL. If `wsl -l -v` lists an Ubuntu, run
+     `tests/setup_linux.sh` and `python3 tests/run.py` inside it, in a clone
+     made inside WSL (not under /mnt/c). No WSL: ASK - installing it needs an
+     administrator and a restart.
+   - macOS with Docker running: `tests/docker/run.sh`. Docker not running and
+     `HIDFI_VM_HOME` set: `tests/docker/vm.sh up`, `tests/docker/run.sh`,
+     `tests/docker/vm.sh down`. Neither: ASK.
+   - Never install Docker Desktop, WSL, colima or a VM unasked. Every route is in
+     docs/TESTING.md, "The Linux tiers, whatever machine you have".
+   - Respect where the user wants things stored. If they said "nothing on the
+     internal disk", every tool, cache and image goes under `HIDFI_VM_HOME`, and
+     run the tools only through `vm.sh`, which redirects HOME for them. Check
+     afterwards that `~/.colima`, `~/.lima`, `~/Library/Caches/lima` were not
+     created.
+5. `--board`, `--perf`, `--e2e`: ASK first - see the rules below.
+6. New Linux golden files from step 4 land in the reports folder. Read them,
+   then copy them into `tests/golden/`, and say so. Never write a golden file to
+   make a failure pass.
+
+The PowerShell flasher tests need `pwsh`: native on Windows; elsewhere they skip
+and CI covers them. CI runs static, unit, ui, build and hostsim on Ubuntu and
+the flasher tests on Windows, free for this public repository. Local runs are still the gate: do not
+push to "let CI check it".
 
 **The one command** - see [docs/TESTING.md](docs/TESTING.md) for everything:
 

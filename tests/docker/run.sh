@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Run the tiers that need Linux, in Docker, on this Mac (or any machine with Docker).
 #
-#   tests/docker/run.sh                 static, unit, ui, hostsim - what CI runs, minus the firmware build
-#   tests/docker/run.sh hostsim         only the Linux text-input replay
-#   TIERS=ui tests/docker/run.sh        any tiers, comma separated
+#   tests/docker/run.sh                 hostsim: the board's typing replayed into a Linux desktop -
+#                                       the one tier that needs Linux (minutes)
+#   tests/docker/run.sh ui              the dashboard and its 517-screen layout matrix on Linux,
+#                                       for Linux layout baselines - heavy (about an hour), only
+#                                       after a layout change
+#   tests/docker/run.sh static,unit,ui,hostsim   everything CI runs, minus the firmware build
 #
 # The repository is mounted read-only and copied inside, so nothing the run
 # writes (reports, caches, new golden files) lands in your working tree as root.
@@ -12,24 +15,31 @@
 # them into tests/golden/.
 #
 # The build tier is left out: it needs the ESP32 core (~1 GB) and runs the same
-# on macOS. Docker's disk can live on an external drive (Docker Desktop:
-# Settings > Resources > Advanced > Disk image location).
+# on macOS.
+#
+# Which Docker: any that is running (Docker Desktop, Linux, colima). With
+# HIDFI_VM_HOME set (see tests/docker/vm.sh) it uses that VM, and the results go
+# to $HIDFI_VM_HOME/reports instead, so nothing is written to the internal disk.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-TIERS="${1:-${TIERS:-static,unit,ui,hostsim}}"
+TIERS="${1:-${TIERS:-hostsim}}"
 IMAGE=hidfi-linux-tests
 OUT="$PWD/tests/.reports/linux"
+if [ -n "${HIDFI_VM_HOME:-}" ]; then
+    export DOCKER_HOST="unix://$HIDFI_VM_HOME/colima/default/docker.sock" DOCKER_CONFIG="$HIDFI_VM_HOME/docker-config"
+    OUT="$HIDFI_VM_HOME/reports"
+fi
 
-docker info >/dev/null 2>&1 || { echo "Docker is not running. Start Docker Desktop (or colima) and try again."; exit 2; }
+docker info >/dev/null 2>&1 || { echo "Docker is not running. Start Docker Desktop, or: tests/docker/vm.sh up"; exit 2; }
 docker build -q -t "$IMAGE" -f tests/docker/Dockerfile tests >/dev/null
 rm -rf "$OUT" && mkdir -p "$OUT"
 echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}}'))"
 set +e
 docker run --rm --init --shm-size=1g \
     -v "$PWD":/src:ro -v "$OUT":/out \
-    -e TIERS="$TIERS" \
+    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-}" \
     "$IMAGE" bash -c '
-        rsync -a --exclude .git --exclude tests/.build --exclude "hid_fi/build" /src/ /work/ && cd /work &&
+        rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" /src/ /work/ && cd /work &&
         ls tests/golden > /tmp/before &&
         python3 tests/run.py --tier "$TIERS"; code=$?
         cp -r tests/.reports/. /out/ 2>/dev/null
@@ -39,5 +49,5 @@ code=$?
 set -e
 new=$(cd "$OUT" && ls *.linux.json 2>/dev/null || true)
 [ -n "$new" ] && echo "   New Linux golden files (review, then copy to tests/golden/): $new"
-echo "   Reports: tests/.reports/linux/"
+echo "   Reports: $OUT/"
 exit $code

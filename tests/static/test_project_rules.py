@@ -184,3 +184,49 @@ def test_every_board_action_matches_its_dashboard_shortcut():
     assert not bad, "board actions that differ from the dashboard's shortcut table:\n  " + "\n  ".join(bad)
     assert len(set(ACTIONS)) == len(ACTIONS)
     assert all(re.fullmatch(r"[a-z_]+", n) for n in ACTIONS), "action names are lower_snake words"
+
+
+AGENT_FILES = ["AGENTS.md", ".claude/CLAUDE.md", ".github/copilot-instructions.md", "GEMINI.md"]
+
+
+@pytest.mark.parametrize("name", AGENT_FILES)
+def test_every_agent_instruction_file_leads_to_the_shared_brief(name):
+    """Codex reads AGENTS.md, Copilot its own file, Claude CLAUDE.md, Gemini GEMINI.md.
+    Each must lead to AGENTS.md and know how to run the Linux tier locally, or an
+    agent on that tool works without the rules."""
+    text = (paths.TESTS.parent / name).read_text(encoding="utf-8")
+    if name != "AGENTS.md":
+        assert "AGENTS.md" in text, f"{name} does not point to AGENTS.md"
+    for route in ("tests/setup_linux.sh", "tests/docker/run.sh"):
+        assert route in text, f"{name} does not give the Linux-tier route {route} - agents on Linux, WSL and macOS each need theirs"
+    assert re.search(r"python tests[/\\]run\.py", text), f"{name} does not give the test command"
+
+
+def test_the_local_linux_scripts_exist_and_run():
+    import os
+    for script in ("tests/docker/run.sh", "tests/docker/vm.sh", "tests/setup_linux.sh"):
+        f = paths.TESTS.parent / script
+        assert f.exists() and os.access(f, os.X_OK), f"{script} is missing or not executable"
+        r = subprocess.run(["bash", "-n", str(f)], capture_output=True, text=True)
+        assert r.returncode == 0, f"{script}: {r.stderr}"
+
+
+def test_every_linux_route_installs_what_ci_installs():
+    """One package list (tests/setup_linux.sh) for WSL, Linux, cloud sandboxes, the
+    Docker image and Copilot's setup. CI must not need anything it lacks, or a
+    contributor's local run passes where CI fails."""
+    root = paths.TESTS.parent
+    script = (root / "tests" / "setup_linux.sh").read_text(encoding="utf-8")
+    block = re.search(r"APT_PACKAGES=\(\n(.*?)\n\)", script, re.S).group(1)
+    ours = set(" ".join(l.split("#")[0] for l in block.splitlines()).split())
+    ci = (root / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    ci_pkgs = set()
+    for block in re.findall(r"apt-get install -y -qq --no-install-recommends \\\n\s*([^\n]+)", ci):
+        ci_pkgs |= set(block.split())
+    assert ci_pkgs, "could not find CI's apt-get install line"
+    missing = ci_pkgs - ours
+    assert not missing, f"CI installs {sorted(missing)} but tests/setup_linux.sh does not"
+    assert "setup_linux.sh" in (root / "tests" / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    copilot = (root / ".github" / "workflows" / "copilot-setup-steps.yml").read_text(encoding="utf-8")
+    assert "\n  copilot-setup-steps:" in copilot and "tests/setup_linux.sh" in copilot, \
+        "Copilot only runs a job named exactly copilot-setup-steps"

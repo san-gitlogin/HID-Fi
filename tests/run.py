@@ -163,7 +163,9 @@ def main():
     # that touches the board or the computer never does: one board, one desktop.
     hardware = {"board", "e2e", "linux", "perf"} & set(tiers)
     if not hardware and not args.serial and _have_xdist():
-        pyargs += ["-n", "auto", "--dist", "loadgroup"]
+        # HIDFI_WORKERS caps it on a small VM or sandbox, where one Chromium per
+        # CPU runs out of memory and timer-driven scenarios starve.
+        pyargs += ["-n", os.environ.get("HIDFI_WORKERS") or "auto", "--dist", "loadgroup"]
     pyargs += passthrough
 
     print(f"\nHID-Fi tests - tiers: {', '.join(tiers)}"

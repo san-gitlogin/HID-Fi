@@ -27,7 +27,13 @@ python tests/run.py                   # no board needed - run before saying "don
 python tests/run.py --all             # with a board on COM + USB - ASK the user first
 python tests/run.py doctor            # installed vs pinned versions
 python tests/run.py --tier ui         # the dashboard: ~280 scenarios + the coverage contract
+tests/setup_linux.sh                  # Linux, WSL or a sandbox: everything the suite needs (then python3 tests/run.py)
+tests/docker/run.sh                   # macOS / any Docker: the Linux-only hostsim tier in Ubuntu 24.04
+tests/docker/vm.sh up                 # macOS, no Docker: the self-contained VM (HIDFI_VM_HOME) - ask before setting it up
 ```
+
+Setting up from nothing, and where the Linux VM may store things: AGENTS.md,
+"Setting up and running tests, as an agent".
 
 ## Serial access will reset the board — and can brick-look it
 

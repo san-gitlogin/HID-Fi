@@ -575,6 +575,13 @@ alone; only a full erase clears them.
 Issues and pull requests are welcome, and so is simply telling me it broke on your
 board.
 
+**Testing your change locally** needs no board and costs nothing:
+`python tests/run.py` runs every test your machine can. The Linux-only ones run
+on Linux (`tests/setup_linux.sh`), on Windows inside WSL, and on macOS in Docker
+(`tests/docker/run.sh`) or a small self-contained VM (`tests/docker/vm.sh`).
+Step by step: [docs/TESTING.md](docs/TESTING.md#testing-locally-from-nothing).
+Using an AI agent? [AGENTS.md](AGENTS.md) is its brief, whichever tool it is.
+
 **If this is useful to you, please star the repo.** It is the main signal that
 tells me whether to keep working on it.
 

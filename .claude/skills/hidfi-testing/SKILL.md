@@ -17,6 +17,18 @@ static, unit, ui, build, hostsim. Needs no board and touches nothing. Run it
 before claiming any change is done. If something is missing, `python tests/run.py
 doctor` says what.
 
+`hostsim` needs Linux; elsewhere it is skipped. Where you are decides how:
+
+| Machine | Run |
+|---|---|
+| Linux, or a cloud sandbox | `tests/setup_linux.sh` then `python3 tests/run.py` |
+| Windows | the same, inside WSL (a clone made inside WSL) |
+| macOS | `tests/docker/run.sh`, or `tests/docker/vm.sh up` first if the user set up `HIDFI_VM_HOME` |
+
+Never install Docker, WSL, colima or a VM without asking, and keep everything
+under the folder the user chose (`HIDFI_VM_HOME`). Steps: AGENTS.md, "Setting
+up and running tests, as an agent".
+
 ## 2. Pick the hardware tiers from what changed
 
 | Changed | Also run | Needs |

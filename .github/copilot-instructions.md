@@ -28,6 +28,13 @@ python tests\run.py            # no board needed - run before saying "done"
 python tests\run.py --all      # with a board on COM + USB - ask the user first: it moves the mouse and types into a test page
 ```
 
+The Linux-only `hostsim` tier: on Linux or in your coding-agent sandbox,
+`tests/setup_linux.sh` then `python3 tests/run.py` (the coding agent gets this
+from `.github/workflows/copilot-setup-steps.yml`); on Windows the same inside
+WSL; on macOS `tests/docker/run.sh`. Do not install Docker, WSL or a VM without
+asking. Setup from
+nothing, step by step: AGENTS.md, "Setting up and running tests, as an agent".
+
 A skipped tier is not a passed tier - report the skips. Never edit `tests/golden/`
 to make a failure pass; `--update-golden` is for intended changes, with a reason.
 

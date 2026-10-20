@@ -122,5 +122,7 @@ Never weaken or delete a scenario to make a run green.
 ## 7. Done
 
 `python tests/run.py` prints PASSED, then the hardware tiers - with the user's
-OK - for any firmware change (`.claude/skills/hidfi-testing`). Update
+OK - for any firmware change (`.claude/skills/hidfi-testing`). A change to how
+text is typed also runs the Linux replay: `tests/docker/run.sh hostsim` (Docker,
+or `tests/docker/vm.sh up` first - ask before setting that up). Update
 `CHANGELOG.md`, and the docs the change touched, in the same commit.

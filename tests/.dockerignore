@@ -1,4 +1,6 @@
 # The image needs only these; tests/.build and the reports are large.
 *
 !requirements.txt
+!setup_linux.sh
+!deps.json
 !docker/Dockerfile
