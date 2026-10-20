@@ -58,13 +58,11 @@ PIP=(python3 -m pip install -q --break-system-packages -r "$REQ")
 [ -n "$SUDO" ] && PIP+=(--user)
 "${PIP[@]}"
 
-# Chromium for the dashboard tests, and the libraries it needs.
-if [ -n "$SUDO" ]; then
-    $SUDO python3 -m playwright install-deps chromium
-    python3 -m playwright install chromium
-else
-    python3 -m playwright install --with-deps chromium
-fi
+# Chromium for the dashboard tests, and the libraries it needs. Always as this
+# user: Playwright calls sudo itself for the system libraries. (Running it under
+# sudo instead fails when Playwright was installed with --user, as above: root's
+# python cannot see this user's packages - which is what a WSL user gets.)
+python3 -m playwright install --with-deps chromium
 fi
 # The ESP32 toolchain, at the exact versions in tests/deps.json - what CI's
 # "Pinned firmware dependencies" step installs.
