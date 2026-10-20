@@ -206,7 +206,13 @@ def test_the_local_linux_scripts_exist_and_run():
     import os
     for script in ("tests/docker/run.sh", "tests/docker/vm.sh", "tests/setup_linux.sh"):
         f = paths.TESTS.parent / script
-        assert f.exists() and os.access(f, os.X_OK), f"{script} is missing or not executable"
+        assert f.exists(), f"{script} is missing"
+        # On Windows "bash" is usually the WSL launcher, which with no Linux
+        # installed prints an install hint instead of checking anything. These are
+        # macOS/Linux scripts; the jobs on those systems check them.
+        if sys.platform == "win32":
+            continue
+        assert os.access(f, os.X_OK), f"{script} is not executable"
         r = subprocess.run(["bash", "-n", str(f)], capture_output=True, text=True)
         assert r.returncode == 0, f"{script}: {r.stderr}"
 
