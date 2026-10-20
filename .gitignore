@@ -35,3 +35,4 @@ desktop.ini
 # Test runner output and host build cache
 tests/.build/
 tests/.reports/
+dist/

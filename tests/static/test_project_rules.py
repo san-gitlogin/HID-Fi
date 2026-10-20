@@ -256,3 +256,15 @@ def test_the_github_workflows_only_run_when_started_by_hand():
         block = re.search(r"^on:\s*\n((?:[ \t]+.*\n)+)", text, re.M)
         triggers = set(re.findall(r"^[ \t]{2}([a-z_]+):", block.group(1), re.M)) if block else set()
         assert triggers == {"workflow_dispatch"}, f"{wf.name} runs on {sorted(triggers)} - manual only"
+
+
+def test_the_version_is_the_same_everywhere():
+    """FW_VERSION and the newest CHANGELOG entry must name the same version - a
+    release is a version, a tag, a changelog entry and a GitHub Release that agree
+    (RELEASING.md). Bump both together."""
+    ino = (paths.TESTS.parent / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
+    fw = re.search(r'#define\s+FW_VERSION\s+"hid_fi_(v[0-9.]+)"', ino).group(1)
+    log = (paths.TESTS.parent / "CHANGELOG.md").read_text(encoding="utf-8")
+    top = re.search(r"^## (v[0-9.]+)", log, re.M).group(1)
+    assert fw == top, f"firmware says {fw}, CHANGELOG's newest entry is {top} - bump both together"
+    assert re.fullmatch(r"v\d+\.\d+(\.\d+)?", fw), f"{fw} is not vMAJOR.MINOR or vMAJOR.MINOR.PATCH"
