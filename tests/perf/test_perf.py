@@ -216,11 +216,15 @@ def test_wifi_pointer_stream_keeps_up(ws, perf, request):
     while time.time() < t_end:
         d = 2 if i % 2 == 0 else -2
         ws.send_binary(struct.pack("<Bhhbb", 1, d, 0, 0, 0))
-        if i % 6 == 0:
+        if i % 3 == 0:                       # ~100 samples: fewer and p95 is one stray ping
             lat.append(_ping(ws, 10_000 + i))
         i += 1
         time.sleep(1 / 60)
-    perf.check("wifi_ping_under_stream_p95", pct(lat, 95), "ms", 120, detail=summary(lat) | {"frames": i})
+    # The tail over WiFi swings 3x between identical runs (16-49 ms measured), so
+    # it is held to its budget only; regressions are judged on the median.
+    perf.check("wifi_ping_under_stream_p95", pct(lat, 95), "ms", 120, detail=summary(lat) | {"frames": i},
+               baseline=False)
+    perf.check("wifi_ping_under_stream_p50", pct(lat, 50), "ms", 40)
 
 
 # ---- several phones at once ------------------------------------------------------------------------
@@ -278,7 +282,7 @@ def test_several_phones_driving_the_pointer_at_once(board, request, perf, phones
                 d = 2 if i % 2 == 0 else -2
                 c.send_binary(struct.pack("<Bhhbb", 1, d, 0, 0, 0))
                 frames[k] += 1
-                if i % 6 == 0:
+                if i % 3 == 0:
                     lat[k].append(_ping(c, 1_000_000 * (k + 1) + i))
                     pings[k] += 1
                 i += 1
@@ -305,4 +309,5 @@ def test_several_phones_driving_the_pointer_at_once(board, request, perf, phones
         f"{moved} pointer frames sent by {phones} phones, the board counted {counted}"
     worst = max(pct(l, 95) for l in lat)
     perf.check(f"wifi_{phones}_phones_worst_p95", worst, "ms", 120,
-               detail={f"phone{k + 1}": summary(l) for k, l in enumerate(lat)} | {"frames": moved})
+               detail={f"phone{k + 1}": summary(l) for k, l in enumerate(lat)} | {"frames": moved}, baseline=False)
+    perf.check(f"wifi_{phones}_phones_worst_p50", max(pct(l, 50) for l in lat), "ms", 40)

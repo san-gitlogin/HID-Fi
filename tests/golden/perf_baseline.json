@@ -7,6 +7,8 @@
  "mac/serial_rtt_p95": 17.222,
  "mac/soak_heap_lost": 0,
  "mac/typing_chars_per_s": 50.097,
+ "mac/wifi_2_phones_worst_p50": 19.292,
+ "mac/wifi_3_phones_worst_p50": 14.934,
  "mac/wifi_ping_p95": 13.565,
- "mac/wifi_ping_under_stream_p95": 20.15
+ "mac/wifi_ping_under_stream_p50": 14.858
 }

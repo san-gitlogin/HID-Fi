@@ -38,7 +38,11 @@ class Perf:
         self.base = json.loads(self.base_file.read_text()) if self.base_file.exists() else {}
         self.results = []
 
-    def check(self, name, value, unit, budget, lower_is_better=True, detail=None):
+    def check(self, name, value, unit, budget, lower_is_better=True, detail=None, baseline=True):
+        """Fail if value breaks the budget, or - with baseline - if it is much worse
+        than this machine's own history. Pass baseline=False for a tail statistic
+        of a radio link (a WiFi p95): it swings 3x between identical runs, so only
+        the budget can judge it; judge regressions on the median instead."""
         key = f"{self.host}/{name}"
         rec = {"metric": name, "host": self.host, "value": round(value, 3), "unit": unit, "budget": budget,
                "lower_is_better": lower_is_better, "detail": detail, "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
@@ -49,7 +53,9 @@ class Perf:
         if not lower_is_better and value < budget:
             problems.append(f"{name} = {value:.2f}{unit} is below the required {budget}{unit}")
         base = self.base.get(key)
-        if base is None or self.update:
+        if not baseline:
+            self.base.pop(key, None)
+        elif base is None or self.update:
             self.base[key] = round(value, 3)
         else:
             worse = (value > base * REGRESSION_FACTOR) if lower_is_better else (value < base / REGRESSION_FACTOR)
