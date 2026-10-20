@@ -17,6 +17,9 @@
 # The build tier is left out: it needs the ESP32 core (~1 GB) and runs the same
 # on macOS.
 #
+# Two parallel workers by default (HIDFI_WORKERS): four Chromiums in a 4 GB VM
+# crash the browser ("Target crashed"), which looks like a bug and is not one.
+#
 # Which Docker: any that is running (Docker Desktop, Linux, colima). With
 # HIDFI_VM_HOME set (see tests/docker/vm.sh) it uses that VM, and the results go
 # to $HIDFI_VM_HOME/reports instead, so nothing is written to the internal disk.
@@ -37,7 +40,7 @@ echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}
 set +e
 docker run --rm --init --shm-size=1g \
     -v "$PWD":/src:ro -v "$OUT":/out \
-    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-}" \
+    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" \
     "$IMAGE" bash -c '
         rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" /src/ /work/ && cd /work &&
         ls tests/golden > /tmp/before &&

@@ -216,6 +216,13 @@ Rules for agents:
 - **Golden files** (`tests/golden/`) define "unchanged". Update one only for an
   intended change (`--update-golden`), read the diff, and say why. Never to make
   a failure go away.
+- **Never call Playwright from another thread.** `board_sim.py` schedules its
+  delayed side effects with `later()` and runs them in `tick()`, from a route
+  handler. A `threading.Timer` that closed a socket "worked" on Playwright 1.63
+  only as a side effect of an error the model swallowed; 1.64 dropped the side
+  effect and six reconnect scenarios failed. An exposed function is no answer
+  either: blocking calls from one deadlock. `tests/static` refuses a timer thread
+  in the model.
 - **Read facts from the source** (`tests/support/firmware.py`, `linux_keys.py`)
   instead of copying lists into tests; a copy drifts.
 - **Add a property, add a planted bug.** `tests/unit/firmware/mutations.json`

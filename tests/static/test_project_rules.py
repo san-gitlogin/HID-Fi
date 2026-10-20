@@ -230,3 +230,13 @@ def test_every_linux_route_installs_what_ci_installs():
     copilot = (root / ".github" / "workflows" / "copilot-setup-steps.yml").read_text(encoding="utf-8")
     assert "\n  copilot-setup-steps:" in copilot and "tests/setup_linux.sh" in copilot, \
         "Copilot only runs a job named exactly copilot-setup-steps"
+
+
+def test_the_board_model_never_drives_playwright_from_a_thread():
+    """A Playwright object belongs to its own thread. The model once closed sockets
+    from threading.Timer threads; Playwright 1.64 stopped tolerating it and six
+    reconnect scenarios failed. Delays go through later()/tick() instead."""
+    lines = (paths.TESTS / "support" / "board_sim.py").read_text(encoding="utf-8").splitlines()
+    src = "\n".join(l.split("#")[0] for l in lines)           # code, not the comment explaining why
+    assert "threading.Timer" not in src and "Thread(" not in src, \
+        "board_sim.py starts a thread - schedule it with self.later() instead"

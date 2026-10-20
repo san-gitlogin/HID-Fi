@@ -87,6 +87,16 @@ class BoardSim:
 
     def __init__(self, pin="", host_os="mac", detected=None, firmware="hid_fi_v3.10"):
         self.lock = threading.RLock()
+        # Things the firmware does a moment after replying (a reboot, an AP restart,
+        # closing a socket that never signed in). They used to run on
+        # threading.Timer threads - but a Playwright object may only be used from
+        # its own thread. Playwright 1.63 let the close through anyway, as a side
+        # effect of an error the model swallowed; 1.64 does not, and the dashboard
+        # never saw its socket close. Now they wait here, and tick() runs them from
+        # a route handler - the one place Playwright lets a callback make blocking
+        # calls (an exposed function cannot: it runs on the event loop itself and
+        # deadlocks). The page asks for /__sim_tick every 100 ms, see attach().
+        self._due = []
         self._offset = 0.0
         self.t0 = time.time()
         self.pin = pin
@@ -207,12 +217,29 @@ class BoardSim:
         }
 
     # ---- Playwright wiring --------------------------------------------------------------
+    # ---- timed side effects, on Playwright's thread --------------------------------------
+    def later(self, delay, fn):
+        with self.lock:
+            self._due.append((time.monotonic() + delay, fn))
+
+    def tick(self):
+        """Run whatever is due. Called by the page (on Playwright's thread) and at the
+        start of every command, so it also runs in tests with no page at all."""
+        now = time.monotonic()
+        with self.lock:
+            ready = [f for t, f in self._due if t <= now]
+            self._due = [(t, f) for t, f in self._due if t > now]
+        for fn in ready:
+            fn()
+
     def attach(self, page, html, ip=None):
         # Both ways a phone reaches a real board: a name on the home network, and
         # the board's own access point, where the page knows it is at 192.168.4.1.
         # `ip` is this phone's address as the board sees it; by default an AP
         # client, or a home-network one when phone_on_lan is set.
         where = lambda: ip or (LAN_IP if self.phone_on_lan else AP_IP)
+        page.add_init_script("if (location.protocol === 'http:') "
+                             "setInterval(() => fetch('/__sim_tick').catch(() => {}), 100)")
         for base, ws in ((URL, WS_URL), (AP_URL, AP_WS_URL)):
             page.route(base + "**", lambda route, req: self._http(route, req, html, where()))
             page.route_web_socket(ws, lambda w: self._ws(w, where()))
@@ -221,6 +248,9 @@ class BoardSim:
         self.peer = ip
         from urllib.parse import urlsplit
         path = urlsplit(req.url).path or "/"
+        if path == "/__sim_tick":                   # the model's clock, see later()
+            self.tick()
+            return route.fulfill(status=204)
         if path in ("/", ""):
             return route.fulfill(body=html, content_type="text/html")
         if path.startswith("/api/status"):
@@ -292,13 +322,8 @@ class BoardSim:
                     with self.lock:
                         if sock in self.sockets:
                             self.sockets.remove(sock)
-                    try:
-                        ws.close(code=1000, reason="did not sign in")
-                    except Exception:
-                        pass
-            t = threading.Timer(self.auth_deadline, drop_if_unsigned)
-            t.daemon = True
-            t.start()
+                    ws.close(code=1000, reason="did not sign in")
+            self.later(self.auth_deadline, drop_if_unsigned)
 
         def on_message(msg):
             if not sock["open"]:
@@ -360,25 +385,19 @@ class BoardSim:
         c = body.get("cmd")
         if c in ("pointer_mode", "gamepad_enable") and getattr(self, "_reboot_pending", False):
             self._reboot_pending = False
-            threading.Timer(0.6, self.reboot).start()
+            self.later(0.6, self.reboot)
         if c == "ap_configure" and getattr(self, "_ap_restart_pending", False):
             self._ap_restart_pending = False
             if self.refuse_after_ap:
                 self.refusing = True
-            threading.Timer(0.3, self.drop_all).start()
+            self.later(0.3, self.drop_all)
 
     def drop_all(self):
         with self.lock:
             socks, self.sockets = list(self.sockets), []
         for s in socks:
             s["open"] = False
-            try:
-                s["ws"].close(code=1006, reason="board restarted")   # code given: Playwright needs it
-            except Exception:
-                try:
-                    s["ws"].close(code=1000, reason="board restarted")
-                except Exception:
-                    pass
+            s["ws"].close(code=1006, reason="board restarted")   # code given: Playwright needs it
 
     def reboot(self):
         if self.refuse_after_reboot:   # stuck in the bootloader, or a bad cable
@@ -494,6 +513,7 @@ class BoardSim:
         self._push(ev)
 
     def handle(self, b, transport="serial", sock=None, ip=None):
+        self.tick()
         with self.lock:
             self.peer = ip if transport != "serial" else None
             self.cmd_count += 1
