@@ -40,6 +40,8 @@ READ_ONLY = [
     # Actions for agents: the lists, and refusals that press nothing.
     {"cmd": "actions"}, {"cmd": "actions", "keys": True}, {"cmd": "do", "a": "definitely_not_an_action"},
     {"cmd": "open"}, {"cmd": "steps", "s": []}, {"cmd": "steps", "s": ["dance"]},
+    # Saved networks: the list, and forgetting one that is not saved.
+    {"cmd": "wifi_networks"}, {"cmd": "wifi_forget", "ssid": "definitely-not-a-saved-network"},
 ]
 
 
@@ -57,6 +59,10 @@ def model(_board_holder):
     sim.host_manual = st["host_os"] if st.get("host_os_source") == "manual" else None
     if st.get("wifi_connected"):        # replies differ online: wifi_status adds the link details
         sim.sta.update(phase="online", ssid=st.get("wifi_ssid") or "home", ip=st.get("wifi_ip") or "192.168.1.50")
+    # The board's network history shows in status (sta_prev_ip once an address
+    # changed, as tests/board/test_home_network.py makes it do): mirror it.
+    sim.net.update(last_ip=st.get("sta_last_ip", ""), prev_ip=st.get("sta_prev_ip", ""),
+                   changes=st.get("sta_ip_changes", 0), drops=st.get("sta_drops", 0))
     return sim
 
 

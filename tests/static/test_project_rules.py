@@ -258,13 +258,8 @@ def test_the_github_workflows_only_run_when_started_by_hand():
         assert triggers == {"workflow_dispatch"}, f"{wf.name} runs on {sorted(triggers)} - manual only"
 
 
-def test_the_version_is_the_same_everywhere():
-    """FW_VERSION and the newest CHANGELOG entry must name the same version - a
-    release is a version, a tag, a changelog entry and a GitHub Release that agree
-    (RELEASING.md). Bump both together."""
-    ino = (paths.TESTS.parent / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
-    fw = re.search(r'#define\s+FW_VERSION\s+"hid_fi_(v[0-9.]+)"', ino).group(1)
-    log = (paths.TESTS.parent / "CHANGELOG.md").read_text(encoding="utf-8")
-    top = re.search(r"^## (v[0-9.]+)", log, re.M).group(1)
-    assert fw == top, f"firmware says {fw}, CHANGELOG's newest entry is {top} - bump both together"
-    assert re.fullmatch(r"v\d+\.\d+(\.\d+)?", fw), f"{fw} is not vMAJOR.MINOR or vMAJOR.MINOR.PATCH"
+def test_the_version_number_has_the_release_format():
+    """vMAJOR.MINOR or vMAJOR.MINOR.PATCH (RELEASING.md). That FW_VERSION and the
+    newest CHANGELOG entry agree is test_firmware_version_matches_changelog."""
+    v = firmware.fw_version()
+    assert re.fullmatch(r"hid_fi_v\d+\.\d+(\.\d+)?", v), f"{v} is not hid_fi_vMAJOR.MINOR(.PATCH)"

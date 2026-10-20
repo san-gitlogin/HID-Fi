@@ -1509,6 +1509,8 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
             <div class="tx"><b id="joinTitle">Joining</b><span id="joinMsg" style="white-space:normal"></span></div>
           </div>
           <div class="bar" id="joinBar" style="display:none"><i></i></div>
+          <p class="hint" style="margin:12px 0 6px"><b>Saved networks</b> &mdash; the board joins whichever one is in range, like a phone. Up to five.</p>
+          <div class="list" id="savedNets"></div>
           <button class="btn sm blk" id="btnScan" style="margin-top:12px">Scan networks</button>
           <div class="list" id="wifiList" style="margin-top:10px"></div>
           <div class="chips" style="margin-top:12px"><button class="chip" id="tStatic">Use a fixed IP</button></div>
@@ -1722,7 +1724,7 @@ function connect(){
     wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
-    refresh();loadCfg();loadMacros();loadPcs();loadVault();};
+    refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();};
   sock.onclose=()=>{if(!live())return;
     if(!lostAt)lostAt=Date.now();
     wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
@@ -4187,7 +4189,7 @@ function pcEditor(edit){
 // phone, and applyStatus() rebuilds whatever a change to the PIN affects.
 let AUTH_SET=null;
 let AP_OPEN=false;
-function syncAll(){refresh();loadMacros();loadPcs();loadVault();}
+function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
@@ -4286,6 +4288,8 @@ function applyStatus(d){
       row('mDNS',d.mdns?d.mdns+'.local':'-')+
       row('Home network',d.wifi_connected
         ? (d.wifi_ssid+'  '+sig(d.wifi_rssi)+' ('+d.wifi_rssi+' dBm)')
+        : d.sta_away
+          ? ('none of your '+(d.sta_known||'')+' saved network'+(d.sta_known===1?'':'s')+' in range \u00b7 looking again soon')
         : d.sta_phase==='reconnecting'
           ? ('reconnecting to '+(d.sta_target||'it')+(d.sta_down_s!=null?' \u00b7 away '+upt(d.sta_down_s):'')+(d.sta_reason?' \u00b7 '+d.sta_reason:''))
           : (d.sta_phase==='failed'?'join failed':'not connected'))+
@@ -4924,6 +4928,29 @@ function joinWifi(ssid){
 // The board is never unreachable during a join because its own access point
 // stays up throughout, so we can keep asking it what is happening.
 let joinPoll=0;
+// Saved networks: the board remembers up to five and joins the strongest one in
+// range. Passwords never come back; only names and whether each has worked.
+function loadSavedNets(){
+  send({cmd:'wifi_networks'},r=>{
+    const l=$('savedNets');if(!l||!r||r.status!=='ok')return;
+    const n=r.networks||[];
+    if(!n.length){l.innerHTML='<p class="hint">None yet. Scan below and pick your network.</p>';return;}
+    l.innerHTML=n.map(x=>
+      '<div class="item">'+ico('wifi')+'<div class="tx"><b>'+esc(x.ssid)+
+      (x.current?' <span class="tag">connected</span>':'')+(x.static?' <span class="tag">fixed IP</span>':'')+'</b>'+
+      '<span>'+(x.refused?'the router refused the password - enter it again':x.proven?'has worked before':'not joined yet')+'</span></div>'+
+      '<button class="iconbtn" data-forget="'+esc(x.ssid)+'" aria-label="Forget '+esc(x.ssid)+'">'+ico('trash','ic-sm')+'</button></div>').join('');
+    l.querySelectorAll('[data-forget]').forEach(b=>b.onclick=()=>{
+      const ssid=b.dataset.forget, cur=n.find(x=>x.ssid===ssid&&x.current);
+      if(!confirm('Forget "'+ssid+'"? The board will not join it again unless you add it.'+
+        (cur?'\n\nIt is connected to it now: it leaves, and looks for another saved network.':'')))return;
+      send({cmd:'wifi_forget',ssid:ssid},r=>{
+        if(r&&r.status==='ok'){toast('Forgot '+ssid,'ok');loadSavedNets();refresh();}
+        else toast((r&&r.message)||'Could not forget it','bad');
+      });
+    });
+  });
+}
 function joinWatch(ssid){
   clearInterval(joinPoll);
   $('joinBox').style.display='';
@@ -4954,7 +4981,7 @@ function joinPaint(r){
     $('joinMsg').textContent=(r.sta_error?r.sta_error+' ':'')+how+
       ' The board is still running its own access point as well, so both ways in work.';
     toast('Connected as '+r.sta_ip,'ok');
-    refresh();
+    refresh();loadSavedNets();
   }else if(p==='failed'){
     $('joinDot').className='dot bad';
     $('joinTitle').textContent='Could not join';

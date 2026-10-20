@@ -71,3 +71,27 @@ def links_to(ctx, el_id, href):
 def no_pin(ctx):
     ctx["sim"].pin = ""
     ctx["init"][:] = [i for i in ctx["init"] if "setItem('pin'" not in i]
+
+
+@given(parsers.parse('the board has saved the networks "{names}"'))
+def saved_networks(ctx, names):
+    sim = ctx["sim"]
+    for n in reversed([x.strip() for x in names.split(",")]):   # listed newest first
+        sim._net_add(n, "pw-" + n)
+    sim._net_worked(sim.sta["ssid"] or "HomeNet")                  # the one it is on has worked
+
+
+@when(parsers.parse('I forget the saved network "{ssid}"'))
+def forget(ctx, ssid):
+    ui = ctx["ui"]
+    ui.page.wait_for_selector(f'#savedNets [data-forget="{ssid}"]', timeout=5000)
+    ui.page.locator(f'#savedNets [data-forget="{ssid}"]').click()
+    ui.idle(400)
+
+
+@when("the board is somewhere none of its networks reach")
+def nowhere(ctx):
+    ctx["sim"].air = {"SomeoneElse": -40}
+    ctx["sim"].net_search()
+    ctx["ui"].page.evaluate("refresh()")
+    ctx["ui"].idle(300)

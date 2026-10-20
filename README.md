@@ -383,6 +383,8 @@ it says otherwise.
 | Router hands it a new address | Rejoins, notices, and tells any open dashboard | Its `.local` name, or `python3 tools/hidfi.py find` |
 | Router is off when the board starts | Keeps trying until the router is up | As above |
 | Home network gone for a while | Its own WiFi stays up - and comes back on its own if you had switched it off | Join `ESP32-HID-...`, open `http://192.168.4.1/` |
+| You take it to another home | It remembers up to five networks, like a phone, and joins whichever is in range - no setup when you come back | Settings lists the saved networks |
+| Somewhere none of them reach | Its own WiFi stays smooth: it looks for a saved network every 30 s, then every 2 min | Join its own WiFi as usual |
 | You forgot the address | - | Settings on the board's own WiFi, `hidfi.py find`, or `./flash_esp.sh --recover` over USB |
 | A phone on the board's own WiFi has no internet | That is normal: the board is not a router | Better: stay on home WiFi and use the board's name. Or switch on **Share the home internet** (Settings, off by default) |
 

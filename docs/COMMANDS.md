@@ -427,6 +427,29 @@ things are checked instead:
 
 `sta_ip_mode` reports which happened: `static`, `dhcp` or `dhcp_fallback`.
 
+### Saved networks
+
+The board remembers up to five networks, most recently used first, and joins
+the strongest one in range - like a phone.
+
+| Command | Parameters | Reply |
+|---|---|---|
+| `wifi_configure` | `ssid`, `password`, optional fixed IP | adds the network (or updates it) at the front and joins it. With five saved, the oldest is forgotten |
+| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again). Never a password. `max`: 5 |
+| `wifi_forget` | `ssid` | `wifi_forgotten` with `left`. Forgetting the connected one leaves it, and the board looks for another |
+| `wifi_disconnect` | - | forgets every saved network |
+
+`status` adds `sta_known` (how many are saved), `sta_away` (none of them in
+range) and `sta_scans`.
+
+| Situation | What the board does |
+|---|---|
+| Not on a network | scans (about 2 s), then joins the strongest saved network it can see |
+| None of them in range | scans every 30 s for ten minutes, then every two minutes, so its own WiFi stays smooth; every fourth round tries the most recent proven network unseen, for hidden networks |
+| A new network's password is refused | not tried again until it is re-entered; the others still are |
+| A new network fails for another reason | rests for five minutes; a network that has worked is preferred meanwhile |
+| Upgrading from v3.10 | its one saved network becomes the first entry, still proven. The v3.10 settings keep mirroring the first entry, so a downgrade still finds it |
+
 ### Staying on the network
 
 Once a network has worked (the board remembers that), the board never gives up
@@ -485,7 +508,7 @@ makes the board behave as if the router misbehaved, without touching the router.
 | `kind` | Staged |
 |---|---|
 | `drop` | the router lets the board go |
-| `vanish` with `s` (5-600) | the network is gone for `s` seconds; with `at_boot: true` the board restarts as if the router were off when it started |
+| `vanish` with `s` (5-600) | the network is gone for `s` seconds; with `ssid`, only that saved network (another one can stay in range); with `at_boot: true` the board restarts as if the router were off when it started |
 | `ap_off` | the access point switched off, as auto-off does |
 | `ip_was` with `ip` | the board believes it last held `ip`, so the next join is a change |
 | `clear` | ends a staged fault now |

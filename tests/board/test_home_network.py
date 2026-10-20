@@ -208,3 +208,51 @@ def test_sharing_the_internet_turns_on_off_and_leaves_the_board_reachable(board,
         board.cmd({"cmd": "internet_share", "on": was})
     st = _wait(board, lambda s: bool(s.get("ap_share")) == was, 10, "putting sharing back")[1]
     _reachable(request, st["wifi_ip"])
+
+
+# ---- saved networks, like a phone (v3.11) ------------------------------------------------
+# Only ever a fake network is added and forgotten here. The owner's real network is
+# never forgotten or pushed out (five saved would evict the oldest) - its password
+# is not something a test could put back.
+FAKE = "hidfi-test-elsewhere"
+
+
+def _saved(board):
+    return board.cmd({"cmd": "wifi_networks"}, "wifi_networks")["networks"]
+
+
+def test_the_owners_network_is_saved_and_proven(board, home):
+    nets = _saved(board)
+    me = [n for n in nets if n["ssid"] == home["wifi_ssid"]]
+    assert me, f"the network the board is on is not in its saved list: {[n['ssid'] for n in nets]}"
+    assert me[0]["proven"] and me[0]["current"], me[0]
+    assert home.get("sta_known", 0) >= 1
+
+
+def test_a_new_network_out_of_range_falls_back_to_one_that_works(board, home, request):
+    before = [n["ssid"] for n in _saved(board)]
+    assert len(before) <= 3, "a fourth and fifth network would push the owner's out - not testing on this board"
+    try:
+        r = board.cmd({"cmd": "wifi_configure", "ssid": FAKE, "password": "not-a-real-network-1"})
+        assert r.get("reply") == "wifi_connecting", r
+        assert _saved(board)[0]["ssid"] == FAKE, "a new network goes in front"
+        # It is not here: the join fails, and the board goes back to the one that works.
+        took, st = _wait(board, lambda s: s.get("wifi_connected") and s.get("wifi_ssid") == home["wifi_ssid"],
+                         90, "falling back to the network that works")
+        nets = _saved(board)
+        assert nets[0]["ssid"] == home["wifi_ssid"], "the network that worked goes back to the front"
+        fake = [n for n in nets if n["ssid"] == FAKE]
+        assert fake and not fake[0]["proven"], "the new one stays saved, not yet proven"
+        _reachable(request, st["wifi_ip"])
+    finally:
+        board.cmd({"cmd": "wifi_forget", "ssid": FAKE})
+    assert [n["ssid"] for n in _saved(board)] == before, "the saved list was not put back"
+
+
+def test_away_from_every_saved_network_it_says_so_and_keeps_its_own_wifi(board, home):
+    _fault(board, kind="vanish", s=45)
+    _, st = _wait(board, lambda s: s.get("sta_away"), 20, "saying no saved network is in range")
+    scans = st.get("sta_scans", 0)
+    assert st.get("ap_running") is not False and "in range" in (st.get("sta_error") or ""), st.get("sta_error")
+    _wait(board, lambda s: s.get("wifi_connected"), 100, "rejoining when the network is back")
+    assert board.status().get("sta_scans", 0) > scans, "it should keep looking while away"

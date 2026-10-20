@@ -250,10 +250,26 @@ bool   staStaticTried = false;    // a static attempt is in flight, fallback sti
 // auto-reconnect is switched off so the two never fight over the radio.
 #define STA_RETRY_FIRST     1000     // first retry after a drop
 #define STA_RETRY_MAX       30000    // back-off ceiling for a network that has worked
-#define STA_RETRY_UNPROVEN  60000    // a network that never has: slowly
 #define STA_RETRY_BADPASS   300000   // a worked-before network now refusing the password
 #define AP_FALLBACK_MS      20000    // home network gone this long: bring the AP back
-String   staSavedSsid = "", staSavedPass = "";   // what the supervisor rejoins
+String   staSavedSsid = "", staSavedPass = "";   // the network being joined: one row of the table below
+// Saved networks, like a phone's: up to NET_MAX, most recently used first. The
+// supervisor joins the strongest one in range. Stored in wifi_cfg as n0..n4
+// (JSON); the old single-network keys (ssid, pass, ip... sta_ok) keep mirroring
+// row 0, so a downgrade to v3.10 still finds its network.
+#define NET_MAX 5
+String   netSsid[NET_MAX], netPass[NET_MAX], netIp[NET_MAX], netGw[NET_MAX], netMask[NET_MAX], netDns[NET_MAX];
+bool     netOk[NET_MAX];              // has been online with these credentials
+bool     netBad[NET_MAX];             // the router refused this new password: skip until re-entered
+uint32_t netCoolUntil[NET_MAX];       // a worked-before network refusing its password: rest until then
+uint8_t  netCount = 0;
+int8_t   netCurrent = -1;             // the row being joined or joined
+bool     staScanPending = false;      // the supervisor started a scan and is waiting for it
+bool     staAway = false;             // the last scan found no saved network in range
+uint32_t staScans = 0;
+uint8_t  staBlindRound = 0;           // every few rounds, try a proven network unseen (hidden SSIDs)
+#define  STA_AWAY_GAP_SOON 30000      // no saved network in range: scan again in 30 s...
+#define  STA_AWAY_GAP_LATE 120000     // ...and every 2 minutes once away for 10, to keep the AP smooth
 uint32_t staRetryAt   = 0;
 uint32_t staRetryGap  = STA_RETRY_FIRST;
 bool     staSupervised = false;   // the join in flight was started by the supervisor or at boot
@@ -271,6 +287,7 @@ volatile uint8_t staLastReason = 0;   // 802.11 reason the router gave for letti
 // the supervisor joins a name that does not exist, which is exactly what a
 // powered-off router looks like. The boot variant survives the restart in RTC RAM.
 uint32_t netFaultUntil = 0;
+String   netFaultSsid = "";           // vanish one network only (empty: all of them)
 // Sharing the home internet with phones on the board's own WiFi (NAPT). Off by
 // default: it lets anything on the board's WiFi reach the home network, and the
 // traffic shares the radio with the pointer. Active only while both are up.
@@ -331,7 +348,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v3.10"
+#define  FW_VERSION "hid_fi_v3.11"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -697,6 +714,15 @@ void staCameOnline(const String& ip);
 void onStaEvent(arduino_event_id_t event, arduino_event_info_t info);
 void staWentAway();
 void staScheduleRetry();
+void staSuperviseScan();
+void netSelect(int i);
+void netToFront(int i);
+void netRemove(int i);
+int netFind(const String& ssid);
+void netSave();
+void netLoad(const String& legacySsid, const String& legacyPass);
+void handleWifiNetworks();
+void handleWifiForget(const JsonDocument& inDoc);
 void handleNetFault(const JsonDocument& inDoc);
 void handleInternetShare(const JsonDocument& inDoc);
 void applyInternetShare();
@@ -1092,11 +1118,9 @@ void setupWifi() {
     // web server up but unable to answer anything until the join timed out.
     WiFi.onEvent(onStaEvent);
     WiFi.setAutoReconnect(false);       // the supervisor owns reconnecting (checkWifiConnection)
-    staSavedSsid = savedSSID;
-    staSavedPass = savedPass;
+    netLoad(savedSSID, savedPass);
     {
         preferences.begin("wifi_cfg", true);
-        staProven = preferences.getBool("sta_ok", false);
         apShare   = preferences.getBool("ap_share", false);
         staLastIp = preferences.getString("last_ip", "");
         preferences.end();
@@ -1106,11 +1130,11 @@ void setupWifi() {
         netFaultUntil = millis() + constrain(rtcFaultSecs, 5u, 600u) * 1000UL;
         COM_SERIAL.printf("[NET] Test fault: home network gone for %us from boot\n", (unsigned)rtcFaultSecs);
     }
-    if (savedSSID.length() > 0) {
-        COM_SERIAL.printf("[WIFI] Saved network: %s - joining in the background\n", savedSSID.c_str());
-        staSupervised = true;
-        staBeginJoin(netFaultUntil ? String(NET_FAULT_SSID) : savedSSID, savedPass, true);
-        staSsid = savedSSID;
+    if (netCount > 0) {
+        // Look first, then join the strongest saved network in range.
+        COM_SERIAL.printf("[WIFI] %u saved network(s) - looking for one in range\n", (unsigned)netCount);
+        staRetryAt = millis();
+        if (!staRetryAt) staRetryAt = 1;
     } else {
         COM_SERIAL.println("[WIFI] No STA credentials. AP-only mode.");
         COM_SERIAL.println("[WIFI] Connect to AP and use dashboard to configure STA network.");
@@ -1401,7 +1425,8 @@ void updateStaJoin() {
     // A network that has worked before is not "failed" because it is away: the
     // supervisor keeps trying. A new one the user just typed in is.
     staPhase = (staSupervised && staProven) ? STA_RECONNECTING : STA_FAILED;
-    if (staError.length() == 0 || staPhase == STA_RECONNECTING) staError = wlStatusStr(WiFi.status());
+    if (staAway) staError = "No saved network in range.";
+    else if (staError.length() == 0 || staPhase == STA_RECONNECTING) staError = wlStatusStr(WiFi.status());
     COM_SERIAL.printf("[STA] Join %s: %s\n", staPhase == STA_FAILED ? "failed" : "attempt missed", staError.c_str());
     if (!staDownSince) staDownSince = millis();
     // Decide on the router's reason before our own disconnect replaces it.
@@ -1420,21 +1445,33 @@ static bool staReasonIsPassword(uint8_t r) {
 }
 
 void staScheduleRetry() {
-    if (!staSavedSsid.length()) return;
+    if (!netCount) return;
     if (staReasonIsPassword(staLastReason)) {
         if (staAuthFails < 255) staAuthFails++;
     } else {
         staAuthFails = 0;
     }
     uint32_t gap;
-    if (!staProven) {
-        // Never worked, and the router says the password is wrong: stop, and say so.
-        if (staAuthFails) { staRetryAt = 0; staPhase = STA_FAILED;
-            staError = "The router refused the password. Enter it again in Settings."; return; }
-        gap = STA_RETRY_UNPROVEN;
-    } else if (staAuthFails >= 3) {
-        gap = STA_RETRY_BADPASS;      // still try: routers misreport, and it costs nothing to ask
-        staError = "The router no longer accepts the saved password. If you changed it, enter it again in Settings.";
+    if (!staProven && staAuthFails) {
+        // Never worked, and the router says the password is wrong: never try it
+        // again until it is re-entered, and say so. Other saved networks still
+        // get their turn.
+        if (netCurrent >= 0) netBad[netCurrent] = true;
+        staPhase = STA_FAILED;
+        staError = "The router refused the password for " + staSavedSsid + ". Enter it again in Settings.";
+        gap = STA_RETRY_FIRST * 5;
+    } else if (!staProven && netCurrent >= 0) {
+        // A new network that failed for another reason (out of range, no address):
+        // rest it, so a network that has worked is preferred meanwhile.
+        netCoolUntil[netCurrent] = millis() + STA_RETRY_BADPASS;
+        gap = staRetryGap;
+        staRetryGap = min<uint32_t>(staRetryGap * 2 + 1000, STA_RETRY_MAX);
+    } else if (staProven && staAuthFails >= 3) {
+        // Routers misreport, so it is not dropped - it rests, and the others are tried.
+        if (netCurrent >= 0) netCoolUntil[netCurrent] = millis() + STA_RETRY_BADPASS;
+        staError = "The router no longer accepts the saved password for " + staSavedSsid + ". If you changed it, enter it again in Settings.";
+        staAuthFails = 0;
+        gap = STA_RETRY_FIRST * 5;
     } else {
         gap = staRetryGap;
         staRetryGap = min<uint32_t>(staRetryGap * 2 + 1000, STA_RETRY_MAX);
@@ -1470,14 +1507,23 @@ void staCameOnline(const String& ip) {
     if (!staStaticTried && staIpMode != "dhcp_fallback") staError = "";
     // Remember the address across reboots too: after a power cut the router may
     // hand out a different one, and that is exactly when the owner needs telling.
-    if (ip != staLastIp || !staProven) {
+    if (ip != staLastIp) {
         preferences.begin("wifi_cfg", false);
-        if (ip != staLastIp) preferences.putString("last_ip", ip);
-        if (!staProven) preferences.putBool("sta_ok", true);
+        preferences.putString("last_ip", ip);
         preferences.end();
     }
     staLastIp = ip;
     staProven = true;
+    staAway = false;
+    staScanPending = false;
+    staBlindRound = 0;                     // a new outage counts its rounds from the start
+    // The network that worked goes to the front, proven - as on a phone.
+    if (netCurrent >= 0 && (!netOk[netCurrent] || netCurrent != 0)) {
+        netOk[netCurrent] = true;
+        netBad[netCurrent] = false;
+        netToFront(netCurrent);
+        netSave();
+    }
     // mDNS answers on the new address, not the old one.
     if (changed && mdnsName.length()) {
         MDNS.end();
@@ -1560,6 +1606,7 @@ void checkWifiConnection() {
 
     if (netFaultUntil && (long)(millis() - netFaultUntil) >= 0) {
         netFaultUntil = 0;
+        netFaultSsid = "";
         staRetryAt = millis();                 // the "router" is back: try now
         staRetryGap = STA_RETRY_FIRST;
         COM_SERIAL.println("[NET] Test fault over - the network is back");
@@ -1577,27 +1624,205 @@ void checkWifiConnection() {
     // A join in flight owns the radio; updateStaJoin() resolves it.
     if (staPhase == STA_CONNECTING) return;
 
-    bool up = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0 && !netFaultUntil;
+    bool up = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0 &&
+              !(netFaultUntil && (!netFaultSsid.length() || WiFi.SSID() == netFaultSsid));
     if (up) {
         String ip = WiFi.localIP().toString();
         if (!wifiConnected || ip != wifiIP) staCameOnline(ip);
         return;
     }
     if (wifiConnected) staWentAway();
-    if (!staSavedSsid.length()) return;
+    if (!netCount) return;
 
+    if (staScanPending) { staSuperviseScan(); return; }
     if (!staRetryAt || (long)(millis() - staRetryAt) < 0) return;
     staRetryAt = 0;
+    // Look before joining: a blind join of a network that is not there costs a
+    // 15 s attempt that disturbs the board's own WiFi; a scan costs about two.
+    int16_t r = WiFi.scanNetworks(true);
+    if (r == WIFI_SCAN_FAILED) { staRetryAt = millis() + STA_RETRY_FIRST * 5; return; }
+    staScanPending = true;
+    staScans++;
+}
+
+// The scan the supervisor started has finished (or not yet): pick the strongest
+// saved network in range and join it; with none in range, wait - longer the
+// longer the board has been away - and now and then try a proven one unseen,
+// because a hidden network never shows up in a scan.
+void staSuperviseScan() {
+    int16_t n = WiFi.scanComplete();
+    if (n == WIFI_SCAN_RUNNING) return;
+    staScanPending = false;
+    int best = -1, bestRssi = -1000;
+    for (int i = 0; n > 0 && i < netCount; i++) {
+        if (netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid)) continue;   // staged absence
+        if (netBad[i] || (netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0)) continue;
+        for (int k = 0; k < n; k++) {
+            if (WiFi.SSID(k) == netSsid[i] && WiFi.RSSI(k) > bestRssi) { best = i; bestRssi = WiFi.RSSI(k); }
+        }
+    }
+    if (!staDownSince) staDownSince = millis();
+    if (best < 0) {
+        staAway = true;
+        int proven = -1;
+        for (int i = 0; i < netCount && proven < 0; i++) if (netOk[i] && !netBad[i]) proven = i;
+        if (proven >= 0 && ++staBlindRound >= 4) {
+            staBlindRound = 0;
+            best = proven;                                  // maybe hidden: try it unseen
+        } else {
+            staPhase = proven >= 0 ? STA_RECONNECTING : (staPhase == STA_FAILED ? STA_FAILED : STA_RECONNECTING);
+            if (!staError.length() || staError.startsWith("No saved network"))
+                staError = "No saved network in range.";
+            staRetryAt = millis() + ((millis() - staDownSince) > 600000UL ? STA_AWAY_GAP_LATE : STA_AWAY_GAP_SOON);
+            if (!staRetryAt) staRetryAt = 1;
+            return;
+        }
+    } else {
+        staAway = false;
+    }
+    netSelect(best);
     staTries++;
     staSupervised = true;
-    staBeginJoin(netFaultUntil ? String(NET_FAULT_SSID) : staSavedSsid, staSavedPass, true);
+    bool staged = netFaultUntil && (!netFaultSsid.length() || staSavedSsid == netFaultSsid);
+    staBeginJoin(staged ? String(NET_FAULT_SSID) : staSavedSsid, staSavedPass, true);
     staSsid = staSavedSsid;
-    if (staPhase == STA_CONNECTING && !staDownSince) staDownSince = millis();
+    // staBeginJoin() clears the error; while away, the status keeps saying why.
+    if (staAway) staError = "No saved network in range - trying " + staSavedSsid + " unseen, in case it is hidden.";
+}
+
+// ---- the saved-network table ------------------------------------------------
+void netSelect(int i) {
+    netCurrent   = i;
+    staSavedSsid = netSsid[i];
+    staSavedPass = netPass[i];
+    staProven    = netOk[i];
+    staWantIp = netIp[i]; staWantGw = netGw[i]; staWantMask = netMask[i]; staWantDns = netDns[i];
+}
+
+void netToFront(int i) {
+    if (i <= 0) return;
+    String s = netSsid[i], p = netPass[i], ip = netIp[i], gw = netGw[i], m = netMask[i], d = netDns[i];
+    bool ok = netOk[i], bad = netBad[i]; uint32_t cool = netCoolUntil[i];
+    for (int k = i; k > 0; k--) {
+        netSsid[k] = netSsid[k-1]; netPass[k] = netPass[k-1]; netIp[k] = netIp[k-1]; netGw[k] = netGw[k-1];
+        netMask[k] = netMask[k-1]; netDns[k] = netDns[k-1]; netOk[k] = netOk[k-1]; netBad[k] = netBad[k-1];
+        netCoolUntil[k] = netCoolUntil[k-1];
+    }
+    netSsid[0] = s; netPass[0] = p; netIp[0] = ip; netGw[0] = gw; netMask[0] = m; netDns[0] = d;
+    netOk[0] = ok; netBad[0] = bad; netCoolUntil[0] = cool;
+    if (netCurrent == i) netCurrent = 0; else if (netCurrent >= 0 && netCurrent < i) netCurrent++;
+}
+
+void netRemove(int i) {
+    for (int k = i; k < netCount - 1; k++) {
+        netSsid[k] = netSsid[k+1]; netPass[k] = netPass[k+1]; netIp[k] = netIp[k+1]; netGw[k] = netGw[k+1];
+        netMask[k] = netMask[k+1]; netDns[k] = netDns[k+1]; netOk[k] = netOk[k+1]; netBad[k] = netBad[k+1];
+        netCoolUntil[k] = netCoolUntil[k+1];
+    }
+    netCount--;
+    netSsid[netCount] = netPass[netCount] = "";
+    if (netCurrent == i) netCurrent = -1; else if (netCurrent > i) netCurrent--;
+}
+
+int netFind(const String& ssid) {
+    for (int i = 0; i < netCount; i++) if (netSsid[i] == ssid) return i;
+    return -1;
+}
+
+void netSave() {
+    preferences.begin("wifi_cfg", false);
+    for (int i = 0; i < NET_MAX; i++) {
+        char key[4]; snprintf(key, sizeof(key), "n%d", i);
+        if (i >= netCount) { preferences.remove(key); continue; }
+        StaticJsonDocument<384> d;
+        d["s"] = netSsid[i]; d["p"] = netPass[i]; d["ok"] = netOk[i];
+        if (netIp[i].length()) { d["ip"] = netIp[i]; d["gw"] = netGw[i]; d["mask"] = netMask[i]; d["dns"] = netDns[i]; }
+        String out; serializeJson(d, out);
+        preferences.putString(key, out);
+    }
+    // Row 0 mirrored to the v3.10 keys, so a downgrade still has its network.
+    if (netCount) {
+        preferences.putString("ssid", netSsid[0]); preferences.putString("pass", netPass[0]);
+        preferences.putString("ip", netIp[0]); preferences.putString("gw", netGw[0]);
+        preferences.putString("mask", netMask[0]); preferences.putString("dns", netDns[0]);
+        preferences.putBool("sta_ok", netOk[0]);
+    } else {
+        preferences.remove("ssid"); preferences.remove("pass"); preferences.remove("ip"); preferences.remove("gw");
+        preferences.remove("mask"); preferences.remove("dns"); preferences.remove("sta_ok");
+    }
+    preferences.end();
+}
+
+// Read the table; a board coming from v3.10 has only the single-network keys,
+// which become row 0 - proven if they were.
+void netLoad(const String& legacySsid, const String& legacyPass) {
+    netCount = 0;
+    preferences.begin("wifi_cfg", true);
+    for (int i = 0; i < NET_MAX; i++) {
+        char key[4]; snprintf(key, sizeof(key), "n%d", i);
+        String raw = preferences.getString(key, "");
+        if (!raw.length()) break;
+        StaticJsonDocument<384> d;
+        if (deserializeJson(d, raw) || !(d["s"] | "")[0]) break;
+        netSsid[netCount] = d["s"].as<String>(); netPass[netCount] = d["p"] | "";
+        netOk[netCount] = d["ok"] | false;
+        netIp[netCount] = d["ip"] | ""; netGw[netCount] = d["gw"] | "";
+        netMask[netCount] = d["mask"] | ""; netDns[netCount] = d["dns"] | "";
+        netBad[netCount] = false; netCoolUntil[netCount] = 0;
+        netCount++;
+    }
+    bool legacyOk = preferences.getBool("sta_ok", false);
+    preferences.end();
+    if (netCount == 0 && legacySsid.length()) {
+        netSsid[0] = legacySsid; netPass[0] = legacyPass; netOk[0] = legacyOk;
+        netIp[0] = staWantIp; netGw[0] = staWantGw; netMask[0] = staWantMask; netDns[0] = staWantDns;
+        netBad[0] = false; netCoolUntil[0] = 0;
+        netCount = 1;
+        netSave();
+        COM_SERIAL.printf("[WIFI] Saved network %s carried over from the single-network settings\n", legacySsid.c_str());
+    }
+    if (netCount) netSelect(0);
+}
+
+// The saved networks, never their passwords.
+void handleWifiNetworks() {
+    DynamicJsonDocument d(1536);
+    d["status"] = "ok"; d["reply"] = "wifi_networks"; d["max"] = NET_MAX;
+    JsonArray a = d.createNestedArray("networks");
+    for (int i = 0; i < netCount; i++) {
+        JsonObject o = a.createNestedObject();
+        o["ssid"] = netSsid[i];
+        o["proven"] = netOk[i];
+        o["static"] = netIp[i].length() > 0;
+        o["current"] = (i == netCurrent && wifiConnected);
+        if (netBad[i]) o["refused"] = true;
+    }
+    sendJson(d);
+}
+
+void handleWifiForget(const JsonDocument& inDoc) {
+    String ssid = inDoc["ssid"] | "";
+    int i = netFind(ssid);
+    StaticJsonDocument<192> d;
+    if (i < 0) { d["status"] = "error"; d["message"] = "Not a saved network"; sendJson(d); return; }
+    bool wasCurrent = (i == netCurrent);
+    netRemove(i);
+    netSave();
+    COM_SERIAL.printf("[WIFI] Forgot %s\n", ssid.c_str());
+    if (wasCurrent) {
+        // Off this one; the supervisor looks for another saved network at once.
+        staSavedSsid = staSavedPass = ""; staProven = false;
+        if (wifiConnected) WiFi.disconnect(false);
+        staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
+    }
+    d["status"] = "ok"; d["reply"] = "wifi_forgotten"; d["ssid"] = ssid; d["left"] = netCount;
+    sendJson(d);
 }
 
 // Serial only: rehearse a bad night for the home network without touching the
 // router. drop - the router lets us go; vanish - it is off for s seconds;
-// at_boot - and it was off when the board started; ap_off - auto-off fired;
+// at_boot - and it was off when the board started; with ssid, only that network
+// vanishes (one home gone, another still there); ap_off - auto-off fired;
 // ip_was - pretend we last
 // held that address, so the next join proves the change is noticed; clear.
 void handleNetFault(const JsonDocument& inDoc) {
@@ -1616,14 +1841,15 @@ void handleNetFault(const JsonDocument& inDoc) {
             pendingRestartAt = millis() + 300;
         } else {
             netFaultUntil = millis() + secs * 1000UL;
-            WiFi.disconnect(false);
+            netFaultSsid = String(inDoc["ssid"] | "");     // one network, or all of them
+            if (!netFaultSsid.length() || WiFi.SSID() == netFaultSsid) WiFi.disconnect(false);
         }
     } else if (!strcmp(kind, "ap_off")) {
         stopAP();                                   // as auto-off would, without the 10 minute wait
     } else if (!strcmp(kind, "ip_was")) {
         staLastIp = String(inDoc["ip"] | "");
     } else if (!strcmp(kind, "clear")) {
-        netFaultUntil = 0; rtcFaultMagic = 0; staRetryAt = millis();
+        netFaultUntil = 0; netFaultSsid = ""; rtcFaultMagic = 0; staRetryAt = millis();
     } else {
         d["status"]="error"; d["message"]="kind is drop, vanish, ap_off, ip_was or clear"; sendJson(d); return;
     }
@@ -2002,6 +2228,8 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "do") == 0)      handleDo(inDoc);
     else if (strcmp(cmd, "net_fault") == 0) handleNetFault(inDoc);
+    else if (strcmp(cmd, "wifi_networks") == 0) handleWifiNetworks();
+    else if (strcmp(cmd, "wifi_forget") == 0) handleWifiForget(inDoc);
     else if (strcmp(cmd, "internet_share") == 0) handleInternetShare(inDoc);
     else if (strcmp(cmd, "actions") == 0) handleActions(inDoc);
     else if (strcmp(cmd, "open") == 0)    handleOpen(inDoc);
@@ -2796,6 +3024,9 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["sta_last_ip"] = staLastIp;
     if (staPrevIp.length()) doc["sta_prev_ip"] = staPrevIp;
     doc["sta_ip_changes"] = staIpChanges;
+    doc["sta_known"] = netCount;
+    doc["sta_away"] = staAway && !wifiConnected;
+    doc["sta_scans"] = staScans;
     doc["sta_drops"] = staDrops;
     if (staDownSince) doc["sta_down_s"] = (millis() - staDownSince) / 1000;
     if (staRetryAt && !wifiConnected) doc["sta_retry_in_s"] = (long)(staRetryAt - millis()) > 0 ? (staRetryAt - millis()) / 1000 : 0;
@@ -2913,21 +3144,26 @@ void handleWifiConfigure(const JsonDocument& inDoc) {
         }
     }
 
-    preferences.begin("wifi_cfg", false);
-    preferences.putString("ssid", ssid);
-    preferences.putString("pass", pass);
-    preferences.putString("ip",   staWantIp);
-    preferences.putString("gw",   staWantGw);
-    preferences.putString("mask", staWantMask);
-    preferences.putString("dns",  staWantDns);
-    preferences.end();
-    preferences.begin("wifi_cfg", false);
-    preferences.putBool("sta_ok", false);
-    preferences.end();
-    COM_SERIAL.printf("[STA] Credentials saved for: %s\n", ssid);
+    // A row in the saved-network table: a new network goes in front (the oldest
+    // drops off when all NET_MAX are used); re-entering one updates it. A new
+    // password is unproven until it works.
+    int row = netFind(String(ssid));
+    if (row < 0) {
+        if (netCount == NET_MAX) { COM_SERIAL.printf("[WIFI] Forgetting %s to make room\n", netSsid[NET_MAX-1].c_str()); netRemove(NET_MAX - 1); }
+        row = netCount++;
+        netOk[row] = false;
+    } else if (netPass[row] != pass) {
+        netOk[row] = false;
+    }
+    netSsid[row] = ssid; netPass[row] = pass;
+    netIp[row] = staWantIp; netGw[row] = staWantGw; netMask[row] = staWantMask; netDns[row] = staWantDns;
+    netBad[row] = false; netCoolUntil[row] = 0;
+    netToFront(row);
+    netSave();
+    netSelect(0);
+    COM_SERIAL.printf("[STA] Saved network: %s (%u saved)\n", ssid, (unsigned)netCount);
 
-    staSavedSsid = ssid; staSavedPass = pass;
-    staProven = false; staAuthFails = 0; staLastReason = 0;
+    staAuthFails = 0; staLastReason = 0; staScanPending = false;
     staSupervised = false; staRetryAt = 0; staDownSince = 0;
     wifiConnected = false;
     wifiIP = "";
@@ -2991,7 +3227,9 @@ void handleWifiDisconnect() {
     staIpMode = "dhcp";
     staWantIp = staWantGw = staWantMask = staWantDns = "";
     staSavedSsid = staSavedPass = "";
-    staProven = false; staRetryAt = 0; staDownSince = 0;
+    staProven = false; staRetryAt = 0; staDownSince = 0; staScanPending = false;
+    netCount = 0; netCurrent = -1;
+    netSave();                                  // every saved network, and the v3.10 keys
     WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);   // back to DHCP for next time
 
     preferences.begin("wifi_cfg", false);

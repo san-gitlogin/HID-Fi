@@ -137,6 +137,12 @@ class BoardSim:
         # The supervisor's record of the home network (checkWifiConnection / staCameOnline).
         self.net = {"last_ip": "", "prev_ip": "", "changes": 0, "drops": 0, "down_since": None, "reason": ""}
         self.ap_share = False              # internet_share: NAPT on the board's own WiFi
+        # Saved networks, most recently used first (the firmware's net* table), and
+        # what is in range right now: ssid -> RSSI (a scenario sets it).
+        self.nets = []                     # [{"ssid", "password", "proven", "static", "refused"}]
+        self.air = {}
+        self.scans = 0
+        self.away = False
         self.networks = [{"ssid": "HomeNet", "rssi": -48, "quality": "excellent", "channel": 6, "encryption": "WPA2"},
                          {"ssid": "Cafe Guest", "rssi": -71, "quality": "fair", "channel": 11, "encryption": "Open"}]
         self.join_succeeds = {"HomeNet"}
@@ -196,6 +202,7 @@ class BoardSim:
             "sta_target": self.sta["ssid"], "cmd_count": self.cmd_count, "wifi_cmd_count": self.cmd_count,
             "wifi_connected": online, "wifi_ip": self.sta["ip"],
             "sta_last_ip": self.net["last_ip"], "sta_ip_changes": self.net["changes"], "sta_drops": self.net["drops"],
+            "sta_known": len(self.nets), "sta_away": self.away and not online, "sta_scans": self.scans,
             **({"sta_prev_ip": self.net["prev_ip"]} if self.net["prev_ip"] else {}),
             **({"sta_down_s": int(self.now() - self.net["down_since"])} if self.net["down_since"] is not None else {}),
             **({"sta_retry_in_s": 3} if self.sta["phase"] == "reconnecting" else {}),
@@ -479,9 +486,50 @@ class BoardSim:
                 s["phase"] = "online"
                 s["ip"] = s["want_ip"] or "192.168.1.77"
                 self.net["last_ip"] = s["ip"]
+                self._net_worked(s["ssid"])
             else:
                 s["phase"] = "failed"
                 s["error"] = "Wrong password, or the network refused the board"
+
+    # ---- saved networks (netLoad / netSave / staSuperviseScan) ------------------------
+    def _net_add(self, ssid, password, static=False):
+        row = next((n for n in self.nets if n["ssid"] == ssid), None)
+        if row is None:
+            if len(self.nets) == 5:
+                self.nets.pop()                     # the oldest makes room
+            row = {"ssid": ssid, "password": password, "proven": False, "static": static, "refused": False}
+        else:
+            self.nets.remove(row)
+            if row["password"] != password:
+                row["proven"] = False
+            row.update(password=password, static=static, refused=False)
+        self.nets.insert(0, row)
+
+    def _net_worked(self, ssid):
+        row = next((n for n in self.nets if n["ssid"] == ssid), None)
+        if row:
+            self.nets.remove(row)
+            row.update(proven=True, refused=False)
+            self.nets.insert(0, row)
+
+    def net_search(self):
+        """staSuperviseScan(): the strongest saved network in range, or away."""
+        with self.lock:
+            self.scans += 1
+            seen = [(self.air[n["ssid"]], -i, n) for i, n in enumerate(self.nets)
+                    if n["ssid"] in self.air and not n["refused"]]
+            if not seen:
+                self.away = True
+                self.sta.update(phase="reconnecting", ip="", error="No saved network in range.")
+                return None
+            self.away = False
+            best = max(seen, key=lambda t: (t[0], t[1]))[2]
+            ip = self.net["last_ip"] or "192.168.1.77"
+        self.net_back(ip)
+        with self.lock:
+            self.sta.update(ssid=best["ssid"])
+            self._net_worked(best["ssid"])
+        return best["ssid"]
 
     # ---- the home network having a bad night (scenarios drive these) -----------------
     def _push(self, ev):
@@ -983,13 +1031,34 @@ class BoardSim:
                     return E("That is not a valid IPv4 address")
                 if not gw:
                     return E("A static address needs a gateway, usually your router")
+            self._net_add(ssid, b.get("password", ""), static=bool(ip))
             self.sta.update(phase="connecting", ssid=ssid, ip="", error="", ip_mode="static" if ip else "dhcp",
                             since=self.now(), want_ip=ip)
             return OK("wifi_connecting", ssid=ssid, phase="connecting", ip_mode=self.sta["ip_mode"],
                       timeout_ms=15000, ap_still_active=True)
         if c == "wifi_disconnect":
             self.sta.update(phase="idle", ip="", error="")
+            self.nets = []
             return OK("wifi_disconnected", ap_still_active=True)
+        if c == "wifi_networks":
+            online = self.sta["phase"] == "online"
+            nets = []
+            for n in self.nets:
+                o = {"ssid": n["ssid"], "proven": n["proven"], "static": n["static"],
+                     "current": online and n["ssid"] == self.sta["ssid"]}
+                if n["refused"]:
+                    o["refused"] = True
+                nets.append(o)
+            return OK("wifi_networks", max=5, networks=nets)
+        if c == "wifi_forget":
+            ssid = b.get("ssid", "")
+            row = next((n for n in self.nets if n["ssid"] == ssid), None)
+            if row is None:
+                return E("Not a saved network")
+            self.nets.remove(row)
+            if self.sta["ssid"] == ssid and self.sta["phase"] == "online":
+                self.sta.update(phase="reconnecting", ip="")
+            return OK("wifi_forgotten", ssid=ssid, left=len(self.nets))
         if c == "ap_configure":
             ssid, pw, open_ = b.get("ssid", ""), b.get("password", ""), bool(b.get("open"))
             n = len(ssid.encode())

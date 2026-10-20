@@ -617,6 +617,10 @@ board, through the USB cable only (`net_fault`), so the router is never touched:
 | auto-off | AP off, then the network goes | AP back within 35 s |
 | name | - | `esp-hid-XXXXXX.local` resolves to the board |
 | USB only | `net_fault` over WiFi | refused |
+| upgrade | v3.10 settings | the home network is saved entry #1, still proven |
+| a new home that is not here | a saved network out of range | the board tries it, then goes back to the one that works |
+| away from all of them | every saved network gone | `sta_away`, it keeps scanning, its own WiFi stays up |
+| two real homes | a phone hotspot, turned on and off when a dialog asks (`tests/board/test_two_homes.py`, `HIDFI_SECOND_SSID=<name>`) | joins it, leaves it, finds it with home gone, comes home |
 
 Run it with `--board`; it takes about four minutes and puts everything back. The
 dashboard side is `tests/ui/bdd/features/home_network.feature`.

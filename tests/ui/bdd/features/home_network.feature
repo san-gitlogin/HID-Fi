@@ -101,3 +101,49 @@ Feature: When the home network has a bad night
     When I open the "Settings" tab
     And I tap the "#tShare" control
     Then I see the message "Set an access PIN first"
+
+  # ---- saved networks, like a phone (v3.11) ------------------------------------------
+
+  Scenario: Settings lists the saved networks, which one is connected, and which have worked
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#savedNets" contains "HomeNet"
+    And "#savedNets" contains "Bangalore"
+    And "#savedNets" contains "connected"
+    And "#savedNets" contains "not joined yet"
+
+  Scenario: Forgetting a network asks first, and a no keeps it
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the dashboard is open
+    And I will answer "no" to the next question
+    When I open the "Settings" tab
+    And I forget the saved network "Bangalore"
+    Then a confirmation asking "will not join it again" was shown
+    And the board does not receive "wifi_forget"
+
+  Scenario: Forgetting a network removes only that one
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the dashboard is open
+    And I will answer "yes" to the next question
+    When I open the "Settings" tab
+    And I forget the saved network "Bangalore"
+    Then the board receives {"cmd": "wifi_forget", "ssid": "Bangalore"}
+    And I see the message "Forgot Bangalore"
+    And "#savedNets" contains "HomeNet"
+    And "#savedNets" does not contain "Bangalore"
+
+  Scenario: Forgetting the connected one warns that the board will leave it
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the dashboard is open
+    And I will answer "no" to the next question
+    When I open the "Settings" tab
+    And I forget the saved network "HomeNet"
+    Then a confirmation asking "looks for another saved network" was shown
+
+  Scenario: Away from every saved network, Settings says so instead of "failed"
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the dashboard is open
+    When the board is somewhere none of its networks reach
+    And I open the "Settings" tab
+    Then "#netInfo" contains "none of your 2 saved networks in range"

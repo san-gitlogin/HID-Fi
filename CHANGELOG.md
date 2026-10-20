@@ -7,6 +7,48 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v3.11 - 2026-10-20
+
+Remembers your networks, like a phone - take it from one home to another.
+
+### Home network
+
+- **Up to five saved networks.** Adding a network no longer replaces the last
+  one: the board keeps them, most recently used first, and joins **whichever is
+  in range**, strongest signal first - at home, at your other home, wherever it
+  is. Settings lists them, with which one is connected and which have worked;
+  each can be forgotten on its own (`wifi_networks`, `wifi_forget`). Reset WiFi
+  still forgets them all.
+- **Looks before it joins.** When it is not on a network it scans first (about
+  two seconds) and only joins a saved network it can see - instead of blindly
+  trying the last one for 15 seconds at a time.
+- **Away from all of them, it stays out of the way.** With no saved network in
+  range it scans every 30 seconds for ten minutes, then every two minutes, so
+  the board's own WiFi stays smooth for the phone using it. Settings says "none
+  of your saved networks in range". A hidden network (which never shows in a
+  scan) is still tried now and then.
+- **A new network that does not work never strands the board.** A wrong
+  password is not retried until it is entered again, and a new network that
+  fails rests for five minutes - meanwhile the board goes back to one that has
+  worked.
+- Upgrading keeps your network: v3.10's single saved network becomes the first
+  entry, still marked as having worked. The v3.10 settings keep mirroring the
+  first entry, so going back to v3.10 still finds it.
+
+### Tools and tests
+
+- The GitHub test workflow runs only when started by hand (no mails on push);
+  the local run is the gate (RELEASING.md).
+- `tests/setup_linux.sh` installs Chromium's libraries as the user (it failed
+  under sudo on a normal user - which is what WSL users are).
+- Timing-sensitive tests - layout speed, and the Linux typing replay - run
+  alone after the parallel phase.
+- RELEASING.md and `tools/make_release.sh`: every release is a version, a tag,
+  a changelog entry and a GitHub Release with the firmware zip; published tags
+  never move.
+
+---
+
 ## v3.10 - 2026-10-19
 
 Owning the board: a password unique to each board, a first PIN only its owner
