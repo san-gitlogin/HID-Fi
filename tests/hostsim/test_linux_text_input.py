@@ -21,7 +21,10 @@ import pytest
 
 from support import corpus, linux_keys, paths
 
-pytestmark = pytest.mark.hostsim
+# timing: live typing into IBus misses keys when it shares the CPU with the
+# parallel dashboard workers (it did on GitHub's 4-CPU runner, 23 cases); run.py
+# runs it alone, after the parallel phase.
+pytestmark = [pytest.mark.hostsim, pytest.mark.timing]
 
 SYS_PY = "/usr/bin/python3"
 MODES = ["linux_off", "linux_on", "linux_caps"]

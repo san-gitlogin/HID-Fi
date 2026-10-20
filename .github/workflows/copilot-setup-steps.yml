@@ -4,10 +4,10 @@
 # every other Linux route: tests/setup_linux.sh.
 name: Copilot setup steps
 
+# Copilot's coding agent runs this job itself when it starts; nothing triggers it
+# on a push.
 on:
   workflow_dispatch:
-  push:
-    paths: [.github/workflows/copilot-setup-steps.yml, tests/setup_linux.sh, tests/requirements.txt]
 
 jobs:
   copilot-setup-steps:

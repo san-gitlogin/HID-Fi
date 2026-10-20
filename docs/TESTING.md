@@ -46,8 +46,8 @@ result the same way. Reports land in `tests/.reports/` (`junit.xml`,
 ## Testing locally, from nothing
 
 Everything below runs on your own machine, costs nothing, and needs no board
-unless it says so. (CI runs the same on every push, also free: the repository is
-public.)
+unless it says so. (The same tiers can also run on GitHub, free for this public
+repository - but only when someone starts them by hand: see below.)
 
 | Step | macOS | Windows | Linux |
 |---|---|---|---|
@@ -178,7 +178,7 @@ Build Tools on Windows. Node.js 18+ for the dashboard syntax check.
 | **unit** | C++ compiler, ESP32 core | The firmware's real typing code, compiled on your machine against the **installed core's own** `USBHIDKeyboard.cpp` and US key table: every Unicode character round-trips through models of macOS and Linux, ill-formed UTF-8 never becomes a key, nothing is left held; plain-ASCII typing is **byte-identical** (reports and timing) to the committed reference; core canaries; 17 planted bugs must all be caught | No |
 | **ui** | Playwright | Gestures; the reply queue never drifts; 67 viewports with no **new** layout problems; every one of ~700 controls on every tab, at phone, tablet and desktop width, sends exactly what it always sent; the emoji settings and Test button | No |
 | **build** | arduino-cli + pinned core/libs | The firmware compiles with the flasher's exact settings, inside its size budget, with no new compiler warnings in HID-Fi's code | No |
-| **hostsim** | Linux + Xvfb, IBus, GTK | The firmware's exact keystrokes replayed into a real Linux input stack (IBus as on GNOME, and GTK without IBus): every language, emoji, Caps Lock on and off. Runs in CI on every push | No (a virtual X display) |
+| **hostsim** | Linux + Xvfb, IBus, GTK | The firmware's exact keystrokes replayed into a real Linux input stack (IBus as on GNOME, and GTK without IBus): every language, emoji, Caps Lock on and off. Locally on Linux, in WSL, or in Docker (`tests/docker/run.sh`) | No (a virtual X display) |
 | **board** | Board on COM | The serial command surface and the original suites: pointer split, media, power modes, inventory, secrets never leak, vault gate, OS detection, the WiFi join state machine, mouse/wiggle/LED | Net-zero mouse moves, a volume down then up. Never types or clicks |
 | **e2e** | Board on COM **and** USB | Real typing, shortcuts, held keys, macros, every safe key by code, every language with Unicode entry off and on, the PC guard, mouse movement to the pixel, wheel, pan, buttons, drag, wiggle | **Yes** - only into the test page, only while it has focus |
 | **linux** (part of e2e) | Linux + board on COM and USB + `evdev` | The kernel's own events from the board with its devices **grabbed**: every key name including F-keys, Esc, Super, PrtSc; every printable character; dangerous combos; all media keys; sleep, power and wake; gestures; presenter; lock and unlock; exact pointer motion, scroll, pan, buttons; latency from kernel timestamps | No - grabbed devices never reach the desktop |
@@ -723,7 +723,7 @@ python tests/run.py --all            # if you touched firmware, and you have a b
 ```
 
 Paste `tests/.reports/summary.md` into the pull request, and say which OS the
-hardware tiers ran on. CI runs the no-board tiers with strict pins on every push.
+hardware tiers ran on. The GitHub workflow (manual: Actions > tests > Run workflow) runs the no-board tiers with strict pins.
 
 ---
 

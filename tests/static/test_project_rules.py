@@ -246,3 +246,13 @@ def test_the_board_model_never_drives_playwright_from_a_thread():
     src = "\n".join(l.split("#")[0] for l in lines)           # code, not the comment explaining why
     assert "threading.Timer" not in src and "Thread(" not in src, \
         "board_sim.py starts a thread - schedule it with self.later() instead"
+
+
+def test_the_github_workflows_only_run_when_started_by_hand():
+    """The owner asked for no runs (and no failure mails) on push: the local run is
+    the gate. A push, pull-request or schedule trigger must not come back."""
+    for wf in (paths.TESTS.parent / ".github" / "workflows").glob("*.yml"):
+        text = wf.read_text(encoding="utf-8")
+        block = re.search(r"^on:\s*\n((?:[ \t]+.*\n)+)", text, re.M)
+        triggers = set(re.findall(r"^[ \t]{2}([a-z_]+):", block.group(1), re.M)) if block else set()
+        assert triggers == {"workflow_dispatch"}, f"{wf.name} runs on {sorted(triggers)} - manual only"

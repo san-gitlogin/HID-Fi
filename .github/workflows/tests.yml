@@ -1,13 +1,10 @@
-# Every push and pull request: every tier that needs no board.
-# Weekly (and on demand): the same against the LATEST ESP32 core and libraries,
-# so a breaking upstream change is found before a contributor trips over it.
+# Manual only: the Actions tab > tests > Run workflow. It never runs by itself -
+# the gate is the local run (python tests/run.py, tests/docker/run.sh for the
+# Linux tier), so a push sends no mails. Run it by hand when a change needs
+# Windows or a clean Linux machine you do not have. Free for public repositories.
 name: tests
 
 on:
-  push:
-  pull_request:
-  schedule:
-    - cron: "17 3 * * 1"        # Mondays 03:17 UTC - latest-dependencies check
   workflow_dispatch:
 
 jobs:

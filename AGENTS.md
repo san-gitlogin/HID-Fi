@@ -189,10 +189,11 @@ Do these in order. Stop and ask the user at any step marked ASK.
    then copy them into `tests/golden/`, and say so. Never write a golden file to
    make a failure pass.
 
-The PowerShell flasher tests need `pwsh`: native on Windows; elsewhere they skip
-and CI covers them. CI runs static, unit, ui, build and hostsim on Ubuntu and
-the flasher tests on Windows, free for this public repository. Local runs are still the gate: do not
-push to "let CI check it".
+The PowerShell flasher tests need `pwsh`: native on Windows; elsewhere they skip.
+The GitHub workflow is **manual only** (Actions > tests > Run workflow): pushes
+never start it, so the owner gets no mails. Local runs are the gate. Never
+re-enable push, pull-request or scheduled triggers, and do not push to "let CI
+check it".
 
 **The one command** - see [docs/TESTING.md](docs/TESTING.md) for everything:
 
