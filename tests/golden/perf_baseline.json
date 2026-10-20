@@ -1,8 +1,8 @@
 {
  "mac/boot_to_banner": 3.043,
- "mac/key_to_host_p95": 4.998,
+ "mac/key_to_host_p95": 9.744,
  "mac/os_detection": 3.146,
- "mac/pointer_to_host_p95": 3.076,
+ "mac/pointer_to_host_p95": 9.589,
  "mac/serial_cmds_per_s": 58.813,
  "mac/serial_rtt_p95": 17.222,
  "mac/soak_heap_lost": 0,
