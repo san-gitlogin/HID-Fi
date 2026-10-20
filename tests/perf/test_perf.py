@@ -221,3 +221,88 @@ def test_wifi_pointer_stream_keeps_up(ws, perf, request):
         i += 1
         time.sleep(1 / 60)
     perf.check("wifi_ping_under_stream_p95", pct(lat, 95), "ms", 120, detail=summary(lat) | {"frames": i})
+
+
+# ---- several phones at once ------------------------------------------------------------------------
+def _open_signed_in(url, pin):
+    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
+    c = websocket.create_connection(url, timeout=5)
+    c.settimeout(0.8)
+    try:
+        greet = c.recv()
+        needs = isinstance(greet, str) and "auth_required" in greet
+    except websocket.WebSocketTimeoutException:
+        needs = False
+    c.settimeout(5)
+    if needs:
+        if not pin:
+            c.close()
+            pytest.skip("the board has an access PIN - pass it with HIDFI_PIN so pointer frames are accepted")
+        c.send(json.dumps({"cmd": "auth", "token": pin}))
+        end = time.time() + 5
+        while time.time() < end:
+            m = c.recv()
+            if isinstance(m, str) and "auth_" in m:
+                assert "auth_ok" in m, "the PIN was not accepted"
+                break
+    return c
+
+
+@pytest.mark.parametrize("phones", [2, 3])
+def test_several_phones_driving_the_pointer_at_once(board, request, perf, phones):
+    """Each phone streams 60 pointer frames a second (net zero) for 5 s, all at the
+    same time, and measures the board's answer to its own pings while it does.
+    Every frame from every phone must reach the HID path (the board's command
+    counter), and no phone may be starved: each one's p95 stays within the same
+    120 ms the single-phone stream is held to."""
+    import threading
+    from support.board import lan_url
+    url = lan_url(request.config.getoption("--board-url"), board)
+    if not url:
+        pytest.skip("needs --board-url ws://<board-ip>:81 and this machine on the board's network")
+    pin = request.config.getoption("--board-pin")
+    conns = [_open_signed_in(url, pin) for _ in range(phones)]
+    lat = [[] for _ in conns]
+    frames = [0] * phones
+    pings = [0] * phones
+    errors = []
+    start = threading.Barrier(phones)
+
+    def phone(k):
+        c = conns[k]
+        try:
+            start.wait()
+            t_end = time.time() + 5
+            i = 0
+            while time.time() < t_end:
+                d = 2 if i % 2 == 0 else -2
+                c.send_binary(struct.pack("<Bhhbb", 1, d, 0, 0, 0))
+                frames[k] += 1
+                if i % 6 == 0:
+                    lat[k].append(_ping(c, 1_000_000 * (k + 1) + i))
+                    pings[k] += 1
+                i += 1
+                time.sleep(1 / 60)
+        except Exception as e:                       # a phone that stalls or loses its socket
+            errors.append(f"phone {k + 1}: {type(e).__name__}: {e}")
+
+    before = board.status()["cmd_count"]
+    threads = [threading.Thread(target=phone, args=(k,)) for k in range(phones)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    time.sleep(0.5)
+    after = board.status()["cmd_count"]
+    for c in conns:
+        c.close()
+
+    assert not errors, "a phone was starved or dropped:\n  " + "\n  ".join(errors)
+    moved = sum(frames)
+    counted = after - before - 1                      # the status read in between is one command
+    # Pings may or may not be counted as commands; moves must all be.
+    assert moved <= counted <= moved + sum(pings), \
+        f"{moved} pointer frames sent by {phones} phones, the board counted {counted}"
+    worst = max(pct(l, 95) for l in lat)
+    perf.check(f"wifi_{phones}_phones_worst_p95", worst, "ms", 120,
+               detail={f"phone{k + 1}": summary(l) for k, l in enumerate(lat)} | {"frames": moved})

@@ -158,16 +158,20 @@ class Board:
 
 
 def lan_url(url, board):
-    """--board-url, corrected to where the board actually is now.
+    """--board-url, corrected to where the board actually is now - or, if none was
+    given, the board's own report of its home address.
 
     A router can hand the board a new address after a restart - that is what
     tests/board/test_home_network.py is about, and it happened during it. The
     board's own report of its home address beats one typed on the command line.
     The board's own access point (192.168.4.x) never moves, so it is left alone.
     """
-    if not url or "//192.168.4." in url:
+    if url and "//192.168.4." in url:
         return url
     st = board.status()
+    if not url:                                   # not given: wherever the board says it is
+        ip = st.get("wifi_ip")
+        return f"ws://{ip}:81" if st.get("wifi_connected") and ip else None
     ip = st.get("wifi_ip")
     if st.get("wifi_connected") and ip and f"//{ip}:" not in url:
         return f"ws://{ip}:81"
