@@ -83,6 +83,9 @@
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "lwip/etharp.h"  // MAC -> IP for AP clients
+#include "lwip/netif.h"
+#include "lwip/tcpip.h"
+#include "esp_netif_net_stack.h"
 #include "nvs.h"
 
 // Dashboard markup lives in web_ui.h (defines WEB_INTERFACE[] in PROGMEM).
@@ -756,6 +759,8 @@ void stopAP();
 void restartAP();
 void handlePowerMode(const JsonDocument& inDoc);
 bool clientIsAp(const IPAddress& ip);
+bool peerAllowed(const IPAddress& ip);
+void staLinkLocalOnly();
 const char* linkQuality(int rssi);
 bool validUtf8(const char* s, size_t len);
 bool hasControlChars(const char* s, size_t len);
@@ -1169,6 +1174,13 @@ void setupWifi() {
 
 void startAP() {
     WiFi.mode(WIFI_AP_STA);  // Always AP+STA so we can scan and connect later
+    // An IPv6 link-local address on the home network, so the .local name
+    // answers the IPv6 (AAAA) question too. Without it macOS and iOS wait 5 s
+    // for that answer on every lookup: the dashboard by name took a minute to
+    // load and every reconnect stalled (measured 5.0 s; 0.002 s for IPv4).
+    // The web and WebSocket servers already listen dual-stack.
+    WiFi.STA.enableIPv6(true);
+    staLinkLocalOnly();
 
     // Radio sleep is decided by the power policy, not hard-coded here. See the
     // PowerMode notes with the globals for why this matters so much for feel.
@@ -1296,6 +1308,36 @@ void restartAP() {
     apIdleSince = millis();
     apShareActive = false;      // a fresh AP: sharing is applied again on the next tick
     COM_SERIAL.printf("[AP] Back up: %s at %s\n", apSSID.c_str(), apIP.c_str());
+}
+
+// IPv6 is on for one reason: so the .local name answers the IPv6 question and
+// browsers stop waiting 5 s for it. That needs only the link-local address.
+// A router would also hand out a public IPv6 address, which could make the
+// dashboard reachable from the internet where the router lets IPv6 in: so no
+// autoconfigured addresses (in lwIP's own thread), and below, every request and
+// socket from a non-local IPv6 address is refused.
+static void staNoGlobalIp6Cb(void* arg) {
+    struct netif* n = (struct netif*)arg;
+    netif_set_ip6_autoconfig_enabled(n, 0);
+    for (int i = 1; i < LWIP_IPV6_NUM_ADDRESSES; i++)        // 0 is the link-local one
+        netif_ip6_addr_set_state(n, i, IP6_ADDR_INVALID);
+}
+void staLinkLocalOnly() {
+    esp_netif_t* e = WiFi.STA.netif();
+    struct netif* n = e ? (struct netif*)esp_netif_get_netif_impl(e) : nullptr;
+    if (n) tcpip_callback(staNoGlobalIp6Cb, n);
+}
+
+// A peer this board answers: any IPv4 (home NAT or the board's own AP), and
+// IPv6 only from the local link (fe80::/10) or a unique-local network (fc00::/7).
+bool peerAllowed(const IPAddress& ip) {
+    if (ip.type() != IPv6) return true;
+    const uint8_t a = ip[0], b = ip[1];
+    if (a == 0xfe && (b & 0xc0) == 0x80) return true;          // link-local
+    if ((a & 0xfe) == 0xfc) return true;                        // unique local
+    bool mapped = true;                                         // ::ffff:a.b.c.d is IPv4
+    for (int i = 0; i < 10; i++) mapped = mapped && ip[i] == 0;
+    return mapped && ip[10] == 0xff && ip[11] == 0xff;
 }
 
 // Everything on the board's own access point sits on the softAP subnet.
@@ -1513,6 +1555,7 @@ static void broadcastJson(const JsonDocument& doc) {
 
 // On the network: either a join just finished, or the address changed under us.
 void staCameOnline(const String& ip) {
+    staLinkLocalOnly();   // a reconnect may have brought router-given addresses back
     bool changed = staLastIp.length() && ip != staLastIp;
     if (changed) {
         staPrevIp = staLastIp;
@@ -1903,6 +1946,14 @@ void setupWebRoutes() {
     static const char* keepHeaders[] = { "X-Auth" };
     webServer.collectHeaders(keepHeaders, 1);
     // Serve dashboard at root
+    // Every request: refused from a public IPv6 address (see peerAllowed).
+    webServer.addMiddleware([](WebServer& s, Middleware::Callback next) {
+        if (!peerAllowed(s.client().remoteIP())) {
+            s.send(403, "text/plain", "Only from the local network");
+            return true;
+        }
+        return next();
+    });
     webServer.on("/", HTTP_GET, []() {
         webServer.send_P(200, "text/html", WEB_INTERFACE);
     });
@@ -4050,6 +4101,10 @@ static inline uint32_t rdU32(const uint8_t* p) {
 void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
     switch (type) {
         case WStype_CONNECTED:
+            if (!peerAllowed(webSocket.remoteIP(num))) {   // a public IPv6 peer: never
+                webSocket.disconnect(num);
+                return;
+            }
             if (num < WS_MAX_CLIENTS) {
                 wsAuthed[num]  = (authToken.length() == 0);
                 wsFromLan[num] = !clientIsAp(webSocket.remoteIP(num));

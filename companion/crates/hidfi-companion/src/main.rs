@@ -76,9 +76,9 @@ fn main() {
     let first_run = store.key().is_none();
     let handle = service::start(store, env);
 
-    #[cfg(any(target_os = "macos", windows))]
     #[cfg(target_os = "macos")]
     replaced::watch();
+    #[cfg(any(target_os = "macos", windows))]
     desktop::run(handle, state, store_for_settings, first_run);
     #[cfg(target_os = "linux")]
     linux::run(handle, state, store_for_settings, first_run);
