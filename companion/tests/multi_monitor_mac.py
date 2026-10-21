@@ -43,7 +43,10 @@ print("virtual displays:", ids, flush=True)
 try:
     time.sleep(4)   # the app checks its display list every 3 s
     with sync_playwright() as p:
-        b = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required"])
+        # Pop-ups allowed, as after the one "Always allow" Chrome offers when the
+        # wall opens several windows (it allows one per click until then, and the
+        # wall says how many were blocked).
+        b = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required", "--disable-popup-blocking"])
         phone = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True).new_page()
         phone.goto(URL + "/#screen"); sign_in(phone)
         phone.wait_for_function("SCR.state==='live' && scrVideo.videoWidth>0", timeout=30000)
@@ -86,17 +89,28 @@ try:
               shape(watch)[0] > shape(watch)[1], f"{shape(watch)} {time.time()-t1:.1f}s after the message")
         check("the phone keeps its own monitor meanwhile", phone.evaluate(f"SCR.disp==={ids[1]}") and phone.evaluate("SCR.state") == "live")
         watch.screenshot(path="/tmp/hidfi-mm-watch.png")
+        # The wall needs a place per monitor (six viewers in all, and the owner's
+        # own phone may be watching): the phone and watch screen above are done.
+        phone.context.close(); watch.context.close(); time.sleep(2)
         # The wall: every monitor left (built-in + two) at once, in one window.
         wall = b.new_context(viewport={"width": 1600, "height": 1000}).new_page()
         wall.goto(URL + "/#wall"); sign_in(wall)
-        wall.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=40000)
+        try:
+            wall.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=40000)
+        except Exception:
+            print("wall:", wall.evaluate("JSON.stringify(WALL.tiles.map(t=>[t.disp,t.state,t.why,t.msg]))"))
+            raise
         tiles = wall.evaluate("WALL.tiles.map(t=>[t.disp, t.el.querySelector('video').videoWidth, t.el.querySelector('video').videoHeight])")
         check("the wall shows all three monitors live at once, each its own", len({t[0] for t in tiles}) == 3, str(tiles))
         wall.screenshot(path="/tmp/hidfi-mm-wall.png")
         # Every monitor in its own window: windows the board serves for real.
-        with wall.context.expect_page() as first:
-            wall.click("#wallPopAll")
-        time.sleep(6)
+        # Each monitor popped out with its own button: one click, one window -
+        # what works in any browser without changing its pop-up setting.
+        for _ in range(3):
+            with wall.context.expect_page():
+                wall.locator("#wallGrid .wtile").first.locator("[data-wpop]").click()
+            time.sleep(1)
+        time.sleep(4)
         pops = [p for p in wall.context.pages if "#watch" in p.url]
         for p_ in pops:
             try:
