@@ -105,3 +105,8 @@ jobs:
         with:
           name: latest-deps-reports
           path: tests/.reports/
+
+  # HID-Fi Companion on macOS, Windows and Linux (x86-64 and ARM).
+  companion:
+    uses: ./.github/workflows/companion.yml
+

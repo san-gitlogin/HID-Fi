@@ -9,6 +9,7 @@ name: companion
 
 on:
   workflow_dispatch:
+  workflow_call:      # tests.yml runs it too, so one manual run covers everything
 
 permissions:
   contents: read
