@@ -37,7 +37,22 @@ impl Browse for NoBrowse {
     }
 }
 
+struct Stderr;
+impl log::Log for Stderr {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::Level::Debug
+    }
+    fn log(&self, r: &log::Record) {
+        if self.enabled(r.metadata()) {
+            eprintln!("{} {}: {}", r.level(), r.target(), r.args());
+        }
+    }
+    fn flush(&self) {}
+}
+
 fn main() {
+    // The service's log on stderr (a test may keep it).
+    let _ = log::set_logger(&Stderr).map(|()| log::set_max_level(log::LevelFilter::Debug));
     let a: Vec<String> = std::env::args().collect();
     let store = Store::open(a[1].clone().into()).unwrap();
     let mut st = store.state();

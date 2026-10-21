@@ -476,3 +476,9 @@ Feature: Screen - seeing the computer's own picture
     And I tap the "#wallPopAll" control
     Then 3 windows open, one per monitor
 
+  # Found by the live test: a page opened straight at #wall left it at once
+  # (start-up wrote the default tab into the address).
+  Scenario: The wall opens straight from its address
+    Given a computer "Studio PC" with 3 displays is paired and running, and this screen opens "#wall"
+    Then the wall shows 3 monitors, all live
+

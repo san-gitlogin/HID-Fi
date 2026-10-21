@@ -57,7 +57,8 @@ board = ThreadingHTTPServer((IP, 0), Board); threading.Thread(target=board.serve
 
 app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), tempfile.mkdtemp(prefix="hidfi-dash-"),
                         f"http://{IP}:{board.server_address[1]}", "B8:1F:3F:DA:1A:2C"],
-                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                       stderr=open(os.environ.get("APP_LOG", os.devnull), "w"),
                        env=dict(os.environ, HIDFI_DISPLAYS="4"))   # main 1280x720, then 1280x1024, 1080x1920, 1600x900
 lines = queue.Queue()
 threading.Thread(target=lambda: [lines.put(json.loads(l)) for l in app.stdout], daemon=True).start()
@@ -107,7 +108,14 @@ try:
         pg.wait_for_function("document.getElementById('scrBadge').innerText.includes('fps')", timeout=6000)
         check("the badge names the computer and the frame rate", "System Test PC" in pg.inner_text("#scrBadge"), pg.inner_text("#scrBadge"))
         check("the trackpad sits in the Screen tab", pg.evaluate("padwrap.parentNode.id") == "scrPadSlot")
+        pg.evaluate("document.getElementById('toasts').innerHTML=''")
         pg.screenshot(path=str(shots / "live-phone.png"))
+        pg.set_viewport_size({"width": 1180, "height": 820})    # a tablet, sideways: picture beside the pad
+        pg.wait_for_timeout(1200)
+        pg.evaluate("document.getElementById('toasts').innerHTML=''")
+        pg.screenshot(path=str(shots / "live-tablet.png"))
+        pg.set_viewport_size({"width": 390, "height": 844})
+        pg.wait_for_timeout(800)
 
         pg.tap("#scrIn"); pg.tap("#scrIn")
         s = pg.evaluate("SCR.z.s")
@@ -131,10 +139,22 @@ try:
         # The wall: every monitor at once, on a desktop browser.
         wctx = b.new_context(viewport={"width": 1280, "height": 760}, device_scale_factor=2)
         wpg = wctx.new_page(); wpg.add_init_script("sessionStorage.setItem('pin','4826')")
+        werrs = []; wpg.on("pageerror", lambda e: werrs.append(str(e)[:200]))
+        wpg.on("console", lambda m: werrs.append(m.text[:200]) if m.type in ("error", "warning") else None)
+        wpg.add_init_script("addEventListener('unhandledrejection',e=>console.error('rejection: '+(e.reason&&e.reason.stack||e.reason)))")
         sim.attach(wpg, extract_html()); wpg.goto(URL + "#wall")
-        wpg.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=30000)
-        check("the wall shows every monitor at once", True, str(wpg.evaluate("WALL.tiles.map(t=>wallName(t.disp))")))
+        try:
+            wpg.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=30000)
+        except Exception:
+            print("wall:", wpg.evaluate("JSON.stringify({sel:SCR.sel,loaded:SCR.loaded,list:WALL.list.map(d=>d.id),want:WALL.want,"
+                  "tiles:WALL.tiles.map(t=>[t.disp,t.state,t.why,t.el&&t.el.querySelector('video').videoWidth]),"
+                  "ws:wsUp,link:document.getElementById('ltext').textContent,sheet:document.getElementById('sheet').classList.contains('on')})"), werrs)
+            raise
+        check("the wall shows every monitor at once, and nothing else",
+              wpg.evaluate("document.getElementById('wallGrid').children.length") == 3,
+              str(wpg.evaluate("WALL.tiles.map(t=>wallName(t.disp))")))
         wpg.wait_for_timeout(1200)
+        wpg.evaluate("document.getElementById('toasts').innerHTML=''")
         wpg.screenshot(path=str(shots / "wall-desktop.png"))
         wctx.close()
 
@@ -147,6 +167,7 @@ try:
         box = pg.locator("#scrFloat").bounding_box()
         check("the floating window is inside the screen, clear of the tab bar",
               box["x"] >= 0 and box["y"] >= 0 and box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844 - 60, str(box))
+        pg.evaluate("document.getElementById('toasts').innerHTML=''")
         pg.screenshot(path=str(shots / "float-phone.png"))
         pg.tap("#scrFDock")
         check("dock brings it back to the Screen tab", pg.evaluate("!SCR.float && curView==='screen'"))
@@ -178,7 +199,9 @@ try:
         third.evaluate("refresh()"); time.sleep(1.5)
         title = third.evaluate("document.getElementById('connPill').title")
         check("three dashboards signed in with one PIN, counted as one device with three pages",
-              third.evaluate("document.getElementById('connN').textContent") == "1" and "(3 pages)" in title, title)
+              # (a page closed a moment ago may still be on its way out: at least 3)
+              third.evaluate("document.getElementById('connN').textContent") == "1"
+              and int((re.search(r"\((\d+) pages\)", title) or [0, 0])[1]) >= 3, title)
         ctx2.close(); ctx3.close()
         wait_app(lambda v: v["watching"] == 1, 8, "back to one viewer")
         check("closing the watch screen frees its place", True)

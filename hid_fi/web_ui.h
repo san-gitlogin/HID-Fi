@@ -2512,7 +2512,7 @@ function go(id){
   $('vtitle').textContent=v?v.t:'';
   $('btnInfo').setAttribute('aria-label',(v?v.t:'')+' help');
   $('main').scrollTop=0;
-  if(!WATCH.on){try{location.hash=id;}catch(e){}}
+  if(!WATCH.on&&!WALL.on){try{location.hash=id;}catch(e){}}
   scrView(id);
   // Who is connected changes while the page is open; show it as it is now.
   if(id==='setup'&&wsUp)loadClients();
@@ -5305,6 +5305,8 @@ const SCR={
 // another device does the controlling. Declared here, before anything can call
 // it; the page marked html.watch before its first paint.
 const WATCH={on:location.hash==='#watch',idleT:0};
+// All monitors at once (#wall): declared here, before anything at load reads it.
+const WALL={on:location.hash==='#wall',want:0,list:[],tiles:[]};
 const scrVideo=$('scrVideo'),scrStage=$('scrStage');
 const PADHOME={parent:padwrap.parentNode,next:padwrap.nextSibling};
 function scrList(){
@@ -5826,7 +5828,6 @@ addEventListener('pagehide',()=>scrStop('idle'));
 // Each tile is its own viewer (the computer serves four at once): the first
 // learns the monitors, the rest take the next ones. Pop a tile out into its
 // own window to drag it to another screen; full screen a tile, or the wall.
-const WALL={on:location.hash==='#wall',want:0,list:[],tiles:[]};
 function wallEnter(){
   WALL.on=true;document.documentElement.classList.add('wall');
   if(SCR.float)scrFloat(false);
@@ -5859,6 +5860,8 @@ function wallFit(){
     used.push(tile.disp);WALL.tiles.push(tile);
   }
   const g=$('wallGrid');g.dataset.n=String(WALL.tiles.length);
+  // Anything that is not a tile (the "Asking the board..." placeholder) goes.
+  [...g.children].forEach(c=>{if(!WALL.tiles.some(x=>x.el===c))c.remove();});
   WALL.tiles.forEach((tl,i)=>{
     if(!tl.el){
       tl.el=document.createElement('div');tl.el.className='wtile';
@@ -5912,7 +5915,7 @@ function wallOn(tl,s){
   else if(s.indexOf('display:')===0){let m;try{m=JSON.parse(s.slice(8));}catch(e){return;}tl.disp=m.id;}
   else if(s!=='connecting'){
     tl.h=null;tl.state='ended';
-    const why=s.slice(s.indexOf(':')+1);
+    const why=s.slice(s.indexOf(':')+1);tl.why=s;
     tl.msg=why==='busy'?'Six screens already watch this computer':why==='permission'?(scrPc()||{}).name+
       ' is not allowed to record its screen yet':'Reconnecting...';
     wallRetry(tl,why==='busy'?6000:2000);

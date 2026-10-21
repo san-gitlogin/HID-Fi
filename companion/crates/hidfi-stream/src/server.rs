@@ -380,8 +380,19 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
         serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)}),
     )
     .map_err(|e| e.to_string())?;
-    let Some(FromViewer::Offer { sdp }) = expect(&mut ws, OFFER_DEADLINE) else {
-        return Err("no offer".into());
+    // The offer, within the deadline. A viewer may ask for its monitor first
+    // (it knows the list from "ready"): keep that for when it is set up - seen
+    // live, insisting on the offer first failed every remembered monitor and
+    // every wall tile ("no offer").
+    let until = Instant::now() + OFFER_DEADLINE;
+    let mut early_display: Option<u32> = None;
+    let sdp = loop {
+        match read(&mut ws, until) {
+            Ok(Got::Msg(Some(FromViewer::Offer { sdp }))) => break sdp,
+            Ok(Got::Msg(Some(FromViewer::Display { id }))) => early_display = Some(id),
+            Ok(Got::Msg(_)) => {}
+            Ok(Got::Quiet) | Err(_) => return Err("no offer".into()),
+        }
     };
     let prepared = match rtc::prepare(&sdp, local_ip, c.cert.clone()) {
         Ok(p) => p,
@@ -407,6 +418,13 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let ended: Arc<Mutex<Option<End>>> = Arc::default();
     let id = c.pipeline.subscribe(vtx);
     let control = c.pipeline.control(id);
+    if let Some(d) = early_display {
+        if display::main_id(&shown) == Some(d) {
+            control.set_display(MAIN);
+        } else if shown.iter().any(|x| x.id == d) {
+            control.set_display(d);
+        }
+    }
     // Frames hop from the pipeline's channel into the session's.
     let fwd_tx = tx.clone();
     let fwd_stop = stop.clone();

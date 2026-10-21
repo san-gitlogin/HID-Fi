@@ -509,7 +509,7 @@ def not_contains(ctx, el_id, text):
 
 
 # ---- watch only ---------------------------------------------------------------------------
-def _open_watch(ctx, browser, names):
+def _open_watch(ctx, browser, names, at="#watch", displays=1):
     """Pairs and serves the computers first, then opens the page straight at #watch
     and signs in - the way a TV or a second tablet would open it."""
     sim = ctx["sim"]
@@ -517,13 +517,13 @@ def _open_watch(ctx, browser, names):
     ui = Dashboard(browser, sim, device="phone", answers=ctx["answers"], init=ctx["init"])
     for name in names:
         app = _new_app(ctx, name)
-        pc = FakePc(browser, app, "live")
+        pc = FakePc(browser, app, "live", displays=displays)
         _pcs(ctx)[name] = pc
         _pair(ctx, app)
         with sim.lock:
             app.beat()
         pc.serve(ui.page)
-    ui.page.goto(ui.sim.URL + "#watch")
+    ui.page.goto(ui.sim.URL + at)
     ui.page.wait_for_selector("#sheet.on .pinbox", timeout=8000)
     # As conftest._enter_pin does it (the step module cannot import conftest).
     ui.page.wait_for_function("""() => { const b = [...document.querySelectorAll('#sheet.on .pinbox')];
@@ -536,6 +536,11 @@ def _open_watch(ctx, browser, names):
     ui.page.wait_for_function("() => !document.getElementById('sheet').classList.contains('on')", timeout=5000)
     ui.idle(300)
     ctx["ui"] = ui
+
+
+@given(parsers.parse('a computer "{name}" with {n:d} displays is paired and running, and this screen opens "#wall"'))
+def wall_direct(ctx, browser, name, n):
+    _open_watch(ctx, browser, [name], at="#wall", displays=n)
 
 
 @given(parsers.parse('"{name}" is paired and running and this screen opens "#watch"'))
