@@ -32,7 +32,7 @@ html,body{height:100%}
 body{font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--fg);
   background:radial-gradient(90% 60% at 80% -10%,rgba(0,210,255,.13),transparent 60%),
   linear-gradient(170deg,#07090f,#0d1119 60%,#0a0f18);padding:22px;user-select:none;-webkit-user-select:none;
-  display:flex;flex-direction:column;gap:16px;cursor:default}
+  display:flex;flex-direction:column;gap:16px;cursor:default;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:12px}
 .brand b{font-size:15px;font-weight:650;display:block}
 .brand span{font-size:12px;color:var(--fg3)}
@@ -50,7 +50,9 @@ body{font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-s
   font-variant-numeric:tabular-nums;color:var(--fg)}
 #code .hint{color:var(--fg2);font-size:12.5px;margin-top:8px}
 ol{list-style:none;display:flex;flex-direction:column;gap:10px}
-li{display:flex;gap:10px;align-items:center;color:var(--fg3);font-size:13.5px}
+li{display:flex;gap:10px;align-items:flex-start;color:var(--fg3);font-size:13.5px}
+li .t{padding-top:2px}li .d{font-size:12.5px;color:var(--fg3);margin-top:2px;line-height:1.45}
+li.now .d{color:var(--fg2)}
 li .n{width:24px;height:24px;flex:0 0 24px;border-radius:50%;display:grid;place-items:center;
   border:1px solid var(--line);font-size:12px;font-weight:600}
 li.now{color:var(--fg)}li.now .n{border-color:var(--acc);color:var(--acc);box-shadow:0 0 0 3px rgba(0,210,255,.12)}
@@ -89,11 +91,13 @@ window.render=m=>{
   $('hicon').innerHTML='<use href="#'+ic[0]+'"/>';$('hicon').setAttribute('class','ic '+ic[1]);
   // With a code on screen it is said once, large, not again in the headline.
   $('headline').textContent=m.code?'Pair this computer with HID-Fi':(m.lines[0]||'');
-  $('details').innerHTML=m.lines.slice(1).map(l=>'<div class="detail">'+esc(l)+'</div>').join('');
+  // The steps below say what to do; the card adds only a problem, if any.
+  $('details').innerHTML=(m.problem?[m.problem]:[]).map(l=>'<div class="detail">'+esc(l)+'</div>').join('');
   $('code').style.display=m.code?'block':'none';
   $('digits').textContent=m.code||'';
   $('steps').innerHTML=m.steps.map((s,i)=>'<li class="'+s[1]+'"><span class="n">'+
-    (s[1]==='done'?'<svg class="ic" style="width:14px;height:14px"><use href="#i-check"/></svg>':(i+1))+'</span>'+esc(s[0])+'</li>').join('');
+    (s[1]==='done'?'<svg class="ic" style="width:14px;height:14px"><use href="#i-check"/></svg>':(i+1))+'</span>'+
+    '<div class="t">'+esc(s[0])+(s[2]?'<div class="d">'+esc(s[2])+'</div>':'')+'</div></li>').join('');
   $('btns').innerHTML=m.actions.map((a,i)=>'<button data-i="'+i+'" class="'+(i===0?'primary':'')+'">'+esc(a)+'</button>').join('')+
     '<button data-close="1">Close</button>';
 };
@@ -118,8 +122,9 @@ pub fn view_json(m: &Model, v: &View) -> String {
     serde_json::json!({
         "icon": icon,
         "lines": m.lines,
+        "problem": v.problem,
         "code": m.title,
-        "steps": menu::steps(v).iter().map(|(l, s)| [*l, step(*s)]).collect::<Vec<_>>(),
+        "steps": menu::steps(v).iter().map(|(l, s, d)| [*l, step(*s), d.as_str()]).collect::<Vec<_>>(),
         "actions": m.actions.iter().map(|(l, _)| l).collect::<Vec<_>>(),
     })
     .to_string()
@@ -132,7 +137,7 @@ impl Panel {
     ) -> Result<Panel, String> {
         let window = WindowBuilder::new()
             .with_title("HID-Fi Companion")
-            .with_inner_size(LogicalSize::new(400.0, 580.0))
+            .with_inner_size(LogicalSize::new(400.0, 640.0))
             .with_min_inner_size(LogicalSize::new(360.0, 480.0))
             .build(target)
             .map_err(|e| e.to_string())?;

@@ -95,8 +95,11 @@ pub fn model(v: &View) -> Model {
                 }
                 Status::WaitingForApproval => {
                     icon = Icon::Attention;
-                    lines.push(format!("\"{}\" is asking to pair", v.name));
-                    lines.push("Open the dashboard and tap Pair on the Screen tab".into());
+                    lines.push("Waiting for you to tap Pair on the dashboard".into());
+                    lines.push(format!(
+                        "Screen tab, next to \"{}\" (this computer)",
+                        v.name
+                    ));
                 }
                 Status::ShowCode(c) => {
                     icon = Icon::Attention;
@@ -153,8 +156,12 @@ pub fn model(v: &View) -> Model {
             icon = Icon::Attention;
         }
         lines.push("Screen Recording is not allowed for this app yet".into());
+        // The first button is the main one: pairing comes first while it is
+        // pending (allowing makes macOS restart the app), this right after.
+        let paired = matches!(v.session, Status::Online | Status::Reconnecting);
+        let at = if paired { 0 } else { actions.len().min(1) };
         actions.insert(
-            0,
+            at,
             (
                 "Allow Screen Recording…".into(),
                 Action::AllowScreenRecording,
@@ -186,7 +193,10 @@ pub enum Step {
     Later,
 }
 
-pub fn steps(v: &View) -> [(&'static str, Step); 3] {
+/// The three steps, each with a line saying what happened or what to do -
+/// so the window never moves on without saying why (seen live: step 1 ticked
+/// itself and the owner thought someone had done something behind their back).
+pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
     let found = matches!(v.board, BoardState::Found { .. });
     let paired = found && matches!(v.session, Status::Online | Status::Reconnecting);
     let ready = paired && v.capture_allowed;
@@ -199,10 +209,61 @@ pub fn steps(v: &View) -> [(&'static str, Step); 3] {
             Step::Later
         }
     };
+    let one = match &v.board {
+        BoardState::Looking => "Looking on this computer's USB ports\u{2026}".to_string(),
+        BoardState::NotPluggedIn { .. } => {
+            "Plug the board's USB port (not the one marked COM) into this computer.".to_string()
+        }
+        BoardState::NotOnNetwork => "Plugged in, but the board is not on this computer's WiFi yet: \
+             dashboard, Settings, Home network."
+            .to_string(),
+        BoardState::Choose(_) => "More than one is plugged in: choose one below.".to_string(),
+        BoardState::Found { url, .. } => format!(
+            "Found on this computer's USB, and on your WiFi at {}. Nothing to do.",
+            short_url(url)
+        ),
+    };
+    let two = if !found {
+        "Pairing (once) lets only your dashboard see this screen.".to_string()
+    } else {
+        match &v.session {
+            Status::NeedsPin => {
+                "First give the board an access PIN: dashboard, Settings, Access PIN.".to_string()
+            }
+            Status::WaitingForApproval => format!(
+                "Pairing (once) lets only your dashboard see this screen. On your phone: \
+                 open the dashboard, Screen tab, and tap Pair next to \"{}\".",
+                v.name
+            ),
+            Status::ShowCode(_) => {
+                "Type the code above on your phone and tap Pair. It proves the phone is \
+                 talking to this computer and not to someone in between."
+                    .to_string()
+            }
+            Status::PairingFailed | Status::PairingExpired => {
+                "Not paired this time. Choose Pair again below.".to_string()
+            }
+            Status::Online | Status::Reconnecting => "Paired. Nothing to do.".to_string(),
+            _ => "Connecting to the board\u{2026}".to_string(),
+        }
+    };
+    let three = if !v.capture_allowed {
+        "macOS asks once: click Allow Screen Recording, switch on HID-Fi Companion, \
+         then choose Quit & Reopen when macOS offers it."
+            .to_string()
+    } else if !paired {
+        "After pairing, the Screen tab shows this screen.".to_string()
+    } else {
+        match v.watching {
+            0 => "Ready. Open the Screen tab on the dashboard to see this screen.".to_string(),
+            1 => "Shown on 1 screen now.".to_string(),
+            n => format!("Shown on {n} screens now."),
+        }
+    };
     [
-        ("Plug HID-Fi into this computer", st(found, true)),
-        ("Pair with the dashboard", st(paired, found)),
-        ("Show this screen on the Screen tab", st(ready, paired)),
+        ("Plug HID-Fi into this computer", st(found, true), one),
+        ("Pair with the dashboard", st(paired, found), two),
+        ("Show this screen on the Screen tab", st(ready, paired), three),
     ]
 }
 
@@ -216,6 +277,41 @@ pub fn needs_window(v: &View) -> bool {
         || matches!(v.board, BoardState::NotOnNetwork | BoardState::Choose(_))
 }
 
+/// A name for "the thing the user is being asked to do now".
+pub fn episode(v: &View) -> String {
+    format!("{:?}|{:?}", v.board, v.session)
+}
+
+/// When the window comes forward by itself: once for each new thing the user
+/// must do, and not for one they closed it on. Not again while it stays the
+/// same - it used to take focus twice a second while waiting for Pair, so
+/// nothing else on the computer could be used (seen live: "froze like hell").
+#[derive(Default)]
+pub struct AutoOpen {
+    shown_for: Option<String>,
+    dismissed: Option<String>,
+}
+
+impl AutoOpen {
+    /// Whether to bring the window forward now. Call once per tick.
+    pub fn tick(&mut self, v: &View) -> bool {
+        if !needs_window(v) {
+            self.shown_for = None;
+            return false;
+        }
+        let ep = episode(v);
+        if self.dismissed.as_deref() == Some(ep.as_str()) || self.shown_for.as_deref() == Some(ep.as_str()) {
+            return false;
+        }
+        self.shown_for = Some(ep);
+        true
+    }
+    /// The user closed the window on this: do not bring it back for it.
+    pub fn dismissed(&mut self, v: &View) {
+        self.dismissed = Some(episode(v));
+    }
+}
+
 fn short_url(u: &str) -> &str {
     u.trim_start_matches("http://")
         .trim_start_matches("https://")
@@ -225,6 +321,21 @@ fn short_url(u: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_comes_forward_once_per_thing_to_do_not_every_tick() {
+        let mut a = AutoOpen::default();
+        let waiting = view(found(), Status::WaitingForApproval);
+        let opened = (0..100).filter(|_| a.tick(&waiting)).count();
+        assert_eq!(opened, 1, "once while waiting for Pair, not twice a second");
+        let code = view(found(), Status::ShowCode("123456".into()));
+        assert!(a.tick(&code), "a new thing to do: forward again");
+        assert!(!a.tick(&code));
+        a.dismissed(&code);
+        assert!(!a.tick(&code), "closed on it: stays closed");
+        assert!(!a.tick(&view(found(), Status::Online)), "nothing to do");
+        assert!(a.tick(&waiting), "asked to pair again later: forward again");
+    }
 
     fn view(board: BoardState, session: Status) -> View {
         View {
@@ -357,6 +468,41 @@ mod tests {
         let mut v = view(found(), Status::Online);
         v.capture_allowed = false;
         assert_eq!(steps(&v)[2].1, Step::Now);
+    }
+
+    #[test]
+    fn every_step_says_what_happened_or_what_to_do() {
+        let s = steps(&view(found(), Status::WaitingForApproval));
+        assert!(s[0].2.contains("USB") && s[0].2.contains("esp-hid-da1a2c.local"), "how it was found: {}", s[0].2);
+        assert!(s[1].2.contains("tap Pair") && s[1].2.contains("Studio PC"), "{}", s[1].2);
+        assert!(s[1].2.contains("only your dashboard"), "what pairing is for: {}", s[1].2);
+        let s = steps(&view(found(), Status::ShowCode("123456".into())));
+        assert!(s[1].2.contains("code above"));
+        let mut v = view(found(), Status::Online);
+        v.capture_allowed = false;
+        assert!(steps(&v)[2].2.contains("Quit & Reopen"), "the restart macOS asks for is expected");
+        v.capture_allowed = true;
+        v.watching = 3;
+        assert_eq!(steps(&v)[2].2, "Shown on 3 screens now.");
+        for b in [
+            BoardState::Looking,
+            BoardState::NotPluggedIn { elsewhere: 0 },
+            BoardState::NotOnNetwork,
+            BoardState::Choose(vec![]),
+        ] {
+            assert!(!steps(&view(b, Status::Connecting))[0].2.is_empty());
+        }
+    }
+
+    #[test]
+    fn pairing_is_the_main_button_until_paired_then_screen_recording() {
+        let mut v = view(found(), Status::WaitingForApproval);
+        v.capture_allowed = false;
+        assert_eq!(model(&v).actions[0].1, Action::OpenDashboard("http://esp-hid-da1a2c.local".into()));
+        assert!(model(&v).actions.iter().any(|a| a.1 == Action::AllowScreenRecording));
+        let mut v = view(found(), Status::Online);
+        v.capture_allowed = false;
+        assert_eq!(model(&v).actions[0].1, Action::AllowScreenRecording);
     }
 
     #[test]

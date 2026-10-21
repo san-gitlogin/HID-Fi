@@ -238,3 +238,21 @@ screen / login window (system service), multi-display picker in the window.
   errors, test computer removed afterwards. 11/11.
 - Still not verified: real macOS capture (needs Screen Recording permission);
   Windows/Linux runtime (needs the manual CI run, which needs a push).
+
+### 2026-10-21 evening - owner's live test with three phones (their findings)
+Owner: "works really well", but: lag then fine; 1 fps after using float, then
+everywhere; float badge covers the picture; "5 connected" with 3 devices; the Mac
+app froze on step 2; steps advanced with no explanation; several macOS
+permission prompts nobody warned about; Screen tab with no app = just a link
+(404 until pushed), no guidance; multiple monitors (3-4) a big concern.
+- DONE 051923d: the 1 fps collapse (keyframe storm + one encoder for all +
+  no BWE probe target). Two qualities, per-viewer keyframes, VT hard limit.
+- TODO (in order): Mac app freeze (diagnose; log a main-thread stall);
+  window explains each step (what it found, how); macOS permissions documented
+  + guided (Screen Recording, "Quit & Reopen", macOS 15 monthly "bypass the
+  private window picker", Local Network); ad-hoc signature = permission lost
+  on every update (needs Developer ID); float badge into the float title bar;
+  device count (board counts pages: count distinct devices, show pages);
+  multiple displays (choose per viewer, hot-unplug falls back); Screen tab
+  empty state = install/open/pair steps that work offline; first-frame 14 s
+  seen once (not reproduced: 0.6 s).

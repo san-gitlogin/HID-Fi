@@ -3,7 +3,7 @@
 use crate::{act, autostart, icons};
 use hidfi_companion::menu::{self, Action, Icon};
 use hidfi_companion::panel::{self, Click, Panel};
-use hidfi_companion::service::{self, Cmd, Handle};
+use hidfi_companion::service::{Cmd, Handle};
 use hidfi_companion::store::{State, Store};
 use std::time::{Duration, Instant};
 use tao::event::{Event, WindowEvent};
@@ -74,9 +74,8 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     let menu_rx = MenuEvent::receiver();
     let (click_tx, click_rx) = std::sync::mpsc::channel::<Click>();
     let mut panel: Option<Panel> = None;
-    // What the user last closed the window on. It comes back by itself only
-    // for something new to do, never for the same thing again.
-    let mut dismissed: Option<String> = None;
+    // The window comes forward by itself once per new thing to do.
+    let mut auto = menu::AutoOpen::default();
     let mut want_open = first_run;
 
     event_loop.run(move |event, target, flow| {
@@ -112,7 +111,7 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 ..
             } if panel.as_ref().is_some_and(|p| p.id() == window_id) => {
                 panel = None;
-                dismissed = Some(episode(&view));
+                auto.dismissed(&view);
             }
             _ => {}
         }
@@ -149,7 +148,7 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             match c {
                 Click::Close => {
                     panel = None;
-                    dismissed = Some(episode(&view));
+                    auto.dismissed(&view);
                 }
                 Click::Action(i) => {
                     if let Some((_, a)) = shown.as_ref().and_then(|m| m.actions.get(i)) {
@@ -165,7 +164,7 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
         // The window: opened when asked, or by itself when there is something
         // new to do that the menu bar alone would not show (always so on
         // Windows, which has no menu-bar text for the code).
-        if menu::needs_window(&view) && dismissed.as_deref() != Some(episode(&view).as_str()) {
+        if auto.tick(&view) {
             want_open = true;
         }
         let m = menu::model(&view);
@@ -202,10 +201,4 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             shown = Some(m);
         }
     });
-}
-
-/// A name for "the thing the user is being asked to do now", so closing the
-/// window on it is remembered and it is not reopened for the same thing.
-fn episode(v: &service::View) -> String {
-    format!("{:?}|{:?}", v.board, v.session)
 }
