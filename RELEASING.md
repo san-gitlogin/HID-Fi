@@ -59,3 +59,6 @@ hand if a release needs a clean Windows or Linux machine you do not have.
 
 `v3.5`, `v3.6`, `v3.8`, `v3.9`, `v3.10` - each with its changelog notes and a
 source zip; `v3.10` onwards also with the firmware zip.
+
+`v4.0` (2026-10-22): the firmware zip and HID-Fi Companion for macOS, Windows and
+Linux (x86-64, ARM64), with one `SHA256SUMS` for all of them.
