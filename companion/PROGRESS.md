@@ -220,3 +220,21 @@ screen / login window (system service), multi-display picker in the window.
   dashboard links. Bug fixed: links inside the picture were untappable.
 - CI workflow companion.yml (manual) to RUN everything on real Windows/Ubuntu.
 - Full suite PASSED (ui 503).
+
+### 2026-10-21 (owner back; both cables in)
+- Flashed twice (COM /dev/cu.usbmodem5CBC4099421). New firmware answers
+  /api/companion; status has comp_*.
+- Bug found on the real Mac (macOS 15.6): host OS read as Windows (string reads
+  2,2,1,1,3,3,4,4,0 -> 4 re-reads of 9). Fix: host_detect.h adds the per-index
+  pairing rule; 11 cases + 5 planted mutations in tests/unit/test_host_detect.py.
+  Real board: "mac" on 4/4 boots.
+- `--board` tier: 87 passed, 2 failed - both the sim contract racing a board
+  still joining WiFi after the port reset it. Fixture now waits for the phase to
+  settle; rerun 56/56.
+- tests/hardware.py (new): REAL board + REAL service (real USB/network/mDNS,
+  test-pattern picture), Chrome loads the dashboard from the board with NO flags:
+  pairing by code, first frame 1.3 s, 28 fps, four screens at once (25-54 fps),
+  a fifth waits then joins, board counts 5 dashboards on one PIN, no page
+  errors, test computer removed afterwards. 11/11.
+- Still not verified: real macOS capture (needs Screen Recording permission);
+  Windows/Linux runtime (needs the manual CI run, which needs a push).

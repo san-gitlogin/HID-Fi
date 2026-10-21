@@ -218,6 +218,7 @@ class BoardSim:
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
             "detect_phase": "settled", "unicode_mac": self.unicode["mac"], "unicode_linux": self.unicode["linux"],
             "usb_set_idle": 1, "usb_ctrl_reqs": 2, "usb_led_reports": 0, "usb_str_reqs": 10, "usb_str_rereads": 5,
+            "usb_str_paired": 4, "usb_str_seen": 4,
             "usb_str_seq": "0,0,0,0,0,0,2,2,1,1,3,3,4,4,0,0", "pointer_mode": self.pointer_mode,
             "gamepad": self.gamepad, "auth_set": bool(self.pin), "verbose": self.verbose,
             "ap_open": self.ap_open, "ap_pass_generated": self.ap_gen and not self.ap_open,

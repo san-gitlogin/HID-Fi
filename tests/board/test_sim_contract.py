@@ -12,6 +12,7 @@ lockout (up to 5 minutes), so the PIN gates are checked against the model in the
 ui tier instead, never against a board someone is using.
 """
 import json
+import time
 
 import pytest
 
@@ -58,6 +59,13 @@ def shape(r):
 def model(_board_holder):
     board = _board_holder.get()
     st = board.status()
+    # Opening the port can reboot the board (macOS toggles the lines anyway), and
+    # a board with a saved network then spends a few seconds joining it: the
+    # replies differ by phase, so mirror the phase it settles in, not a passing one.
+    end = time.time() + 30
+    while st.get("sta_phase") in ("connecting", "reconnecting") and time.time() < end:
+        time.sleep(1)
+        st = board.status()
     sim = BoardSim(pin="9999" if st.get("auth_set") else "", host_os=st.get("host_os", "mac"),
                    detected=st.get("host_os_detected", "mac"))
     sim.host_manual = st["host_os"] if st.get("host_os_source") == "manual" else None

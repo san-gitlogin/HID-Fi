@@ -51,9 +51,12 @@ adding a login item - for development and tests.
 | `tests/e2e_view.py` | hardware H.264 → WebRTC → real Chrome; refused tickets and certificates; CPU |
 | `tests/system.py` | the real service + board model + Chrome: pair, live, unplug, replug |
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
+| `tests/hardware.py` | the REAL board and service: pair by code, live picture, four viewers, one PIN (`HIDFI_PIN`) |
 
-The last three need Google Chrome and build their binaries first:
-`cargo build --release -p hidfi-stream --example serve -p hidfi-companion --example system_app`.
+The last four need Google Chrome and their binaries built first:
+`cargo build --release -p hidfi-stream --example serve -p hidfi-companion --example system_app --example hw_app`.
+`hardware.py` also needs the board on this computer's USB and the home WiFi; it
+removes its test pairing when done.
 
 ## Layout
 

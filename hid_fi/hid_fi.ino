@@ -86,6 +86,7 @@
 #include "nvs.h"
 
 // Dashboard markup lives in web_ui.h (defines WEB_INTERFACE[] in PROGMEM).
+#include "host_detect.h"
 #include "web_ui.h"
 
 // Declared here, above everything, because arduino-cli hoists generated function
@@ -491,12 +492,19 @@ volatile uint32_t usbStrRereadCount = 0;  // ...that asked for the same index ag
 #define USB_STR_SEQ_LEN 16
 volatile uint8_t  usbStrSeq[USB_STR_SEQ_LEN] = {0};  // the last few indices asked for
 volatile uint8_t  usbStrSeqHead = 0;
+volatile uint16_t usbStrSeen   = 0;     // string indices (1..15) asked for since detectArm()
+volatile uint16_t usbStrPaired = 0;     // ...that were asked for twice in a row
 extern "C" uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t /*langid*/) {
     static uint16_t desc[127];
     static uint8_t  lastIndex = 0xFF;   // only ever touched from the USB task
 
     usbStrReqCount++;
     if (index == lastIndex) usbStrRereadCount++;
+    {
+        uint16_t seen = usbStrSeen, paired = usbStrPaired;
+        hdNote(index, lastIndex, &seen, &paired);
+        usbStrSeen = seen; usbStrPaired = paired;
+    }
     lastIndex = index;
     // Kept so the raw fingerprint can be read off a phone. An enumeration is a
     // dozen requests at most, so the last sixteen are the whole of it.
@@ -591,6 +599,8 @@ void detectArm() {
     detectLedBase  = ledEventCount;
     detectStrBase  = usbStrReqCount;
     detectRerdBase = usbStrRereadCount;
+    usbStrSeen     = 0;
+    usbStrPaired   = 0;
     detectPhase    = DET_IDLE;
 }
 
@@ -607,7 +617,8 @@ HostOS detectVerdict() {
     // count because Windows does it too, just not as a habit - measured on
     // Windows 11 against this board, 11 string requests of which 2 were repeats.
     // macOS repeats every index, so half its requests or more are repeats.
-    if (rereads >= 3 && rereads * 2 >= strReqs) return OS_MAC;
+    // The rule and why it changed: host_detect.h.
+    if (hdLooksMac(rereads, strReqs, usbStrSeen, usbStrPaired)) return OS_MAC;
     // A host that read our strings straight through, or synced the lock LEDs at
     // enumeration. Linux does both exactly as Windows does and cannot be told
     // apart this way, so it reads as windows and a Linux user pins it by hand.
@@ -3087,6 +3098,8 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["usb_led_reports"] = ledEventCount;
     doc["usb_str_reqs"] = usbStrReqCount;
     doc["usb_str_rereads"] = usbStrRereadCount;
+    doc["usb_str_paired"] = hdBits(usbStrPaired);   // strings read as back-to-back pairs
+    doc["usb_str_seen"]   = hdBits(usbStrSeen);     // different strings read
     // The raw fingerprint, oldest first, so a wrong verdict can be diagnosed from
     // the phone instead of from a rebuild with logging in it.
     {

@@ -367,6 +367,7 @@ board from a Mac to a PC is picked up without a reboot.
 ```json
 { "host_os": "mac", "host_os_source": "auto", "host_os_detected": "mac",
   "detect_phase": "settled", "usb_str_reqs": 9, "usb_str_rereads": 4,
+  "usb_str_paired": 3, "usb_str_seen": 4,
   "usb_str_seq": "0,0,1,1,2,2,3,3,4,0,0,0,0,0,0,0",
   "usb_set_idle": 1, "usb_ctrl_reqs": 1, "usb_led_reports": 0 }
 ```
@@ -388,7 +389,13 @@ guesswork. `usb_str_rereads` is the discriminator: macOS reads each descriptor
 string twice, two bytes then the whole thing, so the same index arrives back to
 back, and at least half of its requests are repeats. Windows does it
 occasionally — measured on Windows 11, 11 requests of which 2 were repeats — so
-the verdict is the *ratio*, not the count. `usb_str_seq` is the raw sequence of
+the verdict is the *ratio*, not the count. A host also reads as a Mac when at
+least three different strings came in back-to-back pairs and pairs make up three
+quarters of the strings it read (`usb_str_paired` of `usb_str_seen`; the
+language table, index 0, is not a string): macOS 15.6 reads `2,2,1,1,3,3,4,4,0`,
+which is every string in pairs but 4 repeats of 9, just under half. The rule
+and its tests: `hid_fi/host_detect.h`, `tests/unit/test_host_detect.py`. Unfilled
+slots in `usb_str_seq` read as 0. `usb_str_seq` is the raw sequence of
 indices the host asked for, oldest first, so a wrong verdict can be diagnosed
 from the phone.
 

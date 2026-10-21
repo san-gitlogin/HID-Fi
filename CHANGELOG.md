@@ -21,6 +21,16 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   Settings is opened. Reproduced and verified against a v3.11 board; two
   regression scenarios in `settings.feature`.
 
+- **A Mac on macOS 15.6 was detected as Windows, on every boot.** It reads each
+  string in pairs (`2,2,1,1,3,3,4,4,0`) but reads the language table once, which
+  left 4 repeats of 9 - one short of the "half" rule - so Mac shortcuts and
+  gestures were Windows ones. A host now also reads as a Mac when three or more
+  strings came in back-to-back pairs and pairs are three quarters of the strings
+  read. The measured Windows 11 pattern (2 repeats) stays Windows. Measured on the
+  owner's Mac (5 of 5 boots wrong before); the rule lives in `hid_fi/host_detect.h`
+  with 11 real and pinned sequences and 5 planted bugs in
+  `tests/unit/test_host_detect.py`. `status` adds `usb_str_paired`, `usb_str_seen`.
+
 ### Added (not yet released or flashed)
 
 - **Screen tab: see the computer's own screen.** With HID-Fi Companion running
