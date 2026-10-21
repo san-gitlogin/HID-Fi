@@ -178,6 +178,44 @@ pub fn model(v: &View) -> Model {
     }
 }
 
+/// Where setting up stands, for the window: three steps a person can follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Done,
+    Now,
+    Later,
+}
+
+pub fn steps(v: &View) -> [(&'static str, Step); 3] {
+    let found = matches!(v.board, BoardState::Found { .. });
+    let paired = found && matches!(v.session, Status::Online | Status::Reconnecting);
+    let ready = paired && v.capture_allowed;
+    let st = |done: bool, now: bool| {
+        if done {
+            Step::Done
+        } else if now {
+            Step::Now
+        } else {
+            Step::Later
+        }
+    };
+    [
+        ("Plug HID-Fi into this computer", st(found, true)),
+        ("Pair with the dashboard", st(paired, found)),
+        ("Show this screen on the Screen tab", st(ready, paired)),
+    ]
+}
+
+/// Whether the window should come forward on its own: the user has to do
+/// something they cannot see from the menu bar alone.
+pub fn needs_window(v: &View) -> bool {
+    matches!(
+        v.session,
+        Status::ShowCode(_) | Status::WaitingForApproval | Status::NeedsPin
+    ) && matches!(v.board, BoardState::Found { .. })
+        || matches!(v.board, BoardState::NotOnNetwork | BoardState::Choose(_))
+}
+
 fn short_url(u: &str) -> &str {
     u.trim_start_matches("http://")
         .trim_start_matches("https://")
@@ -303,6 +341,44 @@ mod tests {
         assert!(
             model(&view(BoardState::NotOnNetwork, Status::Connecting)).lines[1].contains("WiFi")
         );
+    }
+
+    #[test]
+    fn steps_follow_setting_up() {
+        let s = steps(&view(
+            BoardState::NotPluggedIn { elsewhere: 0 },
+            Status::Connecting,
+        ));
+        assert_eq!(s.map(|x| x.1), [Step::Now, Step::Later, Step::Later]);
+        let s = steps(&view(found(), Status::ShowCode("123456".into())));
+        assert_eq!(s.map(|x| x.1), [Step::Done, Step::Now, Step::Later]);
+        let s = steps(&view(found(), Status::Online));
+        assert_eq!(s.map(|x| x.1), [Step::Done, Step::Done, Step::Done]);
+        let mut v = view(found(), Status::Online);
+        v.capture_allowed = false;
+        assert_eq!(steps(&v)[2].1, Step::Now);
+    }
+
+    #[test]
+    fn the_window_comes_forward_only_when_needed() {
+        assert!(needs_window(&view(
+            found(),
+            Status::ShowCode("123456".into())
+        )));
+        assert!(needs_window(&view(found(), Status::WaitingForApproval)));
+        assert!(needs_window(&view(
+            BoardState::NotOnNetwork,
+            Status::Connecting
+        )));
+        assert!(!needs_window(&view(found(), Status::Online)));
+        assert!(!needs_window(&view(
+            BoardState::NotPluggedIn { elsewhere: 0 },
+            Status::Connecting
+        )));
+        assert!(!needs_window(&view(
+            BoardState::Looking,
+            Status::Connecting
+        )));
     }
 
     #[test]

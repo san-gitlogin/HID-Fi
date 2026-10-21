@@ -13,22 +13,23 @@ Status: `todo` / `wip` / `done (how verified)` / `blocked (why)`. Never mark
 | ID | Requirement | Src | Status |
 |---|---|---|---|
 | A1 | Written in Rust. | U | todo |
-| A2 | Live screen streaming to the dashboard, not only screenshots. | U | wip: live H.264/WebRTC stream works end to end in real Chrome (system test); real screen capture written, unverified (no permission here) |
+| A2 | Live screen streaming to the dashboard, not only screenshots. | U | wip: live H.264/WebRTC proven in real Chrome on macOS (test pattern); macOS screen capture + Windows capture/encode written, unverified on real screens |
 | A3 | Very fast; low CPU, memory and power; runs 24/7 in the tray. Idle (no viewer) must cost ~0% CPU: no capture, no encode. | U | wip: idle 0.0% CPU measured (no viewer = no capture, no encode); ~6% of one core for encode+send at 1080p30 measured; tray/app RAM not yet measured |
 | A4 | Very easy to install: one download, a short guided first run, no confusing state. Everything that can be automated is. | U | todo |
 | A5 | Tray / menu-bar icon on Windows, macOS, Linux that shows state (no board, pairing, ready, someone watching, error). | U | todo |
-| A6 | Supports every OS it can, not just the three. Unsupported ones are listed honestly with why. | U | todo |
+| A6 | Supports every OS it can, not just the three. Unsupported ones are listed honestly with why. | U | wip: macOS done (capture unverified without permission); Windows capture+encode written, compiles + clippy clean for x86_64-pc-windows-msvc, NOT run; Linux not started (no test machine) |
 | A7 | Finds the board automatically, and never picks the wrong board, even another HID-Fi or Espressif device from the same maker on the same PC. | U | wip: selection + locator done, unit-tested with fakes (wrong boards, non-HID-Fi answers, duplicates); real USB/mDNS untested on hardware |
 | A8 | Survives WiFi drops, network changes, board reboots, PC sleep/wake, address changes; resumes the stream without user action. | U | wip: board link survives an unreachable board (backoff, pairing kept) and a board that forgets us (re-pair), tested against the model; stream resumption todo |
 | A9 | Every error handled; no panic reaches the user; a crash restarts itself. | U | wip: agent never panics on malformed replies (tested); app-level crash restart todo |
 | A10 | Secure: authenticated, encrypted, resistant to man-in-the-middle and DoS. | U | wip: pairing/ticket crypto agreed by 4 implementations; DTLS-SRTP; fingerprint pinned via board (refusal tested in Chrome); used/forged tickets refused; private peers only; conn/viewer caps; bad-ticket lockout |
-| A11 | Looks like HID-Fi (same palette, icon family, type), not generic or "AI generated": real icons, clear buttons, good state management. | U | todo |
+| A11 | Looks like HID-Fi (same palette, icon family, type), not generic or "AI generated": real icons, clear buttons, good state management. | U | wip: tray icons from the HID-Fi mark (template on macOS), window in the dashboard's tokens/logo/icon style, plain-language menu; app icon from logo-tile |
 | A12 | Follows industry standards (signed installers, auto-update with signatures, platform conventions, standard protocols). | U | todo |
 | A13 | Tested end to end, every function, across OSes and across weak and strong CPUs. | U | todo |
 | A14 | Multiple monitors: pick which one; follows hot-plug, resolution, DPI and rotation changes. | D | wip: encoder rebuilt on any size change (tested); display choice stored; hot-plug follow via SCK unverified |
 | A15 | Shows on the PC that the screen is being watched (tray state change), so watching is never covert. | D | wip: service counts watchers (tested); tray indicator todo |
 | A16 | Starts at login (opt-out), one instance only. | D | todo |
 | A17 | Uninstalls cleanly: login item, firewall rule, files, keys. | D | todo |
+| A19 | The pairing code must be seen without hunting: Windows has no menu-bar text, so a code only in the tray menu is invisible. A small window shows it (and first-run steps), then closes. | D | wip: window built (wry, system web view, destroyed on close), opens by itself on first run and when the user must act, never twice for the same thing; rendered in Chrome and launched natively on macOS; not run on Windows |
 | A18 | Adapts quality to the link and the CPU (resolution, fps, bitrate), and sends nothing while the screen does not change. | D | wip: TWCC estimate drives encoder bitrate; still screen sends a keyframe every 2 s only (tested) |
 
 ## The board (firmware)

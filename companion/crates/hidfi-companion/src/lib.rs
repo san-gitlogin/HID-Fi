@@ -2,5 +2,6 @@
 //! the system tests.
 
 pub mod menu;
+pub mod panel;
 pub mod service;
 pub mod store;

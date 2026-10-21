@@ -167,3 +167,20 @@ Newest first. Read REQUIREMENTS.md and DESIGN.md before continuing any work.
 - `python tests/run.py`: PASSED in 500 s - static 25, unit 138, ui 496, build 4;
   coverage contract OK (178/178 controls). Skips: 312 Linux-only, 35 pwsh.
   Board NOT flashed; hardware tiers NOT run.
+- Windows (not run, no Windows here): dxgi.rs (Desktop Duplication, pointer
+  drawn in, access-lost recovery, >2560 halved), mf.rs (Media Foundation H.264,
+  low latency, constrained baseline, CBR, SPS/PPS guarantee), convert.rs (NV12,
+  halve, pointer drawing: 6 tests). Whole workspace compiles and is clippy clean
+  for x86_64-pc-windows-msvc. DTLS on native crypto (Apple / CNG): no C crypto
+  library on macOS or Windows; Chrome re-verified (~375 ms first frame, ~28 fps).
+  `examples/check_capture.rs` = the one-command on-device check for the owner.
+- macOS packaging: package/macos.sh -> 7.9 MB app (LSUIElement, bundle id
+  in.hidfi.companion, ad-hoc signed; Developer ID + notarize supported), 4.5 MB
+  dmg (verifies). Launched from the bundle: 34 MB RSS, 0.0% CPU.
+- Fresh-install fix: 20 s quiet search before "not on this network" (first start
+  said it before mDNS answered). Measured: found in ~5 s, no false message.
+- Commits on branch `companion`: e2a8660, 652b046, bc173d3 (not pushed).
+- The app's window (panel.rs): HID-Fi look, steps (find board -> pair -> show),
+  the code in 44px type, buttons from the same model as the tray. Opens by itself
+  on first run and when the user must act (needs_window, tested), not again for
+  something already dismissed. 34 MB RSS without it, 73 MB while open.
