@@ -77,6 +77,7 @@ extern "C" {
     static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFStringRef;
     static kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: CFStringRef;
     static kVTCompressionPropertyKey_AverageBitRate: CFStringRef;
+    static kVTCompressionPropertyKey_DataRateLimits: CFStringRef;
     static kVTCompressionPropertyKey_ExpectedFrameRate: CFStringRef;
     static kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel: CFStringRef;
     static kVTEncodeFrameOptionKey_ForceKeyFrame: CFStringRef;
@@ -259,6 +260,20 @@ pub struct VtEncoder {
 // thread.
 unsafe impl Send for VtEncoder {}
 
+/// A hard ceiling next to the average: no half second may carry more than
+/// half a second's worth at the target rate. Without it a keyframe of a busy
+/// screen ran to half a second of a poor link on its own - more than a WiFi
+/// router queues - so it was lost, asked for again, lost again.
+fn set_limits(session: VTSessionRef, bps: i64) {
+    let bytes = CFNumber::from((bps / 8 / 2).max(4_000));
+    let window = CFNumber::from(0.5f64);
+    let limits = core_foundation::array::CFArray::from_CFTypes(&[bytes.as_CFType(), window.as_CFType()]);
+    // SAFETY: framework constant; a live session and value.
+    if let Err(e) = set(session, unsafe { kVTCompressionPropertyKey_DataRateLimits }, limits.as_CFTypeRef()) {
+        log::warn!("data rate limit refused: {e}");
+    }
+}
+
 fn set(session: VTSessionRef, key: CFStringRef, value: CFTypeRef) -> Result<(), EncodeError> {
     // SAFETY: a live session, a framework-provided key, a live CF value.
     let st = unsafe { VTSessionSetProperty(session, key, value) };
@@ -359,6 +374,7 @@ impl VtEncoder {
                 CFNumber::from(cfg.bitrate_bps as i64).as_CFTypeRef(),
             )?;
         }
+        set_limits(session, cfg.bitrate_bps as i64);
         // SAFETY: a live session.
         let st = unsafe { VTCompressionSessionPrepareToEncodeFrames(session) };
         if st != 0 {
@@ -496,6 +512,7 @@ impl Encoder for VtEncoder {
         } {
             log::warn!("bitrate change refused: {e}");
         }
+        set_limits(self.session, bps);
     }
 
     fn size(&self) -> (u32, u32) {

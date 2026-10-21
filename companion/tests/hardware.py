@@ -75,8 +75,10 @@ try:
         pc_id = pg.evaluate("SCR.sel")
         t0 = time.time()
         pg.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=25000)
+        first_s = time.time() - t0
+        pg.wait_for_function("scrVideo.videoWidth===1280", timeout=10000)   # half size first, then sharp
         check("live picture through the real board, no flags", pg.evaluate("[scrVideo.videoWidth,scrVideo.videoHeight]") == [1280, 720],
-              f"{time.time()-t0:.1f}s to first frame")
+              f"{first_s:.1f}s to first frame, {time.time()-t0:.1f}s to full size")
         f = frames(pg); check("frame rate on the phone", f >= 20, f"{f:.0f} fps")
         pg.screenshot(path=str(shots / "hw-phone.png"))
 

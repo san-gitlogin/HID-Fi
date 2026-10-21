@@ -89,8 +89,10 @@ try:
         pg.evaluate("""t => { window.S = []; window.H = watchScreen(t, document.getElementById('v'), s => S.push(s)); }""",
                     dash(cmd="screen_ticket", id=pc))
         pg.wait_for_function("document.getElementById('v').readyState >= 2", timeout=15000)
+        t_full = time.time()
+        pg.wait_for_function("document.getElementById('v').videoWidth===1280", timeout=8000)   # half size first, then sharp
         dims = pg.evaluate("[document.getElementById('v').videoWidth, document.getElementById('v').videoHeight]")
-        check("live video from the app, through a ticket the board signed", dims == [1280, 720], str(dims))
+        check("live video from the app, through a ticket the board signed", dims == [1280, 720], f"{dims}, full size after {time.time()-t_full:.1f}s")
         wait_for(lambda v: v["watching"] == 1, 5, "the tray to count the viewer")
         check("the tray counts one viewer", last["watching"] == 1)
 

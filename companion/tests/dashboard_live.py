@@ -96,8 +96,12 @@ try:
         wait_app(lambda v: v["session"] == "Online", 10, "online")
         pg.wait_for_function("SCR.state==='live'", timeout=20000)
         pg.wait_for_function("document.getElementById('scrVideo').videoWidth>0", timeout=10000)
-        dims = pg.evaluate("[scrVideo.videoWidth, scrVideo.videoHeight]")
-        check("live picture in the Screen tab after pairing by code", dims == [1280, 720], str(dims))
+        first = pg.evaluate("[scrVideo.videoWidth, scrVideo.videoHeight]")
+        t_full = time.time()
+        # A viewer starts at half size and sharpens once its link shows it can.
+        pg.wait_for_function("scrVideo.videoWidth===1280", timeout=8000)
+        check("live picture in the Screen tab after pairing by code, sharp within seconds",
+              first in ([640, 360], [1280, 720]), f"first {first}, full size after {time.time()-t_full:.1f}s")
         pg.wait_for_function("document.getElementById('scrBadge').innerText.includes('fps')", timeout=6000)
         check("the badge names the computer and the frame rate", "System Test PC" in pg.inner_text("#scrBadge"), pg.inner_text("#scrBadge"))
         check("the trackpad sits in the Screen tab", pg.evaluate("padwrap.parentNode.id") == "scrPadSlot")

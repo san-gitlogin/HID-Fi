@@ -386,9 +386,12 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let stop = Arc::new(AtomicBool::new(false));
     let fps = Arc::new(AtomicU32::new(0));
     let ended: Arc<Mutex<Option<End>>> = Arc::default();
+    let id = c.pipeline.subscribe(vtx);
+    let control = c.pipeline.control(id);
     // Frames hop from the pipeline's channel into the session's.
     let fwd_tx = tx.clone();
     let fwd_stop = stop.clone();
+    let fwd_ctl = control.clone();
     let forwarder = std::thread::Builder::new()
         .name("rtc-fwd".into())
         .spawn(move || {
@@ -396,7 +399,9 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                 match vrx.recv_timeout(Duration::from_millis(500)) {
                     Ok(m) => {
                         if fwd_tx.try_send(m.into()).is_err() {
-                            // The session is behind: drop, the pipeline will key.
+                            // The session is behind: drop it, and this viewer
+                            // skips to the next keyframe.
+                            fwd_ctl.request_keyframe();
                         }
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -404,8 +409,6 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                 }
             }
         });
-    let id = c.pipeline.subscribe(vtx);
-    let control = c.pipeline.control(id);
     let (s2, f2, e2, ctl2) = (stop.clone(), fps.clone(), ended.clone(), control.clone());
     let session = std::thread::Builder::new()
         .name("rtc".into())

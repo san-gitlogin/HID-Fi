@@ -122,6 +122,60 @@ pub enum End {
 /// How long a viewer may take to connect before the session gives up.
 pub const CONNECT_DEADLINE: Duration = Duration::from_secs(20);
 
+/// What the bandwidth estimator probes towards: twice what the link carries
+/// now, within these bounds, so it climbs step by step. Without a target it
+/// never probed, and an estimate that fell (a moment of WiFi trouble) never
+/// climbed back. A fixed high target was no better on a poor link: its probe
+/// bursts overflowed the router's queue and crashed the estimate again.
+pub const DESIRED_MIN_BPS: u64 = 1_500_000;
+pub const DESIRED_MAX_BPS: u64 = 8_000_000;
+
+fn desired(estimate: u64) -> u64 {
+    (estimate * 2).clamp(DESIRED_MIN_BPS, DESIRED_MAX_BPS)
+}
+
+/// A viewer's own pace: a safety valve, not the rate control. The encoder
+/// already aims at this viewer's link (its quality follows the slowest viewer
+/// on it), so a burst - a keyframe, a sudden scroll - is let through and paid
+/// for afterwards. Only a viewer a full second behind loses frames (and waits
+/// for a keyframe), instead of piling up delay in the sender. Dropping at the
+/// first overshoot broke the picture into keyframe after keyframe: 1 fps.
+struct Pace {
+    bps: f64,
+    tokens: f64,
+    at: Instant,
+}
+
+impl Pace {
+    /// Half a second of sending, at most, in hand.
+    const BURST_S: f64 = 0.5;
+
+    fn new(bps: u64, now: Instant) -> Pace {
+        Pace {
+            bps: bps as f64,
+            tokens: bps as f64 / 8.0 * Self::BURST_S,
+            at: now,
+        }
+    }
+    fn set_rate(&mut self, bps: u64) {
+        self.bps = bps as f64;
+    }
+    /// Whether a frame of `len` bytes may go now. A keyframe always may (the
+    /// picture cannot repair without one): the debt it leaves holds back the
+    /// frames after it instead.
+    fn admit(&mut self, len: usize, keyframe: bool, now: Instant) -> bool {
+        let dt = now.saturating_duration_since(self.at).as_secs_f64();
+        self.at = now;
+        let second = self.bps / 8.0;
+        self.tokens = (self.tokens + second * dt).min(second * Self::BURST_S);
+        if self.tokens < -second && !keyframe {
+            return false;
+        }
+        self.tokens -= len as f64;
+        true
+    }
+}
+
 /// Runs until the viewer goes away or `stop` is set. `tx` is the sender half
 /// of `rx`, given to the UDP reader thread.
 pub fn run(
@@ -170,6 +224,10 @@ pub fn run(
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
     let mut sent_frames = 0u32;
     let mut stats_at = Instant::now();
+    let mut pace = Pace::new(3_000_000, Instant::now());
+    let mut waiting_key = true;
+    let (mut log_at, mut log_sent, mut log_held, mut log_bytes, mut estimate) =
+        (Instant::now(), 0u32, 0u32, 0u64, 0u64);
     let end = loop {
         if stop.load(Ordering::Relaxed) {
             break End::Stopped;
@@ -187,7 +245,8 @@ pub fn run(
                 match ev {
                     Event::Connected => {
                         connected = true;
-                        control.request_keyframe();
+                        rtc.bwe().set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(3_000_000)));
+                        control.joined();
                     }
                     Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
                         break End::Disconnected
@@ -215,7 +274,10 @@ pub fn run(
                     Event::KeyframeRequest(_) => control.request_keyframe(),
                     Event::EgressBitrateEstimate(BweKind::Twcc { estimate: b, .. }) => {
                         // Leave headroom: the estimate is the ceiling, not the target.
-                        control.offer_bitrate((b.as_u64() as f64 * 0.85) as u32);
+                        estimate = b.as_u64();
+                        control.offer_bitrate((estimate as f64 * 0.85) as u32);
+                        pace.set_rate(estimate);
+                        rtc.bwe().set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(estimate)));
                     }
                     _ => {}
                 }
@@ -253,6 +315,22 @@ pub fn run(
                 let (Some((mid, params)), true) = (&video, connected) else {
                     continue;
                 };
+                // A gap before this frame (dropped on its way here) breaks the
+                // picture until a keyframe: skip what cannot be decoded.
+                if control.needs_key() && !frame.keyframe {
+                    waiting_key = true;
+                }
+                if waiting_key && !frame.keyframe {
+                    log_held += 1;
+                    continue;
+                }
+                if !pace.admit(frame.data.len(), frame.keyframe, Instant::now()) {
+                    waiting_key = true;
+                    control.request_keyframe();
+                    log_held += 1;
+                    continue;
+                }
+                waiting_key = false;
                 let pt = params.pt();
                 let Some(w) = rtc.writer(*mid) else { continue };
                 let t = MediaTime::new(pts_ms * 90, Frequency::NINETY_KHZ);
@@ -260,12 +338,26 @@ pub fn run(
                     break End::Failed(e.to_string());
                 }
                 sent_frames += 1;
+                log_sent += 1;
+                log_bytes += frame.data.len() as u64;
             }
         }
         if stats_at.elapsed() >= Duration::from_secs(1) {
             on_stats(sent_frames);
             sent_frames = 0;
             stats_at = Instant::now();
+        }
+        if log_at.elapsed() >= Duration::from_secs(10) {
+            let secs = log_at.elapsed().as_secs_f64();
+            log::info!(
+                "viewer {}: {:.1} fps, {} kbit/s, link estimate {} kbit/s, {} frame(s) held back",
+                local.port(),
+                log_sent as f64 / secs,
+                (log_bytes as f64 * 8.0 / secs / 1000.0) as u64,
+                estimate / 1000,
+                log_held
+            );
+            (log_at, log_sent, log_held, log_bytes) = (Instant::now(), 0, 0, 0);
         }
     };
     stop.store(true, Ordering::Relaxed);
@@ -279,6 +371,37 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_probe_target_climbs_with_the_link_within_bounds() {
+        assert_eq!(desired(300_000), DESIRED_MIN_BPS);
+        assert_eq!(desired(1_400_000), 2_800_000);
+        assert_eq!(desired(20_000_000), DESIRED_MAX_BPS);
+    }
+
+    #[test]
+    fn pace_lets_a_link_take_what_it_can_and_skips_the_rest() {
+        let t0 = Instant::now();
+        let mut p = Pace::new(1_000_000, t0); // 125 kB/s, 62.5 kB in hand
+        // 30 fps of 10 kB frames = 300 kB/s: more than twice the link.
+        let mut sent = 0;
+        for i in 0..90 {
+            let now = t0 + Duration::from_millis(i * 33);
+            sent += p.admit(10_000, false, now) as u32;
+        }
+        // 3 s: 62.5 kB in hand + 375 kB earned + 125 kB of debt allowed: ~56.
+        assert!((50..=62).contains(&sent), "{sent} of 90 frames sent");
+    }
+
+    #[test]
+    fn a_keyframe_always_goes_and_the_frames_after_it_pay_for_it() {
+        let t0 = Instant::now();
+        let mut p = Pace::new(1_000_000, t0);
+        assert!(p.admit(300_000, true, t0), "a keyframe bigger than the budget still goes");
+        assert!(!p.admit(5_000, false, t0 + Duration::from_millis(33)), "then the debt holds frames back");
+        // 237.5 kB of debt, 125 kB of it allowed, earned back at 125 kB/s: ~0.9 s.
+        assert!(p.admit(5_000, false, t0 + Duration::from_millis(1000)));
+    }
 
     #[test]
     fn media_ports_come_from_the_documented_range_and_do_not_collide() {

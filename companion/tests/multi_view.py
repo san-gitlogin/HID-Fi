@@ -4,7 +4,8 @@ parallel, each with its own one-use ticket.
 
 Checks: 4 viewers all get the picture at a usable rate; a 5th is turned away
 ("busy") and gets in once one leaves; the computer's CPU barely moves with
-more viewers (one encoder feeds them all).
+more viewers (one encoder feeds them all); one viewer on a device too slow to
+keep up does not drag the others down (seen live: every screen fell to 1 fps).
 
 Run: cargo build --release -p hidfi-stream --example serve
      python3 companion/tests/multi_view.py
@@ -20,13 +21,22 @@ def check(name, cond, detail=""):
     global ok
     ok &= bool(cond); print(("ok  " if cond else "FAIL"), name, detail, flush=True)
 
-srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "1920", "1080", "30"],
-                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+import tempfile
+LOG = os.environ.get("STREAM_LOG") or os.path.join(tempfile.mkdtemp(prefix="hidfi-mv-"), "stream.log")
+srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "1920", "1080", "30", "busy"],   # scrolling text: as hard as a real desktop
+                       stdout=subprocess.PIPE, stderr=open(LOG, "w"), text=True)
 info = json.loads(srv.stdout.readline())
 html = ("<!doctype html><meta charset=utf-8><video id=v autoplay muted playsinline></video><script>" +
+        "(()=>{const O=RTCPeerConnection;window.PC=null;window.RTCPeerConnection=function(c){const p=new O(c);PC=p;"
+        # A page with RELAY set reaches the computer's media port through the
+        # squeezing relay below (port + 1000) - a phone on a poor WiFi link.
+        "const s=p.setRemoteDescription.bind(p);p.setRemoteDescription=d=>s(window.RELAY?{type:d.type,"
+        "sdp:d.sdp.replace(/( udp \\d+ [\\d.]+ )(\\d+)( typ host)/g,(m,a,q,b)=>a+(+q+1000)+b)}:d);return p};"
+        "RTCPeerConnection.prototype=O.prototype})();" +
         (ROOT / "web" / "viewer.js").read_text() + """
 window.go = (t) => { window.S = []; window.F = 0; const v = document.getElementById('v');
   window.H = watchScreen(t, v, s => S.push(s));
+  if (window.counting) return; window.counting = true;   // a second go() must not count frames twice
   const cb = () => { F++; v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); };
 </script>""")
 class Page(BaseHTTPRequestHandler):
@@ -35,6 +45,51 @@ class Page(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self, *a): pass
 web = ThreadingHTTPServer((IP, 0), Page); threading.Thread(target=web.serve_forever, daemon=True).start()
+class Squeeze:
+    """A UDP relay with a slow, buffered link towards the viewer: what a phone
+    far from the router sees. Rate in bit/s; packets that would wait longer
+    than `buffer_s` are dropped, like a WiFi access point's queue. One thread,
+    woken only by a packet or by the next one due, so the relay adds no jitter
+    of its own (the estimator would read jitter as congestion)."""
+    def __init__(self, rate, buffer_s=0.5):
+        import selectors
+        self.rate, self.buffer_s = rate / 8, buffer_s
+        self.sel = selectors.DefaultSelector()
+        for port in range(47820, 47860):
+            r = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                r.bind((IP, port + 1000))
+            except OSError:
+                continue
+            r.setblocking(False)
+            self.sel.register(r, selectors.EVENT_READ, {"port": port, "viewer": None})
+        threading.Thread(target=self.run, daemon=True).start()
+    def run(self):
+        import heapq
+        q, busy_until, n = [], time.time(), 0
+        while True:
+            now = time.time()
+            while q and q[0][0] <= now:
+                _, _, r, data, to = heapq.heappop(q)
+                r.sendto(data, to)
+            timeout = max(0.0, q[0][0] - time.time()) if q else 0.5
+            for key, _ in self.sel.select(timeout):
+                r, st = key.fileobj, key.data
+                try:
+                    data, frm = r.recvfrom(65536)
+                except OSError:
+                    continue
+                if frm == (IP, st["port"]):                # computer -> viewer: squeezed
+                    if not st["viewer"]:
+                        continue
+                    now = time.time()
+                    done = max(busy_until, now) + len(data) / self.rate
+                    if done - now <= self.buffer_s:
+                        busy_until = done; n += 1
+                        heapq.heappush(q, (done, n, r, data, st["viewer"]))
+                else:                                      # viewer -> computer: as is
+                    st["viewer"] = frm; r.sendto(data, (IP, st["port"]))
+
 cpu = lambda: 0.0 if os.name == "nt" else float(subprocess.run(["ps", "-o", "%cpu=", "-p", str(srv.pid)], capture_output=True, text=True).stdout.strip() or 0)
 tickets = iter(info["tickets"])
 def ticket():
@@ -79,7 +134,52 @@ try:
         time.sleep(1.5)
         moved = [pg.evaluate("F") > a for pg, a in zip(pages[1:4], alive)]
         check("the others kept playing throughout", all(moved), str(moved))
+
+        # One viewer on a device far too slow to keep up (CPU slowed 20x).
+        KEYS = """(async()=>{let k=0;(await PC.getStats()).forEach(r=>{if(r.type==='inbound-rtp')k=r.keyFramesDecoded||0});return k})()"""
+        slow = pages[1].context.new_cdp_session(pages[1])
+        slow.send("Emulation.setCPUThrottlingRate", {"rate": 20})
+        time.sleep(2)
+        healthy = [pages[2], pages[3], pages[4]]
+        k0 = [pg.evaluate(KEYS) for pg in healthy]
+        for pg in healthy:
+            pg.evaluate("F = 0")
+        time.sleep(6)
+        fps = [pg.evaluate("F") / 6 for pg in healthy]
+        keys = [pg.evaluate(KEYS) - k for pg, k in zip(healthy, k0)]
+        slow.send("Emulation.setCPUThrottlingRate", {"rate": 1})
+        check("a slow device does not drag the others down", all(f >= 20 for f in fps), "fps " + ", ".join(f"{f:.0f}" for f in fps))
+        check("nor turn their stream into keyframes", all(k <= 8 for k in keys), f"keyframes in 6 s: {keys}")
+        time.sleep(3)
+        pages[1].evaluate("F = 0"); time.sleep(3)
+        f = pages[1].evaluate("F") / 3
+        check("the slow device recovers once it can keep up", f >= 15, f"{f:.0f} fps")
+
+        # One viewer on a poor link (1.5 Mbit/s, like a phone far from the
+        # router) joins three good ones.
+        Squeeze(1_500_000)
+        pages[1].evaluate("H.stop()"); time.sleep(1.5)
+        pages[1].evaluate("window.RELAY = 1; S = []")
+        pages[1].evaluate("t => go(t)", ticket())
+        pages[1].wait_for_function("S.includes('live')", timeout=15000)
+        RATE = """(async()=>{let b=0;(await PC.getStats()).forEach(r=>{if(r.type==='inbound-rtp')b=r.bytesReceived});return b})()"""
+        time.sleep(15)                                    # let the estimates settle
+        good = [pages[2], pages[3], pages[4]]
+        b0 = [pg.evaluate(RATE) for pg in good]
+        for pg in pages[1:5]:
+            pg.evaluate("F = 0")
+        time.sleep(8)
+        fps = [pg.evaluate("F") / 8 for pg in good]
+        mbps = [(pg.evaluate(RATE) - b) * 8 / 8 / 1e6 for pg, b in zip(good, b0)]
+        poor = pages[1].evaluate("F") / 8
+        check("a viewer on a poor link does not drag the good ones down",
+              # All four viewers decode on this one computer, which also encodes:
+              # the browsers show ~20 of the ~27 fps sent. Before: 1 fps.
+              all(f >= 15 for f in fps), "fps " + ", ".join(f"{f:.0f}" for f in fps) + ", Mbit/s " + ", ".join(f"{m:.1f}" for m in mbps))
+        check("the poor link still gets a moving picture", poor >= 3, f"{poor:.1f} fps")
         b.close()
 finally:
     srv.terminate(); web.shutdown()
+    if not ok:
+        print("streamer log (last lines):"); print("".join(open(LOG).readlines()[-8:]))
 sys.exit(0 if ok else 1)
