@@ -268,7 +268,9 @@ def test_the_github_workflows_only_run_when_started_by_hand():
         text = wf.read_text(encoding="utf-8")
         block = re.search(r"^on:\s*\n((?:[ \t]+.*\n)+)", text, re.M)
         triggers = set(re.findall(r"^[ \t]{2}([a-z_]+):", block.group(1), re.M)) if block else set()
-        assert triggers == {"workflow_dispatch"}, f"{wf.name} runs on {sorted(triggers)} - manual only"
+        # workflow_call starts nothing on its own: it lets a manual run call this one.
+        assert "workflow_dispatch" in triggers and triggers <= {"workflow_dispatch", "workflow_call"}, \
+            f"{wf.name} runs on {sorted(triggers)} - manual only"
 
 
 def test_the_version_number_has_the_release_format():
