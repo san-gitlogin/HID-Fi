@@ -2,6 +2,7 @@
 //! the system tests.
 
 pub mod menu;
+#[cfg(any(target_os = "macos", windows))]
 pub mod panel;
 pub mod service;
 pub mod store;

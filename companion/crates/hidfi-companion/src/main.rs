@@ -1,112 +1,24 @@
 //! HID-Fi Companion: a tray / menu-bar app that shows this computer's screen
 //! on the HID-Fi dashboard. All the work is in `service`; this file is the
-//! tray, the single-instance guard and the first-run setup.
+//! single-instance guard and the first-run setup, then the tray for the OS:
+//! `desktop` (macOS, Windows) or `linux`.
 
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod act;
 mod autostart;
+#[cfg(any(target_os = "macos", windows))]
+mod desktop;
+mod icons;
+#[cfg(target_os = "linux")]
+mod linux;
 mod logfile;
 
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
-use hidfi_companion::menu::{self, Action, Icon};
-use hidfi_companion::panel::{self, Click, Panel};
-use hidfi_companion::service::{self, Cmd, Env};
+use hidfi_companion::service::{self, Env};
 use hidfi_companion::store::Store;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{TrayIcon, TrayIconBuilder};
-
-fn icon(kind: Icon) -> tray_icon::Icon {
-    let name = match kind {
-        Icon::Idle => "idle",
-        Icon::Ready => "ready",
-        Icon::Live => "live",
-        Icon::Attention => "attention",
-    };
-    #[cfg(target_os = "macos")]
-    let bytes: &[u8] = match name {
-        "idle" => include_bytes!("../assets/mac-idle-44.png"),
-        "ready" => include_bytes!("../assets/mac-ready-44.png"),
-        "live" => include_bytes!("../assets/mac-live-44.png"),
-        _ => include_bytes!("../assets/mac-attention-44.png"),
-    };
-    #[cfg(not(target_os = "macos"))]
-    let bytes: &[u8] = match name {
-        "idle" => include_bytes!("../assets/color-idle-64.png"),
-        "ready" => include_bytes!("../assets/color-ready-64.png"),
-        "live" => include_bytes!("../assets/color-live-64.png"),
-        _ => include_bytes!("../assets/color-attention-64.png"),
-    };
-    let dec = png::Decoder::new(std::io::Cursor::new(bytes));
-    let mut r = dec.read_info().expect("bundled icon");
-    let mut buf = vec![0; r.output_buffer_size().expect("icon size")];
-    let info = r.next_frame(&mut buf).expect("bundled icon");
-    buf.truncate(info.buffer_size());
-    tray_icon::Icon::from_rgba(buf, info.width, info.height).expect("bundled icon")
-}
-
-fn open(target: &str) {
-    let r = if cfg!(target_os = "macos") {
-        std::process::Command::new("open").arg(target).spawn()
-    } else if cfg!(windows) {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", target])
-            .spawn()
-    } else {
-        std::process::Command::new("xdg-open").arg(target).spawn()
-    };
-    if let Err(e) = r {
-        log::warn!("could not open {target}: {e}");
-    }
-}
-
-const SCREEN_RECORDING_SETTINGS: &str =
-    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
-
-/// The menu as built, with the ids that map back to actions.
-struct Built {
-    menu: Menu,
-    actions: Vec<(tray_icon::menu::MenuId, Action)>,
-    window: MenuItem,
-    login: CheckMenuItem,
-    quit: MenuItem,
-}
-
-fn build(m: &menu::Model, start_at_login: bool) -> Built {
-    let menu = Menu::new();
-    let _ = menu.append(&MenuItem::new("HID-Fi Companion", false, None));
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    for l in &m.lines {
-        let _ = menu.append(&MenuItem::new(l, false, None));
-    }
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    let window = MenuItem::new("Open HID-Fi Companion\u{2026}", true, None);
-    let _ = menu.append(&window);
-    let mut actions = Vec::new();
-    if !m.actions.is_empty() {
-        let _ = menu.append(&PredefinedMenuItem::separator());
-    }
-    for (label, a) in &m.actions {
-        let it = MenuItem::new(label, true, None);
-        actions.push((it.id().clone(), a.clone()));
-        let _ = menu.append(&it);
-    }
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    let login = CheckMenuItem::new("Start at login", true, start_at_login, None);
-    let _ = menu.append(&login);
-    let quit = MenuItem::new("Quit HID-Fi Companion", true, None);
-    let _ = menu.append(&quit);
-    Built {
-        menu,
-        actions,
-        window,
-        login,
-        quit,
-    }
-}
+use std::time::Duration;
 
 fn main() {
     // HIDFI_HOME and HIDFI_NO_AUTOSTART exist for development and tests: a
@@ -141,7 +53,7 @@ fn main() {
     log::info!("starting, version {}", env!("CARGO_PKG_VERSION"));
     std::panic::set_hook(Box::new(|p| log::error!("panic: {p}")));
 
-    let mut state = store.state();
+    let state = store.state();
     // First run: start at login unless the user turned it off.
     if state.start_at_login && !no_autostart {
         if let Err(e) = autostart::set(true) {
@@ -161,169 +73,8 @@ fn main() {
     let first_run = store.key().is_none();
     let handle = service::start(store, env);
 
-    let mut event_loop = EventLoopBuilder::new().build();
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
-        // A menu-bar app: no Dock icon, no app switcher entry.
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-    }
-    let _ = &mut event_loop;
-
-    let mut tray: Option<TrayIcon> = None;
-    let mut built: Option<Built> = None;
-    let mut shown: Option<menu::Model> = None;
-    let menu_rx = MenuEvent::receiver();
-    let (click_tx, click_rx) = std::sync::mpsc::channel::<Click>();
-    let mut panel: Option<Panel> = None;
-    // What the user last closed the window on. It comes back by itself only
-    // for something new to do, never for the same thing again.
-    let mut dismissed: Option<String> = None;
-    let mut want_open = first_run;
-
-    event_loop.run(move |event, target, flow| {
-        *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500));
-        let view = handle
-            .view
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        match event {
-            Event::NewEvents(tao::event::StartCause::Init) => {
-                let m = menu::model(&view);
-                let b = build(&m, state.start_at_login);
-                let t = TrayIconBuilder::new()
-                    .with_icon(icon(m.icon))
-                    .with_icon_as_template(cfg!(target_os = "macos"))
-                    .with_tooltip(&m.tooltip)
-                    .with_menu(Box::new(b.menu.clone()))
-                    .build();
-                match t {
-                    Ok(t) => {
-                        t.set_title(m.title.as_deref());
-                        tray = Some(t);
-                    }
-                    Err(e) => log::error!("no tray icon: {e}"),
-                }
-                built = Some(b);
-                shown = Some(m);
-            }
-            Event::WindowEvent {
-                window_id,
-                event: WindowEvent::CloseRequested,
-                ..
-            } if panel.as_ref().is_some_and(|p| p.id() == window_id) => {
-                panel = None;
-                dismissed = Some(episode(&view));
-            }
-            _ => {}
-        }
-
-        let mut act: Vec<Action> = Vec::new();
-        while let Ok(ev) = menu_rx.try_recv() {
-            let Some(b) = built.as_ref() else { continue };
-            if ev.id == *b.quit.id() {
-                let _ = handle.tx.send(Cmd::Quit);
-                panel = None;
-                tray = None;
-                *flow = ControlFlow::Exit;
-                return;
-            }
-            if ev.id == *b.window.id() {
-                want_open = true;
-                continue;
-            }
-            if ev.id == *b.login.id() {
-                state.start_at_login = b.login.is_checked();
-                if let Err(e) = autostart::set(state.start_at_login) {
-                    log::warn!("start at login: {e}");
-                }
-                let mut s = store_for_settings.state();
-                s.start_at_login = state.start_at_login;
-                let _ = store_for_settings.save_state(&s);
-                continue;
-            }
-            if let Some((_, a)) = b.actions.iter().find(|(id, _)| *id == ev.id) {
-                act.push(a.clone());
-            }
-        }
-        while let Ok(c) = click_rx.try_recv() {
-            match c {
-                Click::Close => {
-                    panel = None;
-                    dismissed = Some(episode(&view));
-                }
-                Click::Action(i) => {
-                    if let Some((_, a)) = shown.as_ref().and_then(|m| m.actions.get(i)) {
-                        act.push(a.clone());
-                    }
-                }
-            }
-        }
-        for a in act {
-            match a {
-                Action::OpenDashboard(u) => open(&format!("{u}/#screen")),
-                Action::AllowScreenRecording => {
-                    #[cfg(target_os = "macos")]
-                    hidfi_stream::sck::ask();
-                    open(SCREEN_RECORDING_SETTINGS);
-                }
-                Action::PairAgain => {
-                    let _ = handle.tx.send(Cmd::PairAgain);
-                }
-                Action::ChooseBoard(mac, _) => {
-                    let _ = handle.tx.send(Cmd::ChooseBoard(mac));
-                }
-                Action::Forget => {
-                    let _ = handle.tx.send(Cmd::Forget);
-                }
-            }
-        }
-
-        // The window: opened when asked, or by itself when there is something
-        // new to do that the menu bar alone would not show (always so on
-        // Windows, which has no menu-bar text for the code).
-        if menu::needs_window(&view) && dismissed.as_deref() != Some(episode(&view).as_str()) {
-            want_open = true;
-        }
-        let m = menu::model(&view);
-        if want_open {
-            want_open = false;
-            match panel.as_ref() {
-                Some(p) => p.focus(),
-                None => match Panel::open(target, click_tx.clone()) {
-                    Ok(p) => {
-                        p.render(&panel::view_json(&m, &view));
-                        panel = Some(p);
-                    }
-                    Err(e) => log::warn!("window: {e}"),
-                },
-            }
-        }
-
-        // Redraw only when what is shown has changed.
-        if shown.as_ref() != Some(&m) {
-            if let Some(t) = tray.as_ref() {
-                if shown.as_ref().map(|s| s.icon) != Some(m.icon) {
-                    let _ = t.set_icon(Some(icon(m.icon)));
-                    t.set_icon_as_template(cfg!(target_os = "macos"));
-                }
-                t.set_title(m.title.as_deref());
-                let _ = t.set_tooltip(Some(&m.tooltip));
-                let b = build(&m, state.start_at_login);
-                t.set_menu(Some(Box::new(b.menu.clone())));
-                built = Some(b);
-            }
-            if let Some(p) = panel.as_ref() {
-                p.render(&panel::view_json(&m, &view));
-            }
-            shown = Some(m);
-        }
-    });
-}
-
-/// A name for "the thing the user is being asked to do now", so closing the
-/// window on it is remembered and it is not reopened for the same thing.
-fn episode(v: &service::View) -> String {
-    format!("{:?}|{:?}", v.board, v.session)
+    #[cfg(any(target_os = "macos", windows))]
+    desktop::run(handle, state, store_for_settings, first_run);
+    #[cfg(target_os = "linux")]
+    linux::run(handle, state, store_for_settings, first_run);
 }
