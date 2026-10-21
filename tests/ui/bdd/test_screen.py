@@ -5,6 +5,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from support import companion_sim as cs
 from support.fake_pc import FakePc
+from support.ui import Dashboard
 
 pytestmark = pytest.mark.ui
 scenarios("features/screen.feature")
@@ -321,3 +322,137 @@ def viewer_left(ctx, name):
 def not_contains(ctx, el_id, text):
     ui = ctx["ui"]
     _wait(ui, lambda: text not in ui.page.inner_text(f"#{el_id}"), f"#{el_id} still contains {text!r}")
+
+
+# ---- watch only ---------------------------------------------------------------------------
+def _open_watch(ctx, browser, names):
+    """Pairs and serves the computers first, then opens the page straight at #watch
+    and signs in - the way a TV or a second tablet would open it."""
+    sim = ctx["sim"]
+    sim.pin = "4826"
+    ui = Dashboard(browser, sim, device="phone", answers=ctx["answers"], init=ctx["init"])
+    for name in names:
+        app = _new_app(ctx, name)
+        pc = FakePc(browser, app, "live")
+        _pcs(ctx)[name] = pc
+        _pair(ctx, app)
+        with sim.lock:
+            app.beat()
+        pc.serve(ui.page)
+    ui.page.goto(ui.sim.URL + "#watch")
+    ui.page.wait_for_selector("#sheet.on .pinbox", timeout=8000)
+    # As conftest._enter_pin does it (the step module cannot import conftest).
+    ui.page.wait_for_function("""() => { const b = [...document.querySelectorAll('#sheet.on .pinbox')];
+        return b.length && b.every(x => !x.value); }""", timeout=4000)
+    ui.page.locator("#sheet.on .pinbox").first.click()
+    ui.page.wait_for_timeout(120)
+    for d in "4826":
+        ui.page.keyboard.type(d)
+        ui.page.wait_for_timeout(40)
+    ui.page.wait_for_function("() => !document.getElementById('sheet').classList.contains('on')", timeout=5000)
+    ui.idle(300)
+    ctx["ui"] = ui
+
+
+@given(parsers.parse('"{name}" is paired and running and this screen opens "#watch"'))
+def watch_one(ctx, browser, name):
+    _open_watch(ctx, browser, [name])
+
+
+@given(parsers.parse('"{a}" and "{b}" are paired and running and this screen opens "#watch"'))
+def watch_two(ctx, browser, a, b):
+    _open_watch(ctx, browser, [a, b])
+
+
+@given('nothing is paired and this screen opens "#watch"')
+def watch_none(ctx, browser):
+    _open_watch(ctx, browser, [])
+
+
+@then("the dashboard is hidden behind the picture")
+def dash_hidden(ctx):
+    page = ctx["ui"].page
+    assert page.evaluate("getComputedStyle(document.querySelector('.app')).display") == "none"
+    assert page.evaluate("location.hash") == "#watch"
+    assert page.locator("#watchWrap").is_visible()
+
+
+@when("I open the screen on its own")
+def open_solo(ctx):
+    ui = ctx["ui"]
+    # The new window loads from the board too; answer it here.
+    ui.ctx.route("http://hidfi.test/**", lambda r: r.fulfill(body="<p>watch</p>", content_type="text/html"))
+    with ui.page.expect_popup() as pop:
+        ui.tap_id("scrSolo")
+    w = pop.value
+    w.wait_for_load_state()
+    ctx["notes"]["popup"] = w.url
+    w.close()
+
+
+@then(parsers.parse('a new window opens at "#{hash_}"'))
+def new_window(ctx, hash_):
+    assert ctx["notes"].get("popup", "").endswith("#" + hash_), ctx["notes"].get("popup")
+
+
+@when(parsers.parse("{n:d} seconds pass with nothing touched"))
+def nothing_touched(ctx, n):
+    ctx["ui"].page.wait_for_timeout(n * 1000)
+
+
+@then("the watch bar is hidden")
+def bar_hidden(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("getComputedStyle(document.getElementById('watchBar')).opacity") == "0",
+          "the bar is still showing")
+
+
+@then("the watch bar is shown")
+def bar_shown(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("getComputedStyle(document.getElementById('watchBar')).opacity") == "1",
+          "the bar did not come back")
+
+
+@when("I touch the picture")
+def touch_picture(ctx):
+    ctx["ui"].tap_point("#scrStage")
+
+
+@then("the page is full screen")
+def is_fullscreen(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("!!document.fullscreenElement"), "not full screen")
+    assert ui.page.get_attribute("#watchFs", "aria-label") == "Leave full screen"
+
+
+@then("the page is not full screen")
+def not_fullscreen(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("!document.fullscreenElement"), "still full screen")
+
+
+@when(parsers.parse('I press "{key}" on the keyboard'))
+def press_key(ctx, key):
+    ctx["ui"].page.keyboard.press(key)
+    ctx["ui"].idle(200)
+
+
+@then("the picture is zoomed in")
+def picture_zoomed(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: "scale(1.5" in (ui.page.get_attribute("#scrVideo", "style") or ""), "the picture is not zoomed")
+
+
+@then("the picture fits the screen")
+def picture_fits(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: "scale" not in (ui.page.get_attribute("#scrVideo", "style") or ""), "the picture is still zoomed")
+
+
+@when(parsers.parse('I choose "{name}" in the list'))
+def choose_in_list(ctx, name):
+    sel = f'[data-watchpick="{_apps(ctx)[name].id}"]'
+    ctx["ui"].page.locator(sel).wait_for(timeout=5000)
+    ctx["ui"].page.locator(sel).tap()
+    ctx["ui"].idle(300)

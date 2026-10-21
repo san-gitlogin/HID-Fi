@@ -75,6 +75,8 @@ SHEET_STATES = [
     ("sheet dashboards", "showDashboards()"),
     ("sheet lost board", "MDNS_NAME='esp-hid-da1a2c';wsUp=false;lostAt=1;lostTold=false;lostHelp();wsUp=true"),
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),
+    ("sheet watch pick", "SCR.pcs=[{id:'a'.repeat(32),name:'Studio PC',online:true},"
+                         "{id:'b'.repeat(32),name:'Kitchen laptop with a much longer name',online:false}];watchPick()"),
 ]
 OVERLAY_STATES = [
     ("overlay boot", "bootStart('Switching the pointer to absolute. Windows will install the new device.')",
@@ -84,6 +86,8 @@ OVERLAY_STATES = [
     # The Screen tab's floating window, open and minimised, over another tab.
     ("overlay screen float", "go('screen');scrFloat(true);go('media')", "scrFloat(false)"),
     ("overlay screen float min", "go('screen');scrFloat(true);scrMinimise();go('media')", "scrFloat(false)"),
+    # Watch only: the picture alone, its bar and the stage's zoom buttons.
+    ("overlay watch", "watchEnter()", "watchLeave();go('pad')"),
     ("toast", f"toast('{LONG} could not be saved because the board is full','bad')", ""),
 ]
 

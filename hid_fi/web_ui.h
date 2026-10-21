@@ -1011,6 +1011,34 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   .scrstage{height:calc(100vh - 72px);height:calc(100dvh - 72px);min-height:150px}
   .scrpadslot .padwrap{--padh:calc(100vh - 74px);--padh:calc(100dvh - 74px)}
 }
+/* ---- watch only (#watch): the picture alone, for a screen that just watches ----
+   Decided before the first paint, so a screen opened to watch never shows the
+   dashboard and then jumps: #watch:target matches from the URL alone, before
+   any script runs; the script then sets html.watch, which carries the rest. */
+html.watch .app,html.watch .tabbar,html.watch .scrfloat,
+html:has(#watch:target) .app,html:has(#watch:target) .tabbar{display:none!important}
+.watchwrap{display:none}
+html.watch .watchwrap,html:has(#watch:target) .watchwrap{display:block;position:fixed;inset:0;z-index:300;background:#000}
+html.watch .watchwrap .scrstage{position:absolute;inset:0;width:auto;height:auto;max-height:none;aspect-ratio:auto;
+  border:none;border-radius:0;background:#000}
+html.watch .watchwrap .scrstage video{background:#000}
+html.watch .watchwrap .scrtools{right:calc(10px + var(--sar));bottom:calc(10px + var(--sab))}
+html.watch .watchwrap #scrPop{display:none}
+html.watch .watchwrap .scrbadge{display:none}
+.watchbar{position:absolute;left:0;right:0;top:0;z-index:3;display:flex;align-items:center;gap:8px;
+  padding:calc(10px + var(--sat)) calc(10px + var(--sar)) 10px calc(10px + var(--sal));
+  background:linear-gradient(rgba(5,7,12,.86),rgba(5,7,12,0));transition:opacity .25s var(--ease)}
+.watchbar .who{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto;height:38px;padding:0 12px;
+  border-radius:11px;background:rgba(8,11,17,.74);border:1px solid var(--line);color:var(--fg);font-size:13px;
+  font-weight:600;max-width:max-content}
+.watchbar .who span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.watchbar .who i{font-style:normal;color:var(--fg3);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.watchbar .iconbtn{background:rgba(8,11,17,.74)}
+/* Leaving and full screen sit at the right edge, where every video player keeps them. */
+.watchbar #watchFs,.watchbar #watchFs[style*=none]+#watchExit{margin-left:auto}
+html.watch .watchwrap.idle .watchbar,html.watch .watchwrap.idle .scrtools{opacity:0;pointer-events:none}
+@media(hover:hover){html.watch .watchwrap.idle{cursor:none}}
+
 /* ---- the floating window: the picture over any tab, moved and sized by hand ---- */
 .scrfloat{position:fixed;z-index:450;left:0;top:0;width:320px;display:none;flex-direction:column;
   border-radius:12px;overflow:hidden;background:#05070c;border:1px solid var(--line2);
@@ -1024,7 +1052,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .scrfloat .fbody{position:relative}
 .scrfloat .scrstage{border:none;border-radius:0;max-height:none;height:auto;aspect-ratio:16/10;min-height:0}
 .scrfloat .scrtools .iconbtn{width:30px;height:30px}
-.scrfloat #scrPop{display:none}
+.scrfloat #scrPop,.scrfloat #scrSolo,html.watch #scrSolo{display:none}
 .scrfloat .scrbadge b{display:none}
 .scrfloat.min .fbody,.scrfloat.min .fsize{display:none}
 .scrfloat.min{width:auto!important;max-width:calc(100vw - 16px)}
@@ -1204,6 +1232,7 @@ main::after{height:var(--flpad,0px)}
 <symbol id="i-dock" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m8.5 8.5 6 6M15 9.5v5.5H9.5"/></symbol>
 <symbol id="i-zoomin" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.8v5.4M7.8 10.5h5.4"/></symbol>
 <symbol id="i-zoomout" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.8 10.5h5.4"/></symbol>
+<symbol id="i-newwin" viewBox="0 0 24 24"><path d="M10.5 4.5h-5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></symbol>
 <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3.5 8.5v-5h5M20.5 8.5v-5h-5M3.5 15.5v5h5M20.5 15.5v5h-5"/><rect x="8" y="8.5" width="8" height="7" rx="1.3"/></symbol>
 </defs></svg>
 
@@ -1346,6 +1375,7 @@ main::after{height:var(--flpad,0px)}
               <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
               <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
               <button class="iconbtn" id="scrPop" aria-label="Float over other tabs"><svg class="ic ic-sm"><use href="#i-float"/></svg></button>
+              <button class="iconbtn" id="scrSolo" aria-label="Open the screen on its own"><svg class="ic ic-sm"><use href="#i-newwin"/></svg></button>
             </div>
           </div>
           <div class="scrhole" id="scrHole">
@@ -1753,6 +1783,14 @@ main::after{height:var(--flpad,0px)}
   </div>
 </div>
 
+<i id="watch" hidden></i>
+<div class="watchwrap" id="watchWrap">
+  <div class="watchbar" id="watchBar">
+    <button class="who" id="watchWho" aria-label="Choose the computer"><span class="dot" id="watchDot"></span><span id="watchName">Screen</span><i id="watchFps"></i></button>
+    <button class="iconbtn" id="watchFs" aria-label="Full screen"><svg class="ic"><use href="#i-max"/></svg></button>
+    <button class="iconbtn" id="watchExit" aria-label="Back to the dashboard"><svg class="ic"><use href="#i-x"/></svg></button>
+  </div>
+</div>
 <div class="scrfloat" id="scrFloat" role="dialog" aria-label="Computer screen">
   <div class="fhead" id="scrFHead"><span class="dot" id="scrFDot"></span><b id="scrFName">Screen</b>
     <button class="iconbtn" id="scrFMin" aria-label="Minimise the screen"><svg class="ic ic-sm"><use href="#i-min"/></svg></button>
@@ -1858,7 +1896,7 @@ function connect(){
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-    if(curView==='screen'||SCR.float)scrList();};
+    if(curView==='screen'||SCR.float||WATCH.on)scrList();};
   sock.onclose=()=>{if(!live())return;
     if(!lostAt)lostAt=Date.now();
     wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
@@ -2388,13 +2426,15 @@ function go(id){
   $('vtitle').textContent=v?v.t:'';
   $('btnInfo').setAttribute('aria-label',(v?v.t:'')+' help');
   $('main').scrollTop=0;
-  try{location.hash=id;}catch(e){}
+  if(!WATCH.on){try{location.hash=id;}catch(e){}}
   scrView(id);
   // Who is connected changes while the page is open; show it as it is now.
   if(id==='setup'&&wsUp)loadClients();
 }
 window.addEventListener('hashchange',()=>{
   const id=location.hash.replace('#','');
+  if(id==='watch'){if(!WATCH.on)watchEnter();return;}
+  if(WATCH.on)watchLeave();
   if(VIEWS.some(v=>v.id===id)&&id!==curView)go(id);
 });
 
@@ -4330,7 +4370,7 @@ function pcEditor(edit){
 let AUTH_SET=null;
 let AP_OPEN=false;
 function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-  if(curView==='screen'||SCR.float)scrList();}
+  if(curView==='screen'||SCR.float||WATCH.on)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
@@ -4370,7 +4410,7 @@ function applyStatus(d){
   // to pair - worth re-reading the list, but only where it is shown.
   if(d.comp_paired!==undefined){
     const k=d.comp_paired+'/'+d.comp_online+'/'+d.comp_pending;
-    if(k!==SCR.counts){SCR.counts=k;if(curView==='screen'||SCR.float||d.comp_pending)scrList();}
+    if(k!==SCR.counts){SCR.counts=k;if(curView==='screen'||SCR.float||WATCH.on||d.comp_pending)scrList();}
   }
   // How many dashboards the board is serving. Polled, so a second phone opening
   // this page shows up here on its own - and so does a tab that was left open
@@ -5163,6 +5203,10 @@ const SCR={
   tries:0,retryT:0,float:false,min:false,counts:'',
   z:{s:1,x:0,y:0},notes:{}
 };
+// Watch only (#watch): the picture alone on a screen that just watches, while
+// another device does the controlling. Declared here, before anything can call
+// it; the page marked html.watch before its first paint.
+const WATCH={on:location.hash==='#watch',idleT:0};
 const scrVideo=$('scrVideo'),scrStage=$('scrStage');
 const PADHOME={parent:padwrap.parentNode,next:padwrap.nextSibling};
 function scrList(){
@@ -5261,10 +5305,10 @@ function scrForget(id,pending){
 function scrChoose(id){
   if(SCR.sel!==id)scrStop('idle');
   SCR.sel=id;SCR.tries=0;try{localStorage.setItem('scrpc',id);}catch(e){}
-  if(curView!=='screen'&&!SCR.float)go('screen');
+  if(curView!=='screen'&&!SCR.float&&!WATCH.on)go('screen');
   scrSync();scrRenderList();
 }
-function scrWant(){return (curView==='screen'||SCR.float)&&!document.hidden&&!!SCR.sel;}
+function scrWant(){return (curView==='screen'||SCR.float||WATCH.on)&&!document.hidden&&!!SCR.sel;}
 function scrSync(){
   if(scrWant()){if(!SCR.h&&!SCR.retryT&&SCR.state!=='ticket')scrStart();}
   else if(SCR.h||SCR.retryT||SCR.state==='ticket')scrStop('idle');
@@ -5324,8 +5368,9 @@ function scrMsgHtml(){
   if(!SCR.loaded)return '<span>Asking the board...</span>';
   if(!SCR.pinSet)return ico('shield')+'<b>Set an access PIN to share screens</b><span>Settings, Access PIN.</span>';
   if(!SCR.pcs.length)return ico('screen')+'<b>See a computer\u2019s screen here</b>'+
-    '<span>Install HID-Fi Companion on the computer this board is plugged into. It asks to pair below.</span>';
-  if(!SCR.sel)return ico('screen')+'<b>Choose a computer below</b>';
+    '<span>Install HID-Fi Companion on the computer this board is plugged into. It asks to pair '+
+    (WATCH.on?'on the dashboard\u2019s Screen tab.':'below.')+'</span>';
+  if(!SCR.sel)return ico('screen')+(WATCH.on?'<b>Choose a computer</b><button class="btn sm" id="watchPick2">Choose</button>':'<b>Choose a computer below</b>');
   switch(SCR.state){
     case 'live':return '';
     case 'offline':return ico('monitor')+'<b>'+n+' is not reachable</b><span>Start HID-Fi Companion on it. The picture appears by itself once it is running.</span>';
@@ -5345,6 +5390,7 @@ function scrMsgHtml(){
 }
 function scrPaint(){
   const m=$('scrMsg');if(!m)return;
+  if(WATCH.on)watchPaint();
   const html=scrMsgHtml();
   if(m.innerHTML!==html)m.innerHTML=html;
   const live=SCR.state==='live'||SCR.state==='reconnecting';
@@ -5551,6 +5597,84 @@ function scrView(id){
 }
 addEventListener('pagehide',()=>scrStop('idle'));
 
+// ---- watch only ----
+function watchEnter(){
+  WATCH.on=true;
+  document.documentElement.classList.add('watch');
+  if(SCR.float)scrFloat(false);
+  const w=$('watchWrap');w.insertBefore(scrStage,w.firstChild);
+  const fsOk=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+  $('watchFs').style.display=fsOk?'':'none';
+  watchWake();scrApplyZoom();scrList();scrSync();
+}
+function watchLeave(){
+  WATCH.on=false;
+  document.documentElement.classList.remove('watch');
+  $('watchWrap').classList.remove('idle');
+  clearTimeout(WATCH.idleT);
+  if(document.fullscreenElement||document.webkitFullscreenElement){
+    try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch(e){}
+  }
+  $('scrStageSlot').insertBefore(scrStage,$('scrHole'));
+  scrApplyZoom();scrSync();
+}
+function watchPaint(){
+  const live=SCR.state==='live'||SCR.state==='reconnecting';
+  $('watchName').textContent=SCR.name||(SCR.pcs.length?'Choose a computer':'Screen');
+  $('watchDot').className='dot '+(SCR.state==='live'?'ok':live?'warn':'');
+  $('watchFps').textContent=SCR.state==='live'&&SCR.fps?SCR.fps+' fps':SCR.state==='reconnecting'?'reconnecting':'';
+  // The bar stays up until there is a picture to look at, and starts to fade
+  // the moment there is one.
+  if(!live){$('watchWrap').classList.remove('idle');clearTimeout(WATCH.idleT);WATCH.idleT=0;}
+  else if(!WATCH.idleT&&!$('watchWrap').classList.contains('idle'))watchWake();
+}
+// Shown on any touch, click or key; it fades after three seconds of a live
+// picture, and so does the mouse pointer on a desktop or TV.
+function watchWake(){
+  $('watchWrap').classList.remove('idle');
+  clearTimeout(WATCH.idleT);
+  WATCH.idleT=setTimeout(()=>{WATCH.idleT=0;if(WATCH.on&&SCR.state==='live')$('watchWrap').classList.add('idle');},3000);
+}
+function watchPick(){
+  if(SCR.pcs.length<2)return watchWake();
+  sheet('Choose a computer','<div class="list">'+SCR.pcs.map(p=>
+    '<div class="item">'+ico('monitor')+'<div class="tx"><b>'+esc(p.name)+'</b><span>'+
+    (p.online?'ready':'not running')+'</span></div><button class="btn sm" data-watchpick="'+p.id+'"'+
+    (p.online?'':' disabled')+'>Show</button></div>').join('')+'</div>',
+    ()=>document.querySelectorAll('[data-watchpick]').forEach(b=>b.onclick=()=>{closeSheet();scrChoose(b.dataset.watchpick);}));
+}
+function watchFullscreen(){
+  const d=document,el=d.documentElement;
+  if(d.fullscreenElement||d.webkitFullscreenElement){try{(d.exitFullscreen||d.webkitExitFullscreen).call(d);}catch(e){}}
+  else{try{(el.requestFullscreen||el.webkitRequestFullscreen).call(el);}catch(e){}}
+}
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{
+  const on=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  $('watchFs').innerHTML=ico(on?'min':'max');
+  $('watchFs').setAttribute('aria-label',on?'Leave full screen':'Full screen');
+}));
+['pointerdown','pointermove'].forEach(ev=>$('watchWrap').addEventListener(ev,()=>{if(WATCH.on)watchWake();}));
+$('watchWho').onclick=watchPick;
+$('watchFs').onclick=()=>{watchFullscreen();watchWake();};
+$('watchExit').onclick=()=>{location.hash='screen';};
+$('scrSolo').onclick=()=>{
+  // A new tab or window: put it on a TV, a second monitor, another device.
+  const u=location.pathname+'#watch';
+  const w=window.open(u,'_blank');
+  if(!w)location.hash='watch';
+};
+$('scrMsg').addEventListener('click',e=>{if(e.target.id==='watchPick2')watchPick();});
+document.addEventListener('keydown',e=>{
+  if(!WATCH.on||e.target.closest&&e.target.closest('input,textarea,select,.sheet'))return;
+  const c=scrStage.clientWidth/2,m=scrStage.clientHeight/2;
+  if(e.key==='f'||e.key==='F')watchFullscreen();
+  else if(e.key==='+'||e.key==='=')scrZoomAt(1.5,c,m);
+  else if(e.key==='-')scrZoomAt(1/1.5,c,m);
+  else if(e.key==='0')scrFit();
+  else return;
+  e.preventDefault();watchWake();
+});
+
 // HID-Fi screen viewer - kept identical to companion/web/viewer.js (tests/static checks).
 // HID-Fi screen viewer: the browser half of companion/DESIGN.md "Viewer tickets".
 // Written to drop into the dashboard (web_ui.h) unchanged: no modules, no
@@ -5625,6 +5749,7 @@ DECK.set((()=>{try{return localStorage.getItem('deck')==='1';}catch(e){return fa
 bindStick($('stickL'),'l');bindStick($('stickR'),'r');
 renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();paintOsUi();paintGestureLabels();
 go(VIEWS.some(v=>v.id===location.hash.replace('#',''))?location.hash.replace('#',''):'pad');
+if(WATCH.on)watchEnter();
 connect();
 setInterval(()=>{if(wsUp&&!document.hidden)send({cmd:'status'});},8000);
 // iOS Safari ignores user-scalable=no, so pinch has to be refused as it happens.

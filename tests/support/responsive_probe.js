@@ -61,6 +61,7 @@
     // can be moved, minimised or closed, so the page under it is judged with it
     // minimised ("overlay screen float min"), where all of it must be reachable.
     if (state === 'overlay screen float') return document.getElementById('scrFloat');
+    if (state === 'overlay watch') return document.getElementById('watchWrap');
     return document.querySelector('.view.on');
   };
 

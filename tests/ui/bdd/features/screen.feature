@@ -239,3 +239,57 @@ Feature: Screen - seeing the computer's own picture
     And a computer "Studio PC" is paired but its app refuses connections
     When I open the "Screen" tab
     Then the screen says "Cannot reach Studio PC"
+
+  # ---- Watch only: the picture alone on a screen that just watches ------------------------
+
+  Scenario: A screen that only watches
+    Given "Studio PC" is paired and running and this screen opens "#watch"
+    Then the screen shows "Studio PC" live
+    And the dashboard is hidden behind the picture
+    And "#watchName" reads "Studio PC"
+    And the trackpad is back in the Trackpad tab
+    When I tap the "#watchExit" control
+    Then the "Screen" tab is shown
+    And the screen shows "Studio PC" live
+
+  Scenario: Opening the screen on its own from the Screen tab
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    And I open the screen on its own
+    Then a new window opens at "#watch"
+
+  Scenario: The bar fades from a live picture and comes back on a touch
+    Given "Studio PC" is paired and running and this screen opens "#watch"
+    Then the screen shows "Studio PC" live
+    When 4 seconds pass with nothing touched
+    Then the watch bar is hidden
+    When I touch the picture
+    Then the watch bar is shown
+
+  Scenario: Full screen, and zooming from a keyboard
+    Given "Studio PC" is paired and running and this screen opens "#watch"
+    Then the screen shows "Studio PC" live
+    When I tap the "#watchFs" control
+    Then the page is full screen
+    When I tap the "#watchFs" control
+    Then the page is not full screen
+    When I press "+" on the keyboard
+    Then the picture is zoomed in
+    When I press "0" on the keyboard
+    Then the picture fits the screen
+    When I press "F" on the keyboard
+    Then the page is full screen
+
+  Scenario: Choosing between two computers while only watching
+    Given "Studio PC" and "Den Laptop" are paired and running and this screen opens "#watch"
+    Then the screen says "Choose a computer"
+    When I tap the "#watchPick2" control
+    And I choose "Den Laptop" in the list
+    Then the screen shows "Den Laptop" live
+    When I tap the "#watchWho" control
+    Then the dialog "Choose a computer" is open
+
+  Scenario: Only watching with nothing paired yet
+    Given nothing is paired and this screen opens "#watch"
+    Then the screen says "It asks to pair on the dashboard’s Screen tab"
