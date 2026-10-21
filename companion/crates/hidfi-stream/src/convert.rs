@@ -51,6 +51,44 @@ pub fn bgra_to_nv12(bgra: &[u8], stride: usize, w: usize, h: usize, nv12: &mut [
     }
 }
 
+/// BGRA to I420 (planar Y, then U, then V), BT.601 limited range - what
+/// OpenH264 takes. Same arithmetic as [`bgra_to_nv12`], planes split.
+pub fn bgra_to_i420(
+    bgra: &[u8],
+    stride: usize,
+    w: usize,
+    h: usize,
+    nv12: &mut Vec<u8>,
+    i420: &mut [u8],
+) {
+    nv12.resize(w * h * 3 / 2, 0);
+    bgra_to_nv12(bgra, stride, w, h, nv12);
+    assert!(i420.len() >= w * h * 3 / 2);
+    let (y, rest) = i420.split_at_mut(w * h);
+    let (u, v) = rest.split_at_mut(w * h / 4);
+    y.copy_from_slice(&nv12[..w * h]);
+    for (i, [cu, cv]) in nv12[w * h..].as_chunks::<2>().0.iter().enumerate() {
+        u[i] = *cu;
+        v[i] = *cv;
+    }
+}
+
+/// Undoes premultiplied alpha (X11's cursor image is premultiplied); the
+/// result is what [`Pointer::Color`] blends.
+pub fn unpremultiply_argb(argb: &[u32], out: &mut Vec<u8>) {
+    out.clear();
+    for &p in argb {
+        let a = (p >> 24) & 0xff;
+        let (r, g, b) = ((p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff);
+        let un = |c: u32| {
+            (c * 255 + a / 2)
+                .checked_div(a)
+                .map_or(0, |x| x.min(255) as u8)
+        };
+        out.extend_from_slice(&[un(b), un(g), un(r), a as u8]);
+    }
+}
+
 /// Halves a BGRA picture (2x2 box filter). For screens wider than the stream
 /// may be (a 4K display becomes 1920x1080). Returns the new width and height.
 pub fn halve_bgra(
@@ -233,6 +271,31 @@ mod tests {
         let mut out = vec![0; 2 * 2 * 3 / 2];
         bgra_to_nv12(&src, 32, 2, 2, &mut out);
         assert_eq!(&out[..4], &[235, 235, 235, 235]);
+    }
+
+    #[test]
+    fn i420_is_nv12_with_the_planes_split() {
+        let mut src = vec![0u8; 4 * 2 * 4];
+        for (i, px) in src.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            px.copy_from_slice(&[(i * 30) as u8, (i * 20) as u8, (255 - i * 25) as u8, 255]);
+        }
+        let mut nv12 = vec![0; 12];
+        bgra_to_nv12(&src, 16, 4, 2, &mut nv12);
+        let (mut scratch, mut i420) = (Vec::new(), vec![0; 12]);
+        bgra_to_i420(&src, 16, 4, 2, &mut scratch, &mut i420);
+        assert_eq!(&i420[..8], &nv12[..8]);
+        assert_eq!(&i420[8..10], &[nv12[8], nv12[10]], "U plane");
+        assert_eq!(&i420[10..12], &[nv12[9], nv12[11]], "V plane");
+    }
+
+    #[test]
+    fn premultiplied_cursor_pixels_come_back_straight() {
+        let mut out = Vec::new();
+        // Half-transparent white, premultiplied: 0x80 808080.
+        unpremultiply_argb(&[0x8080_8080, 0xff00_ff00, 0x0000_0000], &mut out);
+        assert_eq!(&out[0..4], &[255, 255, 255, 128]);
+        assert_eq!(&out[4..8], &[0, 255, 0, 255]);
+        assert_eq!(&out[8..12], &[0, 0, 0, 0]);
     }
 
     #[test]

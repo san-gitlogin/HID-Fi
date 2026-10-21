@@ -6,6 +6,8 @@ pub mod dxgi;
 pub mod frame;
 #[cfg(windows)]
 pub mod mf;
+#[cfg(target_os = "linux")]
+pub mod oh264;
 pub mod pattern;
 pub mod pipeline;
 pub mod rtc;
@@ -14,6 +16,8 @@ pub mod sck;
 pub mod server;
 #[cfg(target_os = "macos")]
 pub mod vt;
+#[cfg(target_os = "linux")]
+pub mod x11;
 
 /// The best H.264 encoder this computer has, for `Pipeline::start`.
 pub fn encoder(w: u32, h: u32, fps: u32, bps: u32) -> Result<Box<dyn frame::Encoder>, String> {
@@ -35,7 +39,13 @@ pub fn encoder(w: u32, h: u32, fps: u32, bps: u32) -> Result<Box<dyn frame::Enco
             .map(|e| Box::new(e) as Box<dyn frame::Encoder>)
             .map_err(|e| e.to_string())
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        oh264::OhH264::new(&cfg)
+            .map(|e| Box::new(e) as Box<dyn frame::Encoder>)
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = cfg;
         Err("no H.264 encoder for this OS yet".into())
@@ -58,7 +68,12 @@ pub fn screen(display: Option<u32>, fps: u32) -> Result<Box<dyn pipeline::Source
         let _ = fps;
         dxgi::DxgiSource::start(display).map(|s| Box::new(s) as Box<dyn pipeline::Source>)
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (display, fps);
+        x11::X11Source::start().map(|s| Box::new(s) as Box<dyn pipeline::Source>)
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = (display, fps);
         Err("screen capture is not available on this OS yet".into())
