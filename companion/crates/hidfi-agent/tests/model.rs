@@ -216,11 +216,19 @@ fn a_board_restart_while_asking_asks_again() {
     m.post("/__reboot", json!({}));
     for _ in 0..4 {
         s.step(&m.http, &SystemClock);
-        assert_ne!(*s.status(), Status::PairingExpired, "a restart is not a refusal");
+        assert_ne!(
+            *s.status(),
+            Status::PairingExpired,
+            "a restart is not a refusal"
+        );
     }
     assert_eq!(*s.status(), Status::WaitingForApproval);
     let pending = m.dash(json!({"cmd": "companion_list"}))["pending"].clone();
-    assert_eq!(pending.as_array().map(|a| a.len()), Some(1), "asked again: {pending}");
+    assert_eq!(
+        pending.as_array().map(|a| a.len()),
+        Some(1),
+        "asked again: {pending}"
+    );
 }
 
 #[test]

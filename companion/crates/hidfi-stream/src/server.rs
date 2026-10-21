@@ -16,6 +16,8 @@
 //! presents 5 bad tickets in 10 minutes is refused for 10 minutes. Nothing but
 //! a JSON parse and one HMAC happens before a ticket is accepted.
 
+use crate::display::{self, Display};
+use crate::pipeline::MAIN;
 use crate::pipeline::{Pipeline, ToViewer};
 use crate::rtc::{self, DtlsCert, End, ToSession};
 use hidfi_agent::session::TicketNonces;
@@ -25,8 +27,6 @@ use std::collections::{HashMap, VecDeque};
 use std::io::ErrorKind;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use crate::display::{self, Display};
-use crate::pipeline::MAIN;
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -446,7 +446,10 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                     Err(_) => {
                         // The pipeline let this viewer go (capture failed): end
                         // the session and say so, not stream nothing at 0 fps.
-                        fwd_ended.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(End::PipelineGone);
+                        fwd_ended
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .get_or_insert(End::PipelineGone);
                         fwd_stop.store(true, Ordering::Relaxed);
                         break;
                     }
@@ -461,7 +464,9 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                 f2.store(n, Ordering::Relaxed)
             });
             // The first reason stands (the forwarder may have set why already).
-            e2.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(end);
+            e2.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_or_insert(end);
             s2.store(true, Ordering::Relaxed);
         });
 
@@ -469,7 +474,13 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let mut last_stats = Instant::now();
     let mut last_displays = Instant::now();
     // The display this viewer was last told it watches (MAIN resolved to an id).
-    let current = |list: &[Display], d: u32| if d == MAIN { display::main_id(list) } else { Some(d) };
+    let current = |list: &[Display], d: u32| {
+        if d == MAIN {
+            display::main_id(list)
+        } else {
+            Some(d)
+        }
+    };
     let mut told = current(&shown, MAIN);
     // What the viewer last asked to watch: if it gets something else, it was moved.
     let mut asked: Option<u32> = None;
@@ -502,7 +513,12 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                 }
                 shown = now;
                 let id = current(&shown, control.display());
-                if send(&mut ws, serde_json::json!({"t":"displays","displays":shown,"display":id})).is_err() {
+                if send(
+                    &mut ws,
+                    serde_json::json!({"t":"displays","displays":shown,"display":id}),
+                )
+                .is_err()
+                {
                     break;
                 }
                 told = id;
@@ -516,7 +532,12 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
             if moved {
                 asked = None;
             }
-            if send(&mut ws, serde_json::json!({"t":"display","id":id,"fallback":moved})).is_err() {
+            if send(
+                &mut ws,
+                serde_json::json!({"t":"display","id":id,"fallback":moved}),
+            )
+            .is_err()
+            {
                 break;
             }
             told = id;

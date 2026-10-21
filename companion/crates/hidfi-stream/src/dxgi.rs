@@ -32,10 +32,10 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
-    CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_ACCESS_LOST,
-    DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, DXGI_OUTDUPL_POINTER_SHAPE_INFO,
-    DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR,
-    DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME,
+    CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource,
+    DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
+    DXGI_OUTDUPL_POINTER_SHAPE_INFO, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR,
+    DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME,
 };
 
 /// Wider than this, the picture is halved.
@@ -82,8 +82,12 @@ impl DxgiSource {
         // SAFETY: COM calls on live objects.
         let (adapter, output) = unsafe {
             let f: IDXGIFactory1 = CreateDXGIFactory1().map_err(|e| err("DXGI", e))?;
-            let adapter = f.EnumAdapters1(card).map_err(|e| err("no such display", e))?;
-            let output = adapter.EnumOutputs(out).map_err(|e| err("no such display", e))?;
+            let adapter = f
+                .EnumAdapters1(card)
+                .map_err(|e| err("no such display", e))?;
+            let output = adapter
+                .EnumOutputs(out)
+                .map_err(|e| err("no such display", e))?;
             (adapter, output)
         };
         let mut device: Option<ID3D11Device> = None;

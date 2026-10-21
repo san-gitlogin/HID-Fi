@@ -59,7 +59,12 @@ pub fn monitors() -> Result<Vec<Monitor>, String> {
 /// virtual desktop, some VNC servers - and the Linux test, whose Xvfb cannot).
 pub fn monitors_from(spec: &str) -> Option<Vec<Monitor>> {
     let mut out = Vec::new();
-    for (i, part) in spec.split(',').map(str::trim).filter(|s| !s.is_empty()).enumerate() {
+    for (i, part) in spec
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .enumerate()
+    {
         let (name, geo) = part.split_once('=').unwrap_or(("", part));
         let (size, pos) = geo.split_once('+')?;
         let (w, h) = size.split_once('x')?;
@@ -77,7 +82,10 @@ pub fn monitors_from(spec: &str) -> Option<Vec<Monitor>> {
 }
 
 fn list_monitors(conn: &RustConnection, root: Window) -> Result<Vec<Monitor>, String> {
-    if let Some(m) = std::env::var("HIDFI_X11_MONITORS").ok().and_then(|s| monitors_from(&s)) {
+    if let Some(m) = std::env::var("HIDFI_X11_MONITORS")
+        .ok()
+        .and_then(|s| monitors_from(&s))
+    {
         return Ok(m);
     }
     let r = conn
@@ -165,7 +173,12 @@ impl X11Source {
             Some(m) => {
                 let x = m.x.clamp(0, sw as i16);
                 let y = m.y.clamp(0, sh as i16);
-                (x, y, (m.w.min(sw - x as u16)) as usize, (m.h.min(sh - y as u16)) as usize)
+                (
+                    x,
+                    y,
+                    (m.w.min(sw - x as u16)) as usize,
+                    (m.h.min(sh - y as u16)) as usize,
+                )
             }
             None => (0, 0, sw as usize, sh as usize),
         };
@@ -329,7 +342,10 @@ mod tests {
     fn a_monitor_layout_by_hand() {
         let m = monitors_from("LEFT=1920x1080+0+0, RIGHT=1280x1200+1920+0").unwrap();
         assert_eq!(m.len(), 2);
-        assert_eq!((m[1].name.as_str(), m[1].x, m[1].w, m[1].h), ("RIGHT", 1920, 1280, 1200));
+        assert_eq!(
+            (m[1].name.as_str(), m[1].x, m[1].w, m[1].h),
+            ("RIGHT", 1920, 1280, 1200)
+        );
         assert!(m[0].primary && !m[1].primary);
         assert!(monitors_from("1920x1080").is_none(), "no position: refused");
         assert!(monitors_from("").is_none());

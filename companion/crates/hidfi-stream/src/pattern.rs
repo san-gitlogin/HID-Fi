@@ -49,7 +49,8 @@ impl Pattern {
             let gy = (y + scroll) % 10;
             for x in 0..w {
                 let (col, gx) = (x / 6, x % 6);
-                let mut v = (row.wrapping_mul(0x9E37_79B9) ^ col.wrapping_mul(0x85EB_CA6B)).rotate_left(13);
+                let mut v =
+                    (row.wrapping_mul(0x9E37_79B9) ^ col.wrapping_mul(0x85EB_CA6B)).rotate_left(13);
                 v ^= v >> 15;
                 let blank = v.is_multiple_of(7) || col % 40 > 34; // spaces and a margin
                 let on = !blank && gx < 5 && gy < 8 && (v.rotate_left(gx * 5 + gy) & 1) == 1;
@@ -122,12 +123,19 @@ pub struct FakeDisplays(Arc<Mutex<Vec<Display>>>);
 
 impl FakeDisplays {
     pub fn from_env(w: u32, h: u32) -> FakeDisplays {
-        let n: usize = std::env::var("HIDFI_DISPLAYS").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
+        let n: usize = std::env::var("HIDFI_DISPLAYS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
         let sizes = [(w, h), (1280, 1024), (1080, 1920), (1600, 900)];
         let v = (0..n.clamp(1, 4))
             .map(|i| Display {
                 id: i as u32 + 1,
-                name: if i == 0 { "Built-in display".into() } else { format!("Display {}", i + 1) },
+                name: if i == 0 {
+                    "Built-in display".into()
+                } else {
+                    format!("Display {}", i + 1)
+                },
                 width: sizes[i].0,
                 height: sizes[i].1,
                 main: i == 0,
@@ -139,7 +147,10 @@ impl FakeDisplays {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
     pub fn unplug(&self, id: u32) {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).retain(|d| d.id != id || d.main);
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|d| d.id != id || d.main);
     }
     /// A moving pattern at the display's size; `busy` for scrolling text.
     pub fn source(&self, display: Option<u32>, busy: bool) -> Result<Box<dyn Source>, String> {

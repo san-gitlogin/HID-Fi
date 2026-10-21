@@ -106,7 +106,10 @@ fn bind_media(ip: std::net::IpAddr) -> std::io::Result<UdpSocket> {
             return Ok(s);
         }
     }
-    Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "no free media port in 47820-47859"))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AddrInUse,
+        "no free media port in 47820-47859",
+    ))
 }
 
 /// What ended a session, for the log and the dashboard.
@@ -245,7 +248,8 @@ pub fn run(
                 match ev {
                     Event::Connected => {
                         connected = true;
-                        rtc.bwe().set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(3_000_000)));
+                        rtc.bwe()
+                            .set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(3_000_000)));
                         control.joined();
                     }
                     Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
@@ -277,7 +281,8 @@ pub fn run(
                         estimate = b.as_u64();
                         control.offer_bitrate((estimate as f64 * 0.85) as u32);
                         pace.set_rate(estimate);
-                        rtc.bwe().set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(estimate)));
+                        rtc.bwe()
+                            .set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(estimate)));
                     }
                     _ => {}
                 }
@@ -383,7 +388,7 @@ mod tests {
     fn pace_lets_a_link_take_what_it_can_and_skips_the_rest() {
         let t0 = Instant::now();
         let mut p = Pace::new(1_000_000, t0); // 125 kB/s, 62.5 kB in hand
-        // 30 fps of 10 kB frames = 300 kB/s: more than twice the link.
+                                              // 30 fps of 10 kB frames = 300 kB/s: more than twice the link.
         let mut sent = 0;
         for i in 0..90 {
             let now = t0 + Duration::from_millis(i * 33);
@@ -397,8 +402,14 @@ mod tests {
     fn a_keyframe_always_goes_and_the_frames_after_it_pay_for_it() {
         let t0 = Instant::now();
         let mut p = Pace::new(1_000_000, t0);
-        assert!(p.admit(300_000, true, t0), "a keyframe bigger than the budget still goes");
-        assert!(!p.admit(5_000, false, t0 + Duration::from_millis(33)), "then the debt holds frames back");
+        assert!(
+            p.admit(300_000, true, t0),
+            "a keyframe bigger than the budget still goes"
+        );
+        assert!(
+            !p.admit(5_000, false, t0 + Duration::from_millis(33)),
+            "then the debt holds frames back"
+        );
         // 237.5 kB of debt, 125 kB of it allowed, earned back at 125 kB/s: ~0.9 s.
         assert!(p.admit(5_000, false, t0 + Duration::from_millis(1000)));
     }
@@ -408,7 +419,10 @@ mod tests {
         let ip: std::net::IpAddr = "127.0.0.1".parse().unwrap();
         let a = bind_media(ip).unwrap();
         let b = bind_media(ip).unwrap();
-        let (pa, pb) = (a.local_addr().unwrap().port(), b.local_addr().unwrap().port());
+        let (pa, pb) = (
+            a.local_addr().unwrap().port(),
+            b.local_addr().unwrap().port(),
+        );
         assert!(MEDIA_PORTS.contains(&pa) && MEDIA_PORTS.contains(&pb));
         assert_ne!(pa, pb);
     }

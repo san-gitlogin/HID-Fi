@@ -267,9 +267,14 @@ unsafe impl Send for VtEncoder {}
 fn set_limits(session: VTSessionRef, bps: i64) {
     let bytes = CFNumber::from((bps / 8 / 2).max(4_000));
     let window = CFNumber::from(0.5f64);
-    let limits = core_foundation::array::CFArray::from_CFTypes(&[bytes.as_CFType(), window.as_CFType()]);
+    let limits =
+        core_foundation::array::CFArray::from_CFTypes(&[bytes.as_CFType(), window.as_CFType()]);
     // SAFETY: framework constant; a live session and value.
-    if let Err(e) = set(session, unsafe { kVTCompressionPropertyKey_DataRateLimits }, limits.as_CFTypeRef()) {
+    if let Err(e) = set(
+        session,
+        unsafe { kVTCompressionPropertyKey_DataRateLimits },
+        limits.as_CFTypeRef(),
+    ) {
         log::warn!("data rate limit refused: {e}");
     }
 }

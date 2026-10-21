@@ -83,10 +83,15 @@ pub fn model(v: &View) -> Model {
         BoardState::NotOnNetwork => {
             icon = Icon::Attention;
             lines.push("HID-Fi is plugged in, but this computer cannot reach it".into());
-            lines.push("Is the board on this computer's WiFi? Dashboard: Settings, Home network".into());
+            lines.push(
+                "Is the board on this computer's WiFi? Dashboard: Settings, Home network".into(),
+            );
             if let Some(h) = net_hint() {
                 lines.push(h.into());
-                actions.push(("Open network settings\u{2026}".into(), Action::OpenNetworkSettings));
+                actions.push((
+                    "Open network settings\u{2026}".into(),
+                    Action::OpenNetworkSettings,
+                ));
             }
         }
         BoardState::Choose(boards) => {
@@ -286,7 +291,11 @@ pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
     [
         ("Plug HID-Fi into this computer", st(found, true), one),
         ("Pair with the dashboard", st(paired, found), two),
-        ("Show this screen on the Screen tab", st(ready, paired), three),
+        (
+            "Show this screen on the Screen tab",
+            st(ready, paired),
+            three,
+        ),
     ]
 }
 
@@ -323,7 +332,9 @@ impl AutoOpen {
             return false;
         }
         let ep = episode(v);
-        if self.dismissed.as_deref() == Some(ep.as_str()) || self.shown_for.as_deref() == Some(ep.as_str()) {
+        if self.dismissed.as_deref() == Some(ep.as_str())
+            || self.shown_for.as_deref() == Some(ep.as_str())
+        {
             return false;
         }
         self.shown_for = Some(ep);
@@ -511,14 +522,29 @@ mod tests {
     #[test]
     fn every_step_says_what_happened_or_what_to_do() {
         let s = steps(&view(found(), Status::WaitingForApproval));
-        assert!(s[0].2.contains("USB") && s[0].2.contains("esp-hid-da1a2c.local"), "how it was found: {}", s[0].2);
-        assert!(s[1].2.contains("tap Pair") && s[1].2.contains("Studio PC"), "{}", s[1].2);
-        assert!(s[1].2.contains("only your dashboard"), "what pairing is for: {}", s[1].2);
+        assert!(
+            s[0].2.contains("USB") && s[0].2.contains("esp-hid-da1a2c.local"),
+            "how it was found: {}",
+            s[0].2
+        );
+        assert!(
+            s[1].2.contains("tap Pair") && s[1].2.contains("Studio PC"),
+            "{}",
+            s[1].2
+        );
+        assert!(
+            s[1].2.contains("only your dashboard"),
+            "what pairing is for: {}",
+            s[1].2
+        );
         let s = steps(&view(found(), Status::ShowCode("123456".into())));
         assert!(s[1].2.contains("code above"));
         let mut v = view(found(), Status::Online);
         v.capture_allowed = false;
-        assert!(steps(&v)[2].2.contains("Quit & Reopen"), "the restart macOS asks for is expected");
+        assert!(
+            steps(&v)[2].2.contains("Quit & Reopen"),
+            "the restart macOS asks for is expected"
+        );
         v.capture_allowed = true;
         v.watching = 3;
         assert_eq!(steps(&v)[2].2, "Shown on 3 screens now.");
@@ -536,8 +562,14 @@ mod tests {
     fn pairing_is_the_main_button_until_paired_then_screen_recording() {
         let mut v = view(found(), Status::WaitingForApproval);
         v.capture_allowed = false;
-        assert_eq!(model(&v).actions[0].1, Action::OpenDashboard("http://esp-hid-da1a2c.local".into()));
-        assert!(model(&v).actions.iter().any(|a| a.1 == Action::AllowScreenRecording));
+        assert_eq!(
+            model(&v).actions[0].1,
+            Action::OpenDashboard("http://esp-hid-da1a2c.local".into())
+        );
+        assert!(model(&v)
+            .actions
+            .iter()
+            .any(|a| a.1 == Action::AllowScreenRecording));
         let mut v = view(found(), Status::Online);
         v.capture_allowed = false;
         assert_eq!(model(&v).actions[0].1, Action::AllowScreenRecording);

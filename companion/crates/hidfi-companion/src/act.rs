@@ -34,7 +34,9 @@ pub fn run(handle: &Handle, a: Action) {
         }
         Action::OpenNetworkSettings => {
             if cfg!(target_os = "macos") {
-                open("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork");
+                open(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork",
+                );
             } else if cfg!(windows) {
                 open("ms-settings:network-status");
             }

@@ -174,7 +174,9 @@ fn lane_rates(viewers: &[(u32, usize, u32)], initial: u32) -> BTreeMap<(u32, usi
     let mut m = BTreeMap::new();
     for &(d, t, est) in viewers {
         let e = if est == 0 { initial } else { est };
-        m.entry((d, t)).and_modify(|b: &mut u32| *b = (*b).min(e)).or_insert(e);
+        m.entry((d, t))
+            .and_modify(|b: &mut u32| *b = (*b).min(e))
+            .or_insert(e);
     }
     m
 }
@@ -246,7 +248,12 @@ impl Pipeline {
 
     /// Why capture last failed (viewers were let go for it), if it has since.
     pub fn last_error(&self) -> Option<String> {
-        self.shared.0.lock().unwrap_or_else(|e| e.into_inner()).last_error.clone()
+        self.shared
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_error
+            .clone()
     }
 
     pub fn viewers(&self) -> usize {
@@ -359,7 +366,10 @@ fn run<S, E>(
                 break; // last viewer left: release captures and encoders
             }
             let rates = lane_rates(
-                &seen.iter().map(|v| (v.display, v.tier, v.est)).collect::<Vec<_>>(),
+                &seen
+                    .iter()
+                    .map(|v| (v.display, v.tier, v.est))
+                    .collect::<Vec<_>>(),
                 initial_bps,
             );
             // Nothing for a lane or a display nobody watches now.
@@ -379,7 +389,11 @@ fn run<S, E>(
                     match make_source(if d == MAIN { None } else { Some(d) }) {
                         Ok(src) => {
                             if d == MAIN {
-                                shared.0.lock().unwrap_or_else(|e| e.into_inner()).last_error = None;
+                                shared
+                                    .0
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .last_error = None;
                             }
                             e.insert(Capture {
                                 src,
@@ -400,15 +414,21 @@ fn run<S, E>(
                 let mut want = [false; TIERS];
                 let mut force = [false; TIERS];
                 for t in 0..TIERS {
-                    let Some(&bps) = rates.get(&(d, t)) else { continue };
+                    let Some(&bps) = rates.get(&(d, t)) else {
+                        continue;
+                    };
                     let lane = lanes.entry((d, t)).or_default();
                     let on = |v: &&Seen| v.display == d && v.tier == t;
                     let joined = seen.iter().filter(on).any(|v| v.join);
                     let asked = seen.iter().filter(on).any(|v| v.need_key)
-                        && lane.last_key.is_none_or(|k| now.duration_since(k) >= KEY_GAP);
+                        && lane
+                            .last_key
+                            .is_none_or(|k| now.duration_since(k) >= KEY_GAP);
                     // A still screen sends nothing, but a keyframe every 2 s so a
                     // viewer that joined or lost a packet is never left waiting.
-                    let stale = lane.last_sent.is_none_or(|s| now.duration_since(s) > Duration::from_secs(2));
+                    let stale = lane
+                        .last_sent
+                        .is_none_or(|s| now.duration_since(s) > Duration::from_secs(2));
                     force[t] = joined || asked || stale || lane.enc.is_none();
                     let due = lane.due.is_none_or(|due| now >= due);
                     want[t] = force[t] || due;
@@ -431,8 +451,13 @@ fn run<S, E>(
                         let step = Duration::from_micros(1_000_000 / lane_fps(bps, fps) as u64);
                         lane.due = Some(now + step.saturating_sub(period / 2));
                         let frame = if t == HALF {
-                            let (w, h) =
-                                halve_bgra(f.bgra, f.stride, f.width as usize, f.height as usize, half_px);
+                            let (w, h) = halve_bgra(
+                                f.bgra,
+                                f.stride,
+                                f.width as usize,
+                                f.height as usize,
+                                half_px,
+                            );
                             Frame {
                                 width: w as u32,
                                 height: h as u32,
@@ -539,7 +564,11 @@ fn run<S, E>(
                 let secs = tally_at.elapsed().as_secs_f64();
                 let mut line = format!("streaming: {} viewer(s)", seen.len());
                 for (d, cap) in captures.iter_mut() {
-                    line += &format!("; {} captured {:.1} fps", display_name(*d), cap.grabbed as f64 / secs);
+                    line += &format!(
+                        "; {} captured {:.1} fps",
+                        display_name(*d),
+                        cap.grabbed as f64 / secs
+                    );
                     cap.grabbed = 0;
                 }
                 let mut keys: Vec<_> = lanes.keys().copied().collect();
@@ -583,10 +612,15 @@ fn move_off(shared: &Arc<(Mutex<Shared>, Condvar)>, d: u32, why: &str) {
     if d == MAIN {
         log::error!("stopping: {why}");
         s.last_error = Some(why.to_string());
-        s.viewers.retain(|v| v.s.display.load(Ordering::Relaxed) != MAIN);
+        s.viewers
+            .retain(|v| v.s.display.load(Ordering::Relaxed) != MAIN);
         return;
     }
-    for v in s.viewers.iter().filter(|v| v.s.display.load(Ordering::Relaxed) == d) {
+    for v in s
+        .viewers
+        .iter()
+        .filter(|v| v.s.display.load(Ordering::Relaxed) == d)
+    {
         v.s.display.store(MAIN, Ordering::Relaxed);
         v.s.need_key.store(true, Ordering::Relaxed);
         v.s.join.store(true, Ordering::Relaxed);
@@ -812,8 +846,14 @@ mod tests {
                 keys += f.keyframe as usize;
             }
         }
-        assert!(frames > 60, "the healthy viewer kept its frame rate: {frames} in 2.5 s");
-        assert!(keys <= 5, "{keys} keyframes of {frames}: at most one per KEY_GAP after the start");
+        assert!(
+            frames > 60,
+            "the healthy viewer kept its frame rate: {frames} in 2.5 s"
+        );
+        assert!(
+            keys <= 5,
+            "{keys} keyframes of {frames}: at most one per KEY_GAP after the start"
+        );
         drop(slow_rx);
     }
 
@@ -841,7 +881,11 @@ mod tests {
         p.control(good).offer_bitrate(8_000_000);
         p.control(poor).offer_bitrate(1_000_000);
         std::thread::sleep(Duration::from_millis(300));
-        assert_eq!(c.encoders.load(Ordering::SeqCst), 2, "one encoder per quality");
+        assert_eq!(
+            c.encoders.load(Ordering::SeqCst),
+            2,
+            "one encoder per quality"
+        );
         let (g, q) = (good_rx.try_iter().count(), poor_rx.try_iter().count());
         // The poor one at 1 Mbit/s runs at 15 fps (lane_fps), the good one at 50.
         assert!(g > 10 && q >= 3, "both get frames: {g} and {q}");
@@ -889,7 +933,11 @@ mod tests {
         std::thread::sleep(Duration::from_millis(300));
         while arx.try_recv().is_ok() {}
         while brx.try_recv().is_ok() {}
-        assert_eq!(width_of(&arx), 32, "a: the main display at half size (64 / 2)");
+        assert_eq!(
+            width_of(&arx),
+            32,
+            "a: the main display at half size (64 / 2)"
+        );
         assert_eq!(width_of(&brx), 20, "b: display 2 at half size (40 / 2)");
         // a switches too: from its next keyframe it gets display 2.
         p.control(a).set_display(2);
@@ -939,12 +987,21 @@ mod rate_tests {
     #[test]
     fn each_lane_follows_its_slowest_viewer() {
         let r = lane_rates(
-            &[(MAIN, FULL, 9_000_000), (MAIN, FULL, 5_000_000), (MAIN, HALF, 1_200_000), (2, FULL, 0)],
+            &[
+                (MAIN, FULL, 9_000_000),
+                (MAIN, FULL, 5_000_000),
+                (MAIN, HALF, 1_200_000),
+                (2, FULL, 0),
+            ],
             3_000_000,
         );
         assert_eq!(r[&(MAIN, FULL)], 5_000_000, "the slower one sets full size");
         assert_eq!(r[&(MAIN, HALF)], 1_200_000);
-        assert_eq!(r[&(2, FULL)], 3_000_000, "no estimate yet: the starting rate");
+        assert_eq!(
+            r[&(2, FULL)],
+            3_000_000,
+            "no estimate yet: the starting rate"
+        );
         assert_eq!(r.len(), 3, "nothing for a lane nobody watches");
     }
 
@@ -954,7 +1011,10 @@ mod rate_tests {
         assert_eq!(c.tier(), FULL);
         c.offer_bitrate(1_200_000);
         assert_eq!(c.tier(), HALF);
-        assert!(c.needs_key(), "it starts the half-size stream on a keyframe");
+        assert!(
+            c.needs_key(),
+            "it starts the half-size stream on a keyframe"
+        );
         c.offer_bitrate(3_500_000);
         assert_eq!(c.tier(), HALF, "between the thresholds it stays");
         c.offer_bitrate(5_000_000);

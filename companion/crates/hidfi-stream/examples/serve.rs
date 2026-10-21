@@ -69,16 +69,16 @@ fn main() {
     ));
     let cert = hidfi_stream::rtc::new_cert().expect("certificate");
     let fp = hidfi_stream::rtc::cert_fp(&cert);
-    let srv = server::start(
-        None,
-        gate,
-        pipeline.clone(),
-        cert,
-        {
-            let f = fake.clone();
-            Box::new(move || if real { hidfi_stream::display::list() } else { f.list() })
-        },
-    )
+    let srv = server::start(None, gate, pipeline.clone(), cert, {
+        let f = fake.clone();
+        Box::new(move || {
+            if real {
+                hidfi_stream::display::list()
+            } else {
+                f.list()
+            }
+        })
+    })
     .expect("listening");
     let tickets: Vec<_> = (0..12)
         .map(|i| {
@@ -93,7 +93,11 @@ fn main() {
     // stdin: "unplug <id>" takes a pretend display away.
     std::thread::spawn(move || {
         for line in std::io::stdin().lines().map_while(Result::ok) {
-            if let Some(id) = line.trim().strip_prefix("unplug ").and_then(|s| s.parse().ok()) {
+            if let Some(id) = line
+                .trim()
+                .strip_prefix("unplug ")
+                .and_then(|s| s.parse().ok())
+            {
                 fake.unplug(id);
             }
         }

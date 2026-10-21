@@ -361,7 +361,9 @@ impl Session {
                 if let Some(at) = *asked_at {
                     // Uptime is in whole seconds: a second of slack.
                     let asked = clock.now().duration_since(at);
-                    if board_uptime(http, &base).is_some_and(|up| up + Duration::from_secs(1) < asked) {
+                    if board_uptime(http, &base)
+                        .is_some_and(|up| up + Duration::from_secs(1) < asked)
+                    {
                         *announced = false;
                         *asked_at = None;
                         return Ok(Duration::ZERO);
@@ -437,4 +439,3 @@ fn board_uptime(http: &dyn Http, base: &str) -> Option<Duration> {
     let v: serde_json::Value = serde_json::from_str(&body).ok()?;
     v.get("uptime_sec")?.as_u64().map(Duration::from_secs)
 }
-

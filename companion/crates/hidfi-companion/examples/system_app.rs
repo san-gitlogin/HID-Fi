@@ -97,7 +97,11 @@ fn main() {
     });
     for line in std::io::stdin().lock().lines() {
         let line = line.unwrap_or_default();
-        if let Some(id) = line.trim().strip_prefix("unplug-display ").and_then(|s| s.parse().ok()) {
+        if let Some(id) = line
+            .trim()
+            .strip_prefix("unplug-display ")
+            .and_then(|s| s.parse().ok())
+        {
             fake.unplug(id);
             continue;
         }

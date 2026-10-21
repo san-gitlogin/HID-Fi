@@ -14,9 +14,13 @@ fn stamp(p: &PathBuf) -> Option<(SystemTime, u64)> {
 }
 
 pub fn watch() {
-    let Ok(exe) = std::env::current_exe() else { return };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
     // .../HID-Fi Companion.app/Contents/MacOS/hidfi-companion -> the .app
-    let Some(bundle) = exe.ancestors().nth(3).map(|p| p.to_path_buf()) else { return };
+    let Some(bundle) = exe.ancestors().nth(3).map(|p| p.to_path_buf()) else {
+        return;
+    };
     if bundle.extension().and_then(|e| e.to_str()) != Some("app") {
         return; // not running from a bundle (a developer build): nothing to do
     }

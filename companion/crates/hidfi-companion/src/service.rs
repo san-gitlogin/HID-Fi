@@ -142,7 +142,13 @@ pub fn start(store: Store, env: Env) -> Handle {
         Some(cert) => {
             let fp = hidfi_stream::rtc::cert_fp(&cert);
             let displays = env.displays.clone();
-            match server::start(None, gate, pipeline.clone(), cert, Box::new(move || displays())) {
+            match server::start(
+                None,
+                gate,
+                pipeline.clone(),
+                cert,
+                Box::new(move || displays()),
+            ) {
                 Ok(s) => {
                     let l = Listener { port: s.port, fp };
                     Some((s, l))
@@ -293,7 +299,9 @@ fn run(
                     } else {
                         // Say why, once a minute at most: the log is how a "not
                         // on this network" that is not true gets explained.
-                        if last_miss_log.is_none_or(|t: Instant| t.elapsed() > Duration::from_secs(60)) {
+                        if last_miss_log
+                            .is_none_or(|t: Instant| t.elapsed() > Duration::from_secs(60))
+                        {
                             last_miss_log = Some(Instant::now());
                             for (url, why) in &found.misses {
                                 log::warn!("board on USB, but {url} did not answer: {why}");

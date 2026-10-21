@@ -69,7 +69,10 @@ pub fn list() -> Vec<Display> {
             let (w, h) = if m.is_null() {
                 (0, 0)
             } else {
-                let s = (CGDisplayModeGetPixelWidth(m), CGDisplayModeGetPixelHeight(m));
+                let s = (
+                    CGDisplayModeGetPixelWidth(m),
+                    CGDisplayModeGetPixelHeight(m),
+                );
                 CGDisplayModeRelease(m);
                 s
             };
@@ -77,7 +80,11 @@ pub fn list() -> Vec<Display> {
         };
         out.push(Display {
             id,
-            name: if builtin { "Built-in display".into() } else { numbered(i) },
+            name: if builtin {
+                "Built-in display".into()
+            } else {
+                numbered(i)
+            },
             width: w,
             height: h,
             main: id == main,
@@ -137,7 +144,11 @@ pub fn list() -> Vec<Display> {
                     .enumerate()
                     .map(|(i, m)| Display {
                         id: i as u32,
-                        name: if m.name.is_empty() { numbered(i) } else { m.name },
+                        name: if m.name.is_empty() {
+                            numbered(i)
+                        } else {
+                            m.name
+                        },
                         width: m.w as u32,
                         height: m.h as u32,
                         main: m.primary,
@@ -163,7 +174,13 @@ mod tests {
     use super::*;
 
     fn d(id: u32, main: bool) -> Display {
-        Display { id, name: numbered(id as usize), width: 1920, height: 1080, main }
+        Display {
+            id,
+            name: numbered(id as usize),
+            width: 1920,
+            height: 1080,
+            main,
+        }
     }
 
     #[test]
@@ -171,8 +188,15 @@ mod tests {
         let v = main_first(vec![d(1, false), d(2, true), d(3, false)]);
         assert_eq!(v.iter().map(|x| x.id).collect::<Vec<_>>(), [2, 1, 3]);
         assert_eq!(main_id(&v), Some(2));
-        assert_eq!(main_id(&[d(5, false)]), Some(5), "no main flagged: the first");
-        assert!(main_first(vec![d(7, false), d(8, false)])[0].main, "and it is called main");
+        assert_eq!(
+            main_id(&[d(5, false)]),
+            Some(5),
+            "no main flagged: the first"
+        );
+        assert!(
+            main_first(vec![d(7, false), d(8, false)])[0].main,
+            "and it is called main"
+        );
         assert_eq!(main_id(&[]), None);
     }
 

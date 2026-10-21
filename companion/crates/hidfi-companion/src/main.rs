@@ -5,8 +5,6 @@
 
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-#[cfg(target_os = "macos")]
-mod replaced;
 mod act;
 mod autostart;
 #[cfg(any(target_os = "macos", windows))]
@@ -15,6 +13,8 @@ mod icons;
 #[cfg(target_os = "linux")]
 mod linux;
 mod logfile;
+#[cfg(target_os = "macos")]
+mod replaced;
 
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
 use hidfi_companion::service::{self, Env};
