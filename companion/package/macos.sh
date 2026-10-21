@@ -53,6 +53,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>PolyForm Noncommercial 1.0.0</string>
+  <key>NSLocalNetworkUsageDescription</key><string>HID-Fi Companion finds your HID-Fi board on your home network and sends this screen to your phone over it.</string>
+  <key>NSBonjourServices</key><array><string>_hidfi._tcp</string></array>
 </dict>
 </plist>
 PLIST

@@ -28,11 +28,23 @@ dashboard's **Screen** tab.
 1. Download `HID-Fi-Companion-…-macos.dmg` from the
    [latest release](https://github.com/san-gitlogin/HID-Fi/releases/latest).
 2. Open it and drag **HID-Fi Companion** to **Applications**. Open it from there.
-3. macOS asks to allow **Screen Recording** the first time a screen is shown.
-   Choose **Open System Settings**, switch on HID-Fi Companion, and reopen the
-   app if macOS asks you to.
+3. Its window opens and walks you through three steps. It lives in the menu bar
+   (no Dock icon) and starts at login.
 
-It lives in the menu bar (no Dock icon) and starts at login.
+**What macOS will ask, and what to choose.** These come from macOS, not from
+HID-Fi; each is asked once unless noted.
+
+| When | macOS says | Choose |
+|---|---|---|
+| First start | "…would like to find and connect to devices on your local network" | **Allow**. It is how the app reaches the board and your phone. |
+| First start | "Background Items Added" (a notification) | Nothing. It is the start-at-login entry; the menu bar icon can turn it off. |
+| You click *Allow Screen Recording* | "…would like to record this computer's screen" | **Open System Settings**, then switch on **HID-Fi Companion** under Screen & System Audio Recording. |
+| Right after switching it on | "…may not be able to record the contents of your screen until it is quit" | **Quit & Reopen**. The app comes back by itself, still paired. |
+| The first time a screen is shown (macOS 15 and later) | "…is requesting to bypass the system private window picker and directly access your screen and audio" | **Allow**. macOS asks this again about once a month. The app never records audio; the wording is macOS's. |
+| Opening a download that Apple has not notarized | "Apple could not verify…" | System Settings, Privacy & Security, **Open Anyway**. Release builds are notarized; this is for builds of your own. |
+
+An app you build yourself is signed only for your Mac, so macOS forgets the
+Screen Recording switch whenever you rebuild it: switch it on again.
 
 ### Windows 10 and 11 (64-bit)
 
@@ -45,6 +57,8 @@ irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package
 Windows asks for administrator approval **once**, to let viewers on your home
 network connect (a firewall rule for Private networks only). The icon appears by
 the clock; Windows may hide it under the **^** arrow - drag it out to keep it visible.
+If you skip the approval, Windows Firewall asks the first time a viewer connects:
+tick **Private networks** and choose **Allow access**.
 
 Your WiFi must be set to **Private**: Settings, Network & internet, your WiFi,
 Network profile type, Private.

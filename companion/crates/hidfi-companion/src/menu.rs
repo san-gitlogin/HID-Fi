@@ -249,7 +249,8 @@ pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
     };
     let three = if !v.capture_allowed {
         "macOS asks once: click Allow Screen Recording, switch on HID-Fi Companion, \
-         then choose Quit & Reopen when macOS offers it."
+         then choose Quit & Reopen when macOS offers it. When a screen is first \
+         shown, macOS may ask to allow direct access to the screen: choose Allow."
             .to_string()
     } else if !paired {
         "After pairing, the Screen tab shows this screen.".to_string()
