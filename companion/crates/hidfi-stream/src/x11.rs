@@ -54,7 +54,32 @@ pub fn monitors() -> Result<Vec<Monitor>, String> {
     list_monitors(&conn, root)
 }
 
+/// `HIDFI_X11_MONITORS="LEFT=1920x1080+0+0,RIGHT=1280x1200+1920+0"`: the
+/// monitors by hand, first = primary, for X servers that report none (a
+/// virtual desktop, some VNC servers - and the Linux test, whose Xvfb cannot).
+pub fn monitors_from(spec: &str) -> Option<Vec<Monitor>> {
+    let mut out = Vec::new();
+    for (i, part) in spec.split(',').map(str::trim).filter(|s| !s.is_empty()).enumerate() {
+        let (name, geo) = part.split_once('=').unwrap_or(("", part));
+        let (size, pos) = geo.split_once('+')?;
+        let (w, h) = size.split_once('x')?;
+        let (x, y) = pos.split_once('+')?;
+        out.push(Monitor {
+            name: name.to_string(),
+            x: x.parse().ok()?,
+            y: y.parse().ok()?,
+            w: w.parse().ok()?,
+            h: h.parse().ok()?,
+            primary: i == 0,
+        });
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 fn list_monitors(conn: &RustConnection, root: Window) -> Result<Vec<Monitor>, String> {
+    if let Some(m) = std::env::var("HIDFI_X11_MONITORS").ok().and_then(|s| monitors_from(&s)) {
+        return Ok(m);
+    }
     let r = conn
         .randr_get_monitors(root, true)
         .map_err(|e| err("RandR", e))?
@@ -293,5 +318,20 @@ impl Source for X11Source {
             });
         }
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_monitor_layout_by_hand() {
+        let m = monitors_from("LEFT=1920x1080+0+0, RIGHT=1280x1200+1920+0").unwrap();
+        assert_eq!(m.len(), 2);
+        assert_eq!((m[1].name.as_str(), m[1].x, m[1].w, m[1].h), ("RIGHT", 1920, 1280, 1200));
+        assert!(m[0].primary && !m[1].primary);
+        assert!(monitors_from("1920x1080").is_none(), "no position: refused");
+        assert!(monitors_from("").is_none());
     }
 }

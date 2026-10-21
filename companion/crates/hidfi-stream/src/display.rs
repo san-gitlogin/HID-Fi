@@ -28,9 +28,15 @@ fn numbered(i: usize) -> String {
     format!("Display {}", i + 1)
 }
 
-/// Main first, the rest in the order the OS gave them.
+/// Main first, the rest in the order the OS gave them. With none flagged main
+/// (an X server without a primary monitor), the first is.
 fn main_first(mut v: Vec<Display>) -> Vec<Display> {
     v.sort_by_key(|d| !d.main);
+    if !v.iter().any(|d| d.main) {
+        if let Some(d) = v.first_mut() {
+            d.main = true;
+        }
+    }
     v
 }
 
@@ -166,6 +172,7 @@ mod tests {
         assert_eq!(v.iter().map(|x| x.id).collect::<Vec<_>>(), [2, 1, 3]);
         assert_eq!(main_id(&v), Some(2));
         assert_eq!(main_id(&[d(5, false)]), Some(5), "no main flagged: the first");
+        assert!(main_first(vec![d(7, false), d(8, false)])[0].main, "and it is called main");
         assert_eq!(main_id(&[]), None);
     }
 

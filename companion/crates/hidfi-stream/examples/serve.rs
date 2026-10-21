@@ -45,11 +45,16 @@ fn main() {
     ));
     let fake = FakeDisplays::from_env(w, h);
     let f2 = fake.clone();
+    // HIDFI_REAL_SCREEN=1: this computer's own screen and displays, as the app
+    // captures them (the Linux test runs it on a virtual X desktop).
+    let real = std::env::var_os("HIDFI_REAL_SCREEN").is_some();
     let pipeline = Arc::new(Pipeline::start(
         fps,
         3_000_000,
         move |d: Option<u32>| -> Result<Box<dyn Source>, String> {
-            if still {
+            if real {
+                hidfi_stream::screen(d, fps)
+            } else if still {
                 Ok(Box::new(Pattern::new(w, h).still()))
             } else {
                 f2.source(d, busy)
@@ -66,7 +71,7 @@ fn main() {
         cert,
         {
             let f = fake.clone();
-            Box::new(move || f.list())
+            Box::new(move || if real { hidfi_stream::display::list() } else { f.list() })
         },
     )
     .expect("listening");
