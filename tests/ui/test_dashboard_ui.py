@@ -72,6 +72,10 @@ def _exercise_all_controls(page):
     out = {}
     views = page.evaluate("[...document.querySelectorAll('section.view')].map(s=>s.id)")
     for v in views:
+        # A fresh page per tab: what a tab sends must not depend on what other
+        # tabs' controls left behind (a symbol layer, a held grab, the wall) -
+        # that made this golden change whenever any tab gained a button.
+        page.reload(); page.wait_for_timeout(900)
         page.evaluate("id=>{const b=document.querySelector('[data-v=\"'+id+'\"]'); b&&b.click();}", v[2:])
         page.wait_for_timeout(120)
         n = page.evaluate(
