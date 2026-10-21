@@ -43,24 +43,53 @@ pub struct Pipeline {
     shared: Arc<(Mutex<Shared>, Condvar)>,
     key: Arc<AtomicBool>,
     bitrate: Arc<AtomicU32>,
+    rates: Rates,
+    initial_bps: u32,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
-/// A handle a viewer session uses to ask for a keyframe or change the bitrate.
+/// Each viewer's own bandwidth estimate. One encoder feeds them all, so the
+/// stream follows the slowest: a fast viewer must not raise the bitrate past
+/// what a slow one can take. A viewer that leaves stops counting.
+#[derive(Clone, Default)]
+struct Rates(Arc<Mutex<std::collections::HashMap<u64, u32>>>);
+
+impl Rates {
+    fn set(&self, id: u64, bps: Option<u32>, out: &AtomicU32, initial: u32) {
+        let mut m = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        match bps {
+            Some(b) => {
+                m.insert(id, b);
+            }
+            None => {
+                m.remove(&id);
+            }
+        }
+        out.store(
+            m.values().copied().min().unwrap_or(initial),
+            Ordering::Relaxed,
+        );
+    }
+}
+
+/// One viewer's handle: ask for a keyframe, report its bandwidth estimate.
 #[derive(Clone)]
 pub struct Control {
+    id: u64,
     key: Arc<AtomicBool>,
     bitrate: Arc<AtomicU32>,
+    rates: Rates,
+    initial_bps: u32,
 }
 
 impl Control {
     pub fn request_keyframe(&self) {
         self.key.store(true, Ordering::Relaxed);
     }
-    /// Congestion control's estimate, in bits per second. With two viewers the
-    /// slower one wins, because one encoder feeds both.
+    /// This viewer's congestion-control estimate, in bits per second.
     pub fn offer_bitrate(&self, bps: u32) {
-        self.bitrate.store(bps, Ordering::Relaxed);
+        self.rates
+            .set(self.id, Some(bps), &self.bitrate, self.initial_bps);
     }
 }
 
@@ -90,15 +119,26 @@ impl Pipeline {
             shared,
             key,
             bitrate,
+            rates: Rates::default(),
+            initial_bps,
             thread: Some(thread),
         }
     }
 
-    pub fn control(&self) -> Control {
+    /// The handle for viewer `id` (from [`Pipeline::subscribe`]).
+    pub fn control(&self, id: u64) -> Control {
         Control {
+            id,
             key: self.key.clone(),
             bitrate: self.bitrate.clone(),
+            rates: self.rates.clone(),
+            initial_bps: self.initial_bps,
         }
+    }
+
+    /// The bitrate the encoder is currently asked for.
+    pub fn target_bitrate(&self) -> u32 {
+        self.bitrate.load(Ordering::Relaxed)
     }
 
     /// Add a viewer. Frames arrive on `tx`; drop the receiver to leave.
@@ -114,6 +154,7 @@ impl Pipeline {
     }
 
     pub fn unsubscribe(&self, id: u64) {
+        self.rates.set(id, None, &self.bitrate, self.initial_bps);
         let (m, _) = &*self.shared;
         m.lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -485,5 +526,46 @@ mod tests {
             rx.recv_timeout(Duration::from_millis(100)).is_err(),
             "the viewer's channel is closed"
         );
+    }
+}
+
+#[cfg(test)]
+mod rate_tests {
+    use super::*;
+    use std::sync::mpsc::sync_channel;
+
+    fn idle() -> Pipeline {
+        Pipeline::start(
+            30,
+            3_000_000,
+            || Err("no source in this test".into()),
+            |_, _, _, _| Err("no encoder in this test".into()),
+        )
+    }
+
+    #[test]
+    fn the_slowest_viewer_sets_the_bitrate_and_leaving_releases_it() {
+        let p = idle();
+        assert_eq!(
+            p.target_bitrate(),
+            3_000_000,
+            "no estimates yet: the starting rate"
+        );
+        let (a, b) = (p.control(1), p.control(2));
+        a.offer_bitrate(8_000_000);
+        assert_eq!(p.target_bitrate(), 8_000_000);
+        b.offer_bitrate(1_500_000);
+        assert_eq!(p.target_bitrate(), 1_500_000, "the slow one wins");
+        a.offer_bitrate(9_000_000);
+        assert_eq!(
+            p.target_bitrate(),
+            1_500_000,
+            "a fast viewer cannot raise it"
+        );
+        p.unsubscribe(2);
+        assert_eq!(p.target_bitrate(), 9_000_000, "the slow one left");
+        p.unsubscribe(1);
+        assert_eq!(p.target_bitrate(), 3_000_000);
+        let _ = sync_channel::<ToViewer>(1);
     }
 }

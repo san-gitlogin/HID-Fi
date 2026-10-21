@@ -5297,9 +5297,11 @@ function scrOn(s){
     const why=s.slice(s.indexOf(':')+1);
     SCR.state=s.indexOf('refused')===0?'refused':'ended';SCR.why=why;
     if(why!=='stopped'){scrStage.classList.add('empty');scrRenderList();}
-    // A wrong certificate is someone in the middle and busy is another phone:
-    // retrying either would only repeat it. Everything else is the network.
-    if(why!=='stopped'&&why!=='fingerprint'&&why!=='busy')scrRetry();
+    // A wrong certificate is someone in the middle: retrying would only repeat
+    // it. Busy means four screens already watch: wait for one to close, slowly.
+    // Everything else is the network.
+    if(why==='busy')SCR.tries=Math.max(SCR.tries,3);
+    if(why!=='stopped'&&why!=='fingerprint')scrRetry();
   }
   scrPaint();
 }
@@ -5333,7 +5335,7 @@ function scrMsgHtml(){
     case 'reconnecting':return '';
   }
   const w=SCR.why;
-  if(w==='busy')return ico('eye')+'<b>Two dashboards are already watching '+n+'</b><span>Close one of them, then choose Show again.</span>';
+  if(w==='busy')return ico('eye')+'<b>'+n+' is already on four screens</b><span>This one joins by itself when one of them closes.</span>';
   if(w==='fingerprint')return ico('shield')+'<b>Stopped for your safety</b><span>'+n+' answered with a certificate this board did not vouch for. Someone on the network may be in the middle. Remove it below and pair it again.</span>';
   if(w==='closed')return ico('cpu')+'<b>HID-Fi is not plugged into '+n+'</b><span>Plug the board\u2019s USB port into it.</span>';
   if(w==='unreachable'||w==='network')return onBoardAp()

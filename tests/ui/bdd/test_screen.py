@@ -96,6 +96,11 @@ def turns_away(ctx, name, why):
     _pcs(ctx)[name].behaviour = "refuse:" + why
 
 
+@when(parsers.parse('"{name}" has room again'))
+def room_again(ctx, name):
+    _pcs(ctx)[name].behaviour = "live"
+
+
 @given(parsers.parse('someone in the middle answers for "{name}"'))
 def middle(ctx, name):
     # The board vouches for one certificate; a different one answers.

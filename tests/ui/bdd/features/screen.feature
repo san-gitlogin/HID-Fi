@@ -176,12 +176,14 @@ Feature: Screen - seeing the computer's own picture
     Then the screen says "Studio PC is not reachable"
     And "#scrList" contains "not running"
 
-  Scenario: Two dashboards already watching
+  Scenario: Four screens already watching, and joining when one closes
     Given the dashboard is open and signed in with "4826"
     And a computer "Studio PC" is paired and running
     And "Studio PC" turns viewers away with "busy"
     When I open the "Screen" tab
-    Then the screen says "Two dashboards are already watching Studio PC"
+    Then the screen says "Studio PC is already on four screens"
+    When "Studio PC" has room again
+    Then the screen shows "Studio PC" live
 
   Scenario: A certificate the board did not vouch for is refused
     Given the dashboard is open and signed in with "4826"

@@ -48,7 +48,7 @@ fn main() {
         Box::new(move || (w & !1, h & !1)),
     )
     .expect("listening");
-    let tickets: Vec<_> = (0..4)
+    let tickets: Vec<_> = (0..12)
         .map(|i| {
             let vn = format!("{:032x}", i + 1);
             serde_json::json!({"vn": vn, "ticket": hex::encode(pairing::ticket(&key, &tn, &vn))})

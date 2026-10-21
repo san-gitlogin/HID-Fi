@@ -31,8 +31,10 @@ use std::time::{Duration, Instant};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
-pub const MAX_VIEWERS: usize = 2;
-pub const MAX_CONNS: usize = 6;
+/// One encoder feeds every viewer, so more viewers cost the computer upload,
+/// not CPU; the stream follows the slowest of them.
+pub const MAX_VIEWERS: usize = 4;
+pub const MAX_CONNS: usize = 8;
 pub const HELLO_DEADLINE: Duration = Duration::from_secs(5);
 pub const OFFER_DEADLINE: Duration = Duration::from_secs(10);
 pub const MAX_MESSAGE: usize = 64 * 1024;
@@ -403,7 +405,7 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
             }
         });
     let id = c.pipeline.subscribe(vtx);
-    let control = c.pipeline.control();
+    let control = c.pipeline.control(id);
     let (s2, f2, e2, ctl2) = (stop.clone(), fps.clone(), ended.clone(), control.clone());
     let session = std::thread::Builder::new()
         .name("rtc".into())
