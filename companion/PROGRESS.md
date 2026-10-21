@@ -268,3 +268,23 @@ permission prompts nobody warned about; Screen tab with no app = just a link
   As built: only a computer with this board on its USB can pair or show its
   screen (unplugged, its picture ends: "HID-Fi is not plugged into ..."), so
   whatever the Screen tab shows is the computer the board controls.
+
+### 2026-10-21 night - "the Rust app freezes the Mac"
+- Cause 1: the owner still ran the morning build (focus stolen every 500 ms,
+  fixed in 27c088a). Cause 2 ("not on this network" after a flash): macOS
+  withdrew the app's local network access when I rebuilt its bundle under it.
+  The board never lost WiFi (0 drops).
+- Fixed: event-driven window loop (no timer, stalls >100 ms logged); restart
+  into a replaced bundle (macOS); re-ask pairing after a board restart;
+  unreachable addresses logged with the reason; per-OS cause + settings
+  button when unreachable; later steps show only their title; render check
+  for all 12 window states (panel_review.py); per-OS guidance on the
+  dashboard (what each OS asks; where the app lives).
+- Linux (VM on the SSD): companion/tests/linux/run.sh passes - build, unit
+  tests, app without tray, real X11 + OpenH264 + WebRTC on two monitors,
+  display switch 0.1 s. HID-Fi hostsim tier: 312/312.
+- Mac: full suite green on a quiet machine (two "nothing is drawn" layout
+  flakes appear only when the Mac is loaded by a VM or e2e runs); all four
+  companion e2e suites; real board: board_pages 5/5, hardware 11/11.
+- Waiting on the owner: Screen Recording for the new build (one step), and
+  approval to push for the Windows CI run.
