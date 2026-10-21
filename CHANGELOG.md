@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## v3.12 - 2026-10-21
+## v4.0 - 2026-10-22
 
 The computer's own screen on the dashboard, with the new HID-Fi Companion app
 (macOS, Windows, Linux): every monitor, six viewers, the wall. Plus the fixes

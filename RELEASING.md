@@ -30,7 +30,7 @@ fix lands a minute later: that fix is the next version.
 | 8 | The GitHub Release | `gh release create vX.Y --verify-tag --latest --notes-file <changelog section> <zip>` |
 | 9 | Check it | download the zip from the release page and `shasum -a 256 -c SHA256SUMS` |
 
-### HID-Fi Companion (from v3.12)
+### HID-Fi Companion (from v4.0)
 
 The app ships in the same GitHub Release, so the installers' "latest" links find
 it. Run the manual `companion` workflow on the release commit; its artifacts are
