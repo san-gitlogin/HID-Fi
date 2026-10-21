@@ -807,8 +807,12 @@ mod tests {
         let p = pipe(&c, Arc::new(Mutex::new((64, 64))), true, false);
         let (tx, rx) = sync_channel(2);
         p.subscribe(tx);
-        std::thread::sleep(Duration::from_millis(400));
-        // ~20 frames made, only 2 waiting: the rest were dropped.
+        // Wait for frames rather than a fixed time (a slow CI machine makes fewer).
+        let end = Instant::now() + Duration::from_secs(5);
+        while c.frames.load(Ordering::SeqCst) <= 10 && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // More than 10 made, only 2 waiting: the rest were dropped.
         assert!(c.frames.load(Ordering::SeqCst) > 10);
         let mut waiting = 0;
         while rx.try_recv().is_ok() {
@@ -838,6 +842,7 @@ mod tests {
         let slow = p.subscribe(slow_tx);
         p.control(slow).request_keyframe(); // and it keeps asking, like a browser
         let start = Instant::now();
+        let made0 = c.frames.load(Ordering::SeqCst);
         let (mut frames, mut keys) = (0, 0);
         while start.elapsed() < Duration::from_millis(2500) {
             p.control(slow).request_keyframe();
@@ -846,12 +851,16 @@ mod tests {
                 keys += f.keyframe as usize;
             }
         }
+        // Judged against what was made (a CI machine makes fewer frames), and
+        // keyframes against the time that passed.
+        let made = c.frames.load(Ordering::SeqCst) - made0;
+        let secs = start.elapsed().as_secs_f64();
         assert!(
-            frames > 60,
-            "the healthy viewer kept its frame rate: {frames} in 2.5 s"
+            frames * 10 >= made * 7 && frames > 20,
+            "the healthy viewer kept its frames: {frames} of {made} made in {secs:.1} s"
         );
         assert!(
-            keys <= 5,
+            keys as f64 <= 2.0 + secs, // one keyframe a second at most (KEY_GAP), not one per frame
             "{keys} keyframes of {frames}: at most one per KEY_GAP after the start"
         );
         drop(slow_rx);
@@ -880,13 +889,18 @@ mod tests {
         let poor = p.subscribe(poor_tx);
         p.control(good).offer_bitrate(8_000_000);
         p.control(poor).offer_bitrate(1_000_000);
-        std::thread::sleep(Duration::from_millis(300));
+        let (mut g, mut q) = (0, 0);
+        let end = Instant::now() + Duration::from_secs(5);
+        while (g <= 10 || q < 3) && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(50));
+            g += good_rx.try_iter().count();
+            q += poor_rx.try_iter().count();
+        }
         assert_eq!(
             c.encoders.load(Ordering::SeqCst),
             2,
             "one encoder per quality"
         );
-        let (g, q) = (good_rx.try_iter().count(), poor_rx.try_iter().count());
         // The poor one at 1 Mbit/s runs at 15 fps (lane_fps), the good one at 50.
         assert!(g > 10 && q >= 3, "both get frames: {g} and {q}");
         // The poor link recovers: back to one encoder, which it shares.

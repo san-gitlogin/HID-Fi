@@ -48,7 +48,8 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace
       - name: Build the app and the test streamers
-        run: cargo build --release -p hidfi-companion -p hidfi-stream --examples
+        # --bins too: with --examples alone cargo builds no app binary at all.
+        run: cargo build --release -p hidfi-companion -p hidfi-stream --bins --examples
       - name: Python test tools
         run: |
           python -m pip install playwright cryptography

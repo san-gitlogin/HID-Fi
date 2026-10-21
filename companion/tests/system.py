@@ -81,7 +81,10 @@ try:
     check("the board lists it online", dash(cmd="companion_list")["paired"][0]["online"])
     # The key never left the app's folder unprotected.
     mode = oct(os.stat(os.path.join(store, "pairing.key")).st_mode & 0o777)
-    check("the pairing key is saved owner-only", mode == "0o600", mode)
+    # Unix permissions mean nothing on Windows: there the key is in the user's
+    # own profile folder (%APPDATA%), which other accounts cannot read.
+    if os.name != "nt":
+        check("the pairing key is saved owner-only", mode == "0o600", mode)
 
     with sync_playwright() as p:
         b = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required"])
