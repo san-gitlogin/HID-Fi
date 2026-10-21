@@ -15,6 +15,11 @@ mouse and keyboard are doing.
 Status, decisions and the work log: [REQUIREMENTS.md](REQUIREMENTS.md),
 [DESIGN.md](DESIGN.md), [PROGRESS.md](PROGRESS.md).
 
+
+**What it does:** shows the computer's screen live on the dashboard's Screen tab
+- each monitor, up to six viewers, the all-monitors wall (`#wall`), a floating
+window, watch-only screens (`#watch`). Install and use: [docs/COMPANION.md](../docs/COMPANION.md).
+
 ## Using it
 
 1. Set an access PIN on the board (dashboard, Settings).

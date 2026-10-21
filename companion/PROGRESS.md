@@ -288,3 +288,21 @@ permission prompts nobody warned about; Screen tab with no app = just a link
   companion e2e suites; real board: board_pages 5/5, hardware 11/11.
 - Waiting on the owner: Screen Recording for the new build (one step), and
   approval to push for the Windows CI run.
+
+### 2026-10-21 late - the wall, six viewers, release prep
+- Wall (#wall): 1-4 monitors live at once, per-tile switch/pop-out/full
+  screen, pop out all into windows (?d=<id>#watch). Running it against the
+  real app found: monitor asked before the offer -> "no offer" (also broke a
+  remembered monitor on the single picture); #wall rewritten to #pad at
+  start-up; a placeholder tile left in the grid. All fixed, with scenarios
+  and a real-app check in dashboard_live.py.
+- MAX_VIEWERS 6. Real board: 6 screens at once 27-30 fps; 8 pages; full.
+- Real monitors on a one-screen Mac: tools/vdisplay + multi_monitor_mac.py
+  (each at its shape, two at once, unplug falls back, the wall, pop-outs).
+- macOS: local "HID-Fi Local" signing certificate keeps Screen Recording
+  across rebuilds (package/macos.sh uses it when present).
+- Control golden made order-independent (fresh page per tab).
+- v3.12. Pushed branch `companion`; CI (tests.yml calls companion.yml):
+  first run failed on `cargo fmt` (never run) and the manual-only rule
+  (now allows workflow_call); rerun in progress.
+- Backups: git bundles on the SSD (HID-Fi-backup/).
