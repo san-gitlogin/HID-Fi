@@ -23,6 +23,14 @@ found by testing it live.
 
 ### Fixed
 
+- **The dashboard by its .local name stalled on Macs and iPhones** - 5 s for
+  every lookup (they ask for an IPv6 address and the board never answered), so
+  a refresh or a reconnect looked dead. The board now has an IPv6 link-local
+  address, so the name answers at once (measured 5.0 s -> 0.003 s; page by name
+  in 0.7 s). Only the link-local address: no address from the router (which
+  could expose the dashboard to the internet where a router lets IPv6 in), and
+  every request or socket from a non-local IPv6 address is refused.
+
 - **The board served only 5 dashboard pages, and the 6th said "offline".** The
   WebSockets library has its own limit (5) and never saw the firmware's 8; three
   phones with a watch window each reached it. `hid_fi/build_opt.h` now gives
