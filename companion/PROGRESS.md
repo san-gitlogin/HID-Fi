@@ -65,12 +65,29 @@ Newest first. Read REQUIREMENTS.md and DESIGN.md before continuing any work.
   (static 24, unit 138, ui 467, build 4; skips: 312 Linux-only hostsim, 35 pwsh).
   Hardware tiers NOT run; firmware NOT flashed. Nothing committed yet.
 
-## Next (in order)
-1. Owner OK to flash; then `python tests/run.py --board` (includes the companion
-   contract lines in test_sim_contract.py) and a real pairing over the LAN.
-2. Phase 3 on macOS: ScreenCaptureKit capture, VideoToolbox H.264, str0m WebRTC,
-   signaling server (tickets checked with `TicketNonces` + `pairing::ticket_ok`).
-3. Phase 4 dashboard Screen tab.
+## Next (in order) - updated 2026-10-21, end of the owner-away session
+
+Everything is on branch `companion` (local, not pushed). Each step needs the owner.
+
+1. **Flash the board** (`./flash_esp.sh -c`; keeps NVS). Then `python tests/run.py
+   --board` (moves the mouse net zero, volume down/up) - it now includes the
+   companion lines in test_sim_contract.py, which prove the model against the
+   real firmware.
+2. **macOS Screen Recording**: open `companion/target/package/HID-Fi Companion.app`
+   (or the .dmg), allow Screen Recording when asked (System Settings opens from
+   the app's window/menu). Then `cargo run --release -p hidfi-stream --example
+   check_capture` at the Mac confirms real capture + encode and writes a sample.
+3. **Pair for real**: dashboard -> Screen -> Pair -> type the code the app shows.
+   Watch the phone; try zoom, float, unplug/replug.
+4. **Windows PC**: `cargo build --release -p hidfi-companion` and run
+   `cargo run --release -p hidfi-stream --example check_capture` there (needs Rust
+   on that PC, or a build made on it). First run of the Windows backends.
+5. Owner decisions: code-signing certificates (Apple Developer ID, Windows), and
+   whether to push / open a PR.
+
+Still to build: Linux capture/encode (X11/PipeWire, VA-API or Cisco's openh264
+loaded at runtime), Windows hardware (async) encoder, Windows installer, lock
+screen / login window (system service), multi-display picker in the window.
 
 ### 2026-10-21 (owner away; working alone, not flashing)
 - Owner reported: Settings "Connected clients" stuck on "Asking the board...".
