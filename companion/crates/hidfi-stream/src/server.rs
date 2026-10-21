@@ -448,14 +448,20 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     if let Ok(t) = forwarder {
         let _ = t.join();
     }
-    let reason = format!(
-        "{:?}",
-        ended
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
-            .unwrap_or(End::Stopped)
-    );
+    // "closed": the board was unplugged from this computer - the viewer can say
+    // exactly that at once, instead of "reconnecting" and finding out later.
+    let reason = if !c.open.load(Ordering::Relaxed) {
+        "closed".to_string()
+    } else {
+        format!(
+            "{:?}",
+            ended
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+                .unwrap_or(End::Stopped)
+        )
+    };
     let _ = send(&mut ws, serde_json::json!({"t":"end","reason":reason}));
     let _ = ws.close(None);
     Ok(())

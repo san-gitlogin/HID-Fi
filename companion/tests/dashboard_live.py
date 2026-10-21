@@ -122,6 +122,35 @@ try:
         pg.tap("#scrFDock")
         check("dock brings it back to the Screen tab", pg.evaluate("!SCR.float && curView==='screen'"))
 
+        # A second device that only watches, and a third dashboard, all signed in
+        # with the same PIN at the same time.
+        def sign_in(page):
+            page.wait_for_selector("#sheet.on .pinbox", timeout=8000)
+            page.locator("#sheet.on .pinbox").first.click()
+            page.wait_for_timeout(120)
+            for d in "4826":
+                page.keyboard.type(d); page.wait_for_timeout(40)
+        ctx2 = b.new_context(viewport={"width": 1280, "height": 800})
+        tv = ctx2.new_page(); sim.attach(tv, extract_html())
+        tv.goto(URL + "#watch"); sign_in(tv)
+        tv.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=20000)
+        ctx3 = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+        third = ctx3.new_page(); sim.attach(third, extract_html())
+        third.goto(URL + "#pad"); sign_in(third)
+        third.wait_for_function("document.getElementById('ltext').textContent==='live'", timeout=8000)
+        wait_app(lambda v: v["watching"] == 2, 8, "two viewers")
+        f1 = pg.evaluate("(()=>{window.__f=0;const v=scrVideo;const cb=()=>{__f++;v.requestVideoFrameCallback(cb)};v.requestVideoFrameCallback(cb);return 0})()")
+        f2 = tv.evaluate("(()=>{window.__f=0;const v=scrVideo;const cb=()=>{__f++;v.requestVideoFrameCallback(cb)};v.requestVideoFrameCallback(cb);return 0})()")
+        time.sleep(3)
+        a, c = pg.evaluate("__f") / 3, tv.evaluate("__f") / 3
+        check("phone and a watch-only screen play at once", a >= 15 and c >= 15, f"{a:.0f} fps and {c:.0f} fps")
+        check("the computer counts two viewers", True)
+        n = third.evaluate("+document.getElementById('connN').textContent")
+        check("three dashboards signed in with one PIN", n >= 3, f"board counts {n} dashboards")
+        ctx2.close(); ctx3.close()
+        wait_app(lambda v: v["watching"] == 1, 8, "back to one viewer")
+        check("closing the watch screen frees its place", True)
+
         app.stdin.write("unplug\n"); app.stdin.flush()
         pg.wait_for_function("SCR.state!=='live'", timeout=10000)
         pg.wait_for_function("document.getElementById('scrMsg').innerText.length>0", timeout=10000)
