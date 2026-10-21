@@ -15,6 +15,16 @@ found by testing it live.
 
 ### Added
 
+- **See the computer's screen: the Screen tab and HID-Fi Companion.** A small
+  app for the computer the board is plugged into (macOS, Windows, Linux) shows
+  its screen live on the dashboard - above the trackpad on a phone, beside it on
+  a tablet, floating over any tab, or alone on another screen (`#watch`). Video
+  goes from the computer to the viewer directly and encrypted (WebRTC); the
+  board pairs them with a six-digit code and vouches for the computer. Hardware
+  H.264 on macOS and Windows, Cisco's OpenH264 on Linux; nothing is captured
+  while nobody watches; a viewer on a weak link gets a smaller picture instead
+  of slowing the others. Install: `docs/COMPANION.md`, or the steps on the
+  Screen tab itself.
 - **Every monitor at once (Screen tab, `#wall`).** One, two, three or four of the
   computer's monitors in a grid, each live; full screen one or all; or each in its
   own window (`?d=<monitor>#watch`) to drag to any screen. Each viewer also picks
