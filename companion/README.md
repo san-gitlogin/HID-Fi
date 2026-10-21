@@ -54,6 +54,7 @@ adding a login item - for development and tests.
 | `tests/panel_review.py` | the app's window in every state: fits, nothing cut off, each step says what to do (`cargo run --example panel_states` first) |
 | `tests/board_pages.py` | the REAL board: 8 dashboard pages at once, the 9th told the board is full (`HIDFI_PIN`) |
 | `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors |
+| `tests/multi_monitor_mac.py` | REAL monitors on a one-screen Mac: `tools/vdisplay` makes 3 virtual displays; the real app, board and Chrome show each at its shape, two at once, and an unplugged one falls back (`HIDFI_PIN`) |
 | `tests/hardware.py` | the REAL board and service: pair by code, live picture, four viewers, one PIN (`HIDFI_PIN`) |
 
 The last four need Google Chrome and their binaries built first:

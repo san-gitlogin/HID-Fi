@@ -100,6 +100,13 @@ someone in between. Three wrong codes end the attempt; start again from the app.
   tablet, a TV's browser, a second monitor - while your phone controls. Or open
   `http://<board address>/#watch`. On a desktop: **F** full screen, **+** / **-**
   zoom, **0** fit.
+- **Several monitors:** the display button on the picture (two screens icon,
+  shown when the computer has more than one) picks which monitor to show; on a
+  watch screen keys **1**-**4** do the same, main display first. Each phone or
+  screen picks its own, so two can watch two monitors at once, and the choice is
+  remembered per computer. A monitor that is unplugged while shown hands over
+  to the main display, and the dashboard says which one left. Very large
+  monitors are sent at up to 1920 pixels wide.
 - Up to **four screens** can watch one computer at once. A fifth waits and joins
   by itself when one closes.
 
