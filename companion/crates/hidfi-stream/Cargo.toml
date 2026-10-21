@@ -56,6 +56,7 @@ features = [
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
     "Win32_Media_MediaFoundation",
     "Win32_System_Com",
     "Win32_System_Ole",
@@ -67,5 +68,5 @@ features = [
 # run time from the binary Cisco publishes (installed by the Linux installer),
 # so the H.264 patent licence Cisco pays for covers it.
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = { version = "0.14", features = ["damage", "xfixes"] }
+x11rb = { version = "0.14", features = ["damage", "xfixes", "randr"] }
 openh264 = { version = "0.9", default-features = false, features = ["libloading"] }

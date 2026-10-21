@@ -77,6 +77,10 @@ SHEET_STATES = [
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),
     ("sheet watch pick", "SCR.pcs=[{id:'a'.repeat(32),name:'Studio PC',online:true},"
                          "{id:'b'.repeat(32),name:'Kitchen laptop with a much longer name',online:false}];watchPick()"),
+    ("sheet display pick", "SCR.displays=[{id:1,name:'Built-in display',width:3024,height:1964,main:true},"
+                           "{id:2,name:'Display 2',width:2560,height:1440,main:false},"
+                           "{id:3,name:'DELL U2723QE wide monitor on the left',width:3840,height:2160,main:false}];"
+                           "SCR.disp=1;scrDispPick()"),
 ]
 OVERLAY_STATES = [
     ("overlay boot", "bootStart('Switching the pointer to absolute. Windows will install the new device.')",

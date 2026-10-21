@@ -8,7 +8,7 @@
 
 use hidfi_agent::session::TicketNonces;
 use hidfi_core::pairing::{self, PairKey};
-use hidfi_stream::pattern::Pattern;
+use hidfi_stream::pattern::{FakeDisplays, Pattern};
 use hidfi_stream::pipeline::{Pipeline, Source};
 use hidfi_stream::server::{self, TicketGate};
 use std::sync::{Arc, RwLock};
@@ -43,17 +43,17 @@ fn main() {
         Arc::new(RwLock::new(Some(key.clone()))),
         nonces,
     ));
+    let fake = FakeDisplays::from_env(w, h);
+    let f2 = fake.clone();
     let pipeline = Arc::new(Pipeline::start(
         fps,
         3_000_000,
-        move || -> Result<Box<dyn Source>, String> {
-            Ok(if still {
-                Box::new(Pattern::new(w, h).still())
-            } else if busy {
-                Box::new(Pattern::new(w, h).busy())
+        move |d: Option<u32>| -> Result<Box<dyn Source>, String> {
+            if still {
+                Ok(Box::new(Pattern::new(w, h).still()))
             } else {
-                Box::new(Pattern::new(w, h))
-            })
+                f2.source(d, busy)
+            }
         },
         hidfi_stream::encoder,
     ));
@@ -64,7 +64,10 @@ fn main() {
         gate,
         pipeline.clone(),
         cert,
-        Box::new(move || (w & !1, h & !1)),
+        {
+            let f = fake.clone();
+            Box::new(move || f.list())
+        },
     )
     .expect("listening");
     let tickets: Vec<_> = (0..12)
@@ -77,6 +80,14 @@ fn main() {
         "{}",
         serde_json::json!({"port": srv.port, "tn": tn, "fp": fp, "tickets": tickets})
     );
+    // stdin: "unplug <id>" takes a pretend display away.
+    std::thread::spawn(move || {
+        for line in std::io::stdin().lines().map_while(Result::ok) {
+            if let Some(id) = line.trim().strip_prefix("unplug ").and_then(|s| s.parse().ok()) {
+                fake.unplug(id);
+            }
+        }
+    });
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
         eprintln!(

@@ -5,7 +5,9 @@
 // watchScreen(t, video, on) where t = the board's screen_ticket reply
 // ({ip, port, fp, tn, vn, ticket}) and `on` gets state changes:
 //   'connecting' | 'live' | 'reconnect' | 'ended:<why>' | 'refused:<why>'
-// Returns {stop()}. Keyframes are asked for by WebRTC itself when a picture breaks.
+//   'stats:<fps>' | 'displays:<json {displays, display}>' | 'display:<json {id, fallback}>'
+// Returns {stop(), display(id)}: display() switches to another of the
+// computer's displays. Keyframes are asked for by WebRTC itself when a picture breaks.
 function watchScreen(t, video, on){
   let pc=null, ws=null, done=false, live=false;
   const say=s=>{ if(!done||s.indexOf('ended')===0||s.indexOf('refused')===0) on(s); };
@@ -28,7 +30,10 @@ function watchScreen(t, video, on){
     if(m.t==='error'){ return finish('refused:'+(m.reason||'error')); }
     if(m.t==='end'){ return finish('ended:'+(m.reason||'')); }
     if(m.t==='stats'){ on('stats:'+(m.fps|0)); return; }
+    if(m.t==='displays'){ on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display})); return; }
+    if(m.t==='display'){ on('display:'+JSON.stringify({id:m.id,fallback:!!m.fallback})); return; }
     if(m.t==='ready'){
+      on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display}));
       pc=new RTCPeerConnection({iceServers:[]});
       const tr=pc.addTransceiver('video',{direction:'recvonly'});
       try{ // H.264 first: the PC encodes it in hardware
@@ -57,6 +62,7 @@ function watchScreen(t, video, on){
     }
   };
   return {
-    stop(){ finish('ended:stopped'); }
+    stop(){ finish('ended:stopped'); },
+    display(id){ try{ ws&&ws.readyState===1&&ws.send(JSON.stringify({t:'display',id:id})); }catch(e){} }
   };
 }

@@ -25,6 +25,8 @@ use std::collections::{HashMap, VecDeque};
 use std::io::ErrorKind;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use crate::display::{self, Display};
+use crate::pipeline::MAIN;
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -113,6 +115,10 @@ enum FromViewer {
     Offer {
         sdp: String,
     },
+    /// Watch another display (an id from the list in `ready`).
+    Display {
+        id: u32,
+    },
     Key,
     Bye,
 }
@@ -167,7 +173,7 @@ struct Ctx {
     conns: AtomicUsize,
     viewers: Watchers,
     bad: Mutex<HashMap<IpAddr, VecDeque<Instant>>>,
-    size: Box<dyn Fn() -> (u32, u32) + Send + Sync>,
+    displays: Displays,
     stop: Arc<AtomicBool>,
     open: Arc<AtomicBool>,
 }
@@ -198,13 +204,20 @@ impl Ctx {
     }
 }
 
+/// The displays viewers may choose from, asked when one connects and every
+/// few seconds while it watches (monitors come and go).
+pub type Displays = Box<dyn Fn() -> Vec<Display> + Send + Sync>;
+
+/// How often a watching viewer's display list is checked for changes.
+const DISPLAYS_EVERY: Duration = Duration::from_secs(3);
+
 /// Binds the first free port in [`PORTS`] (or exactly `port` if given).
 pub fn start(
     port: Option<u16>,
     gate: Arc<dyn Gate>,
     pipeline: Arc<Pipeline>,
     cert: DtlsCert,
-    size: Box<dyn Fn() -> (u32, u32) + Send + Sync>,
+    displays: Displays,
 ) -> std::io::Result<Server> {
     let listener = match port {
         Some(p) => TcpListener::bind(("0.0.0.0", p))?,
@@ -226,7 +239,7 @@ pub fn start(
         conns: AtomicUsize::new(0),
         viewers: watchers.clone(),
         bad: Mutex::default(),
-        size,
+        displays,
         stop: stop.clone(),
         open: open.clone(),
     });
@@ -359,8 +372,12 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     }
     let _slot = Slot(&c.viewers);
 
-    let (w, h) = (c.size)();
-    send(&mut ws, serde_json::json!({"t":"ready","w":w,"h":h})).map_err(|e| e.to_string())?;
+    let mut shown = (c.displays)();
+    send(
+        &mut ws,
+        serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)}),
+    )
+    .map_err(|e| e.to_string())?;
     let Some(FromViewer::Offer { sdp }) = expect(&mut ws, OFFER_DEADLINE) else {
         return Err("no offer".into());
     };
@@ -422,14 +439,59 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
 
     // The control channel, until either side ends it.
     let mut last_stats = Instant::now();
+    let mut last_displays = Instant::now();
+    // The display this viewer was last told it watches (MAIN resolved to an id).
+    let current = |list: &[Display], d: u32| if d == MAIN { display::main_id(list) } else { Some(d) };
+    let mut told = current(&shown, MAIN);
+    // What the viewer last asked to watch: if it gets something else, it was moved.
+    let mut asked: Option<u32> = None;
     while !stop.load(Ordering::Relaxed)
         && !c.stop.load(Ordering::Relaxed)
         && c.open.load(Ordering::Relaxed)
     {
         match read(&mut ws, Instant::now() + Duration::from_millis(1000)) {
             Ok(Got::Msg(Some(FromViewer::Key))) => control.request_keyframe(),
+            Ok(Got::Msg(Some(FromViewer::Display { id }))) => {
+                asked = Some(id);
+                // Only a display this computer has; the main one by its id
+                // follows the main display (MAIN), so it is never a dead end.
+                if display::main_id(&shown) == Some(id) {
+                    control.set_display(MAIN);
+                } else if shown.iter().any(|d| d.id == id) {
+                    control.set_display(id);
+                }
+            }
             Ok(Got::Msg(Some(FromViewer::Bye))) | Err(_) => break,
             Ok(_) => {}
+        }
+        if last_displays.elapsed() >= DISPLAYS_EVERY {
+            last_displays = Instant::now();
+            let now = (c.displays)();
+            if now != shown {
+                // A display that went away hands this viewer the main one.
+                if control.display() != MAIN && !now.iter().any(|d| d.id == control.display()) {
+                    control.set_display(MAIN);
+                }
+                shown = now;
+                let id = current(&shown, control.display());
+                if send(&mut ws, serde_json::json!({"t":"displays","displays":shown,"display":id})).is_err() {
+                    break;
+                }
+                told = id;
+            }
+        }
+        // Say which display this viewer watches whenever it changes: its own
+        // choice, or the main one after its display could not be captured.
+        let id = current(&shown, control.display());
+        if id != told {
+            let moved = asked.is_some_and(|a| Some(a) != id);
+            if moved {
+                asked = None;
+            }
+            if send(&mut ws, serde_json::json!({"t":"display","id":id,"fallback":moved})).is_err() {
+                break;
+            }
+            told = id;
         }
         if last_stats.elapsed() >= Duration::from_secs(1) {
             last_stats = Instant::now();

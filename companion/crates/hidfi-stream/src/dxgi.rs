@@ -23,7 +23,7 @@ use std::ffi::c_void;
 use windows::core::Interface;
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Graphics::Direct3D::{
-    D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_11_0,
+    D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_11_0,
 };
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
@@ -32,7 +32,7 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
-    IDXGIDevice, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_ACCESS_LOST,
+    CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_ACCESS_LOST,
     DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, DXGI_OUTDUPL_POINTER_SHAPE_INFO,
     DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR,
     DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME,
@@ -69,15 +69,31 @@ fn err(what: &str, e: windows::core::Error) -> String {
 }
 
 impl DxgiSource {
-    /// Capture display number `index` (0 = the first output of the main GPU).
-    pub fn start(index: Option<u32>) -> Result<Self, String> {
+    /// Capture display `id` from [`crate::display::list`] (`card << 8 |
+    /// output`), or the main display if `None`. The Direct3D device is made on
+    /// the card that owns the output: Desktop Duplication refuses any other,
+    /// which is how a laptop's external monitor on its second GPU was out of reach.
+    pub fn start(id: Option<u32>) -> Result<Self, String> {
+        let id = match id {
+            Some(i) => i,
+            None => crate::display::main_id(&crate::display::list()).unwrap_or(0),
+        };
+        let (card, out) = (id >> 8, id & 0xff);
+        // SAFETY: COM calls on live objects.
+        let (adapter, output) = unsafe {
+            let f: IDXGIFactory1 = CreateDXGIFactory1().map_err(|e| err("DXGI", e))?;
+            let adapter = f.EnumAdapters1(card).map_err(|e| err("no such display", e))?;
+            let output = adapter.EnumOutputs(out).map_err(|e| err("no such display", e))?;
+            (adapter, output)
+        };
         let mut device: Option<ID3D11Device> = None;
         let mut ctx: Option<ID3D11DeviceContext> = None;
-        // SAFETY: documented call with valid out pointers.
+        // SAFETY: documented call with valid out pointers. With an adapter the
+        // driver type must be UNKNOWN.
         unsafe {
             D3D11CreateDevice(
-                None,
-                D3D_DRIVER_TYPE_HARDWARE,
+                &adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
                 HMODULE::default(),
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 Some(&[D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1]),
@@ -90,14 +106,6 @@ impl DxgiSource {
         }
         let device = device.ok_or("no Direct3D device")?;
         let ctx = ctx.ok_or("no Direct3D context")?;
-        // SAFETY: COM calls on live objects.
-        let output = unsafe {
-            let dxgi: IDXGIDevice = device.cast().map_err(|e| err("DXGI device", e))?;
-            let adapter = dxgi.GetAdapter().map_err(|e| err("adapter", e))?;
-            adapter
-                .EnumOutputs(index.unwrap_or(0))
-                .map_err(|e| err("no such display", e))?
-        };
         let output: IDXGIOutput1 = output
             .cast()
             .map_err(|e| err("IDXGIOutput1 (Windows 8+)", e))?;

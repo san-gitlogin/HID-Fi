@@ -1054,11 +1054,27 @@ html.watch .watchwrap.idle .watchbar,html.watch .watchwrap.idle .scrtools{opacit
 .scrfloat .scrstage{border:none;border-radius:0;max-height:none;height:auto;aspect-ratio:16/10;min-height:0}
 .scrfloat .scrtools .iconbtn{width:30px;height:30px}
 .scrfloat #scrPop,.scrfloat #scrSolo,html.watch #scrSolo{display:none}
-.scrfloat .scrbadge b{display:none}
+/* The title bar says what the badge would: nothing covers a small picture. */
+.scrfloat .scrbadge{display:none}
+.scrtools [hidden]{display:none}
+/* First time, no computer yet: the steps, here, without needing the internet. */
+.scrsteps{list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:14px;margin:4px 0 12px}
+.scrsteps li{counter-increment:st;position:relative;padding-left:34px;font-size:13.5px;color:var(--fg2);line-height:1.5}
+.scrsteps li::before{content:counter(st);position:absolute;left:0;top:-1px;width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;border:1px solid var(--line2);color:var(--acc);font-size:12px;font-weight:600}
+.scrsteps li b{color:var(--fg)}
+.scrsteps .seg{display:inline-flex;margin:8px 0 6px}
+.scrsteps p{margin:4px 0 6px}
+.scrcmd{display:flex;gap:8px;align-items:stretch}
+.scrcmd code{flex:1;min-width:0;font:12px/1.45 ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--fg);
+  background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+  overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
+.scrfloat .fhead .fstat{flex:0 0 auto;font-size:11px;color:var(--fg3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.scrfloat .fhead .fstat:empty{display:none}
 .scrfloat.min .fbody,.scrfloat.min .fsize{display:none}
 .scrfloat.min{width:auto!important;max-width:calc(100vw - 16px)}
 /* A screen under 400px tall has no room for the pill: just the way back. */
-.scrfloat.min.tiny .fhead b,.scrfloat.min.tiny .fhead .dot,.scrfloat.min.tiny #scrFDock,.scrfloat.min.tiny #scrFClose{display:none}
+.scrfloat.min.tiny .fhead b,.scrfloat.min.tiny .fhead .dot,.scrfloat.min.tiny .fhead .fstat,.scrfloat.min.tiny #scrFDock,.scrfloat.min.tiny #scrFClose{display:none}
 .scrfloat.min.tiny .fhead{padding:0 3px;gap:0}
 /* While the window floats, the page gets that much more room to scroll on the
    side the window sits, so nothing under it is out of reach. */
@@ -1173,6 +1189,7 @@ main::after{height:var(--flpad,0px)}
 <symbol id="i-phone" viewBox="0 0 24 24"><path d="M20.6 16.7v2.6a1.9 1.9 0 0 1-2.1 1.9 18.6 18.6 0 0 1-8.1-2.9 18.4 18.4 0 0 1-5.7-5.7A18.6 18.6 0 0 1 1.8 4.5 1.9 1.9 0 0 1 3.7 2.4h2.6a1.9 1.9 0 0 1 1.9 1.7 12 12 0 0 0 .7 2.6 1.9 1.9 0 0 1-.5 2L7.2 10a15 15 0 0 0 5.7 5.7l1.3-1.2a1.9 1.9 0 0 1 2-.5 12 12 0 0 0 2.6.7 1.9 1.9 0 0 1 1.7 1.9Z"/></symbol>
 <symbol id="i-phoneoff" viewBox="0 0 24 24"><g transform="translate(12 12) rotate(135) scale(.86) translate(-12 -12)" stroke-width="2.03"><path d="M20.6 16.7v2.6a1.9 1.9 0 0 1-2.1 1.9 18.6 18.6 0 0 1-8.1-2.9 18.4 18.4 0 0 1-5.7-5.7A18.6 18.6 0 0 1 1.8 4.5 1.9 1.9 0 0 1 3.7 2.4h2.6a1.9 1.9 0 0 1 1.9 1.7 12 12 0 0 0 .7 2.6 1.9 1.9 0 0 1-.5 2L7.2 10a15 15 0 0 0 5.7 5.7l1.3-1.2a1.9 1.9 0 0 1 2-.5 12 12 0 0 0 2.6.7 1.9 1.9 0 0 1 1.7 1.9Z"/></g></symbol>
 <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
+<symbol id="i-displays" viewBox="0 0 24 24"><rect x="2.5" y="8.5" width="13" height="9" rx="1.5"/><path d="M7 21h4M9 17.5V21"/><path d="M7 8.5V5.5A1.5 1.5 0 0 1 8.5 4h11.5a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5h-4.5"/></symbol>
 <symbol id="i-vol" viewBox="0 0 24 24"><path d="M11 5 6.5 8.8H3.5v6.4h3L11 19z"/><path d="M15 9.5a3.5 3.5 0 0 1 0 5M17.8 6.8a7.5 7.5 0 0 1 0 10.4"/></symbol>
 <symbol id="i-volx" viewBox="0 0 24 24"><path d="M11 5 6.5 8.8H3.5v6.4h3L11 19z"/><path d="m16 10 4.5 4.5M20.5 10 16 14.5"/></symbol>
 <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.8v14.4l12-7.2z"/></symbol>
@@ -1375,6 +1392,7 @@ main::after{height:var(--flpad,0px)}
               <button class="iconbtn zm" id="scrOut" aria-label="Zoom out"><svg class="ic ic-sm"><use href="#i-zoomout"/></svg></button>
               <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
               <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
+              <button class="iconbtn" id="scrDisp" aria-label="Choose the display" hidden><svg class="ic ic-sm"><use href="#i-displays"/></svg></button>
               <button class="iconbtn" id="scrPop" aria-label="Float over other tabs"><svg class="ic ic-sm"><use href="#i-float"/></svg></button>
               <button class="iconbtn" id="scrSolo" aria-label="Open the screen on its own"><svg class="ic ic-sm"><use href="#i-newwin"/></svg></button>
             </div>
@@ -1391,7 +1409,7 @@ main::after{height:var(--flpad,0px)}
           <div class="ch"><svg class="ic"><use href="#i-screen"/></svg><h2>Computers</h2></div>
           <div class="list" id="scrList"><p class="hint">Asking the board...</p></div>
           <p class="hint" id="scrHelp" style="margin-top:10px"></p>
-          <a class="btn sm" id="scrGuide" style="margin-top:12px" href="https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md" target="_blank" rel="noopener"><svg class="ic ic-sm"><use href="#i-newwin"/></svg>Install guide: macOS, Windows, Linux</a>
+          <a class="btn sm" id="scrGuide" style="margin-top:12px" href="https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md" target="_blank" rel="noopener"><svg class="ic ic-sm"><use href="#i-newwin"/></svg>Full install guide (online)</a>
         </div>
       </div>
     </section>
@@ -1794,7 +1812,7 @@ main::after{height:var(--flpad,0px)}
   </div>
 </div>
 <div class="scrfloat" id="scrFloat" role="dialog" aria-label="Computer screen">
-  <div class="fhead" id="scrFHead"><span class="dot" id="scrFDot"></span><b id="scrFName">Screen</b>
+  <div class="fhead" id="scrFHead"><span class="dot" id="scrFDot"></span><b id="scrFName">Screen</b><span class="fstat" id="scrFStat"></span>
     <button class="iconbtn" id="scrFMin" aria-label="Minimise the screen"><svg class="ic ic-sm"><use href="#i-min"/></svg></button>
     <button class="iconbtn" id="scrFDock" aria-label="Back to the Screen tab"><svg class="ic ic-sm"><use href="#i-dock"/></svg></button>
     <button class="iconbtn" id="scrFClose" aria-label="Close the screen"><svg class="ic ic-sm"><use href="#i-x"/></svg></button>
@@ -1898,10 +1916,15 @@ function connect(){
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-    if(curView==='screen'||SCR.float||WATCH.on)scrList();};
+    scrAgain(true);if(curView==='screen'||SCR.float||WATCH.on)scrList();};
   sock.onclose=()=>{if(!live())return;
     if(!lostAt)lostAt=Date.now();
-    wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
+    // Replies this socket still owed will never come: say so to whoever asked
+    // (with null), or they wait forever - seen live: the Screen tab stuck on
+    // "Connecting..." after a phone slept, until the page was reloaded.
+    const lost=waiters.splice(0);
+    setTimeout(()=>lost.forEach(cb=>{if(cb)try{cb(null);}catch(e){}}),0);
+    wsUp=false;link(false);aswAbort();tries++;setTimeout(connect,1200);};
   sock.onerror=()=>{try{sock.close();}catch(e){}};
   sock.onmessage=ev=>{
     if(!live())return;
@@ -1988,10 +2011,12 @@ function send(o,cb){
   const pin=sessionStorage.getItem('pin');
   fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(pin?Object.assign({token:pin},o):o)})
-    .then(r=>r.json()).then(d=>{if(d.reply==='auth_required')return askPin();
-      if(d.reply==='lan_locked')return lanLocked();
+    // Every way out answers the caller: a refusal is still a reply, and no
+    // answer is null - never silence, which left callers waiting forever.
+    .then(r=>r.json()).then(d=>{if(d.reply==='auth_required')askPin();
+      else if(d.reply==='lan_locked')lanLocked();
       if(cb)cb(d);})
-    .catch(e=>logline('net '+e.message,true));
+    .catch(e=>{logline('net '+e.message,true);if(cb)cb(null);});
 }
 // Shown once per page load, not on every blocked command, or a dashboard that
 // polls status would bury the user in sheets.
@@ -4372,7 +4397,7 @@ function pcEditor(edit){
 let AUTH_SET=null;
 let AP_OPEN=false;
 function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-  if(curView==='screen'||SCR.float||WATCH.on)scrList();}
+  scrAgain();if(curView==='screen'||SCR.float||WATCH.on)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
@@ -4392,6 +4417,7 @@ function applyStatus(d){
   if(d.mdns)MDNS_NAME=d.mdns;
   if(d.ap_ssid)AP_SSID=d.ap_ssid;
   if(d.wifi_connected&&d.wifi_ip)noteHomeIp(d.wifi_ip);
+  if(d.wifi_connected!==undefined&&SCR.homeNet!==!!d.wifi_connected){SCR.homeNet=!!d.wifi_connected;if(!SCR.pcs.length)scrRenderList();}
   if(!d)return;
   if(d.host_os)applyHostOs(d.host_os,d.host_os_source,d.host_os_detected);  // The evidence behind the verdict, in the UI rather than only on the serial
   // port: a detection argument is settled by reading these, not by guessing at
@@ -4418,11 +4444,12 @@ function applyStatus(d){
   // this page shows up here on its own - and so does a tab that was left open
   // somewhere and is still holding a socket.
   if(d.ws_clients!==undefined){
-    const n=d.ws_clients|0, ap=d.ap_clients|0;
+    // Devices, not pages: a phone with the dashboard and a watch window is one.
+    const pages=d.ws_clients|0, n=d.ws_devices!==undefined?d.ws_devices|0:pages, ap=d.ap_clients|0;
     $('connN').textContent=n;
     const pill=$('connPill');
     pill.classList.toggle('multi',n>1);
-    pill.title=(n===1?'1 dashboard':n+' dashboards')+' connected to this board'+
+    pill.title=(n===1?'1 device':n+' devices')+(pages>n?' ('+pages+' pages)':'')+' connected to this board'+
       (ap?' \u00b7 '+ap+' device'+(ap===1?'':'s')+' on its access point':'')+
       (n>1?' \u2014 they share the link, so the pointer can feel slower':'');
   }
@@ -4959,12 +4986,16 @@ function bindWheel(el){
 // counts these, so this is what answers "why does it say 3?" - usually a tab
 // left open on a laptop, which reconnects by itself whenever the board restarts.
 function dashListHtml(r){
-  const d=(r&&r.dashboards)||[];
-  if(!d.length)return '<p class="hint">No dashboards are open.</p>';
-  return d.map(x=>
+  // One row per device (address); its pages - a dashboard, a watch window - together.
+  const g=[];
+  ((r&&r.dashboards)||[]).forEach(x=>{const o=g.find(y=>y.ip===x.ip);
+    if(o){o.pages++;o.you=o.you||x.you;o.signed_in=o.signed_in||x.signed_in;}else g.push(Object.assign({pages:1},x));});
+  if(!g.length)return '<p class="hint">No dashboards are open.</p>';
+  return g.map(x=>
     '<div class="item" data-dash="'+esc(x.ip)+'">'+ico(x.network==='board'?'wifi':'devices')+
     '<div class="tx"><b>'+esc(x.ip)+(x.you?' <span class="tag">this device</span>':'')+'</b>'+
     '<span>'+(x.network==='board'?'on the board\u2019s own WiFi':'over your home network')+
+    (x.pages>1?' \u00b7 '+x.pages+' pages open':'')+
     (AUTH_SET?(x.signed_in?' \u00b7 signed in':' \u00b7 not signed in'):'')+'</span></div></div>').join('')+
     '<p class="hint" style="margin-top:10px">A browser tab left open anywhere counts, and reconnects by itself '+
     'when the board restarts. Close the tab to remove it.'+(AUTH_SET?'':' Set an access PIN so only devices that know it can connect.')+'</p>';
@@ -5203,7 +5234,11 @@ const SCR={
   pcs:[],pend:[],pinSet:true,loaded:false,
   sel:null,h:null,state:'idle',why:'',fps:0,name:'',ip:'',
   tries:0,retryT:0,float:false,min:false,counts:'',
-  z:{s:1,x:0,y:0},notes:{}
+  z:{s:1,x:0,y:0},notes:{},
+  // The computer's displays, and the one shown (its id); empty with one display.
+  displays:[],disp:null,
+  // First-time guide: the OS whose install steps are shown; the board's WiFi.
+  guideOs:null,homeNet:null
 };
 // Watch only (#watch): the picture alone on a screen that just watches, while
 // another device does the controlling. Declared here, before anything can call
@@ -5230,6 +5265,44 @@ function scrPc(){return SCR.pcs.find(p=>p.id===SCR.sel)||null;}
 // The list is rebuilt from the board's answer, which arrives every few seconds
 // while a pairing is under way. A code half typed must survive that, and keep
 // its focus, or the box empties under your thumb.
+// ---- first time: what to do, step by step, on the board itself ----
+// (a phone on the board's own WiFi has no internet for a guide on GitHub)
+const SCR_INSTALL={
+  mac:{name:'macOS',how:'Download it, open the .dmg, drag HID-Fi Companion to Applications and open it from there.',
+    link:'https://github.com/san-gitlogin/HID-Fi/releases/latest',linkText:'Download for Mac'},
+  win:{name:'Windows',how:'In PowerShell (Start, type PowerShell), paste this and press Enter:',
+    cmd:'irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-windows.ps1 | iex'},
+  linux:{name:'Linux',how:'In a terminal, paste this and press Enter:',
+    cmd:'curl -fsSL https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-linux.sh | sh'}
+};
+function scrGuideHtml(){
+  // The board knows which OS the computer runs: start on that one.
+  const os=SCR.guideOs||(SCR_INSTALL[OS]?OS:'win'),g=SCR_INSTALL[os];
+  return (SCR.homeNet===false?'<div class="item">'+ico('wifi')+'<div class="tx"><b style="white-space:normal">First, join the board to your home WiFi</b>'+
+      '<span style="white-space:normal">The computer finds the board there.</span></div>'+
+      '<button class="btn sm" id="scrToNet">Settings</button></div>':'')+
+    '<ol class="scrsteps">'+
+    '<li><b>Install HID-Fi Companion</b> on the computer this board is plugged into.'+
+      '<div class="seg">'+Object.keys(SCR_INSTALL).map(k=>'<button class="'+(k===os?'on':'')+'" data-scros="'+k+'">'+
+      SCR_INSTALL[k].name+'</button>').join('')+'</div>'+
+      '<p>'+esc(g.how)+'</p>'+
+      (g.cmd?'<div class="scrcmd"><code>'+esc(g.cmd)+'</code><button class="btn sm" data-scrcopy="'+os+'">Copy</button></div>'
+        :'<a class="btn sm" href="'+g.link+'" target="_blank" rel="noopener">'+ico('newwin','ic-sm')+g.linkText+'</a>')+'</li>'+
+    '<li><b>Open it.</b> It finds this board through the USB cable by itself, and shows up here, asking to pair.</li>'+
+    '<li><b>Tap Pair here</b>, then type the six-digit code the computer shows. Only once.</li></ol>'+
+    '<p class="hint">Nothing here after a minute? Check that the board\u2019s USB port (not COM) is in that computer, '+
+    'that the computer is on the same WiFi as the board, and that HID-Fi Companion is running: its icon is in the '+
+    'menu bar, or by the clock.</p>';
+}
+// Copy works on a plain-http page too (the board serves no https): the older
+// way, when the clipboard API is not offered.
+function copyText(s){
+  const old=()=>{const a=document.createElement('textarea');a.value=s;a.setAttribute('readonly','');
+    a.style.cssText='position:fixed;opacity:0;left:0;top:0';document.body.appendChild(a);a.select();
+    let ok=false;try{ok=document.execCommand('copy');}catch(e){}a.remove();
+    toast(ok?'Copied':'Select the line and copy it',ok?'ok':'warn');};
+  try{navigator.clipboard.writeText(s).then(()=>toast('Copied','ok'),old);}catch(e){old();}
+}
 function scrRenderList(){
   const l=$('scrList');if(!l)return;
   const typed={},act=document.activeElement;
@@ -5268,14 +5341,13 @@ function scrRenderList(){
       (p.id===SCR.sel&&(SCR.h||SCR.retryT)?'':'<button class="btn sm" data-scrwatch="'+p.id+'"'+(p.online?'':' disabled')+'>Show</button>')+
       '<button class="iconbtn" data-scrdel="'+p.id+'" aria-label="Remove '+esc(p.name)+'">'+ico('trash','ic-sm')+'</button></div>';
   });
-  if(!h)h='<p class="hint">No computers yet.</p>';
+  if(!h)h=scrGuideHtml();
   l.innerHTML=h;
   l.querySelectorAll('[data-scrcode]').forEach(i=>{
     if(typed[i.dataset.scrcode])i.value=typed[i.dataset.scrcode];
     if(focused===i.dataset.scrcode)i.focus();
   });
-  $('scrHelp').textContent=SCR.pcs.length?'':
-    'Install HID-Fi Companion on the computer this board is plugged into. It finds the board by itself and asks to pair here.';
+  $('scrHelp').textContent='';
 }
 function scrNote(id,t,bad){SCR.notes[id]={t:t,bad:!!bad};scrRenderList();}
 function scrPair(id){
@@ -5322,7 +5394,8 @@ function scrStart(){
   if(!pc.online){SCR.state='offline';scrPaint();return;}   // a companion_online event retries
   SCR.state='ticket';scrPaint();
   send({cmd:'screen_ticket',id:pc.id},r=>{
-    if(SCR.state!=='ticket')return;            // stopped while the ticket was on its way
+    if(SCR.state!=='ticket')return;            // stopped, or given up for lost (scrAgain)
+    if(!r){SCR.state='idle';scrRetry();scrPaint();return;}   // lost with the link: ask again
     if(!scrWant()){SCR.state='idle';scrPaint();return;}
     if(!r||r.status!=='ok'){
       if(r&&r.reply==='pc_offline'){pc.online=false;SCR.state='offline';scrRenderList();}
@@ -5338,6 +5411,25 @@ function scrOn(s){
   else if(s==='live'){SCR.state='live';SCR.tries=0;SCR.why='';scrStage.classList.remove('empty');scrRenderList();}
   else if(s==='reconnect')SCR.state='reconnecting';
   else if(s.indexOf('stats:')===0){SCR.fps=parseInt(s.slice(6),10)||0;}
+  else if(s.indexOf('displays:')===0){
+    let m;try{m=JSON.parse(s.slice(9));}catch(e){return;}
+    const list=m.displays||[], was=SCR.disp, wasName=scrDispName(was);
+    SCR.displays=list;SCR.disp=m.display;
+    // The display shown left the list (unplugged): the computer moved this
+    // screen to the main one - say so, by name.
+    if(was!==null&&was!==m.display&&!list.some(d=>d.id===was))
+      toast(wasName+' is not connected: showing '+scrDispName(m.display)+' instead','warn');
+    // Back to the display chosen last time for this computer, when it is there
+    // (also when it is plugged back in after being pulled out).
+    const want=scrDispSaved();
+    if(want!==null&&want!==SCR.disp&&SCR.displays.some(d=>d.id===want)&&SCR.h)SCR.h.display(want);
+  }
+  else if(s.indexOf('display:')===0){
+    let m;try{m=JSON.parse(s.slice(8));}catch(e){return;}
+    const was=scrDispName(SCR.disp);
+    SCR.disp=m.id;
+    if(m.fallback)toast(was+' is not connected: showing '+scrDispName(m.id)+' instead','warn');
+  }
   else{
     SCR.h=null;
     const why=s.slice(s.indexOf(':')+1);
@@ -5351,10 +5443,40 @@ function scrOn(s){
   }
   scrPaint();
 }
+// Back with the board (reconnected, signed in again): try at once, not after
+// whatever back-off the failures while it was away had built up.
+// `fresh`: a new link, so a ticket asked on the old one will never be answered.
+function scrAgain(fresh){
+  if(SCR.retryT){clearTimeout(SCR.retryT);SCR.retryT=0;}
+  SCR.tries=0;
+  if(fresh&&SCR.state==='ticket'&&!SCR.h)SCR.state='idle';
+}
 function scrRetry(){
   if(SCR.retryT||!scrWant())return;
   const d=Math.min(15000,1000*Math.pow(2,SCR.tries++));
   SCR.retryT=setTimeout(()=>{SCR.retryT=0;if(scrWant()&&!SCR.h)scrStart();},d);
+}
+// ---- displays: a computer with several shows any of them ----
+function scrDispName(id){
+  const d=SCR.displays.find(x=>x.id===id);
+  return d?d.name:'the main display';
+}
+function scrDispSaved(){
+  try{const v=localStorage.getItem('scrdisp:'+SCR.sel);return v===null?null:+v;}catch(e){return null;}
+}
+function scrDispShow(id){
+  if(!SCR.h)return;
+  SCR.h.display(id);
+  try{localStorage.setItem('scrdisp:'+SCR.sel,String(id));}catch(e){}
+}
+function scrDispPick(){
+  if(SCR.displays.length<2)return;
+  sheet('Choose the display','<div class="list">'+SCR.displays.map(d=>
+    '<div class="item">'+ico('monitor')+'<div class="tx"><b>'+esc(d.name)+
+    (d.id===SCR.disp?' <span class="tag">showing</span>':'')+'</b><span>'+
+    (d.width&&d.height?d.width+' \u00d7 '+d.height:'')+(d.main?' \u00b7 main display':'')+'</span></div>'+
+    '<button class="btn sm" data-disppick="'+d.id+'"'+(d.id===SCR.disp?' disabled':'')+'>Show</button></div>').join('')+'</div>',
+    ()=>document.querySelectorAll('[data-disppick]').forEach(b=>b.onclick=()=>{closeSheet();scrDispShow(+b.dataset.disppick);}));
 }
 function scrStop(state){
   if(SCR.retryT){clearTimeout(SCR.retryT);SCR.retryT=0;}
@@ -5362,7 +5484,7 @@ function scrStop(state){
   if(h)h.stop();
   try{scrVideo.srcObject=null;}catch(e){}
   scrStage.classList.add('empty');
-  SCR.state=state||'idle';SCR.fps=0;SCR.tries=0;
+  SCR.state=state||'idle';SCR.fps=0;SCR.tries=0;SCR.displays=[];SCR.disp=null;
   scrPaint();
 }
 function scrMsgHtml(){
@@ -5370,9 +5492,8 @@ function scrMsgHtml(){
   if(!SCR.loaded)return '<span>Asking the board...</span>';
   if(!SCR.pinSet)return ico('shield')+'<b>Set an access PIN to share screens</b><span>Settings, Access PIN.</span>';
   if(!SCR.pcs.length)return ico('screen')+'<b>See a computer\u2019s screen here</b>'+
-    '<span>Install HID-Fi Companion on the computer this board is plugged into. It asks to pair '+
-    (WATCH.on?'on the dashboard\u2019s Screen tab.':'below.')+'</span>'+
-    '<a class="btn sm" id="scrGuide2" href="https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md" target="_blank" rel="noopener">'+ico('newwin','ic-sm')+'Install guide</a>';
+    '<span>'+(WATCH.on?'Set it up first on the dashboard\u2019s Screen tab: three steps, once.'
+      :'Three steps, once: install a small app on the computer, open it, pair. Below.')+'</span>';
   if(!SCR.sel)return ico('screen')+(WATCH.on?'<b>Choose a computer</b><button class="btn sm" id="watchPick2">Choose</button>':'<b>Choose a computer below</b>');
   switch(SCR.state){
     case 'live':return '';
@@ -5399,10 +5520,17 @@ function scrPaint(){
   const live=SCR.state==='live'||SCR.state==='reconnecting';
   scrStage.classList.toggle('live',SCR.state==='live');
   const z=SCR.z.s>1.01?' \u00b7 '+Math.round(SCR.z.s*100)+'%':'';
+  // With several displays, which one: the name says it, in every view.
+  const dn=SCR.displays.length>1?scrDispName(SCR.disp):'';
   const badge=live?'<span class="dot '+(SCR.state==='live'?'ok':'warn')+'"></span><b>'+esc(SCR.name)+'</b>'+
+    (dn?' \u00b7 '+esc(dn):'')+
     (SCR.state==='reconnecting'?' reconnecting':(SCR.fps?' \u00b7 '+SCR.fps+' fps':''))+z:'';
+  $('scrDisp').hidden=!(live&&SCR.displays.length>1);
   const b=$('scrBadge');if(b.innerHTML!==badge)b.innerHTML=badge;
   $('scrFName').textContent=SCR.name||'Screen';
+  const fs=!live?'':SCR.state==='reconnecting'?'reconnecting':
+    [dn,SCR.fps?SCR.fps+' fps':'',z.slice(3)].filter(Boolean).join(' \u00b7 ');
+  const st=$('scrFStat');if(st.textContent!==fs)st.textContent=fs;
   $('scrFDot').className='dot '+(SCR.state==='live'?'ok':live?'warn':'');
 }
 // ---- zoom and pan: pinch, wheel, double tap, the buttons ----
@@ -5571,13 +5699,16 @@ function flTuck(){
   addEventListener('resize',()=>{if(SCR.float)flPlace();});
 })();
 $('scrPop').onclick=()=>{scrFloat(true);buzz(8);};
+$('scrDisp').onclick=()=>{scrDispPick();if(WATCH.on)watchWake();};
 $('scrHoleDock').onclick=()=>scrFloat(false);
 $('scrFDock').onclick=()=>{scrFloat(false);go('screen');};
 $('scrFClose').onclick=()=>{scrFloat(false);scrSync();};
 $('scrFMin').onclick=scrMinimise;
 $('scrList').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
-  if(b.id==='scrToSetup')return go('setup');
+  if(b.id==='scrToSetup'||b.id==='scrToNet')return go('setup');
+  if(b.dataset.scros){SCR.guideOs=b.dataset.scros;return scrRenderList();}
+  if(b.dataset.scrcopy)return copyText(SCR_INSTALL[b.dataset.scrcopy].cmd);
   if(b.dataset.scrpair)return scrPair(b.dataset.scrpair);
   if(b.dataset.scrok)return scrConfirm(b.dataset.scrok);
   if(b.dataset.scrno)return scrForget(b.dataset.scrno,true);
@@ -5627,7 +5758,9 @@ function watchPaint(){
   const live=SCR.state==='live'||SCR.state==='reconnecting';
   $('watchName').textContent=SCR.name||(SCR.pcs.length?'Choose a computer':'Screen');
   $('watchDot').className='dot '+(SCR.state==='live'?'ok':live?'warn':'');
-  $('watchFps').textContent=SCR.state==='live'&&SCR.fps?SCR.fps+' fps':SCR.state==='reconnecting'?'reconnecting':'';
+  const dn=SCR.displays.length>1?scrDispName(SCR.disp):'';
+  $('watchFps').textContent=SCR.state==='reconnecting'?'reconnecting':
+    SCR.state==='live'?[dn,SCR.fps?SCR.fps+' fps':''].filter(Boolean).join(' \u00b7 '):'';
   // The bar stays up until there is a picture to look at, and starts to fade
   // the moment there is one.
   if(!live){$('watchWrap').classList.remove('idle');clearTimeout(WATCH.idleT);WATCH.idleT=0;}
@@ -5676,6 +5809,8 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='+'||e.key==='=')scrZoomAt(1.5,c,m);
   else if(e.key==='-')scrZoomAt(1/1.5,c,m);
   else if(e.key==='0')scrFit();
+  // 1-4: the computer's displays, main first.
+  else if(/^[1-4]$/.test(e.key)&&SCR.displays[+e.key-1])scrDispShow(SCR.displays[+e.key-1].id);
   else return;
   e.preventDefault();watchWake();
 });
@@ -5688,7 +5823,9 @@ document.addEventListener('keydown',e=>{
 // watchScreen(t, video, on) where t = the board's screen_ticket reply
 // ({ip, port, fp, tn, vn, ticket}) and `on` gets state changes:
 //   'connecting' | 'live' | 'reconnect' | 'ended:<why>' | 'refused:<why>'
-// Returns {stop()}. Keyframes are asked for by WebRTC itself when a picture breaks.
+//   'stats:<fps>' | 'displays:<json {displays, display}>' | 'display:<json {id, fallback}>'
+// Returns {stop(), display(id)}: display() switches to another of the
+// computer's displays. Keyframes are asked for by WebRTC itself when a picture breaks.
 function watchScreen(t, video, on){
   let pc=null, ws=null, done=false, live=false;
   const say=s=>{ if(!done||s.indexOf('ended')===0||s.indexOf('refused')===0) on(s); };
@@ -5711,7 +5848,10 @@ function watchScreen(t, video, on){
     if(m.t==='error'){ return finish('refused:'+(m.reason||'error')); }
     if(m.t==='end'){ return finish('ended:'+(m.reason||'')); }
     if(m.t==='stats'){ on('stats:'+(m.fps|0)); return; }
+    if(m.t==='displays'){ on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display})); return; }
+    if(m.t==='display'){ on('display:'+JSON.stringify({id:m.id,fallback:!!m.fallback})); return; }
     if(m.t==='ready'){
+      on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display}));
       pc=new RTCPeerConnection({iceServers:[]});
       const tr=pc.addTransceiver('video',{direction:'recvonly'});
       try{ // H.264 first: the PC encodes it in hardware
@@ -5740,7 +5880,8 @@ function watchScreen(t, video, on){
     }
   };
   return {
-    stop(){ finish('ended:stopped'); }
+    stop(){ finish('ended:stopped'); },
+    display(id){ try{ ws&&ws.readyState===1&&ws.send(JSON.stringify({t:'display',id:id})); }catch(e){} }
   };
 }
 

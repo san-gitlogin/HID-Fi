@@ -3014,6 +3014,22 @@ void handlePing(bool fromWifi) {
 
 // Single source of truth for the status payload: /api/status, the `status`
 // command and the dashboard all read the same fields.
+// Distinct devices among the open dashboards, by address: a phone with the
+// dashboard and its watch-only window open is one device with two pages (seen
+// live: three phones read as 5).
+static uint8_t wsDevices() {
+    uint32_t seen[WS_MAX_CLIENTS];
+    uint8_t n = 0;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+        if (!webSocket.clientIsConnected((uint8_t)i)) continue;
+        uint32_t a = (uint32_t)webSocket.remoteIP((uint8_t)i);
+        bool dup = false;
+        for (uint8_t j = 0; j < n && !dup; j++) dup = seen[j] == a;
+        if (!dup) seen[n++] = a;
+    }
+    return n;
+}
+
 void buildStatusDoc(JsonDocument& doc) {
     doc["status"] = "ok";
     doc["reply"] = "status";
@@ -3080,6 +3096,7 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["mac"] = WiFi.macAddress();
     doc["ap_mac"] = WiFi.softAPmacAddress();
     doc["ws_clients"] = webSocket.connectedClients();
+    doc["ws_devices"] = wsDevices();
     doc["mdns"] = mdnsName;
     doc["pc_state"] = lockStateStr();
     // What the board believes it is plugged into, and whether that was probed or

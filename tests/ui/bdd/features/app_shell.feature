@@ -179,6 +179,18 @@ Feature: The dashboard shell - navigation, connection, the access PIN
     And "#dashList" contains "not signed in"
     And "#dashList" contains "A browser tab left open anywhere counts"
 
+  # Found by a person: three phones read as 5 - a phone with the dashboard and
+  # its watch-only window open is one device with two pages, not two devices.
+  Scenario: A device with two pages open counts once, and the list says so
+    Given the dashboard is open and signed in with "4826"
+    When a laptop on the home network opens the dashboard
+    And the laptop opens a second page
+    Then the count of dashboards becomes 2
+    When I tap the "#connPill" control
+    Then the dialog "Connected dashboards" is open
+    And "#dashList" contains "2 pages open"
+    And "#dashList" contains "this device"
+
   Scenario: Settings lists dashboards on the home network too, not only the board's WiFi
     Given the dashboard is open and signed in with "4826"
     When a laptop on the home network opens the dashboard

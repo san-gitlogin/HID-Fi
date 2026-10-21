@@ -7,8 +7,7 @@
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
 use hidfi_companion::service::{self, Cmd, Env};
 use hidfi_companion::store::Store;
-use hidfi_stream::pattern::Pattern;
-use hidfi_stream::pipeline::Source;
+use hidfi_stream::pattern::FakeDisplays;
 use std::io::BufRead;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,11 +18,20 @@ fn main() {
     let mut st = store.state();
     st.name = "HID-Fi hardware test".into();
     store.save_state(&st).unwrap();
+    // HIDFI_DISPLAYS=n pretends to have n displays; stdin "unplug-display <id>" pulls one.
+    let fake = FakeDisplays::from_env(1280, 720);
     let env = Env {
         usb: Box::new(NusbList),
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
         browse: Box::new(MdnsBrowse::start()),
-        source: Arc::new(|_| Ok(Box::new(Pattern::new(1280, 720)) as Box<dyn Source>)),
+        source: {
+            let f = fake.clone();
+            Arc::new(move |d| f.source(d, false))
+        },
+        displays: {
+            let f = fake.clone();
+            Arc::new(move || f.list())
+        },
         capture_allowed: Arc::new(|| true),
     };
     let h = service::start(store, env);

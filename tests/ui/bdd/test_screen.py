@@ -77,6 +77,87 @@ def paired_running(ctx, browser, name):
     pc.serve(ctx["ui"].page)
 
 
+@given(parsers.parse('a computer "{name}" with {n:d} displays is paired and running'))
+def paired_running_displays(ctx, browser, name, n):
+    app = _new_app(ctx, name)
+    pc = FakePc(browser, app, "live", displays=n)
+    _pcs(ctx)[name] = pc
+    _pair(ctx, app)
+    with ctx["sim"].lock:
+        app.beat()
+    pc.serve(ctx["ui"].page)
+
+
+@when("the phone sleeps, and the board forgets its sign-in")
+def phone_sleeps(ctx):
+    # Asleep: the board cannot be reached, the video session to the computer
+    # dies, and the sign-in is gone (the PIN is asked again on waking).
+    sim, ui = ctx["sim"], ctx["ui"]
+    sim.refusing = True
+    sim.drop_all()
+    ui.page.evaluate("sessionStorage.removeItem('pin')")
+    for pc in _pcs(ctx).values():
+        pc.end("Disconnected")
+    ui.idle(2500)          # the Screen tab tries again while the board is away
+
+
+@when("the phone wakes up")
+def phone_wakes(ctx):
+    ctx["sim"].refusing = False
+    ctx["ui"].page.wait_for_selector("#sheet.on .pinbox", timeout=10000)
+
+
+@given("the board will not answer the next screen ticket")
+def swallow_ticket(ctx):
+    ctx["sim"].swallow.add("screen_ticket")
+
+
+@given("the board is on the home WiFi")
+def board_home_wifi(ctx):
+    ctx["sim"].sta.update(phase="online", ssid="home", ip="192.168.1.50")
+
+
+@when(parsers.parse('I choose "{name}" in the install steps'))
+def choose_install_os(ctx, name):
+    ctx["ui"].page.locator("#scrList [data-scros]", has_text=name).click()
+
+
+@when("I tap the copy button in the install steps")
+def copy_install(ctx):
+    ctx["ui"].page.locator("#scrList [data-scrcopy]").click()
+
+
+@then(parsers.parse('"#{el_id}" does not contain "{text}"'))
+def not_contains(ctx, el_id, text):
+    assert text not in ctx["ui"].page.inner_text(f"#{el_id}")
+
+
+@when(parsers.parse('I choose "{display}" in the display list'))
+def choose_display(ctx, display):
+    page = ctx["ui"].page
+    page.locator("#sheet.on .item", has_text=display).locator("[data-disppick]").click()
+
+
+@when(parsers.parse('display {n:d} is unplugged from "{name}"'))
+def unplug_display(ctx, n, name):
+    _pcs(ctx)[name].unplug_display(n)
+
+
+@then(parsers.parse('"{name}" was asked to show display {n:d}'))
+def asked_display(ctx, name, n):
+    _wait(ctx["ui"], lambda: n in _pcs(ctx)[name].asked, f"asked for {_pcs(ctx)[name].asked}")
+
+
+@then("there is no display button")
+def no_display_button(ctx):
+    assert not ctx["ui"].page.locator("#scrDisp").is_visible()
+
+
+@then("there is a display button")
+def display_button(ctx):
+    _wait(ctx["ui"], lambda: ctx["ui"].page.locator("#scrDisp").is_visible(), "no display button")
+
+
 @given(parsers.parse('a computer "{name}" is paired but not running'))
 def paired_not_running(ctx, name):
     _pair(ctx, _new_app(ctx, name))
@@ -282,6 +363,14 @@ def float_live(ctx):
     ui = ctx["ui"]
     assert ui.page.locator("#scrFloat").is_visible()
     _wait(ui, lambda: ui.page.evaluate("document.getElementById('scrVideo').videoWidth > 0"), "the floating picture is blank")
+
+
+@then("the frame rate is in the floating window's title bar, not over the picture")
+def float_fps_in_title(ctx):
+    # Seen live: the badge covered the top left of a small floating picture.
+    ui = ctx["ui"]
+    _wait(ui, lambda: "fps" in ui.page.inner_text("#scrFHead"), "no frame rate in the title bar")
+    assert not ui.page.locator("#scrFloat .scrbadge").is_visible(), "a badge still covers the picture"
 
 
 @then("the floating window is inside the screen")

@@ -5,8 +5,10 @@
 //! desktop gets, where the grid alike would fit in any link and hide every
 //! bandwidth problem.
 
+use crate::display::Display;
 use crate::frame::Frame;
 use crate::pipeline::Source;
+use std::sync::{Arc, Mutex};
 
 pub struct Pattern {
     w: u32,
@@ -108,5 +110,46 @@ impl Source for Pattern {
             return Ok(true);
         }
         Ok(false)
+    }
+}
+
+/// Pretend displays, for tests: `HIDFI_DISPLAYS=n` gives n of them (main
+/// first, at `w`x`h`; then 1280x1024, then a portrait 1080x1920...), each
+/// streaming a pattern of its own size. `unplug(id)` takes one away: it leaves
+/// the list, and capturing it fails, as a monitor pulled out does.
+#[derive(Clone)]
+pub struct FakeDisplays(Arc<Mutex<Vec<Display>>>);
+
+impl FakeDisplays {
+    pub fn from_env(w: u32, h: u32) -> FakeDisplays {
+        let n: usize = std::env::var("HIDFI_DISPLAYS").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
+        let sizes = [(w, h), (1280, 1024), (1080, 1920), (1600, 900)];
+        let v = (0..n.clamp(1, 4))
+            .map(|i| Display {
+                id: i as u32 + 1,
+                name: if i == 0 { "Built-in display".into() } else { format!("Display {}", i + 1) },
+                width: sizes[i].0,
+                height: sizes[i].1,
+                main: i == 0,
+            })
+            .collect();
+        FakeDisplays(Arc::new(Mutex::new(v)))
+    }
+    pub fn list(&self) -> Vec<Display> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+    pub fn unplug(&self, id: u32) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).retain(|d| d.id != id || d.main);
+    }
+    /// A moving pattern at the display's size; `busy` for scrolling text.
+    pub fn source(&self, display: Option<u32>, busy: bool) -> Result<Box<dyn Source>, String> {
+        let l = self.list();
+        let d = match display {
+            None => l.iter().find(|d| d.main),
+            Some(id) => l.iter().find(|d| d.id == id),
+        }
+        .ok_or("no such display")?;
+        let p = Pattern::new(d.width, d.height);
+        Ok(Box::new(if busy { p.busy() } else { p }))
     }
 }

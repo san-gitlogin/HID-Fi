@@ -71,6 +71,8 @@ pub struct Env {
     pub http: Box<dyn Http>,
     pub browse: Box<dyn Browse>,
     pub source: SourceFactory,
+    /// The displays viewers may choose from.
+    pub displays: Arc<dyn Fn() -> Vec<hidfi_stream::display::Display> + Send + Sync>,
     /// Whether capture is permitted (macOS Screen Recording); shown in the tray.
     pub capture_allowed: Arc<dyn Fn() -> bool + Send + Sync>,
 }
@@ -116,19 +118,19 @@ pub fn start(store: Store, env: Env) -> Handle {
 
     // Listening for viewers starts at once, and stays: the port and the
     // certificate's fingerprint are what the board tells dashboards.
-    let display = state.display;
     let source = env.source.clone();
     let pipeline = Arc::new(Pipeline::start(
         30,
         4_000_000,
-        move || source(display),
+        move |display| source(display),
         hidfi_stream::encoder,
     ));
     let gate = Arc::new(TicketGate::new(key.clone(), nonces.clone()));
     let listener: Option<(Server, Listener)> = match store.cert() {
         Some(cert) => {
             let fp = hidfi_stream::rtc::cert_fp(&cert);
-            match server::start(None, gate, pipeline.clone(), cert, Box::new(|| (0, 0))) {
+            let displays = env.displays.clone();
+            match server::start(None, gate, pipeline.clone(), cert, Box::new(move || displays())) {
                 Ok(s) => {
                     let l = Listener { port: s.port, fp };
                     Some((s, l))

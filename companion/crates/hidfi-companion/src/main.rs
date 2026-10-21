@@ -66,6 +66,7 @@ fn main() {
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
         browse: Box::new(MdnsBrowse::start()),
         source: Arc::new(service::real_source),
+        displays: Arc::new(hidfi_stream::display::list),
         capture_allowed: Arc::new(service::capture_allowed),
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");

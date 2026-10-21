@@ -10,8 +10,7 @@ use hidfi_agent::real::UreqHttp;
 use hidfi_companion::service::{self, Cmd, Env};
 use hidfi_companion::store::Store;
 use hidfi_core::discovery::UsbDevice;
-use hidfi_stream::pattern::Pattern;
-use hidfi_stream::pipeline::Source;
+use hidfi_stream::pattern::FakeDisplays;
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -47,11 +46,20 @@ fn main() {
     st.board_mac = Some(a[3].replace(':', ""));
     store.save_state(&st).unwrap();
     let plugged = Arc::new(AtomicBool::new(true));
+    // HIDFI_DISPLAYS=n pretends to have n displays; stdin "unplug-display <id>" pulls one.
+    let fake = FakeDisplays::from_env(1280, 720);
     let env = Env {
         usb: Box::new(FakeUsb(a[3].replace(':', ""), plugged.clone())),
         http: Box::new(UreqHttp::new(Duration::from_secs(2))),
         browse: Box::new(NoBrowse),
-        source: Arc::new(|_| Ok(Box::new(Pattern::new(1280, 720)) as Box<dyn Source>)),
+        source: {
+            let f = fake.clone();
+            Arc::new(move |d| f.source(d, false))
+        },
+        displays: {
+            let f = fake.clone();
+            Arc::new(move || f.list())
+        },
         capture_allowed: Arc::new(|| true),
     };
     let h = service::start(store, env);
@@ -73,7 +81,12 @@ fn main() {
         }
     });
     for line in std::io::stdin().lock().lines() {
-        match line.unwrap_or_default().trim() {
+        let line = line.unwrap_or_default();
+        if let Some(id) = line.trim().strip_prefix("unplug-display ").and_then(|s| s.parse().ok()) {
+            fake.unplug(id);
+            continue;
+        }
+        match line.trim() {
             "unplug" => plugged.store(false, Ordering::Relaxed),
             "plug" => plugged.store(true, Ordering::Relaxed),
             "pair" => {

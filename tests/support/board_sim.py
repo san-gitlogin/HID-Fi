@@ -128,6 +128,7 @@ class BoardSim:
         self.host_asleep_unarmed = False
         self.phone_on_lan = False
         self.refusing = False              # new sockets are turned away
+        self.swallow = set()               # commands to receive once and never answer (a lost reply)
         self.refused = 0                   # ...and how many have been
         self.fail_next = {}                # cmd -> error message, used once
         self.actions_done = []             # (action, keys) the agent commands pressed, in order
@@ -214,6 +215,7 @@ class BoardSim:
             "wifi_rssi": -48 if online else 0, "wifi_quality": "excellent" if online else "",
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
             "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": sum(1 for k in self.sockets if k["open"]),
+            "ws_devices": len({k.get("ip") or AP_IP for k in self.sockets if k["open"]}),
             "mdns": "esp-hid-da1a2c", "pc_state": self.pc_state, "host_os": self.host_os(),
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
             "detect_phase": "settled", "unicode_mac": self.unicode["mac"], "unicode_linux": self.unicode["linux"],
@@ -575,6 +577,9 @@ class BoardSim:
             self.peer = ip if transport != "serial" else None
             self.cmd_count += 1
             self._tick_sta()
+            if b.get("cmd") in self.swallow:
+                self.swallow.discard(b.get("cmd"))
+                return []
             r = self._dispatch(b, transport, sock)
         return [] if r is None else [r]
 

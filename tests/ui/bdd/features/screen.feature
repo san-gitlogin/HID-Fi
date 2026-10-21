@@ -8,8 +8,33 @@ Feature: Screen - seeing the computer's own picture
     Given the dashboard is open and signed in with "4826"
     When I open the "Screen" tab
     Then the screen says "See a computer’s screen here"
-    And "#scrHelp" contains "Install HID-Fi Companion"
+    And "#scrList" contains "Install HID-Fi Companion"
+    And "#scrList" contains "Tap Pair here"
     And the trackpad is in the Screen tab
+
+  # Found by a person: the tab showed a link to GitHub and nothing else, so a
+  # first-time user had no idea what to do - and a phone on the board's own
+  # WiFi cannot open GitHub. The steps are on the board, for this computer's OS.
+  Scenario: With no computer yet, the steps are here, for this computer's OS
+    Given the board is plugged into a Mac computer
+    And the board is on the home WiFi
+    And the dashboard is open and signed in with "4826"
+    When I open the "Screen" tab
+    Then "#scrList" contains "Download for Mac"
+    And "#scrList" does not contain "join the board to your home WiFi"
+    When I choose "Windows" in the install steps
+    Then "#scrList" contains "install-windows.ps1"
+    When I tap the copy button in the install steps
+    Then I see the message "Copied"
+    When I choose "Linux" in the install steps
+    Then "#scrList" contains "install-linux.sh"
+
+  Scenario: A board not on the home WiFi says to join it first
+    Given the dashboard is open and signed in with "4826"
+    When I open the "Screen" tab
+    Then "#scrList" contains "First, join the board to your home WiFi"
+    When I tap the "#scrToNet" control
+    Then the "Settings" tab is shown
 
   Scenario: Without an access PIN no screen is shared
     Given the board has no access PIN
@@ -126,6 +151,7 @@ Feature: Screen - seeing the computer's own picture
     And I open the "Media" tab
     Then the floating window is shown, still live
     And the floating window is inside the screen
+    And the frame rate is in the floating window's title bar, not over the picture
     And the trackpad is back in the Trackpad tab
     When I drag the floating window by its title
     Then the floating window is inside the screen
@@ -292,12 +318,80 @@ Feature: Screen - seeing the computer's own picture
 
   Scenario: Only watching with nothing paired yet
     Given nothing is paired and this screen opens "#watch"
-    Then the screen says "It asks to pair on the dashboard’s Screen tab"
+    Then the screen says "Set it up first on the dashboard’s Screen tab"
 
   Scenario: The install guide is one tap away
     Given the dashboard is open and signed in with "4826"
     When I open the "Screen" tab
     And I open the install guide from "#scrGuide"
     Then the install guide opens on GitHub
-    When I open the install guide from "#scrGuide2"
-    Then the install guide opens on GitHub
+
+  # The owner asked: what about 3-4 monitors? Each viewer picks any of them.
+  Scenario: A computer with several displays shows any of them
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 3 displays is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And there is a display button
+    And "#scrBadge" contains "Built-in display"
+    When I tap the "#scrDisp" control
+    Then the dialog "Choose the display" is open
+    And "#sheet" contains "main display"
+    And "#sheet" contains "2560 × 1440"
+    When I choose "Display 2" in the display list
+    Then "Studio PC" was asked to show display 2
+    And "#scrBadge" contains "Display 2"
+
+  Scenario: One display, no display button
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And there is no display button
+
+  Scenario: The display being watched is unplugged: the main one, and a message
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 3 displays is paired and running
+    When I open the "Screen" tab
+    And I tap the "#scrDisp" control
+    And I choose "Display 3" in the display list
+    Then "#scrBadge" contains "Display 3"
+    When display 3 is unplugged from "Studio PC"
+    Then I see the message "Display 3 is not connected"
+    And "#scrBadge" contains "Built-in display"
+    And the screen shows "Studio PC" live
+
+  Scenario: The display chosen is chosen again next time
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 3 displays is paired and running
+    When I open the "Screen" tab
+    And I tap the "#scrDisp" control
+    And I choose "Display 2" in the display list
+    Then "Studio PC" was asked to show display 2
+    When I reload the dashboard
+    And I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And "#scrBadge" contains "Display 2"
+
+  # Found by a person: a phone left idle, then woken, asked for the PIN again,
+  # signed in - and never showed the paired MacBook again until a reload. The
+  # ticket request made while the phone was away never got an answer, and the
+  # Screen tab waited for it forever.
+  Scenario: After the phone sleeps and signs in again, the paired computer shows by itself
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When the phone sleeps, and the board forgets its sign-in
+    And the phone wakes up
+    And I enter the PIN "4826"
+    Then the screen shows "Studio PC" live
+
+  Scenario: A ticket request lost with the connection is asked again
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    And the board will not answer the next screen ticket
+    When I open the "Screen" tab
+    And the board drops the connection
+    Then the screen shows "Studio PC" live
+

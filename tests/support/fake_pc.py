@@ -7,6 +7,7 @@ after H.264). Its signaling socket is played by `route_web_socket`, speaking the
 app's protocol (companion/crates/hidfi-stream/src/server.rs):
 
   hello -> ready | error ;  offer -> answer ;  stats every second ;  end
+  display -> display (a computer with several displays; `displays=n`)
 
 `behaviour` decides what it does with a viewer:
   "live"          accept: ready, answer, stats
@@ -55,8 +56,9 @@ def lan_ip():
 
 
 class FakePc:
-    def __init__(self, browser, app, behaviour="live"):
-        """`app` is the companion_sim.FakeApp whose ip/port/fp the board hands out."""
+    def __init__(self, browser, app, behaviour="live", displays=1):
+        """`app` is the companion_sim.FakeApp whose ip/port/fp the board hands out.
+        `displays`: how many monitors it has (main first, as the app lists them)."""
         self.ctx = browser.new_context()
         self.page = self.ctx.new_page()
         self.page.set_content(PAGE)
@@ -69,6 +71,11 @@ class FakePc:
         self.ip = lan_ip()
         self.sockets = []
         self.hellos = []
+        sizes = [(3024, 1964), (2560, 1440), (1080, 1920), (1920, 1080)]
+        self.displays = [{"id": i + 1, "name": "Built-in display" if i == 0 else f"Display {i + 1}",
+                          "width": sizes[i][0], "height": sizes[i][1], "main": i == 0} for i in range(displays)]
+        self.asked = []          # display ids viewers asked for, in order
+        self.showing = {}        # socket -> display id it is shown
 
     def serve(self, viewer_page):
         url = f"ws://{self.app.ip}:{self.app.port}/"
@@ -88,15 +95,36 @@ class FakePc:
                     ws.send(json.dumps({"t": "error", "reason": self.behaviour.split(":", 1)[1]}))
                     ws.close()
                 elif self.behaviour == "live":
-                    ws.send(json.dumps({"t": "ready", "w": 640, "h": 360}))
+                    self.showing[id(ws)] = self.displays[0]["id"]
+                    ws.send(json.dumps({"t": "ready", "displays": self.displays, "display": self.displays[0]["id"]}))
             elif m.get("t") == "offer" and self.behaviour == "live":
                 sdp = self.page.evaluate("([o, ip]) => answerOffer(o, ip)", [m["sdp"], self.ip])
                 ws.send(json.dumps({"t": "answer", "sdp": sdp}))
                 ws.send(json.dumps({"t": "stats", "fps": 15}))
+            elif m.get("t") == "display":
+                self.asked.append(m.get("id"))
+                if any(d["id"] == m.get("id") for d in self.displays):
+                    self.showing[id(ws)] = m["id"]
+                    ws.send(json.dumps({"t": "display", "id": m["id"], "fallback": False}))
             elif m.get("t") == "bye":
                 ws.close()
 
         ws.on_message(on_message)
+
+    def unplug_display(self, display_id):
+        """A monitor is pulled out: its viewers move to the main display, told why."""
+        self.displays = [d for d in self.displays if d["id"] != display_id or d["main"]]
+        main = self.displays[0]["id"]
+        # As server.rs does: the new list says which display each viewer now
+        # watches; no separate "display" message for a list change.
+        for ws in self.sockets:
+            if self.showing.get(id(ws)) == display_id:
+                self.showing[id(ws)] = main
+            try:
+                ws.send(json.dumps({"t": "displays", "displays": self.displays,
+                                    "display": self.showing.get(id(ws), main)}))
+            except Exception:
+                pass
 
     def end(self, reason="Disconnected"):
         """The app ends every session (e.g. the board was unplugged from it)."""

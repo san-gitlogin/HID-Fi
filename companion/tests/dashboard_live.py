@@ -57,7 +57,8 @@ board = ThreadingHTTPServer((IP, 0), Board); threading.Thread(target=board.serve
 
 app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), tempfile.mkdtemp(prefix="hidfi-dash-"),
                         f"http://{IP}:{board.server_address[1]}", "B8:1F:3F:DA:1A:2C"],
-                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                       env=dict(os.environ, HIDFI_DISPLAYS="3"))   # main 1280x720, then 1280x1024 and 1080x1920
 lines = queue.Queue()
 threading.Thread(target=lambda: [lines.put(json.loads(l)) for l in app.stdout], daemon=True).start()
 def wait_app(pred, secs, what):
@@ -113,6 +114,19 @@ try:
         pg.tap("#scrFit")
         check("fit returns to the whole screen", pg.evaluate("SCR.z.s") == 1)
 
+        # Three displays: choose another, then lose it.
+        pg.wait_for_selector("#scrDisp:not([hidden])", timeout=8000)
+        pg.tap("#scrDisp")
+        pg.locator("#sheet.on .item", has_text="Display 2").locator("[data-disppick]").tap()
+        pg.wait_for_function("scrVideo.videoHeight===1024||scrVideo.videoHeight===512", timeout=8000)
+        check("another display, on request", "Display 2" in pg.inner_text("#scrBadge"),
+              f"{pg.evaluate('[scrVideo.videoWidth,scrVideo.videoHeight]')} {pg.inner_text('#scrBadge')!r}")
+        app.stdin.write("unplug-display 2\n"); app.stdin.flush()
+        pg.wait_for_function("scrVideo.videoHeight===720||scrVideo.videoHeight===360", timeout=10000)
+        pg.wait_for_function("[...document.querySelectorAll('.toast')].some(t=>t.textContent.includes('Display 2 is not connected'))", timeout=6000)
+        check("unplugged: back to the main display, and the dashboard says so",
+              pg.evaluate("SCR.state")=="live" and "Built-in display" in pg.inner_text("#scrBadge"), pg.inner_text("#scrBadge"))
+
         pg.tap("#scrPop")
         pg.tap("#tabbar [data-v='media']")
         pg.wait_for_timeout(800)
@@ -149,8 +163,11 @@ try:
         a, c = pg.evaluate("__f") / 3, tv.evaluate("__f") / 3
         check("phone and a watch-only screen play at once", a >= 15 and c >= 15, f"{a:.0f} fps and {c:.0f} fps")
         check("the computer counts two viewers", True)
-        n = third.evaluate("+document.getElementById('connN').textContent")
-        check("three dashboards signed in with one PIN", n >= 3, f"board counts {n} dashboards")
+        # All three run on this one computer: one device, three pages.
+        third.evaluate("refresh()"); time.sleep(1.5)
+        title = third.evaluate("document.getElementById('connPill').title")
+        check("three dashboards signed in with one PIN, counted as one device with three pages",
+              third.evaluate("document.getElementById('connN').textContent") == "1" and "(3 pages)" in title, title)
         ctx2.close(); ctx3.close()
         wait_app(lambda v: v["watching"] == 1, 8, "back to one viewer")
         check("closing the watch screen frees its place", True)

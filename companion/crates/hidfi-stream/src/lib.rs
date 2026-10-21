@@ -1,6 +1,7 @@
 //! Capture, encode and send the screen to a dashboard over WebRTC.
 
 pub mod convert;
+pub mod display;
 #[cfg(windows)]
 pub mod dxgi;
 pub mod frame;
@@ -70,8 +71,8 @@ pub fn screen(display: Option<u32>, fps: u32) -> Result<Box<dyn pipeline::Source
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = (display, fps);
-        x11::X11Source::start().map(|s| Box::new(s) as Box<dyn pipeline::Source>)
+        let _ = fps;
+        x11::X11Source::start(display).map(|s| Box::new(s) as Box<dyn pipeline::Source>)
     }
     #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {

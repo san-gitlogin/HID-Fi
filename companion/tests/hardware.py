@@ -101,8 +101,10 @@ try:
         pages[2][0].close()
         q5.wait_for_function("SCR.state==='live'", timeout=30000)
         check("the fifth joins by itself when one closes", True)
-        n = pg.evaluate("+document.getElementById('connN').textContent")
-        check("the board counts every dashboard, one PIN", n >= 4, f"{n} dashboards")
+        pg.evaluate("refresh()"); time.sleep(1.5)
+        title = pg.evaluate("document.getElementById('connPill').title")
+        check("the board counts every page, one PIN (all on this one computer: one device)",
+              "pages)" in title, title)
         for c, _ in pages[:2]: c.close()
         c5.close()
         wait_app(lambda v: v["watching"] == 1, 15, "back to one viewer")

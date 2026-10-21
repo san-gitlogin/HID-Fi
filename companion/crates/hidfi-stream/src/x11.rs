@@ -7,6 +7,8 @@
 //! - The layout of X's pixels is checked, not assumed (32 bits per pixel,
 //!   little-endian), with a clear error otherwise.
 //! - Wider than 2560 pixels, the picture is halved.
+//! - Several monitors are one X screen; RandR says where each one is, and a
+//!   monitor is captured as its part of the screen.
 //! - Wayland: X11 capture would read only XWayland's own windows (a mostly
 //!   black screen), so a Wayland session is refused with a message saying so.
 //!
@@ -17,6 +19,7 @@ use crate::frame::Frame;
 use crate::pipeline::Source;
 use x11rb::connection::Connection;
 use x11rb::protocol::damage::{ConnectionExt as _, ReportLevel};
+use x11rb::protocol::randr::ConnectionExt as _;
 use x11rb::protocol::xfixes::ConnectionExt as _;
 use x11rb::protocol::xproto::{ConnectionExt as _, ImageFormat, ImageOrder, Window};
 use x11rb::protocol::Event;
@@ -30,9 +33,57 @@ pub fn on_wayland() -> bool {
         || std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
+/// One monitor's place on the X screen.
+#[derive(Clone, Debug)]
+pub struct Monitor {
+    pub name: String,
+    pub x: i16,
+    pub y: i16,
+    pub w: u16,
+    pub h: u16,
+    pub primary: bool,
+}
+
+/// The monitors, as RandR (1.5) lists them.
+pub fn monitors() -> Result<Vec<Monitor>, String> {
+    if on_wayland() {
+        return Ok(Vec::new());
+    }
+    let (conn, screen) = x11rb::connect(None).map_err(|e| err("X server", e))?;
+    let root = conn.setup().roots[screen].root;
+    list_monitors(&conn, root)
+}
+
+fn list_monitors(conn: &RustConnection, root: Window) -> Result<Vec<Monitor>, String> {
+    let r = conn
+        .randr_get_monitors(root, true)
+        .map_err(|e| err("RandR", e))?
+        .reply()
+        .map_err(|e| err("RandR", e))?;
+    Ok(r.monitors
+        .iter()
+        .map(|m| Monitor {
+            name: conn
+                .get_atom_name(m.name)
+                .ok()
+                .and_then(|c| c.reply().ok())
+                .map(|n| String::from_utf8_lossy(&n.name).into_owned())
+                .unwrap_or_default(),
+            x: m.x,
+            y: m.y,
+            w: m.width,
+            h: m.height,
+            primary: m.primary,
+        })
+        .collect())
+}
+
 pub struct X11Source {
     conn: RustConnection,
     root: Window,
+    /// The captured part of the X screen: one monitor, or all of it.
+    x: i16,
+    y: i16,
     w: usize,
     h: usize,
     damage: u32,
@@ -49,7 +100,9 @@ fn err(what: &str, e: impl std::fmt::Display) -> String {
 }
 
 impl X11Source {
-    pub fn start() -> Result<Self, String> {
+    /// Capture monitor `display` (an index into [`monitors`]), or the primary
+    /// one if `None`, or the whole X screen if RandR lists none.
+    pub fn start(display: Option<u32>) -> Result<Self, String> {
         if on_wayland() {
             return Err(
                 "this is a Wayland desktop; screen sharing on Wayland is not ready yet. \
@@ -75,11 +128,25 @@ impl X11Source {
                 "unsupported X screen: depth {depth}, {bpp:?} bits per pixel (need 32)"
             ));
         }
-        let (root, w, h) = (
-            s.root,
-            s.width_in_pixels as usize,
-            s.height_in_pixels as usize,
-        );
+        let root = s.root;
+        let (sw, sh) = (s.width_in_pixels, s.height_in_pixels);
+        let mons = list_monitors(&conn, root).unwrap_or_default();
+        let pick = match display {
+            Some(i) => Some(mons.get(i as usize).ok_or("no such display")?),
+            None => mons.iter().find(|m| m.primary).or(mons.first()),
+        };
+        // Clamp to the screen: a monitor partly off it would make GetImage fail.
+        let (x, y, w, h) = match pick {
+            Some(m) => {
+                let x = m.x.clamp(0, sw as i16);
+                let y = m.y.clamp(0, sh as i16);
+                (x, y, (m.w.min(sw - x as u16)) as usize, (m.h.min(sh - y as u16)) as usize)
+            }
+            None => (0, 0, sw as usize, sh as usize),
+        };
+        if w == 0 || h == 0 {
+            return Err("that display has no area on the screen".into());
+        }
         conn.damage_query_version(1, 1)
             .map_err(|e| err("XDamage", e))?
             .reply()
@@ -95,6 +162,8 @@ impl X11Source {
         Ok(X11Source {
             conn,
             root,
+            x,
+            y,
             w,
             h,
             damage,
@@ -132,8 +201,8 @@ impl X11Source {
             .reply()
             .map_err(|e| err("XFixes", e))?;
         let at = (
-            c.x as i64 - c.xhot as i64,
-            c.y as i64 - c.yhot as i64,
+            c.x as i64 - c.xhot as i64 - self.x as i64,
+            c.y as i64 - c.yhot as i64 - self.y as i64,
             c.cursor_serial,
             c.width,
             c.height,
@@ -152,8 +221,8 @@ impl X11Source {
             .get_image(
                 ImageFormat::Z_PIXMAP,
                 self.root,
-                0,
-                0,
+                self.x,
+                self.y,
                 self.w as u16,
                 self.h as u16,
                 !0,

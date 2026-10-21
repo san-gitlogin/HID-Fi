@@ -122,6 +122,15 @@ def laptop_opens(ctx, browser):
     ctx["laptop"] = other
 
 
+@when("the laptop opens a second page")
+def laptop_second_page(ctx, browser):
+    from support.board_sim import LAN_IP
+    other = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], ip=LAN_IP)
+    other.page.goto(ctx["sim"].URL + "#watch")
+    other.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)
+    ctx["laptop2"] = other
+
+
 @when("the laptop closes its tab")
 def laptop_closes(ctx):
     # A closing tab closes its socket. Done from the page because Playwright's
