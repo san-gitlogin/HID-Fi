@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022, ubuntu-24.04]
+        os: [macos-14, windows-2022, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -59,7 +59,7 @@ jobs:
         run: vectors/check_board.sh
       - name: H.264 + WebRTC into real Chrome
         run: python tests/e2e_view.py
-      - name: Four viewers at once
+      - name: Six viewers at once, a slow one, a poor link
         run: python tests/multi_view.py
       - name: Whole system - service, board model, Chrome
         run: python tests/system.py
@@ -82,7 +82,7 @@ jobs:
           sh package/install-linux.sh --from target/release/hidfi-companion
           test -x "$HOME/.local/bin/hidfi-companion"
           test -f "$HOME/.local/share/applications/hidfi-companion.desktop"
-          ls "$HOME/.local/share/hidfi-companion/"libopenh264-2.6.0-linux64.8.so
+          ls "$HOME/.local/share/hidfi-companion/"libopenh264-2.6.0-linux*.so
           sh package/install-linux.sh --uninstall
           test ! -e "$HOME/.local/bin/hidfi-companion"
           test ! -e "$HOME/.local/share/hidfi-companion"
@@ -101,7 +101,7 @@ jobs:
         run: |
           mkdir -p dist
           case "${{ runner.os }}" in
-            Linux)   cp target/release/hidfi-companion dist/hidfi-companion-linux-x86_64 ;;
+            Linux)   cp target/release/hidfi-companion "dist/hidfi-companion-linux-$(uname -m)" ;;
             Windows) cp target/release/hidfi-companion.exe dist/hidfi-companion-windows-x86_64.exe ;;
             macOS)   package/macos.sh && cp target/package/*.dmg dist/ ;;
           esac

@@ -71,12 +71,18 @@ rm -rf "$iconset"
 
 # The launch agent restarts a crashed app from this path, so it must be the
 # installed copy; the app writes it on first run from wherever it runs.
-if [ "$sign" = "-" ]; then
+# No Developer ID given: a local "HID-Fi Local" signing certificate, if this
+# Mac has one, keeps macOS permissions (Screen Recording) across rebuilds - an
+# ad-hoc signature is a new identity every build, and macOS then refuses the
+# new build while System Settings still shows the old switch on.
+if [ "$sign" = "-" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"HID-Fi Local"'; then
+  codesign --force --sign "HID-Fi Local" --timestamp=none "$app"
+elif [ "$sign" = "-" ]; then
   codesign --force --sign - --timestamp=none "$app"
 else
   codesign --force --options runtime --timestamp --sign "$sign" "$app"
 fi
-codesign --verify --strict "$app"
+codesign --verify --strict "$app" 2>/dev/null || [ "$sign" = "-" ]   # a local certificate is not trusted, by design
 
 dmg="$out/HID-Fi-Companion-$ver-macos.dmg"
 stage="$out/dmg"; rm -rf "$stage" "$dmg"; mkdir -p "$stage"

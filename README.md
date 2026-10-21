@@ -110,7 +110,7 @@ own: a Mac gets Mac keys, shortcuts and gestures, a PC gets Windows ones.
 <td align="center" width="25%"><img src="docs/assets/screens/05-gamepad.png" width="180" alt="Gamepad"><br><b>Gamepad</b><br><sub>Two sticks, D-pad, twelve buttons</sub></td>
 <td align="center" width="25%"><img src="docs/assets/screens/06-session.png" width="180" alt="Session"><br><b>Session</b><br><sub>Unlock, lock, sleep, wake, presenter</sub></td>
 <td align="center" width="25%"><img src="docs/assets/screens/07-settings.png" width="180" alt="Settings"><br><b>Settings</b><br><sub>Auto-detects Mac/PC, network, access PIN</sub></td>
-<td align="center" width="25%"></td>
+<td align="center" width="25%"><img src="docs/assets/screens/08-screen.png" width="180" alt="Screen"><br><b>Screen</b><br><sub>The computer's own screen, live (with the Companion app)</sub></td>
 </tr>
 </table>
 
@@ -136,15 +136,36 @@ viewports to prove it.
 
 ## See the computer's screen
 
-HID-Fi itself needs nothing on the computer. If you also want to **see** what you
-are doing, the optional **HID-Fi Companion** app (macOS, Windows, Linux) shows
-that computer's screen live on the dashboard's **Screen** tab - above the
-trackpad on a phone, beside it on a tablet, floating over any tab, or alone on
-a second screen such as a TV (up to four at once). The picture goes from the
-computer to your phone directly and encrypted; pairing takes a six-digit code.
+HID-Fi itself needs nothing on the computer. To also **see** what you are doing,
+install the small, optional **HID-Fi Companion** app on that computer (macOS,
+Windows, Linux). Its screen then shows live on the dashboard's **Screen** tab:
 
-Install and use it: **[docs/COMPANION.md](docs/COMPANION.md)**. *(New, being
-tested on every OS before its first release.)*
+<table>
+<tr>
+<td align="center" width="25%"><img src="docs/assets/screens/09-screen-tablet.png" width="180" alt="The Screen tab on a tablet"><br><b>On a tablet</b><br><sub>The picture beside the trackpad; on a phone, above it</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/10-screen-float.png" width="180" alt="The floating window"><br><b>Floating</b><br><sub>Over any tab; drag it, resize it, minimise it</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/12-companion.png" width="180" alt="The HID-Fi Companion window"><br><b>The app</b><br><sub>Three steps, each saying what to do</sub></td>
+<td align="center" width="25%"><img src="docs/assets/screens/13-companion-code.png" width="180" alt="Pairing code"><br><b>Pairing</b><br><sub>Once, with a six-digit code</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/assets/screens/11-screen-wall.png" width="720" alt="Every monitor of the computer at once"><br>
+<sub><b>Every monitor at once.</b> One, two, three or four in a grid; full screen one or all; or each in its own window to drag anywhere.</sub></p>
+
+- **Directly to you, encrypted.** The picture goes from the computer to your
+  phone over your home WiFi (WebRTC). The board only introduces them and vouches
+  for the computer, so its own WiFi keeps carrying just the mouse and keyboard.
+- **Only the computer the board is plugged into,** paired once with a code - and
+  it stops the moment the board is unplugged.
+- **Several monitors:** choose one per viewer, see them all at once, pop each out.
+- **Up to six screens at once:** your phone, a tablet, a TV's browser, a second
+  monitor (`/#watch` opens a picture with nothing else on it).
+- **Light:** nothing is captured while nobody watches; a phone on a weak link
+  gets a smaller picture instead of slowing everyone down.
+
+**Install, pair, and what each OS will ask: [docs/COMPANION.md](docs/COMPANION.md).**
+The dashboard's Screen tab walks you through it too, with the install line for
+the computer's OS.
 
 ## What you need
 

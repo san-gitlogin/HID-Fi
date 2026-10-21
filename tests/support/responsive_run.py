@@ -93,6 +93,9 @@ OVERLAY_STATES = [
     ("overlay screen float min", "go('screen');scrFloat(true);scrMinimise();go('media')", "scrFloat(false)"),
     # Watch only: the picture alone, its bar and the stage's zoom buttons.
     ("overlay watch", "watchEnter()", "watchLeave();go('pad')"),
+    # The wall with four tiles, as a computer with four monitors gives it.
+    ("overlay wall", "WALL.list=[1,2,3,4].map(i=>({id:i,name:'Display '+i,width:1920,height:1080,main:i===1}));"
+                     "WALL.want=4;wallEnter()", "wallLeave();go('pad')"),
     ("toast", f"toast('{LONG} could not be saved because the board is full','bad')", ""),
 ]
 

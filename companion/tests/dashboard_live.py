@@ -58,7 +58,7 @@ board = ThreadingHTTPServer((IP, 0), Board); threading.Thread(target=board.serve
 app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), tempfile.mkdtemp(prefix="hidfi-dash-"),
                         f"http://{IP}:{board.server_address[1]}", "B8:1F:3F:DA:1A:2C"],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                       env=dict(os.environ, HIDFI_DISPLAYS="3"))   # main 1280x720, then 1280x1024 and 1080x1920
+                       env=dict(os.environ, HIDFI_DISPLAYS="4"))   # main 1280x720, then 1280x1024, 1080x1920, 1600x900
 lines = queue.Queue()
 threading.Thread(target=lambda: [lines.put(json.loads(l)) for l in app.stdout], daemon=True).start()
 def wait_app(pred, secs, what):
@@ -77,7 +77,8 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required",
             "--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests"])
-        ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+        # 2x, as the README's other phone screenshots are (SHOTS keeps them).
+        ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
         pg = ctx.new_page()
         pg.add_init_script("sessionStorage.setItem('pin','4826')")
         errs = []; pg.on("pageerror", lambda e: errs.append(str(e)[:200]))
@@ -126,6 +127,16 @@ try:
         pg.wait_for_function("[...document.querySelectorAll('.toast')].some(t=>t.textContent.includes('Display 2 is not connected'))", timeout=6000)
         check("unplugged: back to the main display, and the dashboard says so",
               pg.evaluate("SCR.state")=="live" and "Built-in display" in pg.inner_text("#scrBadge"), pg.inner_text("#scrBadge"))
+
+        # The wall: every monitor at once, on a desktop browser.
+        wctx = b.new_context(viewport={"width": 1280, "height": 760}, device_scale_factor=2)
+        wpg = wctx.new_page(); wpg.add_init_script("sessionStorage.setItem('pin','4826')")
+        sim.attach(wpg, extract_html()); wpg.goto(URL + "#wall")
+        wpg.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=30000)
+        check("the wall shows every monitor at once", True, str(wpg.evaluate("WALL.tiles.map(t=>wallName(t.disp))")))
+        wpg.wait_for_timeout(1200)
+        wpg.screenshot(path=str(shots / "wall-desktop.png"))
+        wctx.close()
 
         pg.tap("#scrPop")
         pg.tap("#tabbar [data-v='media']")

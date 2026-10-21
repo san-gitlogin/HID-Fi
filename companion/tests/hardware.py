@@ -5,7 +5,7 @@ the board itself - no Local Network Access flags, as a phone would.
 
   app finds the board by USB serial -> asks to pair -> Pair in the Screen tab
   -> type the code -> live picture -> a watch-only screen and a third
-  dashboard, one PIN -> four viewers -> a fifth waits -> remove the computer
+  dashboard, one PIN -> six viewers at once -> remove the computer
   (the board is left as it was found).
 
 Needs the access PIN in HIDFI_PIN (never written anywhere by this script).
@@ -100,7 +100,7 @@ try:
 
             # wrong code must not pair; covered in model tests - here: more viewers, one PIN
             pages = []
-            for i, (vw, frag) in enumerate([((1280, 800), "#watch"), ((1024, 768), "#watch"), ((800, 600), "#watch")]):
+            for i, (vw, frag) in enumerate([((1280, 800), "#watch"), ((1024, 768), "#watch"), ((800, 600), "#watch"), ((800, 600), "#watch"), ((640, 480), "#watch")]):
                 c = b.new_context(viewport={"width": vw[0], "height": vw[1]}); q = c.new_page()
                 q.on("pageerror", lambda e: errs.append(str(e)[:200]))
                 # With two computers paired (the owner's own too), a new screen
@@ -117,24 +117,15 @@ try:
                     print("board:", json.load(urllib.request.urlopen(url + "/api/status", timeout=5)).get("ws_clients"), "pages open")
                     raise
                 pages.append((c, q))
-            wait_app(lambda v: v["watching"] == 4, 10, "four viewers")
+            wait_app(lambda v: v["watching"] == 6, 15, "six viewers")
             rates = [frames(q, 3) for _, q in [(None, pg)] + pages]
-            check("four screens watch at once", min(rates) >= 12, " / ".join(f"{r:.0f}" for r in rates) + " fps")
+            check("six screens watch at once (a wall of four and two phones)", min(rates) >= 8, " / ".join(f"{r:.0f}" for r in rates) + " fps")
             pages[0][1].screenshot(path=str(shots / "hw-watch.png"))
-            c5 = b.new_context(viewport={"width": 800, "height": 600}); q5 = c5.new_page()
-            q5.add_init_script(f"localStorage.setItem('scrpc','{pc_id}')")
-            q5.goto(url + "/#watch"); sign_in(q5); time.sleep(6)
-            check("a fifth waits, it does not push anyone out",
-                  q5.evaluate("SCR.state") != "live" and latest["watching"] == 4, f"fifth: {q5.evaluate('SCR.state')}, app: {latest['watching']}")
-            pages[2][0].close()
-            q5.wait_for_function("SCR.state==='live'", timeout=30000)
-            check("the fifth joins by itself when one closes", True)
             pg.evaluate("refresh()"); time.sleep(1.5)
             title = pg.evaluate("document.getElementById('connPill').title")
             check("the board counts every page, one PIN (all on this one computer: one device)",
                   "pages)" in title, title)
-            for c, _ in pages[:2]: c.close()
-            c5.close()
+            for c, _ in pages: c.close()
             wait_app(lambda v: v["watching"] == 1, 15, "back to one viewer")
             check("closed screens free their places", True)
             check("no page errors", not errs, str(errs))

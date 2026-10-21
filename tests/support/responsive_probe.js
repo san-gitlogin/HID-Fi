@@ -62,6 +62,7 @@
     // minimised ("overlay screen float min"), where all of it must be reachable.
     if (state === 'overlay screen float') return document.getElementById('scrFloat');
     if (state === 'overlay watch') return document.getElementById('watchWrap');
+    if (state === 'overlay wall') return document.getElementById('wallWrap');
     return document.querySelector('.view.on');
   };
 

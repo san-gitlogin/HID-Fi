@@ -393,3 +393,14 @@ explicitly:
 
 The dashboard also sends `key_release_all` on every fresh connection, so a session
 that died mid-chord cannot poison the next one.
+
+## Screen sharing
+
+The board never carries video. The HID-Fi Companion app on the computer the
+board is plugged into captures the screen (ScreenCaptureKit, DXGI Desktop
+Duplication, X11), encodes H.264 in hardware where it can (VideoToolbox, Media
+Foundation; Cisco's OpenH264 on Linux) and sends it over WebRTC straight to each
+viewer. The board pairs the app (X25519 with a six-digit comparison code), lists
+it to signed-in dashboards, and signs one-use tickets that carry the app's
+certificate fingerprint, so a dashboard can tell the real app from anyone in
+between. Details: `companion/DESIGN.md`.

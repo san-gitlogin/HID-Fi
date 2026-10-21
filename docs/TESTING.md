@@ -786,3 +786,19 @@ the board or the computer.
 | The first burst of keys after an idle period is lost | The host suspended the board's USB. Expected; tests wait for `usb_mounted` before typing |
 | macOS: two spaces arrive as `. ` | macOS's "Add period with double-space" (System Settings → Keyboard → Text Input), which Chrome honours. The board typed both spaces; the Mac e2e test accepts exactly that rewrite and nothing else |
 | macOS/Windows: a large mouse move does not cancel exactly | The pointer stops at the screen edge. Exact pixels are checked on the board tier and on Linux (evdev has no edges); the page checks direction for large moves |
+
+## HID-Fi Companion (screen sharing)
+
+The Rust app has its own tests, listed in `companion/README.md`:
+
+| Where | Command | What it proves |
+|---|---|---|
+| any | `cd companion && cargo test --workspace` | pairing vectors, the session against the board model, the pipeline (qualities, keyframes, displays) |
+| any | `python3 companion/tests/e2e_view.py`, `multi_view.py`, `system.py`, `dashboard_live.py` | hardware H.264 over WebRTC into real Chrome; six viewers, a slow one and a poor link; the real service; the real dashboard |
+| any | `python3 companion/tests/panel_review.py` | the app's window in every state fits and says what to do |
+| Linux (Docker) | `companion/tests/linux/run.sh` | build + tests on Linux, the app without a tray, real X11 capture + OpenH264 on two monitors |
+| Windows | the manual `companion.yml` workflow | build, tests, capture and encoding on a real Windows runner |
+| board | `HIDFI_PIN=... python3 companion/tests/hardware.py`, `board_pages.py` | the real board: pairing, six viewers, eight pages, "board is full" |
+| Mac + board | `HIDFI_PIN=... python3 companion/tests/multi_monitor_mac.py <vdisplay>` | real monitors on a one-screen Mac (virtual displays): each, two at once, the wall, pop-outs, unplugging |
+
+The dashboard side (Screen tab, wall, watch mode) is in `tests/ui/bdd/features/screen.feature`, run by the ui tier.

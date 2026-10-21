@@ -202,12 +202,12 @@ Feature: Screen - seeing the computer's own picture
     Then the screen says "Studio PC is not reachable"
     And "#scrList" contains "not running"
 
-  Scenario: Four screens already watching, and joining when one closes
+  Scenario: Six screens already watching, and joining when one closes
     Given the dashboard is open and signed in with "4826"
     And a computer "Studio PC" is paired and running
     And "Studio PC" turns viewers away with "busy"
     When I open the "Screen" tab
-    Then the screen says "Studio PC is already on four screens"
+    Then the screen says "Studio PC is already on six screens"
     When "Studio PC" has room again
     Then the screen shows "Studio PC" live
 
@@ -437,4 +437,42 @@ Feature: Screen - seeing the computer's own picture
     When I open the "Screen" tab
     Then the screen says "Studio PC is not allowed to record its screen yet"
     And the screen says "switch it off and on again"
+
+  # The owner asked: see every monitor at once, choose how many, pop each out
+  # to drag it anywhere, full screen one or all - in one window or several.
+  Scenario: All monitors at once, how many, and one popped out
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 3 displays is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#scrWall" control
+    Then the wall shows 3 monitors, all live
+    And "Studio PC" was asked to show display 2
+    And "Studio PC" was asked to show display 3
+    When I choose 2 monitors on the wall
+    Then the wall shows 2 monitors, all live
+    When I show the next monitor on the first tile
+    Then "#wallGrid" contains "Display 2"
+    When I pop out the first monitor
+    Then a window opens showing only that monitor
+    And the wall shows 1 monitors, all live
+    When I tap the "#wallExit" control
+    Then the "Screen" tab is shown
+    And the screen shows "Studio PC" live
+
+  Scenario: Every monitor in its own window at once
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 3 displays is paired and running
+    When I open the "Screen" tab
+    And I tap the "#scrWall" control
+    Then the wall shows 3 monitors, all live
+    When I tap the "#wallFs" control
+    Then the wall fills the screen
+    When I tap the "#wallFs" control
+    And I make the first monitor fill the screen
+    Then only that monitor fills the screen
+    When I leave full screen
+    And I am watching what the wall opens
+    And I tap the "#wallPopAll" control
+    Then 3 windows open, one per monitor
 

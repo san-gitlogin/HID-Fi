@@ -1057,6 +1057,31 @@ html.watch .watchwrap.idle .watchbar,html.watch .watchwrap.idle .scrtools{opacit
 /* The title bar says what the badge would: nothing covers a small picture. */
 .scrfloat .scrbadge{display:none}
 .scrtools [hidden]{display:none}
+/* All monitors at once (#wall): a grid of live tiles, each with its own strip -
+   nothing over the pictures. Shown before any script runs, like #watch. */
+.wallwrap{display:none}
+html.wall .app,html.wall .tabbar,html.wall .scrfloat,
+html:has(#wall:target) .app,html:has(#wall:target) .tabbar{display:none!important}
+html.wall .wallwrap,html:has(#wall:target) .wallwrap{display:flex;flex-direction:column;position:fixed;inset:0;z-index:300;background:#000}
+.wallbar{display:flex;align-items:center;gap:8px;flex:0 0 auto;background:rgba(13,17,25,.97);
+  padding:calc(6px + var(--sat)) calc(8px + var(--sar)) 6px calc(12px + var(--sal))}
+.wallbar b{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wallbar .iconbtn{width:34px;height:34px;flex:0 0 auto}
+.wallgrid{flex:1;min-height:0;display:grid;gap:4px;padding:4px calc(4px + var(--sar)) calc(4px + var(--sab)) calc(4px + var(--sal));
+  grid-template-columns:1fr;grid-auto-rows:1fr}
+.wallgrid[data-n="2"],.wallgrid[data-n="4"]{grid-template-columns:1fr 1fr}
+.wallgrid[data-n="3"]{grid-template-columns:repeat(3,1fr)}
+@media(max-aspect-ratio:1/1){.wallgrid[data-n="2"],.wallgrid[data-n="3"]{grid-template-columns:1fr}}
+.wtile{display:flex;flex-direction:column;min-width:0;min-height:0;background:#05070c;border-radius:6px;overflow:hidden}
+.wtile .wtbar{display:flex;align-items:center;gap:4px;height:32px;flex:0 0 auto;padding:0 2px 0 9px;background:rgba(13,17,25,.97)}
+.wtile .wtbar b{flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wtile .wtbar i{font-style:normal;font-size:11px;color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.wtile .wtbar .iconbtn{width:28px;height:28px;border-radius:7px;background:none;border:none}
+.wtile .wtpic{position:relative;flex:1;min-height:0}
+.wtile video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.wtile .wtmsg{position:absolute;inset:0;display:grid;place-items:center;padding:14px;text-align:center;font-size:13px;color:var(--fg2)}
+.wtile .wtmsg:empty{display:none}
+.wtile:fullscreen .wtbar{display:none}
 /* First time, no computer yet: the steps, here, without needing the internet. */
 .scrsteps{list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:14px;margin:4px 0 12px}
 .scrsteps li{counter-increment:st;position:relative;padding-left:34px;font-size:13.5px;color:var(--fg2);line-height:1.5}
@@ -1250,6 +1275,7 @@ main::after{height:var(--flpad,0px)}
 <symbol id="i-dock" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m8.5 8.5 6 6M15 9.5v5.5H9.5"/></symbol>
 <symbol id="i-zoomin" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.8v5.4M7.8 10.5h5.4"/></symbol>
 <symbol id="i-zoomout" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.8 10.5h5.4"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="7.5" height="6.5" rx="1.2"/><rect x="13" y="4.5" width="7.5" height="6.5" rx="1.2"/><rect x="3.5" y="13" width="7.5" height="6.5" rx="1.2"/><rect x="13" y="13" width="7.5" height="6.5" rx="1.2"/></symbol>
 <symbol id="i-newwin" viewBox="0 0 24 24"><path d="M10.5 4.5h-5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></symbol>
 <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3.5 8.5v-5h5M20.5 8.5v-5h-5M3.5 15.5v5h5M20.5 15.5v5h-5"/><rect x="8" y="8.5" width="8" height="7" rx="1.3"/></symbol>
 </defs></svg>
@@ -1392,6 +1418,7 @@ main::after{height:var(--flpad,0px)}
               <button class="iconbtn zm" id="scrOut" aria-label="Zoom out"><svg class="ic ic-sm"><use href="#i-zoomout"/></svg></button>
               <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
               <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
+              <button class="iconbtn" id="scrWall" aria-label="All monitors at once" hidden><svg class="ic ic-sm"><use href="#i-grid"/></svg></button>
               <button class="iconbtn" id="scrDisp" aria-label="Choose the display" hidden><svg class="ic ic-sm"><use href="#i-displays"/></svg></button>
               <button class="iconbtn" id="scrPop" aria-label="Float over other tabs"><svg class="ic ic-sm"><use href="#i-float"/></svg></button>
               <button class="iconbtn" id="scrSolo" aria-label="Open the screen on its own"><svg class="ic ic-sm"><use href="#i-newwin"/></svg></button>
@@ -1804,6 +1831,17 @@ main::after{height:var(--flpad,0px)}
 </div>
 
 <i id="watch" hidden></i>
+<i id="wall" hidden></i>
+<div class="wallwrap" id="wallWrap" role="region" aria-label="All monitors">
+  <div class="wallbar">
+    <b id="wallName">All monitors</b>
+    <div class="seg" id="wallLayout" aria-label="How many monitors"></div>
+    <button class="iconbtn" id="wallPopAll" aria-label="Open each monitor in its own window"><svg class="ic"><use href="#i-newwin"/></svg></button>
+    <button class="iconbtn" id="wallFs" aria-label="Full screen"><svg class="ic"><use href="#i-max"/></svg></button>
+    <button class="iconbtn" id="wallExit" aria-label="Back to the dashboard"><svg class="ic"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="wallgrid" id="wallGrid" data-n="1"></div>
+</div>
 <div class="watchwrap" id="watchWrap">
   <div class="watchbar" id="watchBar">
     <button class="who" id="watchWho" aria-label="Choose the computer"><span class="dot" id="watchDot"></span><span id="watchName">Screen</span><i id="watchFps"></i></button>
@@ -1919,7 +1957,7 @@ function connect(){
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-    scrAgain(true);if(curView==='screen'||SCR.float||WATCH.on)scrList();};
+    scrAgain(true);if(curView==='screen'||SCR.float||WATCH.on||WALL.on)scrList();};
   sock.onclose=()=>{if(!live())return;
     if(!opened)checkFull();             // turned away before it opened: full, or unreachable
     if(!lostAt)lostAt=Date.now();
@@ -2481,8 +2519,10 @@ function go(id){
 }
 window.addEventListener('hashchange',()=>{
   const id=location.hash.replace('#','');
-  if(id==='watch'){if(!WATCH.on)watchEnter();return;}
+  if(id==='watch'){if(WALL.on)wallLeave();if(!WATCH.on)watchEnter();return;}
+  if(id==='wall'){if(WATCH.on)watchLeave();if(!WALL.on)wallEnter();return;}
   if(WATCH.on)watchLeave();
+  if(WALL.on)wallLeave();
   if(VIEWS.some(v=>v.id===id)&&id!==curView)go(id);
 });
 
@@ -4418,7 +4458,7 @@ function pcEditor(edit){
 let AUTH_SET=null;
 let AP_OPEN=false;
 function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
-  scrAgain();if(curView==='screen'||SCR.float||WATCH.on)scrList();}
+  scrAgain();if(curView==='screen'||SCR.float||WATCH.on||WALL.on)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
@@ -4459,7 +4499,7 @@ function applyStatus(d){
   // to pair - worth re-reading the list, but only where it is shown.
   if(d.comp_paired!==undefined){
     const k=d.comp_paired+'/'+d.comp_online+'/'+d.comp_pending;
-    if(k!==SCR.counts){SCR.counts=k;if(curView==='screen'||SCR.float||WATCH.on||d.comp_pending)scrList();}
+    if(k!==SCR.counts){SCR.counts=k;if(curView==='screen'||SCR.float||WATCH.on||WALL.on||d.comp_pending)scrList();}
   }
   // How many dashboards the board is serving. Polled, so a second phone opening
   // this page shows up here on its own - and so does a tab that was left open
@@ -5280,6 +5320,7 @@ function scrList(){
       SCR.sel=ids.indexOf(keep)>=0?keep:(on.length===1?on[0].id:(SCR.pcs.length===1?SCR.pcs[0].id:null));
     }
     scrRenderList();scrSync();
+    if(WALL.on)wallFit();
   });
 }
 function scrPc(){return SCR.pcs.find(p=>p.id===SCR.sel)||null;}
@@ -5415,7 +5456,8 @@ function scrChoose(id){
   if(curView!=='screen'&&!SCR.float&&!WATCH.on)go('screen');
   scrSync();scrRenderList();
 }
-function scrWant(){return (curView==='screen'||SCR.float||WATCH.on)&&!document.hidden&&!!SCR.sel;}
+// The wall runs its own sessions: the single picture stops, freeing its place.
+function scrWant(){return (curView==='screen'||SCR.float||WATCH.on)&&!WALL.on&&!document.hidden&&!!SCR.sel;}
 function scrSync(){
   if(scrWant()){if(!SCR.h&&!SCR.retryT&&SCR.state!=='ticket')scrStart();}
   else if(SCR.h||SCR.retryT||SCR.state==='ticket')scrStop('idle');
@@ -5469,7 +5511,7 @@ function scrOn(s){
     SCR.state=s.indexOf('refused')===0?'refused':'ended';SCR.why=why;
     if(why!=='stopped'){scrStage.classList.add('empty');scrRenderList();}
     // A wrong certificate is someone in the middle: retrying would only repeat
-    // it. Busy means four screens already watch: wait for one to close, slowly.
+    // it. Busy means six screens already watch: wait for one to close, slowly.
     // Everything else is the network.
     if(why==='busy'||why==='permission'||why==='capture')SCR.tries=Math.max(SCR.tries,3);
     if(why!=='stopped'&&why!=='fingerprint')scrRetry();
@@ -5495,6 +5537,9 @@ function scrDispName(id){
   return d?d.name:'the main display';
 }
 function scrDispSaved(){
+  // A window popped out of the wall (?d=<id>#watch) shows that monitor.
+  const q=new URLSearchParams(location.search).get('d');
+  if(WATCH.on&&q!==null&&q!=='')return +q;
   try{const v=localStorage.getItem('scrdisp:'+SCR.sel);return v===null?null:+v;}catch(e){return null;}
 }
 function scrDispShow(id){
@@ -5539,7 +5584,7 @@ function scrMsgHtml(){
     case 'reconnecting':return '';
   }
   const w=SCR.why;
-  if(w==='busy')return ico('eye')+'<b>'+n+' is already on four screens</b><span>This one joins by itself when one of them closes.</span>';
+  if(w==='busy')return ico('eye')+'<b>'+n+' is already on six screens</b><span>This one joins by itself when one of them closes.</span>';
   // The computer refused to record its own screen (macOS asks per app, and
   // per version of an app built by hand: a switch can look on and not be).
   if(w==='permission')return ico('shield')+'<b>'+n+' is not allowed to record its screen yet</b><span>On it: System Settings, '+
@@ -5568,6 +5613,7 @@ function scrPaint(){
     (dn?' \u00b7 '+esc(dn):'')+
     (SCR.state==='reconnecting'?' reconnecting':(SCR.fps?' \u00b7 '+SCR.fps+' fps':''))+z:'';
   $('scrDisp').hidden=!(live&&SCR.displays.length>1);
+  $('scrWall').hidden=!(live&&SCR.displays.length>1);
   const b=$('scrBadge');if(b.innerHTML!==badge)b.innerHTML=badge;
   $('scrFName').textContent=SCR.name||'Screen';
   const fs=!live?'':SCR.state==='reconnecting'?'reconnecting':
@@ -5742,6 +5788,7 @@ function flTuck(){
 })();
 $('scrPop').onclick=()=>{scrFloat(true);buzz(8);};
 $('scrDisp').onclick=()=>{scrDispPick();if(WATCH.on)watchWake();};
+$('scrWall').onclick=()=>{location.hash='wall';};
 $('scrHoleDock').onclick=()=>scrFloat(false);
 $('scrFDock').onclick=()=>{scrFloat(false);go('screen');};
 $('scrFClose').onclick=()=>{scrFloat(false);scrSync();};
@@ -5774,6 +5821,153 @@ function scrView(id){
   scrSync();
 }
 addEventListener('pagehide',()=>scrStop('idle'));
+
+// ---- all monitors at once (#wall) ----
+// Each tile is its own viewer (the computer serves four at once): the first
+// learns the monitors, the rest take the next ones. Pop a tile out into its
+// own window to drag it to another screen; full screen a tile, or the wall.
+const WALL={on:location.hash==='#wall',want:0,list:[],tiles:[]};
+function wallEnter(){
+  WALL.on=true;document.documentElement.classList.add('wall');
+  if(SCR.float)scrFloat(false);
+  try{WALL.want=+localStorage.getItem('walln')||0;}catch(e){WALL.want=0;}
+  scrSync();wallFit();
+}
+function wallLeave(){
+  WALL.on=false;document.documentElement.classList.remove('wall');
+  WALL.tiles.splice(0).forEach(wallStop);
+  $('wallGrid').innerHTML='';
+  if(document.fullscreenElement||document.webkitFullscreenElement){
+    try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch(e){}
+  }
+  scrSync();
+}
+function wallName(id){const d=WALL.list.find(x=>x.id===id);return d?d.name:(WALL.list.length?'Main display':'Connecting...');}
+// As many tiles as wanted (or as there are monitors), each on a monitor of its own.
+function wallFit(){
+  if(!WALL.on)return;
+  const pc=scrPc();
+  $('wallName').textContent=pc?pc.name:'All monitors';
+  if(!pc){$('wallGrid').innerHTML='<div class="wtile"><div class="wtpic"><div class="wtmsg">'+
+    (SCR.loaded?'No computer is paired yet: set it up on the Screen tab.':'Asking the board...')+'</div></div></div>';return;}
+  const m=Math.max(1,WALL.list.length), n=WALL.list.length?Math.min(4,m,WALL.want||m):1;
+  while(WALL.tiles.length>n)wallStop(WALL.tiles.pop());
+  const used=WALL.tiles.map(x=>x.disp);
+  while(WALL.tiles.length<n){
+    const free=WALL.list.find(d=>used.indexOf(d.id)<0);
+    const tile={disp:free?free.id:null,h:null,fps:0,state:'',msg:'',retryT:0,el:null};
+    used.push(tile.disp);WALL.tiles.push(tile);
+  }
+  const g=$('wallGrid');g.dataset.n=String(WALL.tiles.length);
+  WALL.tiles.forEach((tl,i)=>{
+    if(!tl.el){
+      tl.el=document.createElement('div');tl.el.className='wtile';
+      tl.el.innerHTML='<div class="wtbar"><span class="dot"></span><b></b><i></i>'+
+        '<button class="iconbtn" data-wnext aria-label="Show the next monitor here">'+ico('displays','ic-sm')+'</button>'+
+        '<button class="iconbtn" data-wpop aria-label="Open this monitor in its own window">'+ico('newwin','ic-sm')+'</button>'+
+        '<button class="iconbtn" data-wfs aria-label="This monitor full screen">'+ico('max','ic-sm')+'</button></div>'+
+        '<div class="wtpic"><video autoplay muted playsinline></video><div class="wtmsg"></div></div>';
+      tl.el.querySelector('[data-wnext]').onclick=()=>wallNext(tl);
+      tl.el.querySelector('[data-wpop]').onclick=()=>wallPop([tl]);
+      tl.el.querySelector('[data-wfs]').onclick=()=>wallFull(tl.el,tl.el.querySelector('video'));
+    }
+    if(g.children[i]!==tl.el)g.insertBefore(tl.el,g.children[i]||null);
+    if(!tl.h&&!tl.retryT)wallStart(tl);
+    wallPaint(tl);
+  });
+  const k=Math.min(4,Math.max(1,WALL.list.length));
+  $('wallLayout').innerHTML=WALL.list.length>1?Array.from({length:k},(_,i)=>i+1).map(v=>
+    '<button data-walln="'+v+'" class="'+(v===WALL.tiles.length?'on':'')+'" aria-label="Show '+v+'">'+v+'</button>').join(''):'';
+}
+function wallPaint(tl){
+  if(!tl.el)return;
+  tl.el.querySelector('b').textContent=wallName(tl.disp);
+  tl.el.querySelector('i').textContent=tl.state==='live'&&tl.fps?tl.fps+' fps':'';
+  tl.el.querySelector('.dot').className='dot '+(tl.state==='live'?'ok':tl.state==='reconnecting'?'warn':'');
+  tl.el.querySelector('.wtmsg').textContent=tl.state==='live'?'':tl.msg||'Connecting...';
+  tl.el.querySelector('[data-wnext]').hidden=WALL.list.length<2;
+}
+function wallStart(tl){
+  const pc=scrPc();if(!pc||!WALL.on)return;
+  tl.state='ticket';tl.msg='';wallPaint(tl);
+  send({cmd:'screen_ticket',id:pc.id},r=>{
+    if(!WALL.on||WALL.tiles.indexOf(tl)<0)return;
+    if(!r||r.status!=='ok'){tl.msg=r&&r.reply==='pc_offline'?pc.name+' is not running HID-Fi Companion':'Trying again...';return wallRetry(tl);}
+    tl.state='connecting';
+    tl.h=watchScreen(r,tl.el.querySelector('video'),s=>wallOn(tl,s));
+  });
+}
+function wallOn(tl,s){
+  if(s==='live'){tl.state='live';tl.msg='';}
+  else if(s==='reconnect')tl.state='reconnecting';
+  else if(s.indexOf('stats:')===0)tl.fps=parseInt(s.slice(6),10)||0;
+  else if(s.indexOf('displays:')===0){
+    let m;try{m=JSON.parse(s.slice(9));}catch(e){return;}
+    const first=!WALL.list.length;WALL.list=m.displays||[];
+    if(tl.disp===null)tl.disp=m.display;
+    else if(tl.disp!==m.display&&WALL.list.some(d=>d.id===tl.disp)&&tl.h)tl.h.display(tl.disp);
+    else if(!WALL.list.some(d=>d.id===tl.disp))tl.disp=m.display;
+    if(first||WALL.tiles.length!==Math.min(4,WALL.want||WALL.list.length,WALL.list.length))return wallFit();
+  }
+  else if(s.indexOf('display:')===0){let m;try{m=JSON.parse(s.slice(8));}catch(e){return;}tl.disp=m.id;}
+  else if(s!=='connecting'){
+    tl.h=null;tl.state='ended';
+    const why=s.slice(s.indexOf(':')+1);
+    tl.msg=why==='busy'?'Six screens already watch this computer':why==='permission'?(scrPc()||{}).name+
+      ' is not allowed to record its screen yet':'Reconnecting...';
+    wallRetry(tl,why==='busy'?6000:2000);
+  }
+  wallPaint(tl);
+}
+function wallRetry(tl,ms){
+  if(tl.retryT)return;
+  tl.retryT=setTimeout(()=>{tl.retryT=0;if(WALL.on&&WALL.tiles.indexOf(tl)>=0&&!tl.h)wallStart(tl);},ms||2000);
+  wallPaint(tl);
+}
+function wallStop(tl){
+  if(tl.retryT){clearTimeout(tl.retryT);tl.retryT=0;}
+  const h=tl.h;tl.h=null;if(h)h.stop();
+  if(tl.el)tl.el.remove();
+}
+function wallNext(tl){
+  if(WALL.list.length<2||!tl.h)return;
+  const i=WALL.list.findIndex(d=>d.id===tl.disp);
+  tl.disp=WALL.list[(i+1)%WALL.list.length].id;
+  tl.h.display(tl.disp);wallPaint(tl);
+}
+// Pop out: each monitor in a window of its own, to drag anywhere and full
+// screen there. Its place on the wall is given up (four viewers at most).
+function wallPop(tiles){
+  let blocked=0;
+  tiles.forEach(tl=>{
+    const d=tl.disp===null?'':tl.disp;
+    const w=window.open(location.pathname+'?d='+d+'#watch','hidfi-'+d,'popup,width=960,height=600');
+    if(!w){blocked++;return;}
+    WALL.tiles.splice(WALL.tiles.indexOf(tl),1);wallStop(tl);
+  });
+  if(blocked)toast('The browser blocked '+blocked+' window'+(blocked>1?'s':'')+': allow pop-ups for this page, '+
+    'or use each monitor\u2019s own pop-out button','warn');
+  // The wall keeps what is left; it does not refill the gap (that monitor is
+  // in its own window now).
+  WALL.want=WALL.tiles.length;
+  if(!WALL.tiles.length)location.hash='screen';
+  else wallFit();
+}
+function wallFull(el,video){
+  const d=document;
+  if(d.fullscreenElement||d.webkitFullscreenElement){try{(d.exitFullscreen||d.webkitExitFullscreen).call(d);}catch(e){}return;}
+  if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
+  else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+  else if(video&&video.webkitEnterFullscreen)video.webkitEnterFullscreen();   // iPhone: the video alone
+}
+$('wallLayout').addEventListener('click',e=>{
+  const b=e.target.closest('[data-walln]');if(!b)return;
+  WALL.want=+b.dataset.walln;try{localStorage.setItem('walln',String(WALL.want));}catch(e){}
+  wallFit();
+});
+$('wallPopAll').onclick=()=>wallPop(WALL.tiles.slice());
+$('wallFs').onclick=()=>wallFull($('wallWrap'));
+$('wallExit').onclick=()=>{location.hash='screen';};
 
 // ---- watch only ----
 function watchEnter(){
@@ -5938,6 +6132,7 @@ bindStick($('stickL'),'l');bindStick($('stickR'),'r');
 renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();paintOsUi();paintGestureLabels();
 go(VIEWS.some(v=>v.id===location.hash.replace('#',''))?location.hash.replace('#',''):'pad');
 if(WATCH.on)watchEnter();
+if(WALL.on)wallEnter();
 connect();
 setInterval(()=>{if(wsUp&&!document.hidden)send({cmd:'status'});},8000);
 // iOS Safari ignores user-scalable=no, so pinch has to be refused as it happens.

@@ -9,6 +9,14 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ## Unreleased
 
+### Added
+
+- **Every monitor at once (Screen tab, `#wall`).** One, two, three or four of the
+  computer's monitors in a grid, each live; full screen one or all; or each in its
+  own window (`?d=<monitor>#watch`) to drag to any screen. Each viewer also picks
+  its own monitor, and one unplugged mid-view hands over to the main display.
+- **Six viewers per computer** (was four): a wall of four and a phone or two.
+
 ### Fixed
 
 - **The board served only 5 dashboard pages, and the 6th said "offline".** The

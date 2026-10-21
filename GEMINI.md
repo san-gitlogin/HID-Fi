@@ -18,3 +18,6 @@ The essentials, in case only this file is loaded:
   rules, are in AGENTS.md ("Ownership, PINs and recovery").
 - A new command or dashboard control ships with its test; the static tier fails
   otherwise.
+- Screen sharing lives in `companion/` (Rust) and the dashboard's Screen tab:
+  read AGENTS.md "Screen sharing" first. Never write the access PIN into a file;
+  real-board tests take it from `HIDFI_PIN`.

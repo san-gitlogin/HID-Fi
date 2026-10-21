@@ -104,7 +104,7 @@ def cpu_avg(n=4):
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required"])
-        pages = [b.new_page() for _ in range(5)]
+        pages = [b.new_page() for _ in range(7)]
         for pg in pages:
             pg.goto(f"http://{IP}:{web.server_address[1]}/")
         pages[0].evaluate("t => go(t)", ticket())
@@ -122,14 +122,21 @@ try:
         dims = [pg.evaluate("[v.videoWidth, v.videoHeight]") for pg in pages[:4]]
         check("each gets the full picture", all(d == [1920, 1080] for d in dims), str(dims[0]))
         check("more viewers cost the computer little CPU", four < one + 25, f"1 viewer {one:.0f}%, 4 viewers {four:.0f}% of one core")
+        # Six places (a wall of four monitors and a phone or two): two more fill them.
+        for pg in pages[5:7]:
+            pg.evaluate("t => go(t)", ticket())
+        for pg in pages[5:7]:
+            pg.wait_for_function("S.includes('live')", timeout=15000)
         pages[4].evaluate("t => go(t)", ticket())
         pages[4].wait_for_function("S.some(s => s.startsWith('refused'))", timeout=10000)
-        check("a fifth is turned away as busy", "refused:busy" in pages[4].evaluate("S"), str(pages[4].evaluate("S")))
+        check("a seventh is turned away as busy", "refused:busy" in pages[4].evaluate("S"), str(pages[4].evaluate("S")))
+        for pg in pages[5:7]:
+            pg.evaluate("H.stop()")
         pages[0].evaluate("H.stop()")
         time.sleep(1.5)
         pages[4].evaluate("t => go(t)", ticket())
         pages[4].wait_for_function("S.includes('live')", timeout=15000)
-        check("once one leaves, the fifth gets in", True)
+        check("once others leave, it gets in", True)
         alive = [pg.evaluate("(()=>{const a=F; return a})()") for pg in pages[1:4]]
         time.sleep(1.5)
         moved = [pg.evaluate("F") > a for pg, a in zip(pages[1:4], alive)]

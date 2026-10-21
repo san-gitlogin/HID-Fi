@@ -694,6 +694,39 @@ sign pressed F1 then **Enter**. Therefore:
 
 ---
 
+## Screen sharing (HID-Fi Companion) - the rules
+
+The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
+`DESIGN.md` and `PROGRESS.md` first. The board's side is `hid_fi/companion.h`
+(pairing, tickets) and the dashboard's Screen tab in `web_ui.h`.
+
+- **Video never touches the board.** WebRTC goes computer -> viewer directly; the
+  board is a directory and trust anchor (pairing, signed one-use tickets, the
+  app's certificate fingerprint). The app never holds a board WebSocket (it would
+  break release-all, radio sleep and AP auto-off): `POST /api/companion` only.
+- **The board picked is the one on this computer's USB**, matched by USB serial
+  (= efuse MAC = status `mac`). 303A:1001 is generic: never match by VID/PID.
+- **Pages:** the board serves `ws_max` = 8 dashboard pages. The WebSockets
+  library's own limit comes from `hid_fi/build_opt.h`; a `static_assert` ties it
+  to `WS_MAX_CLIENTS`, and the flash scripts rebuild from clean when that file
+  changes (a stale library object would corrupt memory). Never remove it.
+- **Viewers:** six per computer (`MAX_VIEWERS`), each choosing a monitor; capture
+  and encoding are per (monitor, quality) lane and shared. Keyframes are per
+  viewer and rate limited - one slow viewer must never make keyframes for all.
+- **macOS signing:** an ad-hoc signed app gets a new identity every build; macOS
+  then refuses Screen Recording while System Settings still shows the switch on.
+  `companion/package/macos.sh` signs with a local "HID-Fi Local" certificate when
+  one exists. After an ad-hoc rebuild: `tccutil reset ScreenCapture in.hidfi.companion`.
+  Never rebuild the bundle under a running app without expecting it to restart
+  itself (macOS drops a replaced app's local network access; `replaced.rs`).
+- **Every dashboard request gets an answer** (`send()` calls back with `null` when
+  the link drops or the PIN is asked): a callback that waits forever left the
+  Screen tab stuck on "Connecting..." after a phone slept.
+- **Tests:** `companion/README.md` lists them. Real-board ones (`hardware.py`,
+  `board_pages.py`, `multi_monitor_mac.py`) need `HIDFI_PIN` in the environment
+  - never write a PIN into a file. Linux: `companion/tests/linux/run.sh` (Docker;
+  `tests/docker/vm.sh` on a Mac). Windows: the manual `companion.yml` workflow.
+
 ## Working style expected here
 
 - **Verify, do not assume.** Read the source, the vendor guide, or probe the

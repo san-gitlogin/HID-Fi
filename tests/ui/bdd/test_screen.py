@@ -155,6 +155,83 @@ def screen_on(ctx, name):
           f"showing {ui.page.evaluate('(scrPc()||{}).name')!r}")
 
 
+@then(parsers.parse("the wall shows {n:d} monitors, all live"))
+def wall_live(ctx, n):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate(
+        "n => WALL.tiles.length===n && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", n),
+        f"wall: {ui.page.evaluate('WALL.tiles.map(t=>[t.disp,t.state,t.msg])')}")
+
+
+@when(parsers.parse("I choose {n:d} monitors on the wall"))
+def wall_choose(ctx, n):
+    ctx["ui"].page.locator(f"#wallLayout [data-walln='{n}']").click()
+
+
+@when("I show the next monitor on the first tile")
+def wall_next(ctx):
+    ctx["ui"].page.locator("#wallGrid .wtile").first.locator("[data-wnext]").click()
+
+
+# Pop-outs open new windows the board model does not serve (it routes one page):
+# what matters is the address each was opened with.
+OPEN_SPY = "(()=>{if(window.__opened)return;window.__opened=[];const o=window.open;" \
+           "window.open=(u,n,f)=>{__opened.push(u);return o.call(window,u,n,f);};})()"
+
+
+@then("the wall fills the screen")
+def wall_fs(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("document.fullscreenElement&&document.fullscreenElement.id==='wallWrap'"), "not full screen")
+
+
+@when("I make the first monitor fill the screen")
+def tile_fs(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("!document.fullscreenElement"), "still full screen")
+    ui.page.locator("#wallGrid .wtile").first.locator("[data-wfs]").click()
+
+
+@then("only that monitor fills the screen")
+def tile_fs_on(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("!!(document.fullscreenElement&&document.fullscreenElement.classList.contains('wtile'))"),
+          "the tile is not full screen")
+
+
+@when("I leave full screen")
+def leave_fs(ctx):
+    # Esc, or the back gesture on a phone: the browser's own way out.
+    ui = ctx["ui"]
+    ui.page.evaluate("document.exitFullscreen()")
+    _wait(ui, lambda: ui.page.evaluate("!document.fullscreenElement"), "still full screen")
+
+
+@when("I am watching what the wall opens")
+def spy(ctx):
+    ctx["ui"].page.evaluate(OPEN_SPY)
+
+
+@when("I pop out the first monitor")
+def wall_pop(ctx):
+    page = ctx["ui"].page
+    page.evaluate(OPEN_SPY)
+    page.locator("#wallGrid .wtile").first.locator("[data-wpop]").click()
+
+
+@then("a window opens showing only that monitor")
+def popped_one(ctx):
+    urls = ctx["ui"].page.evaluate("window.__opened")
+    assert len(urls) == 1 and "?d=" in urls[0] and urls[0].endswith("#watch"), urls
+
+
+@then(parsers.parse("{n:d} windows open, one per monitor"))
+def popped_all(ctx, n):
+    urls = ctx["ui"].page.evaluate("window.__opened")
+    ds = {u.split("?d=")[1].split("#")[0] for u in urls}
+    assert len(urls) == n and len(ds) == n and all(u.endswith("#watch") for u in urls), urls
+
+
 @then("there is no display button")
 def no_display_button(ctx):
     assert not ctx["ui"].page.locator("#scrDisp").is_visible()

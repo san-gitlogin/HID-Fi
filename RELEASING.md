@@ -30,6 +30,28 @@ fix lands a minute later: that fix is the next version.
 | 8 | The GitHub Release | `gh release create vX.Y --verify-tag --latest --notes-file <changelog section> <zip>` |
 | 9 | Check it | download the zip from the release page and `shasum -a 256 -c SHA256SUMS` |
 
+### HID-Fi Companion (from v3.12)
+
+The app ships in the same GitHub Release, so the installers' "latest" links find
+it. Run the manual `companion` workflow on the release commit; its artifacts are
+the files the installers expect:
+
+| File | From |
+|---|---|
+| `HID-Fi-Companion-<ver>-macos.dmg` | macos-14 (Developer ID signed and notarized when the secrets exist; otherwise ad hoc) |
+| `hidfi-companion-windows-x86_64.exe` | windows-2022 |
+| `hidfi-companion-linux-x86_64`, `hidfi-companion-linux-aarch64` | ubuntu-24.04, ubuntu-24.04-arm |
+
+Put them in the release with the firmware zip and **one** `SHA256SUMS` covering
+all of them - `install-windows.ps1` and `install-linux.sh` refuse a download whose
+line in it is missing or wrong:
+
+```bash
+gh run download <run-id> -D dist && cd dist && cp */dist/* . 2>/dev/null
+cp ../hidfi-vX.Y-firmware.zip . && shasum -a 256 HID-Fi-Companion-* hidfi-companion-* hidfi-*.zip > SHA256SUMS
+gh release upload vX.Y HID-Fi-Companion-* hidfi-companion-* SHA256SUMS --clobber
+```
+
 The GitHub test workflow is manual (Actions > tests > Run workflow); run it by
 hand if a release needs a clean Windows or Linux machine you do not have.
 

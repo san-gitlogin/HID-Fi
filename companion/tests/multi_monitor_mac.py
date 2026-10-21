@@ -86,6 +86,31 @@ try:
               shape(watch)[0] > shape(watch)[1], f"{shape(watch)} {time.time()-t1:.1f}s after the message")
         check("the phone keeps its own monitor meanwhile", phone.evaluate(f"SCR.disp==={ids[1]}") and phone.evaluate("SCR.state") == "live")
         watch.screenshot(path="/tmp/hidfi-mm-watch.png")
+        # The wall: every monitor left (built-in + two) at once, in one window.
+        wall = b.new_context(viewport={"width": 1600, "height": 1000}).new_page()
+        wall.goto(URL + "/#wall"); sign_in(wall)
+        wall.wait_for_function("WALL.tiles.length===3 && WALL.tiles.every(t=>t.state==='live' && t.el.querySelector('video').videoWidth>0)", timeout=40000)
+        tiles = wall.evaluate("WALL.tiles.map(t=>[t.disp, t.el.querySelector('video').videoWidth, t.el.querySelector('video').videoHeight])")
+        check("the wall shows all three monitors live at once, each its own", len({t[0] for t in tiles}) == 3, str(tiles))
+        wall.screenshot(path="/tmp/hidfi-mm-wall.png")
+        # Every monitor in its own window: windows the board serves for real.
+        with wall.context.expect_page() as first:
+            wall.click("#wallPopAll")
+        time.sleep(6)
+        pops = [p for p in wall.context.pages if "#watch" in p.url]
+        for p_ in pops:
+            try:
+                sign_in(p_)
+            except Exception:
+                pass
+        for p_ in pops:
+            try:
+                p_.wait_for_function("SCR.state==='live' && scrVideo.videoWidth>0", timeout=30000)
+            except Exception:
+                pass
+        shown = sorted((p_.evaluate("SCR.disp"), p_.evaluate("SCR.state")) for p_ in pops)
+        check("each monitor opens live in its own window", len(pops) == 3 and all(s == "live" for _, s in shown)
+              and len({d for d, _ in shown}) == 3, str(shown))
         b.close()
 finally:
     try:

@@ -35,8 +35,10 @@ use tungstenite::{Message, WebSocket};
 
 /// One encoder feeds every viewer, so more viewers cost the computer upload,
 /// not CPU; the stream follows the slowest of them.
-pub const MAX_VIEWERS: usize = 4;
-pub const MAX_CONNS: usize = 8;
+/// Six: a wall of four monitors plus a phone or two that control. Capture and
+/// encoding are shared per monitor, so a viewer more costs only its sending.
+pub const MAX_VIEWERS: usize = 6;
+pub const MAX_CONNS: usize = 10;
 pub const HELLO_DEADLINE: Duration = Duration::from_secs(5);
 pub const OFFER_DEADLINE: Duration = Duration::from_secs(10);
 pub const MAX_MESSAGE: usize = 64 * 1024;

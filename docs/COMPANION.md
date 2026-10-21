@@ -107,7 +107,8 @@ someone in between. Three wrong codes end the attempt; start again from the app.
   remembered per computer. A monitor that is unplugged while shown hands over
   to the main display, and the dashboard says which one left. Very large
   monitors are sent at up to 1920 pixels wide.
-- Up to **four screens** can watch one computer at once. A fifth waits and joins
+- Up to **six screens** can watch one computer at once (a wall of four monitors
+  and a phone or two). A seventh waits and joins
   by itself when one closes.
 
 ## When something is not right
