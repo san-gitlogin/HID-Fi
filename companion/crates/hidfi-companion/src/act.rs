@@ -32,6 +32,13 @@ pub fn run(handle: &Handle, a: Action) {
                 open(SCREEN_RECORDING_SETTINGS);
             }
         }
+        Action::OpenNetworkSettings => {
+            if cfg!(target_os = "macos") {
+                open("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork");
+            } else if cfg!(windows) {
+                open("ms-settings:network-status");
+            }
+        }
         Action::PairAgain => {
             let _ = handle.tx.send(Cmd::PairAgain);
         }

@@ -27,6 +27,21 @@ pub enum Action {
     PairAgain,
     ChooseBoard(String, String),
     Forget,
+    /// The OS's own page for what can block the network (macOS Local Network
+    /// privacy, Windows network profile).
+    OpenNetworkSettings,
+}
+
+/// This OS's likely reason a board on USB cannot be reached, besides the board
+/// not being on the same WiFi - the one a user cannot guess.
+pub fn net_hint() -> Option<&'static str> {
+    if cfg!(target_os = "macos") {
+        Some("Or macOS is blocking it: System Settings, Privacy & Security, Local Network: switch on HID-Fi Companion")
+    } else if cfg!(windows) {
+        Some("Or Windows treats this WiFi as Public: set it to Private in Settings, Network & internet")
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,10 +82,12 @@ pub fn model(v: &View) -> Model {
         }
         BoardState::NotOnNetwork => {
             icon = Icon::Attention;
-            lines.push("HID-Fi is plugged in, but not on this network".into());
-            lines.push(
-                "Join the board to your WiFi in the dashboard: Settings, Home network".into(),
-            );
+            lines.push("HID-Fi is plugged in, but this computer cannot reach it".into());
+            lines.push("Is the board on this computer's WiFi? Dashboard: Settings, Home network".into());
+            if let Some(h) = net_hint() {
+                lines.push(h.into());
+                actions.push(("Open network settings\u{2026}".into(), Action::OpenNetworkSettings));
+            }
         }
         BoardState::Choose(boards) => {
             icon = Icon::Attention;
@@ -214,9 +231,11 @@ pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
         BoardState::NotPluggedIn { .. } => {
             "Plug the board's USB port (not the one marked COM) into this computer.".to_string()
         }
-        BoardState::NotOnNetwork => "Plugged in, but the board is not on this computer's WiFi yet: \
-             dashboard, Settings, Home network."
-            .to_string(),
+        BoardState::NotOnNetwork => format!(
+            "Plugged in, but not reachable. Is the board on this computer's WiFi? Dashboard, \
+             Settings, Home network.{}",
+            net_hint().map(|h| format!(" {h}.")).unwrap_or_default()
+        ),
         BoardState::Choose(_) => "More than one is plugged in: choose one below.".to_string(),
         BoardState::Found { url, .. } => format!(
             "Found on this computer's USB, and on your WiFi at {}. Nothing to do.",
@@ -322,6 +341,21 @@ fn short_url(u: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn not_reachable_names_this_os_own_cause_and_opens_its_settings() {
+        let m = model(&view(BoardState::NotOnNetwork, Status::Connecting));
+        let has = |s: &str| m.lines.iter().any(|l| l.contains(s));
+        assert!(has("WiFi"), "the board's own network first: {:?}", m.lines);
+        let button = m.actions.iter().any(|a| a.1 == Action::OpenNetworkSettings);
+        if cfg!(target_os = "macos") {
+            assert!(has("Local Network") && button);
+        } else if cfg!(windows) {
+            assert!(has("Private") && button);
+        } else {
+            assert!(!button, "no settings page to open on Linux");
+        }
+    }
 
     #[test]
     fn the_window_comes_forward_once_per_thing_to_do_not_every_tick() {

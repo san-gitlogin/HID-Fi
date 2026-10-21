@@ -409,3 +409,23 @@ Feature: Screen - seeing the computer's own picture
     Then I see the message "Paired with Den Laptop"
     And the Screen tab is on "Den Laptop"
 
+  Scenario: The setup steps say what each OS will ask, and what to choose
+    Given the board is plugged into a Mac computer
+    And the dashboard is open and signed in with "4826"
+    When I open the "Screen" tab
+    Then "#scrList" contains "Screen Recording"
+    And "#scrList" contains "Quit & Reopen"
+    When I choose "Windows" in the install steps
+    Then "#scrList" contains "administrator approval"
+    And "#scrList" contains "Private"
+    When I choose "Linux" in the install steps
+    Then "#scrList" contains "X11"
+
+  Scenario: A paired computer that is not running says where its app is, on its OS
+    Given the board is plugged into a Windows computer
+    And the dashboard is open and signed in with "4826"
+    And a computer "Den Laptop" is paired but not running
+    When I open the "Screen" tab
+    Then the screen says "Den Laptop is not reachable"
+    And the screen says "Start menu"
+

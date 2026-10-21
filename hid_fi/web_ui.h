@@ -5290,11 +5290,20 @@ function scrPc(){return SCR.pcs.find(p=>p.id===SCR.sel)||null;}
 // (a phone on the board's own WiFi has no internet for a guide on GitHub)
 const SCR_INSTALL={
   mac:{name:'macOS',how:'Download it, open the .dmg, drag HID-Fi Companion to Applications and open it from there.',
-    link:'https://github.com/san-gitlogin/HID-Fi/releases/latest',linkText:'Download for Mac'},
+    link:'https://github.com/san-gitlogin/HID-Fi/releases/latest',linkText:'Download for Mac',
+    allow:'macOS asks to let it find devices on your network: choose Allow. To show the screen, it asks for '+
+      'Screen Recording: switch HID-Fi Companion on in System Settings, then choose Quit & Reopen.',
+    where:'Open it from Applications. It lives in the menu bar, at the top of the screen.'},
   win:{name:'Windows',how:'In PowerShell (Start, type PowerShell), paste this and press Enter:',
-    cmd:'irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-windows.ps1 | iex'},
+    cmd:'irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-windows.ps1 | iex',
+    allow:'Windows asks once for administrator approval, to let your phone connect: choose Yes. Your WiFi must be '+
+      'set to Private (Settings, Network & internet).',
+    where:'Open it from the Start menu. Its icon sits by the clock, maybe under the ^ arrow.'},
   linux:{name:'Linux',how:'In a terminal, paste this and press Enter:',
-    cmd:'curl -fsSL https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-linux.sh | sh'}
+    cmd:'curl -fsSL https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-linux.sh | sh',
+    allow:'Log in with an X11 (Xorg) session; Wayland is not supported yet. GNOME shows its tray icon only with the '+
+      'AppIndicator extension; without it the app still works.',
+    where:'Open HID-Fi Companion from your applications menu.'}
 };
 function scrGuideHtml(){
   // The board knows which OS the computer runs: start on that one.
@@ -5309,7 +5318,8 @@ function scrGuideHtml(){
       '<p>'+esc(g.how)+'</p>'+
       (g.cmd?'<div class="scrcmd"><code>'+esc(g.cmd)+'</code><button class="btn sm" data-scrcopy="'+os+'">Copy</button></div>'
         :'<a class="btn sm" href="'+g.link+'" target="_blank" rel="noopener">'+ico('newwin','ic-sm')+g.linkText+'</a>')+'</li>'+
-    '<li><b>Open it.</b> It finds this board through the USB cable by itself, and shows up here, asking to pair.</li>'+
+    '<li><b>Open it.</b> It finds this board through the USB cable by itself, and shows up here, asking to pair.'+
+      '<p class="hint" style="margin-top:6px">'+esc(g.allow)+'</p></li>'+
     '<li><b>Tap Pair here</b>, then type the six-digit code the computer shows. Only once.</li></ol>'+
     '<p class="hint">Nothing here after a minute? Check that the board\u2019s USB port (not COM) is in that computer, '+
     'that the computer is on the same WiFi as the board, and that HID-Fi Companion is running: its icon is in the '+
@@ -5520,7 +5530,9 @@ function scrMsgHtml(){
   if(!SCR.sel)return ico('screen')+(WATCH.on?'<b>Choose a computer</b><button class="btn sm" id="watchPick2">Choose</button>':'<b>Choose a computer below</b>');
   switch(SCR.state){
     case 'live':return '';
-    case 'offline':return ico('monitor')+'<b>'+n+' is not reachable</b><span>Start HID-Fi Companion on it. The picture appears by itself once it is running.</span>';
+    // The board knows the computer's OS: say where the app is on that one.
+    case 'offline':return ico('monitor')+'<b>'+n+' is not reachable</b><span>Start HID-Fi Companion on it. '+
+      (SCR_INSTALL[OS]?esc(SCR_INSTALL[OS].where)+' ':'')+'The picture appears by itself once it is running.</span>';
     case 'ticket':case 'connecting':case 'idle':
       // Retrying after a failure: keep saying why, not just "connecting".
       if(!(SCR.tries&&SCR.why))return '<span>Connecting to '+n+'...</span>';
