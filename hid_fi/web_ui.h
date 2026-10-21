@@ -993,6 +993,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 #scrPadSlot #pad{height:var(--padh)}
 .scrpc .tag{margin-left:6px}
 .scrcode{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+a.btn{color:inherit;text-decoration:none}
 .scrcode input{flex:1 1 140px;min-width:0;min-height:44px;padding:8px 12px;border-radius:10px;
   background:rgba(0,0,0,.32);border:1px solid var(--line2);font-size:22px;letter-spacing:.35em;
   font-variant-numeric:tabular-nums;text-align:center}
@@ -1390,6 +1391,7 @@ main::after{height:var(--flpad,0px)}
           <div class="ch"><svg class="ic"><use href="#i-screen"/></svg><h2>Computers</h2></div>
           <div class="list" id="scrList"><p class="hint">Asking the board...</p></div>
           <p class="hint" id="scrHelp" style="margin-top:10px"></p>
+          <a class="btn sm" id="scrGuide" style="margin-top:12px" href="https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md" target="_blank" rel="noopener"><svg class="ic ic-sm"><use href="#i-newwin"/></svg>Install guide: macOS, Windows, Linux</a>
         </div>
       </div>
     </section>
@@ -5369,7 +5371,8 @@ function scrMsgHtml(){
   if(!SCR.pinSet)return ico('shield')+'<b>Set an access PIN to share screens</b><span>Settings, Access PIN.</span>';
   if(!SCR.pcs.length)return ico('screen')+'<b>See a computer\u2019s screen here</b>'+
     '<span>Install HID-Fi Companion on the computer this board is plugged into. It asks to pair '+
-    (WATCH.on?'on the dashboard\u2019s Screen tab.':'below.')+'</span>';
+    (WATCH.on?'on the dashboard\u2019s Screen tab.':'below.')+'</span>'+
+    '<a class="btn sm" id="scrGuide2" href="https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md" target="_blank" rel="noopener">'+ico('newwin','ic-sm')+'Install guide</a>';
   if(!SCR.sel)return ico('screen')+(WATCH.on?'<b>Choose a computer</b><button class="btn sm" id="watchPick2">Choose</button>':'<b>Choose a computer below</b>');
   switch(SCR.state){
     case 'live':return '';
@@ -5425,7 +5428,9 @@ function scrFit(){SCR.z={s:1,x:0,y:0};scrApplyZoom();}
   const pts=new Map();let pinch=null,pan=null,tap=null,lastTap=0;
   const local=e=>{const r=scrStage.getBoundingClientRect(),Z=pgZoom();return {x:(e.clientX-r.left)/Z,y:(e.clientY-r.top)/Z};};
   scrStage.addEventListener('pointerdown',e=>{
-    if(e.target.closest('button'))return;
+    // Buttons and links inside the picture (its tools, a message's link) keep
+    // their own taps; capturing the pointer here would swallow them.
+    if(e.target.closest('button,a'))return;
     try{scrStage.setPointerCapture(e.pointerId);}catch(x){}
     const p=local(e);pts.set(e.pointerId,p);
     if(pts.size===2){

@@ -55,7 +55,7 @@ class Board(BaseHTTPRequestHandler):
         self._send(404, {"status": "error", "message": "Not found"})
 board = ThreadingHTTPServer((IP, 0), Board); threading.Thread(target=board.serve_forever, daemon=True).start()
 
-app = subprocess.Popen([str(ROOT / "target/release/examples/system_app"), tempfile.mkdtemp(prefix="hidfi-dash-"),
+app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), tempfile.mkdtemp(prefix="hidfi-dash-"),
                         f"http://{IP}:{board.server_address[1]}", "B8:1F:3F:DA:1A:2C"],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 lines = queue.Queue()

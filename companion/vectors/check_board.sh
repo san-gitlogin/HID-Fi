@@ -18,7 +18,7 @@ mkdir -p "$work/o"
 if [ ! -d "$src" ]; then
   tar="$work/mbedtls-$ver.tar.bz2"
   curl -fsSL -o "$tar" "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-$ver/mbedtls-$ver.tar.bz2"
-  got="$( (command -v sha256sum >/dev/null && sha256sum "$tar" || shasum -a 256 "$tar") | cut -d' ' -f1)"
+  if command -v sha256sum >/dev/null; then got="$(sha256sum "$tar" | cut -d' ' -f1)"; else got="$(shasum -a 256 "$tar" | cut -d' ' -f1)"; fi
   if [ "$got" != "$sha" ]; then echo "mbedTLS archive checksum mismatch: $got" >&2; rm -f "$tar"; exit 2; fi
   tar -xjf "$tar" -C "$work"
 fi

@@ -80,7 +80,7 @@ pub fn prepare(
         .enable_h264(true)
         .enable_bwe(Some(str0m::bwe::Bitrate::mbps(3)))
         .build(Instant::now());
-    let socket = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
+    let socket = bind_media(local_ip)?;
     let addr = socket.local_addr()?;
     let cand = Candidate::host(addr, "udp").map_err(|e| RtcSetupError::Rtc(e.to_string()))?;
     rtc.add_local_candidate(cand);
@@ -93,6 +93,20 @@ pub fn prepare(
         socket,
         answer: answer.to_sdp_string(),
     })
+}
+
+/// Media ports, fixed so a firewall that allows ports (Linux's ufw and
+/// firewalld) can allow exactly these: UDP 47820-47859, next to the viewers'
+/// TCP 47800-47819. One per viewer; 40 leaves room for sessions still closing.
+pub const MEDIA_PORTS: std::ops::RangeInclusive<u16> = 47820..=47859;
+
+fn bind_media(ip: std::net::IpAddr) -> std::io::Result<UdpSocket> {
+    for port in MEDIA_PORTS {
+        if let Ok(s) = UdpSocket::bind(SocketAddr::new(ip, port)) {
+            return Ok(s);
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "no free media port in 47820-47859"))
 }
 
 /// What ended a session, for the log and the dashboard.
@@ -260,4 +274,19 @@ pub fn run(
         let _ = t.join();
     }
     end
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_ports_come_from_the_documented_range_and_do_not_collide() {
+        let ip: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        let a = bind_media(ip).unwrap();
+        let b = bind_media(ip).unwrap();
+        let (pa, pb) = (a.local_addr().unwrap().port(), b.local_addr().unwrap().port());
+        assert!(MEDIA_PORTS.contains(&pa) && MEDIA_PORTS.contains(&pb));
+        assert_ne!(pa, pb);
+    }
 }

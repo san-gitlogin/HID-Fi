@@ -39,7 +39,7 @@ def dash(**cmd):
     return json.loads(urllib.request.urlopen(r, timeout=5).read())
 
 store = tempfile.mkdtemp(prefix="hidfi-sys-")
-app = subprocess.Popen([str(ROOT / "target/release/examples/system_app"), store, BURL, MAC],
+app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), store, BURL, MAC],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 lines = queue.Queue()
 threading.Thread(target=lambda: [lines.put(json.loads(l)) for l in app.stdout], daemon=True).start()

@@ -31,6 +31,11 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   happens in the same tab: tap Pair, type the six digits the computer shows.
   The picture goes from the computer to the phone directly (WebRTC, encrypted)
   and stops whenever nobody can see it.
+- **Watch only** (`#watch`, or "Open on its own" on the Screen tab): the picture
+  alone for a TV, tablet or second monitor while another device controls; a
+  bar that fades, full screen, keys F, +, -, 0. Up to four screens watch one
+  computer; a fifth waits and joins by itself.
+- **Install guide** linked from the Screen tab: [docs/COMPANION.md](docs/COMPANION.md).
 - **Board side** (`hid_fi/companion.h`): pairing with a committed six-digit
   code, heartbeats and one-use viewer tickets (`POST /api/companion`,
   `companion_list`, `companion_pair`, `companion_unpair`, `screen_ticket`).

@@ -293,3 +293,11 @@ Feature: Screen - seeing the computer's own picture
   Scenario: Only watching with nothing paired yet
     Given nothing is paired and this screen opens "#watch"
     Then the screen says "It asks to pair on the dashboard’s Screen tab"
+
+  Scenario: The install guide is one tap away
+    Given the dashboard is open and signed in with "4826"
+    When I open the "Screen" tab
+    And I open the install guide from "#scrGuide"
+    Then the install guide opens on GitHub
+    When I open the install guide from "#scrGuide2"
+    Then the install guide opens on GitHub

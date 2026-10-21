@@ -9,7 +9,7 @@ more viewers (one encoder feeds them all).
 Run: cargo build --release -p hidfi-stream --example serve
      python3 companion/tests/multi_view.py
 """
-import json, pathlib, socket, subprocess, sys, threading, time
+import json, os, pathlib, socket, subprocess, sys, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from playwright.sync_api import sync_playwright
 
@@ -20,7 +20,7 @@ def check(name, cond, detail=""):
     global ok
     ok &= bool(cond); print(("ok  " if cond else "FAIL"), name, detail, flush=True)
 
-srv = subprocess.Popen([str(ROOT / "target/release/examples/serve"), "1920", "1080", "30"],
+srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "1920", "1080", "30"],
                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 info = json.loads(srv.stdout.readline())
 html = ("<!doctype html><meta charset=utf-8><video id=v autoplay muted playsinline></video><script>" +
@@ -35,7 +35,7 @@ class Page(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self, *a): pass
 web = ThreadingHTTPServer((IP, 0), Page); threading.Thread(target=web.serve_forever, daemon=True).start()
-cpu = lambda: float(subprocess.run(["ps", "-o", "%cpu=", "-p", str(srv.pid)], capture_output=True, text=True).stdout.strip() or 0)
+cpu = lambda: 0.0 if os.name == "nt" else float(subprocess.run(["ps", "-o", "%cpu=", "-p", str(srv.pid)], capture_output=True, text=True).stdout.strip() or 0)
 tickets = iter(info["tickets"])
 def ticket():
     return {"ip": IP, "port": info["port"], "fp": info["fp"], "tn": info["tn"], **next(tickets)}

@@ -456,3 +456,21 @@ def choose_in_list(ctx, name):
     ctx["ui"].page.locator(sel).wait_for(timeout=5000)
     ctx["ui"].page.locator(sel).tap()
     ctx["ui"].idle(300)
+
+
+@when(parsers.parse('I open the install guide from "#{el_id}"'))
+def open_guide(ctx, el_id):
+    ui = ctx["ui"]
+    # No network in tests: answer GitHub here.
+    ui.ctx.route("https://github.com/**", lambda r: r.fulfill(body="<p>guide</p>", content_type="text/html"))
+    with ui.page.expect_popup() as pop:
+        ui.tap_id(el_id)
+    w = pop.value
+    w.wait_for_load_state()
+    ctx["notes"]["guide"] = w.url
+    w.close()
+
+
+@then("the install guide opens on GitHub")
+def guide_opened(ctx):
+    assert ctx["notes"].get("guide") == "https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md", ctx["notes"].get("guide")

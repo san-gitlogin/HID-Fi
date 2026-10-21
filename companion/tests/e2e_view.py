@@ -22,7 +22,7 @@ def lan_ip():
         s.close()
 
 IP = lan_ip()
-srv = subprocess.Popen([str(ROOT / "target/release/examples/serve"), str(W), str(H), str(FPS)]
+srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), str(W), str(H), str(FPS)]
                        + (["still"] if os.environ.get("STILL") else []),
                        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 info = json.loads(srv.stdout.readline())
@@ -42,6 +42,8 @@ def check(name, cond, detail=""):
     ok &= bool(cond); print(("ok  " if cond else "FAIL"), name, detail)
 
 def cpu_of(pid):
+    if os.name == "nt":
+        return 0.0   # no ps on Windows; Task Manager shows it
     return float(subprocess.run(["ps", "-o", "%cpu=", "-p", str(pid)], capture_output=True, text=True).stdout.strip() or 0)
 
 try:

@@ -1,0 +1,116 @@
+# HID-Fi Companion on the three operating systems it ships for, on real
+# machines: every Rust test, clippy, the real-Chrome end-to-end test of that
+# OS's own H.264 encoder over WebRTC, real screen capture where the runner has a
+# screen, and the downloadable app as an artifact.
+#
+# Manual only (Actions > companion > Run workflow), like every workflow here:
+# the owner chose that no push ever starts one.
+name: companion
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: companion
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Linux packages (X server, an app to draw on it, OpenH264 from Cisco)
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-apps
+          companion/package/fetch-openh264.sh "$HOME/.local/share/hidfi-companion"
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --workspace
+      - name: Build the app and the test streamers
+        run: cargo build --release -p hidfi-companion -p hidfi-stream --examples
+      - name: Python test tools
+        run: |
+          python -m pip install playwright cryptography
+          python -m playwright install chromium
+      - name: Pairing vectors (Python cryptography)
+        run: python vectors/check.py
+      - name: Board crypto against the vectors (mbedTLS 3.6.4)
+        if: runner.os != 'Windows'
+        run: vectors/check_board.sh
+      - name: H.264 + WebRTC into real Chrome
+        run: python tests/e2e_view.py
+      - name: Four viewers at once
+        run: python tests/multi_view.py
+      - name: Whole system - service, board model, Chrome
+        run: python tests/system.py
+      - name: Real X11 screen capture + encode (virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          DISPLAY=:99 xeyes -geometry 400x300+100+100 &
+          DISPLAY=:99 xclock -update 1 -geometry 300x300+700+200 &
+          sleep 1
+          DISPLAY=:99 cargo run --release -p hidfi-stream --example check_capture
+      - name: Real screen capture + encode (Windows desktop)
+        if: runner.os == 'Windows'
+        continue-on-error: true   # hosted runners may have no duplicable display; reported, not hidden
+        run: cargo run --release -p hidfi-stream --example check_capture
+      - name: Installer, for real (Linux) - install, check, uninstall, check
+        if: runner.os == 'Linux'
+        run: |
+          sh package/install-linux.sh --from target/release/hidfi-companion
+          test -x "$HOME/.local/bin/hidfi-companion"
+          test -f "$HOME/.local/share/applications/hidfi-companion.desktop"
+          ls "$HOME/.local/share/hidfi-companion/"libopenh264-2.6.0-linux64.8.so
+          sh package/install-linux.sh --uninstall
+          test ! -e "$HOME/.local/bin/hidfi-companion"
+          test ! -e "$HOME/.local/share/hidfi-companion"
+      - name: PowerShell scripts parse (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($f in @('package/install-windows.ps1', '../flash_esp.ps1')) {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
+            if ($errs) { $errs | Format-List; throw "$f does not parse" }
+          }
+      - name: Name the build as the installers expect it
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p dist
+          case "${{ runner.os }}" in
+            Linux)   cp target/release/hidfi-companion dist/hidfi-companion-linux-x86_64 ;;
+            Windows) cp target/release/hidfi-companion.exe dist/hidfi-companion-windows-x86_64.exe ;;
+            macOS)   package/macos.sh && cp target/package/*.dmg dist/ ;;
+          esac
+          (cd dist && (sha256sum * 2>/dev/null || shasum -a 256 *) > SHA256SUMS-${{ runner.os }})
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hidfi-companion-${{ matrix.os }}
+          path: |
+            companion/dist/
+            companion/check_capture.h264
+          if-no-files-found: ignore

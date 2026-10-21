@@ -50,6 +50,7 @@ tour of the dashboard.
 - [Watch the build](#watch-the-build)
 - [What it does](#what-it-does)
 - [The dashboard](#the-dashboard)
+- [See the computer's screen](#see-the-computers-screen)
 - [What you need](#what-you-need)
 - [The two USB ports are not interchangeable](#the-two-usb-ports-are-not-interchangeable)
 - [Quick start](#quick-start)
@@ -132,6 +133,18 @@ every layout can reach everything the smaller one could, and a test sweeps 67
 viewports to prove it.
 
 ---
+
+## See the computer's screen
+
+HID-Fi itself needs nothing on the computer. If you also want to **see** what you
+are doing, the optional **HID-Fi Companion** app (macOS, Windows, Linux) shows
+that computer's screen live on the dashboard's **Screen** tab - above the
+trackpad on a phone, beside it on a tablet, floating over any tab, or alone on
+a second screen such as a TV (up to four at once). The picture goes from the
+computer to your phone directly and encrypted; pairing takes a six-digit code.
+
+Install and use it: **[docs/COMPANION.md](docs/COMPANION.md)**. *(New, being
+tested on every OS before its first release.)*
 
 ## What you need
 
@@ -496,6 +509,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
 | [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
+| [docs/COMPANION.md](docs/COMPANION.md) | HID-Fi Companion: install it on macOS, Windows or Linux, pair, watch, fix problems |
 | [docs/AGENT_CONTROL.md](docs/AGENT_CONTROL.md) | Driving a computer from an AI agent: actions, steps, MCP |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |
 | [SECURITY.md](SECURITY.md) | Threat model, and what is deliberately not protected |
