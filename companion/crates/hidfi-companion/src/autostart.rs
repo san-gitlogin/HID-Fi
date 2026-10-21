@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const LABEL: &str = "in.hidfi.companion";
 
 fn exe() -> std::io::Result<PathBuf> {
@@ -14,12 +15,14 @@ fn exe() -> std::io::Result<PathBuf> {
 }
 
 /// XML-escape for the plist: a path can contain & or <.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn plist(exe: &Path) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>

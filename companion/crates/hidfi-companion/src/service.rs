@@ -96,20 +96,7 @@ pub fn capture_allowed() -> bool {
 }
 
 pub fn real_source(display: Option<u32>) -> Result<Box<dyn Source>, String> {
-    #[cfg(target_os = "macos")]
-    {
-        if !hidfi_stream::sck::allowed() {
-            // Ask once; macOS shows its prompt the first time only.
-            hidfi_stream::sck::ask();
-            return Err("Screen Recording is not allowed for HID-Fi Companion".into());
-        }
-        hidfi_stream::sck::ScreenSource::start(display, 30).map(|s| Box::new(s) as Box<dyn Source>)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = display;
-        Err("screen capture is not available on this OS yet".into())
-    }
+    hidfi_stream::screen(display, 30)
 }
 
 pub fn start(store: Store, env: Env) -> Handle {

@@ -44,6 +44,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "apple-cryptokit-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "508eed99695e0ddc94adb8dda623477e76bb8b5dcc9f59a01b43ce646f715343"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1363,6 +1373,7 @@ dependencies = [
  "str0m",
  "thiserror 2.0.21",
  "tungstenite",
+ "windows",
 ]
 
 [[package]]
@@ -2743,6 +2754,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "security-framework"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
+dependencies = [
+ "bitflags",
+ "core-foundation",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
+
+[[package]]
+name = "security-framework-sys"
+version = "2.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2927,11 +2961,34 @@ dependencies = [
  "is",
  "sctp-proto",
  "serde",
+ "str0m-apple-crypto",
  "str0m-proto",
  "str0m-rust-crypto",
+ "str0m-wincrypto",
  "subtle",
  "time",
  "tracing",
+]
+
+[[package]]
+name = "str0m-apple-crypto"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f0fe88675a99679ce154c87ee356eb133af5ade7657fb5fe2db97689b4c41eb"
+dependencies = [
+ "apple-cryptokit-rs",
+ "cc",
+ "core-foundation",
+ "der",
+ "dimpl",
+ "pkcs8",
+ "sec1",
+ "security-framework",
+ "spki",
+ "str0m-proto",
+ "subtle",
+ "time",
+ "x509-cert",
 ]
 
 [[package]]
@@ -2964,6 +3021,17 @@ dependencies = [
  "sha2",
  "str0m-proto",
  "time",
+]
+
+[[package]]
+name = "str0m-wincrypto"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39d023c5572bf4dc44e1e33a684587ba6a207b4ef2dac600c287d30b547abb19"
+dependencies = [
+ "dimpl",
+ "str0m-proto",
+ "windows",
 ]
 
 [[package]]

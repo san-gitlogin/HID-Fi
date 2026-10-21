@@ -105,7 +105,9 @@ fn build(m: &menu::Model, start_at_login: bool) -> Built {
 fn main() {
     // HIDFI_HOME and HIDFI_NO_AUTOSTART exist for development and tests: a
     // test run must not install a login item or touch the real app folder.
-    let dir = std::env::var_os("HIDFI_HOME").map(std::path::PathBuf::from).unwrap_or_else(Store::default_dir);
+    let dir = std::env::var_os("HIDFI_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(Store::default_dir);
     let no_autostart = std::env::var_os("HIDFI_NO_AUTOSTART").is_some();
     let store = match Store::open(dir) {
         Ok(s) => s,

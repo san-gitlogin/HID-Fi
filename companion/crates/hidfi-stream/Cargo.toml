@@ -9,13 +9,29 @@ rust-version.workspace = true
 [dependencies]
 hidfi-core = { path = "../hidfi-core" }
 hidfi-agent = { path = "../hidfi-agent" }
-str0m = { version = "0.24.1", default-features = false, features = ["rust-crypto"] }
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 serde_json = "1.0.154"
 log = "0.4.34"
 hex = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
+
+# WebRTC's DTLS on each OS's own crypto: Apple's on macOS, CNG on Windows, and
+# RustCrypto elsewhere. No C library to build on the platforms that have their own.
+[target.'cfg(target_os = "macos")'.dependencies.str0m]
+version = "0.24.1"
+default-features = false
+features = ["apple-crypto"]
+
+[target.'cfg(windows)'.dependencies.str0m]
+version = "0.24.1"
+default-features = false
+features = ["wincrypto"]
+
+[target.'cfg(not(any(target_os = "macos", windows)))'.dependencies.str0m]
+version = "0.24.1"
+default-features = false
+features = ["rust-crypto"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
@@ -31,3 +47,18 @@ objc2-screen-capture-kit = { version = "0.3", features = ["SCStream", "SCShareab
 [dev-dependencies]
 hex = "0.4.3"
 serde_json = "1.0.154"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_UI_Shell_PropertiesSystem",
+]
