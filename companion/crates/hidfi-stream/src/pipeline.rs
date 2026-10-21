@@ -91,6 +91,8 @@ struct Shared {
     viewers: Vec<Viewer>,
     next_id: u64,
     stop: bool,
+    /// Why the main display could not be captured last time, until it can.
+    last_error: Option<String>,
 }
 
 pub struct Pipeline {
@@ -242,6 +244,11 @@ impl Pipeline {
             .retain(|v| v.id != id);
     }
 
+    /// Why capture last failed (viewers were let go for it), if it has since.
+    pub fn last_error(&self) -> Option<String> {
+        self.shared.0.lock().unwrap_or_else(|e| e.into_inner()).last_error.clone()
+    }
+
     pub fn viewers(&self) -> usize {
         self.shared
             .0
@@ -371,6 +378,9 @@ fn run<S, E>(
                 if let std::collections::hash_map::Entry::Vacant(e) = captures.entry(d) {
                     match make_source(if d == MAIN { None } else { Some(d) }) {
                         Ok(src) => {
+                            if d == MAIN {
+                                shared.0.lock().unwrap_or_else(|e| e.into_inner()).last_error = None;
+                            }
                             e.insert(Capture {
                                 src,
                                 half_px: Vec::new(),
@@ -572,6 +582,7 @@ fn move_off(shared: &Arc<(Mutex<Shared>, Condvar)>, d: u32, why: &str) {
     let mut s = shared.0.lock().unwrap_or_else(|e| e.into_inner());
     if d == MAIN {
         log::error!("stopping: {why}");
+        s.last_error = Some(why.to_string());
         s.viewers.retain(|v| v.s.display.load(Ordering::Relaxed) != MAIN);
         return;
     }

@@ -5471,7 +5471,7 @@ function scrOn(s){
     // A wrong certificate is someone in the middle: retrying would only repeat
     // it. Busy means four screens already watch: wait for one to close, slowly.
     // Everything else is the network.
-    if(why==='busy')SCR.tries=Math.max(SCR.tries,3);
+    if(why==='busy'||why==='permission'||why==='capture')SCR.tries=Math.max(SCR.tries,3);
     if(why!=='stopped'&&why!=='fingerprint')scrRetry();
   }
   scrPaint();
@@ -5540,6 +5540,13 @@ function scrMsgHtml(){
   }
   const w=SCR.why;
   if(w==='busy')return ico('eye')+'<b>'+n+' is already on four screens</b><span>This one joins by itself when one of them closes.</span>';
+  // The computer refused to record its own screen (macOS asks per app, and
+  // per version of an app built by hand: a switch can look on and not be).
+  if(w==='permission')return ico('shield')+'<b>'+n+' is not allowed to record its screen yet</b><span>On it: System Settings, '+
+    'Privacy &amp; Security, Screen &amp; System Audio Recording: switch on HID-Fi Companion. If it already looks on, switch '+
+    'it off and on again. Then choose Quit &amp; Reopen. The picture appears here by itself.</span>';
+  if(w==='capture')return ico('monitor')+'<b>'+n+' could not capture its screen</b><span>HID-Fi Companion on it could not '+
+    'start. Trying again...</span>';
   if(w==='fingerprint')return ico('shield')+'<b>Stopped for your safety</b><span>'+n+' answered with a certificate this board did not vouch for. Someone on the network may be in the middle. Remove it below and pair it again.</span>';
   if(w==='closed')return ico('cpu')+'<b>HID-Fi is not plugged into '+n+'</b><span>Plug the board\u2019s USB port into it.</span>';
   if(w==='unreachable'||w==='network')return onBoardAp()

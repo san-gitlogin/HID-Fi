@@ -116,7 +116,7 @@ someone in between. Three wrong codes end the attempt; start again from the app.
 | "HID-Fi is not plugged into …" | The board's **USB** port (not COM) goes into that computer |
 | "Stopped for your safety" | The computer answered with a certificate the board did not vouch for. Remove it on the Screen tab and pair again |
 | "Update the board's firmware to use screen sharing" (in the app) | Flash the latest firmware ([FLASHING.md](FLASHING.md)) |
-| macOS: black picture | System Settings, Privacy & Security, Screen Recording: switch HID-Fi Companion on |
+| macOS: black picture, or "… is not allowed to record its screen yet" | System Settings, Privacy & Security, Screen & System Audio Recording: switch HID-Fi Companion on. If it already looks on, switch it off and on again (macOS keeps the switch of an earlier version), then Quit & Reopen |
 | Linux: "this is a Wayland desktop" | Log in with an Xorg session |
 | Linux: no tray icon on GNOME | Install the AppIndicator extension; the code still comes as a notification |
 

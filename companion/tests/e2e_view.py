@@ -88,6 +88,19 @@ try:
         check("a forged ticket is refused", any(s.startswith("refused:ticket") for s in r3["states"]), str(r3["states"]))
         r4 = pg.evaluate(run, [ticket(2, fp="ab" * 32), 2])
         check("a fingerprint the board did not vouch for is refused", any(s == "refused:fingerprint" for s in r4["states"]) and r4["frames"] == 0, str(r4["states"]))
+        # A Mac where Screen Recording is not allowed: the viewer is told why
+        # (it used to stay connected, receiving nothing, at 0 fps).
+        bad = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "640", "360", "30"],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                               env=dict(os.environ, HIDFI_FAIL_CAPTURE="Screen Recording is not allowed for HID-Fi Companion"))
+        try:
+            binfo = json.loads(bad.stdout.readline())
+            bt = {"ip": IP, "port": binfo["port"], "fp": binfo["fp"], "tn": binfo["tn"], **binfo["tickets"][0]}
+            r5 = pg.evaluate(run, [bt, 3])
+            check("a computer not allowed to record says so, and the session ends",
+                  "ended:permission" in r5["states"] and "live" not in r5["states"], str(r5["states"]) + f", frames {r5['frames']}")
+        finally:
+            bad.terminate()
         time.sleep(1.5)
         after = cpu_of(srv.pid)
         print(f"     cpu: idle before={idle_cpu:.1f}% after viewers left={after:.1f}%")

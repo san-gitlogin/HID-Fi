@@ -409,6 +409,7 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let fwd_tx = tx.clone();
     let fwd_stop = stop.clone();
     let fwd_ctl = control.clone();
+    let fwd_ended = ended.clone();
     let forwarder = std::thread::Builder::new()
         .name("rtc-fwd".into())
         .spawn(move || {
@@ -422,7 +423,13 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
                         }
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-                    Err(_) => break,
+                    Err(_) => {
+                        // The pipeline let this viewer go (capture failed): end
+                        // the session and say so, not stream nothing at 0 fps.
+                        fwd_ended.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(End::PipelineGone);
+                        fwd_stop.store(true, Ordering::Relaxed);
+                        break;
+                    }
                 }
             }
         });
@@ -433,7 +440,8 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
             let end = rtc::run(prepared, rx, tx, ctl2, s2.clone(), |n| {
                 f2.store(n, Ordering::Relaxed)
             });
-            *e2.lock().unwrap_or_else(|e| e.into_inner()) = Some(end);
+            // The first reason stands (the forwarder may have set why already).
+            e2.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(end);
             s2.store(true, Ordering::Relaxed);
         });
 
@@ -515,17 +523,23 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     }
     // "closed": the board was unplugged from this computer - the viewer can say
     // exactly that at once, instead of "reconnecting" and finding out later.
+    let end = ended
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+        .unwrap_or(End::Stopped);
     let reason = if !c.open.load(Ordering::Relaxed) {
         "closed".to_string()
+    } else if end == End::PipelineGone {
+        // Capture failed: "permission" lets the dashboard say exactly what to
+        // switch on, instead of reconnecting forever.
+        match c.pipeline.last_error() {
+            Some(e) if e.contains("Screen Recording") => "permission".to_string(),
+            Some(_) => "capture".to_string(),
+            None => format!("{end:?}"),
+        }
     } else {
-        format!(
-            "{:?}",
-            ended
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take()
-                .unwrap_or(End::Stopped)
-        )
+        format!("{end:?}")
     };
     let _ = send(&mut ws, serde_json::json!({"t":"end","reason":reason}));
     let _ = ws.close(None);

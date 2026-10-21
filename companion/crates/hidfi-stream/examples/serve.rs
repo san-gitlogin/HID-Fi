@@ -52,6 +52,11 @@ fn main() {
         fps,
         3_000_000,
         move |d: Option<u32>| -> Result<Box<dyn Source>, String> {
+            // HIDFI_FAIL_CAPTURE="...": capture fails with that message, as on
+            // a Mac where Screen Recording is not allowed.
+            if let Ok(why) = std::env::var("HIDFI_FAIL_CAPTURE") {
+                return Err(why);
+            }
             if real {
                 hidfi_stream::screen(d, fps)
             } else if still {

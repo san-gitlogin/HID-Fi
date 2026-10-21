@@ -13,6 +13,7 @@ app's protocol (companion/crates/hidfi-stream/src/server.rs):
   "live"          accept: ready, answer, stats
   "refuse:<why>"  answer the hello with {"t":"error","reason":why}
   "silent"        accept the socket, say nothing (the viewer times out)
+  "end:<why>"     accept, then end the session at once with that reason
 
 The certificate is the page's own, so the board model is told its real
 fingerprint and the dashboard's man-in-the-middle check runs for real.
@@ -94,6 +95,10 @@ class FakePc:
                 if self.behaviour.startswith("refuse:"):
                     ws.send(json.dumps({"t": "error", "reason": self.behaviour.split(":", 1)[1]}))
                     ws.close()
+                elif self.behaviour.startswith("end:"):
+                    # Accepts, then cannot capture (e.g. macOS Screen Recording not allowed).
+                    ws.send(json.dumps({"t": "ready", "displays": self.displays, "display": self.displays[0]["id"]}))
+                    ws.send(json.dumps({"t": "end", "reason": self.behaviour.split(":", 1)[1]}))
                 elif self.behaviour == "live":
                     self.showing[id(ws)] = self.displays[0]["id"]
                     ws.send(json.dumps({"t": "ready", "displays": self.displays, "display": self.displays[0]["id"]}))

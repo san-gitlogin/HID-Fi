@@ -165,6 +165,17 @@ def display_button(ctx):
     _wait(ctx["ui"], lambda: ctx["ui"].page.locator("#scrDisp").is_visible(), "no display button")
 
 
+@given(parsers.parse('a computer "{name}" is paired, running, and not allowed to record its screen'))
+def paired_no_permission(ctx, browser, name):
+    app = _new_app(ctx, name)
+    pc = FakePc(browser, app, "end:permission")
+    _pcs(ctx)[name] = pc
+    _pair(ctx, app)
+    with ctx["sim"].lock:
+        app.beat()
+    pc.serve(ctx["ui"].page)
+
+
 @given(parsers.parse('a computer "{name}" is paired but not running'))
 def paired_not_running(ctx, name):
     _pair(ctx, _new_app(ctx, name))

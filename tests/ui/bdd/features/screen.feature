@@ -429,3 +429,12 @@ Feature: Screen - seeing the computer's own picture
     Then the screen says "Den Laptop is not reachable"
     And the screen says "Start menu"
 
+  # Seen live: the Mac's Screen Recording switch looked on (left from an older
+  # build) while macOS refused this one; viewers sat at 0 fps with no word why.
+  Scenario: A computer not allowed to record its screen says what to switch on
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired, running, and not allowed to record its screen
+    When I open the "Screen" tab
+    Then the screen says "Studio PC is not allowed to record its screen yet"
+    And the screen says "switch it off and on again"
+
