@@ -96,7 +96,8 @@ window.render=m=>{
   $('digits').textContent=m.code||'';
   $('steps').innerHTML=m.steps.map((s,i)=>'<li class="'+s[1]+'"><span class="n">'+
     (s[1]==='done'?'<svg class="ic" style="width:14px;height:14px"><use href="#i-check"/></svg>':(i+1))+'</span>'+
-    '<div class="t">'+esc(s[0])+(s[2]?'<div class="d">'+esc(s[2])+'</div>':'')+'</div></li>').join('');
+    // What happened (done) and what to do (now); a later step is only its title.
+    '<div class="t">'+esc(s[0])+(s[2]&&s[1]?'<div class="d">'+esc(s[2])+'</div>':'')+'</div></li>').join('');
   $('btns').innerHTML=m.actions.map((a,i)=>'<button data-i="'+i+'" class="'+(i===0?'primary':'')+'">'+esc(a)+'</button>').join('')+
     '<button data-close="1">Close</button>';
 };

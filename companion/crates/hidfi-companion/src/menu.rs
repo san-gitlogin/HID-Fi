@@ -147,6 +147,9 @@ pub fn model(v: &View) -> Model {
                             1 => "This screen is being shown on 1 dashboard".to_string(),
                             n => format!("This screen is being shown on {n} dashboards"),
                         });
+                    } else if !v.capture_allowed {
+                        // Not "ready" until the screen can be recorded.
+                        lines.push("One more step: allow Screen Recording".into());
                     } else {
                         lines.push("Ready: open the Screen tab on the dashboard".into());
                     }

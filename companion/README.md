@@ -51,6 +51,9 @@ adding a login item - for development and tests.
 | `tests/e2e_view.py` | hardware H.264 → WebRTC → real Chrome; refused tickets and certificates; CPU |
 | `tests/system.py` | the real service + board model + Chrome: pair, live, unplug, replug |
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
+| `tests/panel_review.py` | the app's window in every state: fits, nothing cut off, each step says what to do (`cargo run --example panel_states` first) |
+| `tests/board_pages.py` | the REAL board: 8 dashboard pages at once, the 9th told the board is full (`HIDFI_PIN`) |
+| `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors |
 | `tests/hardware.py` | the REAL board and service: pair by code, live picture, four viewers, one PIN (`HIDFI_PIN`) |
 
 The last four need Google Chrome and their binaries built first:
