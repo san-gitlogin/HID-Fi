@@ -640,6 +640,7 @@ the same text back - a round-trip check for a transport.
   "ap_mac": "DC:B4:D9:09:F7:C9",
   "ws_clients": 1,
   "ws_devices": 1,
+  "ws_max": 8,
   "pointer_mode": "relative",
   "gamepad": false,
   "auth_set": true,
@@ -658,7 +659,9 @@ the same text back - a round-trip check for a transport.
 
 `ws_clients` counts open dashboard pages; `ws_devices` counts the devices they
 are on (distinct addresses). A phone with the dashboard and its watch-only
-window open is 2 pages, 1 device; the header shows devices.
+window open is 2 pages, 1 device; the header shows devices. `ws_max` is how
+many pages the board serves at once (8); one more cannot connect, and its
+dashboard says the board is full rather than "offline".
 
 `ap_pass_generated` is true while the access point still uses the password the
 board made for itself (v3.10); `ap_pass_default` is true if it is the old shared

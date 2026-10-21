@@ -147,6 +147,13 @@ int32_t absX = 16384, absY = 16384;      // virtual cursor for absolute mode, 0.
 
 // ==================== WiFi + WEB SERVER ====================
 #define WS_MAX_CLIENTS 8
+// The WebSockets library has its own limit (5 unless told otherwise), and a
+// #define here never reaches it: it is compiled on its own. hid_fi/build_opt.h
+// gives every file the same number (the ESP32 core passes it to libraries too).
+// Without it the board served 5 dashboard pages, and a 6th - three phones, a
+// watch window each - showed "offline" with a PIN box that could never work.
+static_assert(WEBSOCKETS_SERVER_CLIENT_MAX == WS_MAX_CLIENTS,
+              "hid_fi/build_opt.h must set -DWEBSOCKETS_SERVER_CLIENT_MAX to WS_MAX_CLIENTS");
 WebServer        webServer(80);
 WebSocketsServer webSocket(81);
 String  mdnsName  = "";
@@ -3097,6 +3104,7 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["ap_mac"] = WiFi.softAPmacAddress();
     doc["ws_clients"] = webSocket.connectedClients();
     doc["ws_devices"] = wsDevices();
+    doc["ws_max"]     = WS_MAX_CLIENTS;
     doc["mdns"] = mdnsName;
     doc["pc_state"] = lockStateStr();
     // What the board believes it is plugged into, and whether that was probed or

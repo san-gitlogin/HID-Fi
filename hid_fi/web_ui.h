@@ -1910,7 +1910,10 @@ function connect(){
   ws=sock;
   sock.binaryType='arraybuffer';
   const live=()=>ws===sock;
+  let opened=false;
   sock.onopen=()=>{if(!live())return;
+    opened=true;
+    if(fullTold){fullTold=false;closeSheet();toast('Connected','ok');}
     lostAt=0;lostTold=false;
     wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
@@ -1918,6 +1921,7 @@ function connect(){
     refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
     scrAgain(true);if(curView==='screen'||SCR.float||WATCH.on)scrList();};
   sock.onclose=()=>{if(!live())return;
+    if(!opened)checkFull();             // turned away before it opened: full, or unreachable
     if(!lostAt)lostAt=Date.now();
     // Replies this socket still owed will never come: say so to whoever asked
     // (with null), or they wait forever - seen live: the Screen tab stuck on
@@ -1997,6 +2001,23 @@ function lostHelp(){
     '</div>',null);
 }
 setInterval(lostHelp,2000);
+// The board answers over HTTP but turns this page's socket away: every page it
+// can serve at once is taken (ws_max). Say that - not "offline", and not a PIN
+// box that cannot work without the socket.
+let fullTold=false;
+function checkFull(){
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    if(wsUp||fullTold||!d.ws_max||(d.ws_clients|0)<d.ws_max)return;
+    fullTold=true;lostTold=true;
+    boardFull(d.ws_max);
+  }).catch(()=>{});
+}
+function boardFull(max){
+    sheet('This board is full',
+      '<p class="hint">It is already serving '+max+' dashboard pages, the most it can at once. Close a dashboard '+
+      'tab or a watch window on another device, or one left open somewhere. This page connects by itself the '+
+      'moment one closes.</p>',null);
+}
 function link(up){
   $('ldot').className='dot '+(up?'ok':'bad');
   $('ltext').textContent=up?'live':'offline';
@@ -5362,7 +5383,9 @@ function scrConfirm(id){
   const code=(i&&i.value||'').replace(/\D/g,'');
   if(code.length!==6)return scrNote(id,'The code has six digits.',true);
   send({cmd:'companion_pair',id:id,code:code},r=>{
-    if(r&&r.status==='ok'){delete SCR.notes[id];toast('Paired with '+(r.name||'the computer'),'ok');buzz(14);}
+    // The computer just paired is the one wanted on screen, whatever was before.
+    if(r&&r.status==='ok'){delete SCR.notes[id];toast('Paired with '+(r.name||'the computer'),'ok');buzz(14);
+      if(SCR.sel!==id)scrStop('idle');SCR.sel=id;try{localStorage.setItem('scrpc',id);}catch(e){}}
     else if(r&&r.reply==='wrong_code'){if(i)i.value='';scrNote(id,'That is not the code on the computer. '+r.tries_left+' '+(r.tries_left===1?'try':'tries')+' left.',true);}
     else if(r&&r.reply==='not_ready')scrNote(id,'The computer has not shown its code yet. Give it a second.',true);
     else toast((r&&r.message)||'Pairing failed','bad');

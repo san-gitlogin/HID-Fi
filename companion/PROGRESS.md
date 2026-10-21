@@ -256,3 +256,15 @@ permission prompts nobody warned about; Screen tab with no app = just a link
   multiple displays (choose per viewer, hot-unplug falls back); Screen tab
   empty state = install/open/pair steps that work offline; first-frame 14 s
   seen once (not reproduced: 0.6 s).
+- DONE 27c088a: window focus stealing (the "freeze"); steps explain themselves.
+- DONE f384487 + this commit: several displays (per viewer, unplug falls back,
+  Windows multi-GPU, Linux RandR crop); phone-slept-then-PIN stuck ticket
+  (2 scenarios); devices not pages; float badge in title; offline setup steps;
+  the newly paired computer is selected; board served only 5 pages (library
+  limit) -> 8 via build_opt.h + "board is full" message; runner names test
+  files that fail to load. Real board: hardware.py 11/11 with the owner's Mac
+  paired, board_pages.py 5/5, sim contract 56/56.
+- Owner's idea, parked by them ("leave it"): watching PCs without a board.
+  As built: only a computer with this board on its USB can pair or show its
+  screen (unplugged, its picture ends: "HID-Fi is not plugged into ..."), so
+  whatever the Screen tab shows is the computer the board controls.

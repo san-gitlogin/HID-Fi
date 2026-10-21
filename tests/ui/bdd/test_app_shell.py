@@ -1,5 +1,5 @@
 import pytest
-from pytest_bdd import parsers, scenarios, then, when
+from pytest_bdd import parsers, scenarios, then, when, given
 
 from support.ui import Dashboard
 
@@ -120,6 +120,31 @@ def laptop_opens(ctx, browser):
     other.page.goto(ctx["sim"].URL)
     other.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)
     ctx["laptop"] = other
+
+
+@given(parsers.parse("the board can serve {n:d} pages at once"))
+def ws_max(ctx, n):
+    ctx["sim"].ws_max = n
+
+
+@given("a laptop on the home network has the dashboard open twice")
+def laptop_twice(ctx, browser):
+    from support.board_sim import LAN_IP
+    pages = []
+    for _ in range(2):
+        other = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], ip=LAN_IP)
+        other.page.goto(ctx["sim"].URL)
+        other.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)
+        pages.append(other)
+    ctx["laptop"], ctx["laptop2"] = pages
+
+
+@when("the dashboard is opened on this phone")
+def open_on_phone(ctx, browser):
+    # Not .open(): that waits for a live link, which a full board never gives.
+    ui = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"])
+    ui.page.goto(ctx["sim"].URL)
+    ctx["ui"] = ui
 
 
 @when("the laptop opens a second page")

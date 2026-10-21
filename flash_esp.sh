@@ -175,9 +175,18 @@ fi
 # ---- compile -------------------------------------------------------------
 if [ "$COMPILE" -eq 1 ]; then
   step "Compiling"
-  if ! arduino-cli compile --fqbn "$FQBN" --output-dir "$BUILD" "$SKETCH"; then
+  # build_opt.h holds compiler flags every file gets, libraries included. A
+  # cached library built with other flags would disagree with the sketch about
+  # its own objects' sizes (memory corruption), so a change rebuilds everything.
+  OPT_SUM="$( (shasum -a 256 "$SKETCH/build_opt.h" 2>/dev/null || sha256sum "$SKETCH/build_opt.h") | cut -d' ' -f1)"
+  mkdir -p "$BUILD"
+  CLEAN=""
+  [ "$(cat "$BUILD/.build_opt.sha256" 2>/dev/null || true)" = "$OPT_SUM" ] || CLEAN="--clean"
+  # shellcheck disable=SC2086  # $CLEAN is one flag or nothing
+  if ! arduino-cli compile $CLEAN --fqbn "$FQBN" --output-dir "$BUILD" "$SKETCH"; then
     bad "Compile failed."; exit 2
   fi
+  printf '%s\n' "$OPT_SUM" > "$BUILD/.build_opt.sha256"
 fi
 
 APP="$BUILD/hid_fi.ino.bin"

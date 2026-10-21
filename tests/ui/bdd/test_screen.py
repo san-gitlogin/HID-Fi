@@ -148,6 +148,13 @@ def asked_display(ctx, name, n):
     _wait(ctx["ui"], lambda: n in _pcs(ctx)[name].asked, f"asked for {_pcs(ctx)[name].asked}")
 
 
+@then(parsers.parse('the Screen tab is on "{name}"'))
+def screen_on(ctx, name):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.evaluate("(scrPc()||{}).name") == name,
+          f"showing {ui.page.evaluate('(scrPc()||{}).name')!r}")
+
+
 @then("there is no display button")
 def no_display_button(ctx):
     assert not ctx["ui"].page.locator("#scrDisp").is_visible()

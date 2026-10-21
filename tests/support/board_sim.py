@@ -129,6 +129,7 @@ class BoardSim:
         self.phone_on_lan = False
         self.refusing = False              # new sockets are turned away
         self.swallow = set()               # commands to receive once and never answer (a lost reply)
+        self.ws_max = 8                    # WS_MAX_CLIENTS: dashboard pages at once
         self.refused = 0                   # ...and how many have been
         self.fail_next = {}                # cmd -> error message, used once
         self.actions_done = []             # (action, keys) the agent commands pressed, in order
@@ -216,6 +217,7 @@ class BoardSim:
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
             "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": sum(1 for k in self.sockets if k["open"]),
             "ws_devices": len({k.get("ip") or AP_IP for k in self.sockets if k["open"]}),
+            "ws_max": self.ws_max,
             "mdns": "esp-hid-da1a2c", "pc_state": self.pc_state, "host_os": self.host_os(),
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
             "detect_phase": "settled", "unicode_mac": self.unicode["mac"], "unicode_linux": self.unicode["linux"],
@@ -306,7 +308,10 @@ class BoardSim:
         return route.fulfill(status=404, json={"status": "error", "message": "Not found. Dashboard at / or API at /api/command"})
 
     def _ws(self, ws, ip=AP_IP):
-        if self.refusing:                  # e.g. the phone has not rejoined the new AP yet
+        # The WebSockets library has WS_MAX slots (8, from hid_fi/build_opt.h);
+        # with all taken it closes a new connection at once, before it opens.
+        full = sum(1 for k in self.sockets if k["open"]) >= self.ws_max
+        if self.refusing or full:                  # e.g. the phone has not rejoined the new AP yet
             # A real network failure: hand the socket to the actual host, which
             # does not exist (hidfi.test), so the browser fails the connection
             # itself and fires onerror, as it does when a board is out of reach.

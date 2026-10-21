@@ -26,8 +26,16 @@ def build():
     out.mkdir(parents=True, exist_ok=True)
     # Recompile the sketch every time (its warnings are only printed when it is
     # compiled) but keep the core's objects - those take minutes and never change.
-    import shutil
+    import hashlib, shutil
     shutil.rmtree(bp / "sketch", ignore_errors=True)
+    # build_opt.h's flags reach the libraries too: a change means their cached
+    # objects are stale (and would disagree with the sketch), so start over.
+    opt = hashlib.sha256((paths.SKETCH / "build_opt.h").read_bytes()).hexdigest()
+    stamp = bp / ".build_opt.sha256"
+    if not stamp.exists() or stamp.read_text().strip() != opt:
+        shutil.rmtree(bp, ignore_errors=True)
+        bp.mkdir(parents=True)
+        stamp.write_text(opt)
     r = subprocess.run(["arduino-cli", "compile", "--fqbn", firmware.fqbn(), "--warnings", "default",
                         "--build-path", str(bp), "--output-dir", str(out), str(paths.SKETCH)],
                        capture_output=True, text=True, timeout=1800)

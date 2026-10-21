@@ -274,7 +274,17 @@ function Invoke-Compile {
     }
     Step "Building firmware"
     Say  "   $cli"
-    $code = Invoke-Native $cli @('compile', '--fqbn', $fqbn, '--output-dir', $build, $sketch)
+    # build_opt.h holds compiler flags every file gets, libraries included. A
+    # cached library built with other flags would disagree with the sketch about
+    # its own objects' sizes (memory corruption), so a change rebuilds everything.
+    $optSum = (Get-FileHash -Algorithm SHA256 (Join-Path $sketch 'build_opt.h')).Hash.ToLower()
+    $stamp = Join-Path $build '.build_opt.sha256'
+    New-Item -ItemType Directory -Force -Path $build | Out-Null
+    # (not $args: PowerShell keeps the script's own arguments in that name)
+    $compileArgs = @('compile', '--fqbn', $fqbn, '--output-dir', $build, $sketch)
+    if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $optSum) { $compileArgs = @('compile', '--clean') + $compileArgs[1..($compileArgs.Count-1)] }
+    $code = Invoke-Native $cli $compileArgs
+    if ($code -eq 0) { Set-Content -Path $stamp -Value $optSum -NoNewline }
     if ($code -ne 0) {
         Bad 'Compile failed. The output above says why.'
         Say '   Missing libraries? Run:'

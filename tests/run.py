@@ -49,6 +49,15 @@ class Collector:
         for item in items:   # tier from real markers, not keywords (those include parameter ids)
             self.tiers[item.nodeid] = tier_of({m.name for m in item.iter_markers()})
 
+    def pytest_collectreport(self, report):
+        # A test file that cannot even load (a typo, a missing import) runs none
+        # of its tests: name it in the table and the FAILED list, or the verdict
+        # says FAILED with nothing to point at.
+        if report.failed:
+            msg = (report.longreprtext or "").strip().splitlines()
+            self.rows.append({"id": report.nodeid or "collection", "tier": "other", "outcome": "error",
+                              "secs": 0, "reason": "could not load: " + " ".join((msg[-1] if msg else "").split())[:220]})
+
     def pytest_runtest_logreport(self, report):
         if report.when == "call" or (report.when == "setup" and report.outcome != "passed") \
                 or (report.when == "teardown" and report.outcome == "failed"):

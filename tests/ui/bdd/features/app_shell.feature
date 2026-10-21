@@ -211,3 +211,15 @@ Feature: The dashboard shell - navigation, connection, the access PIN
     Given the dashboard is open on a desktop
     When I focus the dashboard count and press Enter
     Then the dialog "Connected dashboards" is open
+
+  # Found on the real board: the 6th page (three phones, a watch window each)
+  # showed "offline" and a PIN box that could never work - the board was full.
+  Scenario: A page the board has no room for says so, and connects when one closes
+    Given the board can serve 2 pages at once
+    And a laptop on the home network has the dashboard open twice
+    When the dashboard is opened on this phone
+    Then the dialog "This board is full" is open
+    When the laptop closes its tab
+    Then the dashboard reconnects
+    And no dialog is open
+

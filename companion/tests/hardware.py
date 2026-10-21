@@ -44,6 +44,17 @@ def frames(page, secs=3):
     page.evaluate("(()=>{window.__f=0;const v=scrVideo;const cb=()=>{__f++;v.requestVideoFrameCallback(cb)};v.requestVideoFrameCallback(cb)})()")
     time.sleep(secs); return page.evaluate("__f") / secs
 
+def unpair_test_pcs(page, pending=True):
+    """Remove every pairing this test made, now or on an earlier run that died
+    (`pending=False` at the start: this run's own request is pending then)."""
+    r = page.evaluate("new Promise(r=>send({cmd:'companion_list'},r))") or {}
+    gone = 0
+    for c in (r.get("paired") or []) + ((r.get("pending") or []) if pending else []):
+        if c.get("name") == "HID-Fi hardware test":
+            page.evaluate("id=>new Promise(r=>send({cmd:'companion_unpair',id:id},r))", c["id"])
+            gone += 1
+    return gone
+
 def sign_in(page):
     page.wait_for_selector("#sheet.on .pinbox", timeout=10000)
     page.locator("#sheet.on .pinbox").first.click(); page.wait_for_timeout(150)
@@ -64,59 +75,84 @@ try:
         ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
         pg = ctx.new_page(); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)[:200]))
         pg.goto(url + "/#screen"); sign_in(pg)
-        pg.wait_for_selector("[data-scrpair]", timeout=20000)
-        check("the request appears in the real Screen tab", "HID-Fi hardware test" in pg.inner_text("#scrList"))
-        pg.tap("[data-scrpair]")
-        v = wait_app(lambda v: "ShowCode" in v["session"], 15, "the code on the computer")
-        code = re.search(r'"(\d{6})"', v["session"]).group(1)
-        pg.wait_for_selector("[data-scrcode]", timeout=10000)
-        pg.tap("[data-scrcode]"); pg.keyboard.type(code, delay=40); pg.tap("[data-scrok]")
-        wait_app(lambda v: v["session"] == "Online", 15, "paired and online")
-        pc_id = pg.evaluate("SCR.sel")
-        t0 = time.time()
-        pg.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=25000)
-        first_s = time.time() - t0
-        pg.wait_for_function("scrVideo.videoWidth===1280", timeout=10000)   # half size first, then sharp
-        check("live picture through the real board, no flags", pg.evaluate("[scrVideo.videoWidth,scrVideo.videoHeight]") == [1280, 720],
-              f"{first_s:.1f}s to first frame, {time.time()-t0:.1f}s to full size")
-        f = frames(pg); check("frame rate on the phone", f >= 20, f"{f:.0f} fps")
-        pg.screenshot(path=str(shots / "hw-phone.png"))
+        pg.wait_for_function("SCR.loaded", timeout=10000)
+        left = unpair_test_pcs(pg, pending=False)
+        if left:
+            print(f"removed {left} pairing(s) left by an earlier run")
+        try:
+            pg.wait_for_selector("[data-scrpair]", timeout=20000)
+            check("the request appears in the real Screen tab", "HID-Fi hardware test" in pg.inner_text("#scrList"))
+            pg.tap("[data-scrpair]")
+            v = wait_app(lambda v: "ShowCode" in v["session"], 15, "the code on the computer")
+            code = re.search(r'"(\d{6})"', v["session"]).group(1)
+            pg.wait_for_selector("[data-scrcode]", timeout=10000)
+            pg.tap("[data-scrcode]"); pg.keyboard.type(code, delay=40); pg.tap("[data-scrok]")
+            wait_app(lambda v: v["session"] == "Online", 15, "paired and online")
+            pc_id = pg.evaluate("SCR.sel")
+            t0 = time.time()
+            pg.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=25000)
+            first_s = time.time() - t0
+            pg.wait_for_function("scrVideo.videoWidth===1280", timeout=10000)   # half size first, then sharp
+            check("live picture through the real board, no flags", pg.evaluate("[scrVideo.videoWidth,scrVideo.videoHeight]") == [1280, 720],
+                  f"{first_s:.1f}s to first frame, {time.time()-t0:.1f}s to full size")
+            f = frames(pg); check("frame rate on the phone", f >= 20, f"{f:.0f} fps")
+            pg.screenshot(path=str(shots / "hw-phone.png"))
 
-        # wrong code must not pair; covered in model tests - here: more viewers, one PIN
-        pages = []
-        for i, (vw, frag) in enumerate([((1280, 800), "#watch"), ((1024, 768), "#watch"), ((800, 600), "#watch")]):
-            c = b.new_context(viewport={"width": vw[0], "height": vw[1]}); q = c.new_page()
-            q.on("pageerror", lambda e: errs.append(str(e)[:200]))
-            q.goto(url + "/" + frag); sign_in(q)
-            q.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=25000)
-            pages.append((c, q))
-        wait_app(lambda v: v["watching"] == 4, 10, "four viewers")
-        rates = [frames(q, 3) for _, q in [(None, pg)] + pages]
-        check("four screens watch at once", min(rates) >= 12, " / ".join(f"{r:.0f}" for r in rates) + " fps")
-        pages[0][1].screenshot(path=str(shots / "hw-watch.png"))
-        c5 = b.new_context(viewport={"width": 800, "height": 600}); q5 = c5.new_page()
-        q5.goto(url + "/#watch"); sign_in(q5); time.sleep(6)
-        check("a fifth waits, it does not push anyone out",
-              q5.evaluate("SCR.state") != "live" and latest["watching"] == 4, f"fifth: {q5.evaluate('SCR.state')}, app: {latest['watching']}")
-        pages[2][0].close()
-        q5.wait_for_function("SCR.state==='live'", timeout=30000)
-        check("the fifth joins by itself when one closes", True)
-        pg.evaluate("refresh()"); time.sleep(1.5)
-        title = pg.evaluate("document.getElementById('connPill').title")
-        check("the board counts every page, one PIN (all on this one computer: one device)",
-              "pages)" in title, title)
-        for c, _ in pages[:2]: c.close()
-        c5.close()
-        wait_app(lambda v: v["watching"] == 1, 15, "back to one viewer")
-        check("closed screens free their places", True)
-        check("no page errors", not errs, str(errs))
+            # wrong code must not pair; covered in model tests - here: more viewers, one PIN
+            pages = []
+            for i, (vw, frag) in enumerate([((1280, 800), "#watch"), ((1024, 768), "#watch"), ((800, 600), "#watch")]):
+                c = b.new_context(viewport={"width": vw[0], "height": vw[1]}); q = c.new_page()
+                q.on("pageerror", lambda e: errs.append(str(e)[:200]))
+                # With two computers paired (the owner's own too), a new screen
+                # asks which; this one was chosen before, as a person would.
+                q.add_init_script(f"localStorage.setItem('scrpc','{pc_id}')")
+                q.goto(url + "/" + frag); sign_in(q)
+                try:
+                    q.wait_for_function("SCR.state==='live' && document.getElementById('scrVideo').videoWidth>0", timeout=25000)
+                except Exception:
+                    print("watch screen stuck:", q.evaluate("JSON.stringify({sel:SCR.sel,want:localStorage.getItem('scrpc'),"
+                          "pcs:SCR.pcs.map(p=>p.name+(p.online?'+':'-')),state:SCR.state,why:SCR.why,loaded:SCR.loaded,"
+                          "msg:document.getElementById('scrMsg').innerText,ws:wsUp,link:document.getElementById('ltext').textContent,"
+                          "sheet:document.getElementById('sheet').classList.contains('on'),pin:!!sessionStorage.getItem('pin')})"))
+                    print("board:", json.load(urllib.request.urlopen(url + "/api/status", timeout=5)).get("ws_clients"), "pages open")
+                    raise
+                pages.append((c, q))
+            wait_app(lambda v: v["watching"] == 4, 10, "four viewers")
+            rates = [frames(q, 3) for _, q in [(None, pg)] + pages]
+            check("four screens watch at once", min(rates) >= 12, " / ".join(f"{r:.0f}" for r in rates) + " fps")
+            pages[0][1].screenshot(path=str(shots / "hw-watch.png"))
+            c5 = b.new_context(viewport={"width": 800, "height": 600}); q5 = c5.new_page()
+            q5.add_init_script(f"localStorage.setItem('scrpc','{pc_id}')")
+            q5.goto(url + "/#watch"); sign_in(q5); time.sleep(6)
+            check("a fifth waits, it does not push anyone out",
+                  q5.evaluate("SCR.state") != "live" and latest["watching"] == 4, f"fifth: {q5.evaluate('SCR.state')}, app: {latest['watching']}")
+            pages[2][0].close()
+            q5.wait_for_function("SCR.state==='live'", timeout=30000)
+            check("the fifth joins by itself when one closes", True)
+            pg.evaluate("refresh()"); time.sleep(1.5)
+            title = pg.evaluate("document.getElementById('connPill').title")
+            check("the board counts every page, one PIN (all on this one computer: one device)",
+                  "pages)" in title, title)
+            for c, _ in pages[:2]: c.close()
+            c5.close()
+            wait_app(lambda v: v["watching"] == 1, 15, "back to one viewer")
+            check("closed screens free their places", True)
+            check("no page errors", not errs, str(errs))
 
-        # Leave the board as found: remove this computer.
-        pg.on("dialog", lambda d: d.accept())
-        pg.click(f"[data-scrdel='{pc_id}']")
-        pg.wait_for_function(f"!SCR.pcs.some(p=>p.id==={json.dumps(pc_id)})", timeout=10000)
-        pc_id = None
-        check("removed from the board again", True)
+            # Leave the board as found: remove this computer.
+            pg.on("dialog", lambda d: d.accept())
+            pg.click(f"[data-scrdel='{pc_id}']")
+            pg.wait_for_function(f"!SCR.pcs.some(p=>p.id==={json.dumps(pc_id)})", timeout=10000)
+            pc_id = None
+            check("removed from the board again", True)
+        finally:
+            # Leave the board as found, whatever happened above.
+            try:
+                if unpair_test_pcs(pg):
+                    print("cleaned up: the test computer is no longer paired")
+                pc_id = None
+            except Exception as e:
+                print("WARNING: could not clean up the test pairing:", e)
         b.close()
 finally:
     try:

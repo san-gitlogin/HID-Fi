@@ -11,6 +11,24 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ### Fixed
 
+- **The board served only 5 dashboard pages, and the 6th said "offline".** The
+  WebSockets library has its own limit (5) and never saw the firmware's 8; three
+  phones with a watch window each reached it. `hid_fi/build_opt.h` now gives
+  every compiled file, libraries included, the same 8 (a compile-time check
+  fails the build if they ever differ, and the flash scripts rebuild from clean
+  when that file changes). One page more than the board can serve now says
+  "This board is full" and connects by itself when one closes. Measured on a
+  board: 8 pages at once, 9-13 ms answers, the 9th told and then let in.
+
+- **A paired computer never showed again after the phone slept.** A reply lost
+  with the board connection, or held back by the PIN prompt, was never
+  answered, so the Screen tab waited for its ticket forever. Every request now
+  gets an answer (nothing, if nothing came), and the Screen tab asks again as
+  soon as the link is back.
+
+- **"5 connected" with 3 phones.** The header counted pages; it counts devices
+  now (`ws_devices` in status), and the list says "2 pages open".
+
 - **Settings: Connected clients and Storage no longer sit on "Asking the
   board..." / "Reading...".** Both were read once, over HTTP, as the page
   loaded - before the access PIN was entered - so a fresh tab got "PIN

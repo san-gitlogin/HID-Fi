@@ -395,3 +395,17 @@ Feature: Screen - seeing the computer's own picture
     And the board drops the connection
     Then the screen shows "Studio PC" live
 
+  # Found on the real board: with one computer already paired, pairing a second
+  # left the Screen tab on neither - the one just paired is the one wanted.
+  Scenario: The computer just paired is the one shown, even beside another
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    And a computer "Den Laptop" is asking to pair
+    When I open the "Screen" tab
+    And I tap "Pair" for "Den Laptop"
+    And "Den Laptop" shows its pairing code
+    And I type the code "Den Laptop" shows
+    And I confirm the code for "Den Laptop"
+    Then I see the message "Paired with Den Laptop"
+    And the Screen tab is on "Den Laptop"
+
