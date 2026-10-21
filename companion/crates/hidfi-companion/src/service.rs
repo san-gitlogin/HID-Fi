@@ -80,6 +80,9 @@ const FIND_LATER: Duration = Duration::from_secs(10);
 /// How often the board is checked to still be on this computer's USB, even
 /// while everything else is quiet. A USB listing costs well under a millisecond.
 const USB_CHECK: Duration = Duration::from_secs(3);
+/// How long a board on USB may stay unanswered before the tray says it is not
+/// on this network.
+const NOT_ON_NETWORK_AFTER: Duration = Duration::from_secs(20);
 
 pub fn capture_allowed() -> bool {
     #[cfg(target_os = "macos")]
@@ -188,6 +191,7 @@ fn run(
     let mut pending_identity = Some(identity);
     let mut chosen: Option<Mac> = state.board_mac.as_deref().and_then(Mac::parse);
     let started = Instant::now();
+    let mut unseen_since: Option<Instant> = None;
     let set = |f: &dyn Fn(&mut View)| {
         let mut v = view.lock().unwrap_or_else(|e| e.into_inner());
         let (b, st) = (v.board.clone(), v.session.clone());
@@ -232,6 +236,7 @@ fn run(
             );
             let board = match found.selection {
                 Selection::Board(b) => {
+                    unseen_since = None;
                     if state.board_mac.as_deref() != Some(&b.mac.hex())
                         || state.board_url.as_deref() != Some(&b.url)
                     {
@@ -259,7 +264,18 @@ fn run(
                     }
                 }
                 Selection::NotPluggedIn { elsewhere } => BoardState::NotPluggedIn { elsewhere },
-                Selection::NotOnNetwork { .. } => BoardState::NotOnNetwork,
+                // On USB but not answering yet: a fresh install has no address
+                // to try, mDNS answers within a few seconds and a lookup by name
+                // can take five on macOS. Keep looking quietly before saying it
+                // is not on this network, or every first start says so.
+                Selection::NotOnNetwork { .. } => {
+                    let since = *unseen_since.get_or_insert_with(Instant::now);
+                    if since.elapsed() < NOT_ON_NETWORK_AFTER {
+                        BoardState::Looking
+                    } else {
+                        BoardState::NotOnNetwork
+                    }
+                }
                 Selection::Choose(v) => {
                     BoardState::Choose(v.into_iter().map(|b| (b.mac.hex(), b.url)).collect())
                 }
