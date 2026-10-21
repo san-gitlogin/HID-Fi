@@ -427,6 +427,8 @@ class BoardSim:
             self.refusing = True
         self.boots += 1
         self.t0 = self.now()
+        # Pairing requests live in RAM (hid_fi/companion.h); pairings are in NVS.
+        self.comp.pending = []
         self._reset_pin_guards()
         self.wiggle = None
         self.drop_all()

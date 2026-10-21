@@ -16,7 +16,11 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let store = Store::open(a[1].clone().into()).unwrap();
     let mut st = store.state();
-    st.name = "HID-Fi hardware test".into();
+    // HIDFI_KEEP_NAME: run as an existing install (a copy of its folder) without
+    // renaming that computer on the board.
+    if std::env::var_os("HIDFI_KEEP_NAME").is_none() {
+        st.name = "HID-Fi hardware test".into();
+    }
     store.save_state(&st).unwrap();
     // HIDFI_DISPLAYS=n pretends to have n displays; stdin "unplug-display <id>" pulls one.
     let fake = FakeDisplays::from_env(1280, 720);

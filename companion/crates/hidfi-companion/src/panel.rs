@@ -6,7 +6,6 @@
 
 use crate::menu::{self, Model, Step};
 use crate::service::View;
-use std::sync::mpsc::Sender;
 use tao::dpi::LogicalSize;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder, WindowId};
@@ -133,7 +132,7 @@ pub fn view_json(m: &Model, v: &View) -> String {
 impl Panel {
     pub fn open<T: 'static>(
         target: &EventLoopWindowTarget<T>,
-        clicks: Sender<Click>,
+        clicks: impl Fn(Click) + 'static,
     ) -> Result<Panel, String> {
         let window = WindowBuilder::new()
             .with_title("HID-Fi Companion")
@@ -154,7 +153,7 @@ impl Panel {
                         .map(Click::Action)
                 };
                 if let Some(c) = c {
-                    let _ = clicks.send(c);
+                    clicks(c);
                 }
             })
             .build(&window)

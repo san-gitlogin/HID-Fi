@@ -59,6 +59,18 @@ pub struct Handle {
     pub view: Arc<Mutex<View>>,
     pub tx: Sender<Cmd>,
     pub watchers: Option<Watchers>,
+    notify: Notify,
+}
+
+/// Called whenever the view changes, so a window can sleep until then instead
+/// of waking on a timer to look.
+type Notify = Arc<Mutex<Option<Box<dyn Fn() + Send>>>>;
+
+impl Handle {
+    /// `f` runs (on the service thread) after every change to `view`.
+    pub fn on_change(&self, f: impl Fn() + Send + 'static) {
+        *self.notify.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(f));
+    }
 }
 
 /// What makes a screen source for a display. Real capture in the app; a
@@ -150,11 +162,18 @@ pub fn start(store: Store, env: Env) -> Handle {
     };
     let watchers = listener.as_ref().map(|(s, _)| s.watchers.clone());
     let v = view.clone();
+    let notify: Notify = Arc::default();
+    let n = notify.clone();
     std::thread::Builder::new()
         .name("service".into())
-        .spawn(move || run(store, state, env, key, nonces, listener, pipeline, v, rx))
+        .spawn(move || run(store, state, env, key, nonces, listener, pipeline, v, n, rx))
         .expect("spawning the service thread");
-    Handle { view, tx, watchers }
+    Handle {
+        view,
+        tx,
+        watchers,
+        notify,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -167,6 +186,7 @@ fn run(
     listener: Option<(Server, Listener)>,
     _pipeline: Arc<Pipeline>,
     view: Arc<Mutex<View>>,
+    notify: Notify,
     rx: Receiver<Cmd>,
 ) {
     let mut id = [0u8; 16];
@@ -181,10 +201,13 @@ fn run(
     let mut chosen: Option<Mac> = state.board_mac.as_deref().and_then(Mac::parse);
     let started = Instant::now();
     let mut unseen_since: Option<Instant> = None;
+    let mut last_miss_log: Option<Instant> = None;
     let set = |f: &dyn Fn(&mut View)| {
         let mut v = view.lock().unwrap_or_else(|e| e.into_inner());
+        let before = v.clone();
         let (b, st) = (v.board.clone(), v.session.clone());
         f(&mut v);
+        let changed = *v != before;
         // Changes only, so a quiet day writes nothing. Never the pairing code.
         if v.board != b {
             log::info!("board: {:?}", v.board);
@@ -193,6 +216,12 @@ fn run(
             match &v.session {
                 Status::ShowCode(_) => log::info!("session: showing the pairing code"),
                 other => log::info!("session: {other:?}"),
+            }
+        }
+        drop(v);
+        if changed {
+            if let Some(f) = notify.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                f();
             }
         }
     };
@@ -262,6 +291,14 @@ fn run(
                     if since.elapsed() < NOT_ON_NETWORK_AFTER {
                         BoardState::Looking
                     } else {
+                        // Say why, once a minute at most: the log is how a "not
+                        // on this network" that is not true gets explained.
+                        if last_miss_log.is_none_or(|t: Instant| t.elapsed() > Duration::from_secs(60)) {
+                            last_miss_log = Some(Instant::now());
+                            for (url, why) in &found.misses {
+                                log::warn!("board on USB, but {url} did not answer: {why}");
+                            }
+                        }
                         BoardState::NotOnNetwork
                     }
                 }

@@ -28,11 +28,24 @@ pub fn mdns_url(mac: &Mac) -> String {
 /// Asks one address what board it is. `None` for anything that is not a
 /// HID-Fi board answering sensibly.
 pub fn probe(http: &dyn Http, base: &str) -> Option<NetBoard> {
-    let (code, body) = http.get(&format!("{base}/api/status")).ok()?;
+    probe_why(http, base).ok()
+}
+
+/// As [`probe`], saying why not: for the log, when a board on USB cannot be
+/// reached (a network the computer is not on, a firewall, macOS refusing the
+/// app local network access).
+pub fn probe_why(http: &dyn Http, base: &str) -> Result<NetBoard, String> {
+    let (code, body) = http
+        .get(&format!("{base}/api/status"))
+        .map_err(|e| format!("{e:?}"))?;
     if code != 200 {
-        return None;
+        return Err(format!("HTTP {code}"));
     }
-    let s: StatusReply = serde_json::from_str(&body).ok()?;
+    probe_parse(base, &body).ok_or_else(|| "not a HID-Fi status reply".into())
+}
+
+fn probe_parse(base: &str, body: &str) -> Option<NetBoard> {
+    let s: StatusReply = serde_json::from_str(body).ok()?;
     let firmware = s.firmware?;
     if !firmware.starts_with("hid_fi_v") {
         return None;
@@ -95,6 +108,8 @@ pub struct Found {
     pub selection: Selection,
     /// MACs of Espressif devices on this USB, for the tray's diagnostics.
     pub usb: Vec<Mac>,
+    /// Addresses tried that did not answer as a board, and why.
+    pub misses: Vec<(String, String)>,
 }
 
 pub fn find(
@@ -110,11 +125,20 @@ pub fn find(
         return Found {
             selection: Selection::NotPluggedIn { elsewhere: 0 },
             usb: macs,
+            misses: Vec::new(),
         };
     }
     let mut seen: Vec<NetBoard> = Vec::new();
+    let mut misses = Vec::new();
     for url in candidates(&macs, remembered.map(|r| r.1), &browse.boards()) {
-        if let Some(b) = probe(http, &url) {
+        let b = match probe_why(http, &url) {
+            Ok(b) => b,
+            Err(why) => {
+                misses.push((url, why));
+                continue;
+            }
+        };
+        {
             // One board can answer on two addresses (its .local name and an IP).
             // Keep the first, which is the cheaper one to reach next time.
             if !seen.iter().any(|s| s.mac == b.mac) {
@@ -125,6 +149,7 @@ pub fn find(
     Found {
         selection: discovery::select(&devices, &seen, remembered.map(|r| r.0)),
         usb: macs,
+        misses,
     }
 }
 

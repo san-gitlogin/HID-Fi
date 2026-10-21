@@ -204,6 +204,25 @@ fn not_now_on_the_dashboard_is_not_asked_again() {
     run_until(&mut s, &m, 3, |st| *st == Status::WaitingForApproval);
 }
 
+/// Seen live: the board restarted (a flash) while the app waited for Pair, and
+/// the app said the request "was not accepted in time" - nobody had declined
+/// it; the board had forgotten it. It asks again by itself.
+#[test]
+fn a_board_restart_while_asking_asks_again() {
+    let m = Model::start("4826");
+    let mut s = session(&m, "PC");
+    run_until(&mut s, &m, 3, |st| *st == Status::WaitingForApproval);
+    std::thread::sleep(Duration::from_millis(1200)); // the board's clock counts whole seconds
+    m.post("/__reboot", json!({}));
+    for _ in 0..4 {
+        s.step(&m.http, &SystemClock);
+        assert_ne!(*s.status(), Status::PairingExpired, "a restart is not a refusal");
+    }
+    assert_eq!(*s.status(), Status::WaitingForApproval);
+    let pending = m.dash(json!({"cmd": "companion_list"}))["pending"].clone();
+    assert_eq!(pending.as_array().map(|a| a.len()), Some(1), "asked again: {pending}");
+}
+
 #[test]
 fn an_unapproved_request_expires_quietly() {
     let m = Model::start("4826");

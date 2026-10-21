@@ -92,6 +92,9 @@ enum Phase {
         init: Initiator,
         confirmed: Option<Confirmed>,
         announced: bool,
+        /// When the board took our request: a board that has been up for less
+        /// time than this restarted and forgot it (requests live in its RAM).
+        asked_at: Option<Instant>,
     },
     Paired,
 }
@@ -184,8 +187,8 @@ impl Session {
     pub fn step(&mut self, http: &dyn Http, clock: &dyn Clock) -> Duration {
         let r = match self.phase {
             Phase::Idle => return IDLE_WAIT,
-            Phase::Unpaired => self.start_pairing(http),
-            Phase::Pairing { .. } => self.poll_pairing(http),
+            Phase::Unpaired => self.start_pairing(http, clock),
+            Phase::Pairing { .. } => self.poll_pairing(http, clock),
             Phase::Paired => self.beat(http, clock),
         };
         match r {
@@ -254,18 +257,19 @@ impl Session {
         }
     }
 
-    fn start_pairing(&mut self, http: &dyn Http) -> Result<Duration, CallError> {
+    fn start_pairing(&mut self, http: &dyn Http, clock: &dyn Clock) -> Result<Duration, CallError> {
         let init = Initiator::new()
             .map_err(|_| CallError::Net(NetError::Unreachable("no randomness".into())))?;
         self.phase = Phase::Pairing {
             init,
             confirmed: None,
             announced: false,
+            asked_at: None,
         };
-        self.poll_pairing(http)
+        self.poll_pairing(http, clock)
     }
 
-    fn poll_pairing(&mut self, http: &dyn Http) -> Result<Duration, CallError> {
+    fn poll_pairing(&mut self, http: &dyn Http, clock: &dyn Clock) -> Result<Duration, CallError> {
         let id = self.id_hex();
         let name = self.identity.name.clone();
         let base = self.base.clone();
@@ -273,6 +277,7 @@ impl Session {
             init,
             confirmed,
             announced,
+            asked_at,
         } = &mut self.phase
         else {
             return Ok(Duration::ZERO);
@@ -299,6 +304,9 @@ impl Session {
             RawReply::parse_http(code, &body).map_err(CallError::Reply)
         };
         let r = post(&req)?;
+        if !*announced {
+            *asked_at = Some(clock.now());
+        }
         *announced = true;
         let next = match r.pair_state().map_err(CallError::Reply)? {
             PairState::Pending => {
@@ -347,7 +355,18 @@ impl Session {
             },
             // Gone: it expired unapproved, or someone tapped "Not now". Do not
             // ask again on our own - that would pester every dashboard forever.
+            // ...unless the board restarted since: it forgot the request
+            // (they live in its RAM), nobody turned it down. Ask again.
             PairState::None => {
+                if let Some(at) = *asked_at {
+                    // Uptime is in whole seconds: a second of slack.
+                    let asked = clock.now().duration_since(at);
+                    if board_uptime(http, &base).is_some_and(|up| up + Duration::from_secs(1) < asked) {
+                        *announced = false;
+                        *asked_at = None;
+                        return Ok(Duration::ZERO);
+                    }
+                }
                 self.status = Status::PairingExpired;
                 Phase::Idle
             }
@@ -408,3 +427,14 @@ enum CallError {
     Net(NetError),
     Reply(ReplyError),
 }
+
+/// How long the board has been up, from its status; `None` if it does not say.
+fn board_uptime(http: &dyn Http, base: &str) -> Option<Duration> {
+    let (code, body) = http.get(&format!("{base}/api/status")).ok()?;
+    if code != 200 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(&body).ok()?;
+    v.get("uptime_sec")?.as_u64().map(Duration::from_secs)
+}
+

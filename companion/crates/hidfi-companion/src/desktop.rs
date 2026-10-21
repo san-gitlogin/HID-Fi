@@ -59,7 +59,10 @@ fn build(m: &menu::Model, start_at_login: bool) -> Built {
 }
 
 pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_run: bool) {
-    let mut event_loop = EventLoopBuilder::new().build();
+    // Woken only when something happens (a status change, a menu choice, a
+    // click), never by a timer: instant to react, and asleep the rest of the time.
+    let mut event_loop = EventLoopBuilder::<()>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
     #[cfg(target_os = "macos")]
     {
         use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
@@ -71,7 +74,21 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     let mut tray: Option<TrayIcon> = None;
     let mut built: Option<Built> = None;
     let mut shown: Option<menu::Model> = None;
-    let menu_rx = MenuEvent::receiver();
+    let (menu_tx, menu_rx) = std::sync::mpsc::channel::<MenuEvent>();
+    {
+        let wake = std::sync::Mutex::new(proxy.clone());
+        let menu_tx = std::sync::Mutex::new(menu_tx);
+        MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
+            let _ = menu_tx.lock().map(|t| t.send(e));
+            let _ = wake.lock().map(|p| p.send_event(()));
+        }));
+    }
+    {
+        let wake = std::sync::Mutex::new(proxy.clone());
+        handle.on_change(move || {
+            let _ = wake.lock().map(|p| p.send_event(()));
+        });
+    }
     let (click_tx, click_rx) = std::sync::mpsc::channel::<Click>();
     let mut panel: Option<Panel> = None;
     // The window comes forward by itself once per new thing to do.
@@ -79,7 +96,9 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     let mut want_open = first_run;
 
     event_loop.run(move |event, target, flow| {
-        *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500));
+        *flow = ControlFlow::Wait;
+        let t0 = Instant::now();
+        let what = format!("{event:?}").chars().take(60).collect::<String>();
         let view = handle
             .view
             .lock()
@@ -172,7 +191,13 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             want_open = false;
             match panel.as_ref() {
                 Some(p) => p.focus(),
-                None => match Panel::open(target, click_tx.clone()) {
+                None => match Panel::open(target, {
+                    let (tx, wake) = (click_tx.clone(), proxy.clone());
+                    move |c| {
+                        let _ = tx.send(c);
+                        let _ = wake.send_event(());
+                    }
+                }) {
                     Ok(p) => {
                         p.render(&panel::view_json(&m, &view));
                         panel = Some(p);
@@ -199,6 +224,11 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 p.render(&panel::view_json(&m, &view));
             }
             shown = Some(m);
+        }
+        // The main thread must never be busy long: everything on screen waits on it.
+        let took = t0.elapsed();
+        if took > Duration::from_millis(100) {
+            log::warn!("window busy for {} ms on {what}", took.as_millis());
         }
     });
 }

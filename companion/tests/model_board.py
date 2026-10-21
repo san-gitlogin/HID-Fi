@@ -5,6 +5,7 @@ agent's integration tests. Prints the port it listens on, then serves:
   POST /api/companion    the companion endpoint, as the firmware's route
   POST /__dash           {"cmd": ...} as a signed-in dashboard would send it
   POST /__advance        {"s": seconds}: move the board's clock on
+  POST /__reboot         the board restarts: waiting requests are gone, pairings stay
   POST /__pin            {"token": ..., "old": ...}: set_auth over serial
 
 Listens on 127.0.0.1, or $HOST. Only for tests.
@@ -52,6 +53,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(*sim.comp.http(body, self.client_address[0]))
             if self.path == "/__dash":
                 return self._send(200, sim.handle(json.loads(body), "ws", ip="192.168.1.30")[0])
+            if self.path == "/__reboot":
+                sim.reboot()
+                return self._send(200, {"ok": True})
             if self.path == "/__advance":
                 sim.advance(json.loads(body)["s"])
                 return self._send(200, {"ok": True})
