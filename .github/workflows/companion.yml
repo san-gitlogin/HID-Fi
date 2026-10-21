@@ -59,10 +59,13 @@ jobs:
         if: runner.os != 'Windows'
         run: vectors/check_board.sh
       - name: H.264 + WebRTC into real Chrome
+        if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM (companion/tests/linux/run.sh covers it)
         run: python tests/e2e_view.py
       - name: Six viewers at once, a slow one, a poor link
+        if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM (companion/tests/linux/run.sh covers it)
         run: python tests/multi_view.py
       - name: Whole system - service, board model, Chrome
+        if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM (companion/tests/linux/run.sh covers it)
         run: python tests/system.py
       - name: Real X11 screen capture + encode (virtual display)
         if: runner.os == 'Linux'
