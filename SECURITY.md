@@ -210,6 +210,11 @@ is tested against the board model in `tests/unit/test_companion.py`.
   the one the paired app registered with the board.
 - **The app's heartbeats cannot be replayed**: each one answers a fresh
   single-use challenge.
+- **Local network only.** The app accepts viewers only from private addresses;
+  the board has an IPv6 link-local address (so its `.local` name answers at
+  once) but no address from the router, and refuses any request or socket from
+  a non-local IPv6 address.
+- **Limits:** six viewers per computer, eight dashboard pages per board.
 - **What it does not protect against:** anyone who can already see the
   dashboard can watch, exactly as they can already type. Malware on the computer
   sees the screen anyway.
@@ -231,7 +236,7 @@ secret belongs.
 
 ## What never returns a secret
 
-Audited against the firmware, current as of v3.10:
+Audited against the firmware, current as of v4.0:
 
 | Command | What it gives back |
 |---|---|
