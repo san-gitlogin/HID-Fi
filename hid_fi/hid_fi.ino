@@ -821,6 +821,10 @@ int  vaultCount();
 String pcPassword(int slot);
 uint8_t hidKeyFor(const char* name);
 
+// Screen sharing with the companion app: pairing, heartbeats, viewer tickets.
+// Uses the globals above, so it is included here, after them.
+#include "companion.h"
+
 // ==================== SETUP ====================
 void setup() {
     COM_SERIAL.begin(115200);
@@ -856,6 +860,7 @@ void setup() {
     preferences.begin("vault", true);
     vaultPinCode = preferences.getString("pin", "");
     preferences.end();
+    compLoad();
 
     // Exactly one mouse object may exist -- see the note on the globals.
     COM_SERIAL.printf("[HID] Initializing USB HID (pointer=%s, gamepad=%s)...\n",
@@ -955,6 +960,7 @@ void loop() {
         updateStaJoin();           // advances a join in progress, never blocks
         checkWifiConnection();
         updatePower();
+        compTick();                // companion expiry, never blocks
     }
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds
@@ -1897,6 +1903,11 @@ void setupWebRoutes() {
         processCommand(body, SRC_HTTP);
     });
     
+    // POST /api/companion - the companion app's own endpoint (companion.h).
+    // Outside processCommand on purpose: it is authenticated by the pairing
+    // key, so the PIN and LAN gates stay exactly as they are.
+    webServer.on("/api/companion", HTTP_POST, handleCompanionHttp);
+
     // GET /api/status — quick status (includes AP info)
     webServer.on("/api/status", HTTP_GET, []() {
         DynamicJsonDocument doc(2560);
@@ -2281,6 +2292,18 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "vault_pin") == 0) {
         handleVaultPin(inDoc);
+    }
+    else if (strcmp(cmd, "companion_list") == 0) {
+        handleCompanionList();
+    }
+    else if (strcmp(cmd, "companion_pair") == 0) {
+        handleCompanionPair(inDoc);
+    }
+    else if (strcmp(cmd, "companion_unpair") == 0) {
+        handleCompanionUnpair(inDoc);
+    }
+    else if (strcmp(cmd, "screen_ticket") == 0) {
+        handleScreenTicket(inDoc);
     }
     else {
         StaticJsonDocument<256> doc;
@@ -3078,6 +3101,12 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
     doc["gamepad"] = gamepadEnabled;
     doc["auth_set"] = (authToken.length() > 0);
+    // Screen sharing: counts only, so the dashboard knows whether to offer it and
+    // can show a pairing request. Names, addresses and keys come from
+    // companion_list, which is PIN-gated like every command.
+    doc["comp_paired"]  = compPairedCount();
+    doc["comp_online"]  = compOnlineCount();
+    doc["comp_pending"] = compPendingCount();
     doc["ap_open"] = (apPassword.length() == 0);
     doc["ap_pass_generated"] = apPassGenerated;
     doc["ap_pass_default"] = (apPassword == "hid12345");
@@ -4482,6 +4511,10 @@ void handleSetAuth(const JsonDocument& inDoc) {
     bool provedOld = authToken.length() && (authToken == String(inDoc["old"] | ""));
     bool wipeVault = vaultGuardedByAccessPin && !provedOld && vaultCount() > 0;
     if (wipeVault) vaultWipeAll();
+    // A paired computer's screen is guarded by the access PIN alone, so a PIN
+    // set without proving the old one removes every pairing (companion.h).
+    bool wipePairings = !provedOld && compPairedCount() > 0;
+    if (wipePairings) compWipeAll();
 
     authToken = tk;
     preferences.begin("hid_cfg", false);
@@ -4494,10 +4527,12 @@ void handleSetAuth(const JsonDocument& inDoc) {
         wsAuthed[wsClientNum] = true;
     }
     if (wipeVault) COM_SERIAL.println("[AUTH] PIN replaced without the old one - vault erased");
+    if (wipePairings) COM_SERIAL.println("[AUTH] PIN replaced without the old one - paired computers removed");
 
     StaticJsonDocument<224> doc;
     doc["status"]="ok"; doc["reply"]="auth_set"; doc["auth_set"]=(authToken.length() > 0);
     doc["vault_wiped"]=wipeVault;
+    doc["pairings_wiped"]=wipePairings;
     sendJson(doc);
 }
 

@@ -188,6 +188,32 @@ works and keeps nothing.
 
 ---
 
+## Screen sharing
+
+The companion app streams a computer's screen to the dashboard. Every rule here
+is tested against the board model in `tests/unit/test_companion.py`.
+
+- **No access PIN, no screen.** Pairing and tickets are refused until one is set.
+- **Pairing proves the person sees that computer.** The computer shows a
+  six-digit code, and the person types it into the dashboard. The code comes
+  from both sides' keys, with a commitment so nobody in the middle can choose
+  keys until the codes match. This is the Bluetooth LE Secure Connections
+  pattern. Three wrong codes end the attempt.
+- **The pairing key never leaves the board.** No reply on any transport carries
+  it.
+- **Watching is a ticket, not a session.** A signed-in dashboard asks for one
+  each time. The app accepts each ticket once and for at most 90 s.
+- **The cable cannot open the screen.** `screen_ticket` is refused over serial,
+  and a PIN set without the old one removes every pairing, as it erases the vault.
+- **The video is encrypted** (WebRTC DTLS-SRTP), and goes from the computer to
+  the phone directly. The dashboard refuses a connection whose certificate is not
+  the one the paired app registered with the board.
+- **The app's heartbeats cannot be replayed**: each one answers a fresh
+  single-use challenge.
+- **What it does not protect against:** anyone who can already see the
+  dashboard can watch, exactly as they can already type. Malware on the computer
+  sees the screen anyway.
+
 ## Do not put a password in a macro
 
 A macro is a list of steps the board replays, and `macro_get` returns those steps
@@ -217,6 +243,9 @@ Audited against the firmware, current as of v3.10:
 | `storage_info` | Booleans only: `pin_set`, `sta_pass_set`, `ap_pass_set`. |
 | `status`, `/api/status` | `auth_set` as a boolean. No PIN, no passwords. |
 | `wifi_status` | The SSID. Never the WiFi password. |
+| `companion_list` | Paired computers' names, addresses and online state; pending requests. Never a pairing key. |
+| `screen_ticket` | **A short-lived ticket** to watch one paired computer. Signed-in dashboards only: refused over serial, refused with no access PIN. |
+| `POST /api/companion` | Pairing state, the board's public key half, single-use challenges. Never a pairing key. |
 
 The board's **own access point password** is the exception, and deliberately so:
 it is printed on the serial console at boot and returned by `ap_password`, **over

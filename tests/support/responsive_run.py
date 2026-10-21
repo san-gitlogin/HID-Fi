@@ -81,6 +81,9 @@ OVERLAY_STATES = [
      "booting=false;$('boot').classList.remove('on')"),
     ("overlay apnew", f"apStart('{SSID32}','a-long-access-point-password-1234')", "apPending=false;$('apnew').classList.remove('on')"),
     ("overlay asw", "go('pad');aswOpen()", "aswClose(false)"),
+    # The Screen tab's floating window, open and minimised, over another tab.
+    ("overlay screen float", "go('screen');scrFloat(true);go('media')", "scrFloat(false)"),
+    ("overlay screen float min", "go('screen');scrFloat(true);scrMinimise();go('media')", "scrFloat(false)"),
     ("toast", f"toast('{LONG} could not be saved because the board is full','bad')", ""),
 ]
 

@@ -1,0 +1,32 @@
+//! Capture, encode and send the screen to a dashboard over WebRTC.
+
+pub mod frame;
+pub mod pattern;
+pub mod pipeline;
+pub mod rtc;
+#[cfg(target_os = "macos")]
+pub mod sck;
+pub mod server;
+#[cfg(target_os = "macos")]
+pub mod vt;
+
+/// The best H.264 encoder this computer has, for `Pipeline::start`.
+pub fn encoder(w: u32, h: u32, fps: u32, bps: u32) -> Result<Box<dyn frame::Encoder>, String> {
+    let cfg = frame::EncoderConfig {
+        width: w,
+        height: h,
+        fps,
+        bitrate_bps: bps,
+    };
+    #[cfg(target_os = "macos")]
+    {
+        vt::VtEncoder::new(&cfg)
+            .map(|e| Box::new(e) as Box<dyn frame::Encoder>)
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = cfg;
+        Err("no H.264 encoder for this OS yet".into())
+    }
+}

@@ -371,6 +371,26 @@ Feature: The Settings tab
     And "#clientList" contains "dashboard open"
     And "#clientList" contains "Device names are not shown"
 
+  # Regression: both cards were read once, over HTTP, as the page loaded - before
+  # the PIN was entered. A fresh tab got "PIN required", and the lists sat on
+  # "Asking the board..." and "Reading..." until someone found the small refresh
+  # buttons. Even when they did load, they described the moment before this
+  # page's socket existed, so "No dashboards are open" was shown from a dashboard.
+  Scenario: Clients and storage fill in on their own after signing in
+    Given the board's access PIN is "4826"
+    And the dashboard is open
+    When I enter the PIN "4826"
+    And I open the "Settings" tab
+    Then "#clientList" contains "192.168.4.2"
+    And "#clientList" contains "this device"
+    And "#storeInfo" contains "Access PIN"
+
+  Scenario: Opening Settings shows who is connected now, not who was
+    Given the dashboard is open
+    And nobody is on the board's access point
+    When I open the "Settings" tab
+    Then "#clientList" contains "Nothing is connected to the board"
+
   Scenario: No clients on the access point is explained
     Given nobody is on the board's access point
     And the dashboard is open

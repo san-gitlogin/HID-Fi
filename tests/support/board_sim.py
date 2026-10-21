@@ -152,6 +152,9 @@ class BoardSim:
         self.cmd_count = 0
         self.boots = 0
         self.http_status_calls = 0
+        # Screen sharing: pairings, heartbeats and tickets (hid_fi/companion.h).
+        from support.companion_sim import CompanionBoard
+        self.comp = CompanionBoard(self)
 
     # ---- time ------------------------------------------------------------------------
     def now(self):
@@ -221,6 +224,7 @@ class BoardSim:
             "ap_pass_default": self.ap_pass == "hid12345",
             "wiggle_active": self.wiggle is not None, "wiggle_mode": self.wiggle["mode"] if self.wiggle else "idle",
             "led_on": False, "boot_button": "released",
+            **self.comp.counts(),
         }
 
     # ---- Playwright wiring --------------------------------------------------------------
@@ -275,6 +279,10 @@ class BoardSim:
                     return route.fulfill(status=403, json={"status": "error", "reply": "lan_locked",
                                          "message": "Set an access PIN before scanning over your home network."})
             return route.fulfill(json=self._scan())
+        if path.startswith("/api/companion") and req.method == "POST":
+            with self.lock:
+                code, r = self.comp.http(req.post_data or "", ip)
+            return route.fulfill(status=code, json=r)
         if path.startswith("/api/command"):
             try:
                 body = json.loads(req.post_data or "{}")
@@ -664,6 +672,8 @@ class BoardSim:
 
         if c == "status":
             return self.status()
+        if c in ("companion_list", "companion_pair", "companion_unpair", "screen_ticket"):
+            return self.comp.command(c, b, transport)
         if c == "ping":
             return OK("pong", uptime=int(self.now() - self.t0), hid_ready=True, wifi_connected=self.sta["phase"] == "online",
                       cmd_count=self.cmd_count, pc_state=self.pc_state, wiggle_active=self.wiggle is not None)
@@ -698,12 +708,16 @@ class BoardSim:
             wipe = not self.vault_pin and not (self.pin and b.get("old") == self.pin) and bool(self.vault)
             if wipe:
                 self.vault.clear()
+            # companion.h: a PIN set without the old one removes every paired computer.
+            wipe_pairs = not (self.pin and b.get("old") == self.pin) and bool(self.comp.paired)
+            if wipe_pairs:
+                self.comp.wipe()
             self.pin = tk
             for s in self.sockets:
                 s["authed"] = not tk
             if tk and sock:
                 sock["authed"] = True
-            return OK("auth_set", auth_set=bool(tk), vault_wiped=wipe)
+            return OK("auth_set", auth_set=bool(tk), vault_wiped=wipe, pairings_wiped=wipe_pairs)
 
         # --- keyboard -------------------------------------------------------------------
         if c == "type":

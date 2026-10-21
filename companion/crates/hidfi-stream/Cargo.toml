@@ -1,0 +1,33 @@
+[package]
+name = "hidfi-stream"
+description = "HID-Fi companion: capture, encode and send the screen to a dashboard over WebRTC."
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hidfi-core = { path = "../hidfi-core" }
+hidfi-agent = { path = "../hidfi-agent" }
+str0m = { version = "0.24.1", default-features = false, features = ["rust-crypto"] }
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+serde_json = "1.0.154"
+log = "0.4.34"
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
+objc2 = "0.6"
+block2 = "0.6"
+dispatch2 = "0.3"
+objc2-foundation = "0.3"
+objc2-core-media = "0.3"
+objc2-core-video = "0.3"
+objc2-screen-capture-kit = { version = "0.3", features = ["SCStream", "SCShareableContent", "SCError", "block2", "objc2-core-media", "objc2-core-graphics", "objc2-core-foundation", "dispatch2"] }
+
+[dev-dependencies]
+hex = "0.4.3"
+serde_json = "1.0.154"

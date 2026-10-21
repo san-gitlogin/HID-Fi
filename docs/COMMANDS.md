@@ -297,6 +297,54 @@ back buys nothing. Tampering is the accepted price; disclosure is not.
 Denials come back as `vault_denied` (wrong or missing PIN), `vault_locked` (no
 access PIN set, or too many wrong guesses — with `retry_in`).
 
+### Screen sharing (companion app)
+
+The companion app on a computer streams that computer's screen straight to the
+dashboard. The board never carries the video. It pairs the computer, remembers
+where its app is listening, and hands a signed-in dashboard a short-lived ticket.
+Protocol and reasons: [companion/DESIGN.md](../companion/DESIGN.md).
+
+**Nothing here works without an access PIN.** No PIN, no pairing, no tickets.
+
+| Command | Parameters | Notes |
+|---|---|---|
+| `companion_list` | — | `paired`: `id`, `name`, `online`, and `ip`, `port`, `seen_s` once it has checked in. `pending`: `id`, `name`, `state`, `ip`. Never a key |
+| `companion_pair` | `id`, `code` | Without `code`: approve a request (`state: "confirm"`). With `code`: the six digits the computer shows (`state: "paired"`). Three wrong codes end the attempt |
+| `companion_unpair` | `id` | Also drops a pending request. `removed` says whether there was anything |
+| `screen_ticket` | `id` | `ip`, `port`, `fp`, `tn`, `vn`, `ticket`: where to connect and the proof to show. **Refused over serial** (`wifi_only`) |
+
+`id` is 32 lowercase hex digits. Refusals carry `reply`: `bad_request`,
+`pin_required`, `not_found`, `not_ready`, `wrong_code` (with `tries_left`),
+`aborted`, `full` (four computers already), `pc_offline`, `wifi_only`, `failed`.
+
+`set_auth` replies `pairings_wiped`. A PIN set without proving the old one
+removes every paired computer, the same rule as the vault.
+
+`status` carries counts only: `comp_paired`, `comp_online`, `comp_pending`. The
+board pushes `{"event":"companion_pending","name":...}` when a computer asks to
+pair, and `{"event":"companion_online","name":...}` when a paired one comes back.
+
+#### `POST /api/companion`: the app's endpoint
+
+The app never uses `/api/command` or the WebSocket. Three board features count
+WebSocket clients, and a resident app would break them: releasing held keys on
+the last disconnect, radio sleep, and AP auto-off. The app sends one JSON object
+per request, `op` plus fields, at most 768 bytes, and 25 requests per 5 s per
+address. It is authenticated by the pairing key, so the PIN and LAN gates are
+not involved; with no access PIN set, every op answers `403 pin_required`.
+
+| `op` | Fields | Reply |
+|---|---|---|
+| `hello` | `v` (1), `id`, `name` (≤ 32 bytes), `a_pub`, `commit` | `state`, plus `b_pub`, `n_b` in `confirm` |
+| `state` | `id` | `state`: `none`, `pending`, `confirm`, `code_shown`, `paired`, `aborted` |
+| `reveal` | `id`, `n_a` | `state: "code_shown"`, or `bad_mac` if it breaks the commitment |
+| `chal` | `id` | `chal`: single use, 30 s |
+| `beat` | `id`, `port`, `fp`, `tn`, `chal`, `mac` | `{"status":"ok"}`. The board records the request's source address, never a claimed one |
+
+HTTP status and `reply` on refusal: `400 bad_request`, `400 unsupported`,
+`403 pin_required`, `404 unknown_pc`, `409 not_ready`, `401 stale_chal`,
+`401 bad_mac`, `413 bad_request`, `429 rate_limited` (with `retry_ms`), `503 full`.
+
 ### Host OS
 
 The board works out whether it is plugged into a Mac or a PC by **watching how the

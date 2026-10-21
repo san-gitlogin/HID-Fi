@@ -32,7 +32,7 @@ DEVICES = {
     "desktop": {"width": 1400, "height": 900, "touch": False},
     "wide desktop": {"width": 1920, "height": 1080, "touch": False},
 }
-TABS = {"Trackpad": "pad", "Keyboard": "keys", "Keys": "short", "Media": "media",
+TABS = {"Trackpad": "pad", "Screen": "screen", "Keyboard": "keys", "Keys": "short", "Media": "media",
         "Gamepad": "game", "Session": "power", "Settings": "setup"}
 
 # Which element a touch belongs to: its id, else the data-* attribute that names

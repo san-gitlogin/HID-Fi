@@ -170,6 +170,19 @@ def test_every_overlay_is_measured_on_every_screen():
                          f"in tests/support/responsive_run.py")
 
 
+def test_the_screen_viewer_matches_the_companion_copy():
+    """watchScreen() lives in the dashboard and in companion/web/viewer.js, where
+    the companion app's own browser tests run it. One copy edited without the
+    other would test code the dashboard does not ship."""
+    import re as _re
+    js = _dashboard_js()
+    src = (paths.REPO / "companion" / "web" / "viewer.js").read_text(encoding="utf-8")
+    grab = lambda t: _re.search(r"^function watchScreen\(.*?^}", t, _re.S | _re.M)
+    a, b = grab(js), grab(src)
+    assert a and b, "watchScreen() missing from the dashboard or companion/web/viewer.js"
+    assert a.group(0) == b.group(0), "watchScreen() in web_ui.h and companion/web/viewer.js differ - change both"
+
+
 def test_every_board_action_matches_its_dashboard_shortcut():
     """{"cmd":"do","a":NAME} and the dashboard's shortcut tiles must press the same
     keys for the same thing on every OS. Each firmware ACTIONS row needs a dashboard

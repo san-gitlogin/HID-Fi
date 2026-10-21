@@ -42,6 +42,10 @@ READ_ONLY = [
     {"cmd": "open"}, {"cmd": "steps", "s": []}, {"cmd": "steps", "s": ["dance"]},
     # Saved networks: the list, and forgetting one that is not saved.
     {"cmd": "wifi_networks"}, {"cmd": "wifi_forget", "ssid": "definitely-not-a-saved-network"},
+    # Screen sharing: the list, and refusals that change nothing (an id no board has).
+    {"cmd": "companion_list"}, {"cmd": "companion_unpair", "id": "0f" * 16},
+    {"cmd": "companion_pair", "id": "0f" * 16}, {"cmd": "companion_pair", "id": "NOT-HEX"},
+    {"cmd": "screen_ticket", "id": "0f" * 16},               # serial: always wifi_only
 ]
 
 

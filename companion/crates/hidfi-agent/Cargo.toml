@@ -1,0 +1,23 @@
+[package]
+name = "hidfi-agent"
+description = "HID-Fi companion: finds the board on this computer's USB and network, pairs, and keeps it informed."
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+getrandom = "0.3.4"
+hex = "0.4.3"
+hidfi-core = { path = "../hidfi-core" }
+log = "0.4.34"
+mdns-sd = "0.21.6"
+nusb = "0.2.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+ureq = { version = "3.2.1", default-features = false }
+
+[dev-dependencies]
+getrandom = "0.3.4"
+hex = "0.4.3"
+serde_json = "1.0.154"

@@ -57,6 +57,10 @@
     if (state === 'overlay asw') return document.getElementById('asw');
     if (state === 'toast') return document.getElementById('toasts');
     if (state.startsWith('fullscreen')) return document.getElementById('padwrap');
+    // The floating screen, open: its own controls must work and be on screen; it
+    // can be moved, minimised or closed, so the page under it is judged with it
+    // minimised ("overlay screen float min"), where all of it must be reachable.
+    if (state === 'overlay screen float') return document.getElementById('scrFloat');
     return document.querySelector('.view.on');
   };
 
@@ -65,6 +69,9 @@
     // The reboot and new-network overlays scroll as a last resort on tiny screens.
     if (state === 'overlay boot') return document.getElementById('boot');
     if (state === 'overlay apnew') return document.getElementById('apnew');
+    // The Screen tab's floating window sits over a page that still scrolls: the
+    // page's controls must all stay reachable with it open.
+    if (state === 'overlay screen float min') return document.getElementById('main');
     if (state.startsWith('overlay') || state.startsWith('fullscreen') || state === 'toast') return null;
     return document.getElementById('main');
   };

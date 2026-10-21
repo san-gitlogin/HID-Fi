@@ -954,6 +954,91 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .toast.ok{border-color:rgba(34,211,154,.5)}.toast.bad{border-color:rgba(255,90,90,.5)}
 @keyframes tin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
 
+/* ---------------- screen: the computer's picture (companion app) ----------------
+   Docked, the picture sits above the trackpad on a phone held upright and beside
+   it on anything wider than tall. The trackpad is the Trackpad tab's own #padwrap,
+   moved in while this tab is open, so every gesture and setting is the real one
+   rather than a copy that could drift. */
+.scrwrap{display:flex;flex-direction:column;gap:var(--sp);max-width:1600px;margin:0 auto}
+.scrstageslot{min-width:0;position:relative}
+.scrstage{position:relative;width:100%;aspect-ratio:16/10;max-height:56vh;max-height:56dvh;min-height:150px;
+  background:#05070c;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+.scrstage video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;
+  transform-origin:0 0;background:#05070c;pointer-events:none}
+.scrstage.empty video{visibility:hidden}
+.scrstage.live{box-shadow:inset 0 0 0 1px rgba(0,210,255,.25)}
+.scrmsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:9px;padding:20px 22px;text-align:center;color:var(--fg2);font-size:13px;line-height:1.5}
+.scrmsg b{color:var(--fg);font-size:15px;font-weight:620}
+.scrmsg .ic{width:30px;height:30px;color:var(--acc)}
+.scrmsg .btn{margin-top:4px}
+.scrmsg:empty{display:none}
+.scrtools{position:absolute;right:8px;bottom:8px;display:flex;gap:6px;z-index:2}
+.scrtools .iconbtn{width:34px;height:34px;border-radius:10px;background:rgba(8,11,17,.74);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.scrstage.empty .scrtools .zm{display:none}
+.scrbadge{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:7px;height:26px;padding:0 10px;
+  border-radius:999px;background:rgba(8,11,17,.74);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  font-size:11.5px;color:var(--fg2);z-index:2;max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.scrbadge b{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.scrbadge:empty{display:none}
+/* Docked slot while the picture is floating: says where it went, and brings it back. */
+.scrhole{display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:120px;
+  padding:18px;border:1px dashed var(--line);border-radius:var(--r);color:var(--fg3);font-size:13px;text-align:center}
+.scrpadslot{min-width:0}
+.scrpadslot .padwrap{--padh:clamp(180px,30vh,320px)}
+/* The phone-landscape rule sizes #pad by id; in this tab the pad follows --padh. */
+#scrPadSlot #pad{height:var(--padh)}
+.scrpc .tag{margin-left:6px}
+.scrcode{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.scrcode input{flex:1 1 140px;min-width:0;min-height:44px;padding:8px 12px;border-radius:10px;
+  background:rgba(0,0,0,.32);border:1px solid var(--line2);font-size:22px;letter-spacing:.35em;
+  font-variant-numeric:tabular-nums;text-align:center}
+.scrcode .btn{flex:0 0 auto}
+.scrnote{font-size:12px;color:var(--fg3);margin-top:6px;white-space:normal}
+.scrnote.bad{color:var(--bad)}
+/* Wider than tall: picture left, trackpad right, both as tall as the screen allows. */
+@media(orientation:landscape) and (min-width:700px){
+  .scrwrap{flex-direction:row;align-items:stretch}
+  .scrstageslot{flex:1 1 auto}
+  .scrstage{aspect-ratio:auto;height:calc(100vh - 128px);height:calc(100dvh - 128px);max-height:none;min-height:220px}
+  .scrpadslot{flex:0 0 clamp(280px,34%,520px)}
+  .scrpadslot .padwrap{--padh:calc(100vh - 130px);--padh:calc(100dvh - 130px)}
+}
+@media(orientation:landscape) and (max-height:500px){
+  .scrstage{height:calc(100vh - 72px);height:calc(100dvh - 72px);min-height:150px}
+  .scrpadslot .padwrap{--padh:calc(100vh - 74px);--padh:calc(100dvh - 74px)}
+}
+/* ---- the floating window: the picture over any tab, moved and sized by hand ---- */
+.scrfloat{position:fixed;z-index:450;left:0;top:0;width:320px;display:none;flex-direction:column;
+  border-radius:12px;overflow:hidden;background:#05070c;border:1px solid var(--line2);
+  box-shadow:0 18px 50px rgba(0,0,0,.62)}
+.scrfloat.on{display:flex}
+.scrfloat .fhead{display:flex;align-items:center;gap:6px;height:36px;padding:0 3px 0 11px;flex:0 0 auto;
+  background:rgba(13,17,25,.97);cursor:grab;touch-action:none}
+.scrfloat .fhead.drag{cursor:grabbing}
+.scrfloat .fhead b{flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scrfloat .fhead .iconbtn{width:30px;height:30px;border-radius:8px;background:none;border:none}
+.scrfloat .fbody{position:relative}
+.scrfloat .scrstage{border:none;border-radius:0;max-height:none;height:auto;aspect-ratio:16/10;min-height:0}
+.scrfloat .scrtools .iconbtn{width:30px;height:30px}
+.scrfloat #scrPop{display:none}
+.scrfloat .scrbadge b{display:none}
+.scrfloat.min .fbody,.scrfloat.min .fsize{display:none}
+.scrfloat.min{width:auto!important;max-width:calc(100vw - 16px)}
+/* A screen under 400px tall has no room for the pill: just the way back. */
+.scrfloat.min.tiny .fhead b,.scrfloat.min.tiny .fhead .dot,.scrfloat.min.tiny #scrFDock,.scrfloat.min.tiny #scrFClose{display:none}
+.scrfloat.min.tiny .fhead{padding:0 3px;gap:0}
+/* While the window floats, the page gets that much more room to scroll on the
+   side the window sits, so nothing under it is out of reach. */
+main::before,main::after{content:'';display:block}
+main::before{height:var(--flpadtop,0px)}
+main::after{height:var(--flpad,0px)}
+.fsize{position:absolute;right:0;bottom:0;width:24px;height:24px;cursor:nwse-resize;touch-action:none;z-index:3;
+  background:linear-gradient(135deg,transparent 52%,rgba(0,210,255,.55) 52%)}
+
 /* ---------------- mobile ---------------- */
 .tabbar{display:none}
 /* Below 1100px the rail starts collapsed, but that is only a default - the
@@ -1112,6 +1197,14 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 <symbol id="i-keycap" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="17" rx="3.2"/><rect x="5.8" y="6.2" width="12.4" height="9.6" rx="2"/><text x="12" y="12.6" text-anchor="middle" font-size="5.1" font-weight="700" fill="currentColor" stroke="none" font-family="-apple-system,'Segoe UI',Roboto,sans-serif">Ctrl</text></symbol>
 <symbol id="i-appswitch" viewBox="0 0 24 24"><rect x="2.8" y="2.8" width="13" height="13" rx="2.5"/><path d="M2.8 6.9h13"/><rect x="8.2" y="8.2" width="13" height="13" rx="2.5"/><path d="M8.2 12.3h13"/></symbol>
 <symbol id="i-menukey" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/></symbol>
+<!-- Screen sharing. A monitor showing a live picture, a window inside a window
+     for floating, a lens for zoom, corners round a box for fit. -->
+<symbol id="i-screen" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8.5 20.5h7M12 17v3.5"/><path d="M10.2 8.3v5.4l4.4-2.7z"/></symbol>
+<symbol id="i-float" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="11.5" y="11" width="7.5" height="6" rx="1.3"/></symbol>
+<symbol id="i-dock" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m8.5 8.5 6 6M15 9.5v5.5H9.5"/></symbol>
+<symbol id="i-zoomin" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.8v5.4M7.8 10.5h5.4"/></symbol>
+<symbol id="i-zoomout" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.8 10.5h5.4"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24"><path d="M3.5 8.5v-5h5M20.5 8.5v-5h-5M3.5 15.5v5h5M20.5 15.5v5h-5"/><rect x="8" y="8.5" width="8" height="7" rx="1.3"/></symbol>
 </defs></svg>
 
 <div class="app">
@@ -1236,6 +1329,37 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
           </div>
           <p class="hint" style="margin-top:10px">Glide 0 stops the cursor dead when you lift off. Three finger drag replaces the three finger swipes with a drag, which never sends a click first. Turn off Three finger app switch and a sideways three finger swipe changes virtual desktop instead, which is what macOS does.</p>
           <p class="hint" id="hapNote" style="margin-top:8px;display:none"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN ============ -->
+    <section class="view" id="v-screen">
+      <div class="scrwrap" id="scrWrap">
+        <div class="scrstageslot" id="scrStageSlot">
+          <div class="scrstage empty" id="scrStage">
+            <video id="scrVideo" autoplay muted playsinline></video>
+            <div class="scrmsg" id="scrMsg"></div>
+            <div class="scrbadge" id="scrBadge"></div>
+            <div class="scrtools">
+              <button class="iconbtn zm" id="scrOut" aria-label="Zoom out"><svg class="ic ic-sm"><use href="#i-zoomout"/></svg></button>
+              <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
+              <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
+              <button class="iconbtn" id="scrPop" aria-label="Float over other tabs"><svg class="ic ic-sm"><use href="#i-float"/></svg></button>
+            </div>
+          </div>
+          <div class="scrhole" id="scrHole">
+            <span>The screen is in its floating window.</span>
+            <button class="btn sm" id="scrHoleDock"><svg class="ic ic-sm"><use href="#i-dock"/></svg>Bring it back here</button>
+          </div>
+        </div>
+        <div class="scrpadslot" id="scrPadSlot"></div>
+      </div>
+      <div class="grid" style="margin-top:var(--sp)">
+        <div class="card span">
+          <div class="ch"><svg class="ic"><use href="#i-screen"/></svg><h2>Computers</h2></div>
+          <div class="list" id="scrList"><p class="hint">Asking the board...</p></div>
+          <p class="hint" id="scrHelp" style="margin-top:10px"></p>
         </div>
       </div>
     </section>
@@ -1629,6 +1753,15 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   </div>
 </div>
 
+<div class="scrfloat" id="scrFloat" role="dialog" aria-label="Computer screen">
+  <div class="fhead" id="scrFHead"><span class="dot" id="scrFDot"></span><b id="scrFName">Screen</b>
+    <button class="iconbtn" id="scrFMin" aria-label="Minimise the screen"><svg class="ic ic-sm"><use href="#i-min"/></svg></button>
+    <button class="iconbtn" id="scrFDock" aria-label="Back to the Screen tab"><svg class="ic ic-sm"><use href="#i-dock"/></svg></button>
+    <button class="iconbtn" id="scrFClose" aria-label="Close the screen"><svg class="ic ic-sm"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="fbody" id="scrFBody"></div>
+  <div class="fsize" id="scrFSize" aria-hidden="true"></div>
+</div>
 <nav class="tabbar" id="tabbar"></nav>
 <div class="sheet" id="sheet"><div class="sheetin" id="sheetin"></div></div>
 <div class="boot" id="boot">
@@ -1724,7 +1857,8 @@ function connect(){
     wsUp=true;tries=0;link(true);bootDone();apDone();
     const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
-    refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();};
+    refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
+    if(curView==='screen'||SCR.float)scrList();};
   sock.onclose=()=>{if(!live())return;
     if(!lostAt)lostAt=Date.now();
     wsUp=false;waiters.length=0;link(false);aswAbort();tries++;setTimeout(connect,1200);};
@@ -1743,6 +1877,8 @@ function connect(){
     if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);
       else if(m.event==='sta_online'){if(m.mdns)MDNS_NAME=m.mdns;noteHomeIp(m.ip);refresh();}
       else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
+      else if(m.event==='companion_pending'){toast((m.name||'A computer')+' wants to share its screen','ok');scrList();}
+      else if(m.event==='companion_online')scrList();
       return;}
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
     // With a PIN set the board greets every new socket with a bare auth_required
@@ -2195,6 +2331,7 @@ function saveCfg(){
 // so the bar gets its own shorter wording rather than an ellipsis.
 const VIEWS=[
   {id:'pad',  t:'Trackpad',  s:'Pad',   i:'cursor'},
+  {id:'screen',t:'Screen',   s:'Screen',i:'screen'},
   {id:'keys', t:'Keyboard',  s:'Type',  i:'keyboard'},
   {id:'short',t:'Keys',      s:'Keys',  i:'keycap'},
   {id:'media',t:'Media',     s:'Media', i:'media'},
@@ -2252,6 +2389,9 @@ function go(id){
   $('btnInfo').setAttribute('aria-label',(v?v.t:'')+' help');
   $('main').scrollTop=0;
   try{location.hash=id;}catch(e){}
+  scrView(id);
+  // Who is connected changes while the page is open; show it as it is now.
+  if(id==='setup'&&wsUp)loadClients();
 }
 window.addEventListener('hashchange',()=>{
   const id=location.hash.replace('#','');
@@ -4189,7 +4329,8 @@ function pcEditor(edit){
 // phone, and applyStatus() rebuilds whatever a change to the PIN affects.
 let AUTH_SET=null;
 let AP_OPEN=false;
-function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();}
+function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
+  if(curView==='screen'||SCR.float)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
   else fetch('/api/status').then(r=>r.json()).then(applyStatus).catch(()=>{});
@@ -4225,6 +4366,12 @@ function applyStatus(d){
   }
   if(d.unicode_mac!==undefined)paintUni(d);
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
+  // Screen sharing: counts only. A change means a computer came, went or asked
+  // to pair - worth re-reading the list, but only where it is shown.
+  if(d.comp_paired!==undefined){
+    const k=d.comp_paired+'/'+d.comp_online+'/'+d.comp_pending;
+    if(k!==SCR.counts){SCR.counts=k;if(curView==='screen'||SCR.float||d.comp_pending)scrList();}
+  }
   // How many dashboards the board is serving. Polled, so a second phone opening
   // this page shows up here on its own - and so does a tab that was left open
   // somewhere and is still holding a socket.
@@ -4791,7 +4938,8 @@ function loadClients(){
   const l=$('clientList');
   l.innerHTML='<p class="hint">Asking the board...</p>';
   send({cmd:'clients'},r=>{
-    if(!r||r.status!=='ok'){l.innerHTML='<p class="hint">Could not read the client list.</p>';return;}
+    if(!r||r.status!=='ok'){l.innerHTML='<p class="hint">'+(r&&r.reply==='auth_required'
+      ?'Enter the access PIN to see who is connected.':'Could not read the client list.')+'</p>';return;}
     const dash='<p class="hint" style="margin:0 0 8px"><b>Dashboards open</b></p>'+dashListHtml(r)+
       '<p class="hint" style="margin:14px 0 8px"><b>On the board\u2019s own WiFi</b></p>';
     if(!r.clients||!r.clients.length){
@@ -4811,7 +4959,7 @@ function loadStorage(){
   const l=$('storeInfo');
   l.innerHTML=row('Reading','...');
   send({cmd:'storage_info'},r=>{
-    if(!r||r.status!=='ok'){l.innerHTML=row('Storage','could not be read');return;}
+    if(!r||r.status!=='ok'){l.innerHTML=row('Storage',r&&r.reply==='auth_required'?'enter the access PIN to see it':'could not be read');return;}
     const yn=v=>v?'yes':'no';
     const n=r.nvs||{}, c=r.hid_cfg||{}, w=r.wifi_cfg||{};
     l.innerHTML=
@@ -5001,13 +5149,477 @@ function renderPres(){
 }
 
 // =====================================================================
+//  screen - the computer's own picture, from the HID-Fi Companion app
+// =====================================================================
+// The board pairs the computer and hands out a one-use ticket; the picture
+// then comes straight from the computer over WebRTC (watchScreen, below), so
+// the board's radio keeps carrying only the mouse and keyboard. Watching runs
+// only while someone can see it: this tab open or the floating window shown,
+// and the page visible. Anything else stops the stream, which also stops the
+// computer capturing and encoding.
+const SCR={
+  pcs:[],pend:[],pinSet:true,loaded:false,
+  sel:null,h:null,state:'idle',why:'',fps:0,name:'',ip:'',
+  tries:0,retryT:0,float:false,min:false,counts:'',
+  z:{s:1,x:0,y:0},notes:{}
+};
+const scrVideo=$('scrVideo'),scrStage=$('scrStage');
+const PADHOME={parent:padwrap.parentNode,next:padwrap.nextSibling};
+function scrList(){
+  send({cmd:'companion_list'},r=>{
+    if(!r||r.status!=='ok')return;
+    SCR.loaded=true;SCR.pinSet=!!r.pin_set;
+    SCR.pcs=Array.isArray(r.paired)?r.paired:[];SCR.pend=Array.isArray(r.pending)?r.pending:[];
+    const ids=SCR.pcs.map(p=>p.id);
+    if(SCR.sel&&ids.indexOf(SCR.sel)<0){scrStop('idle');SCR.sel=null;}
+    if(!SCR.sel){
+      let keep='';try{keep=localStorage.getItem('scrpc')||'';}catch(e){}
+      const on=SCR.pcs.filter(p=>p.online);
+      SCR.sel=ids.indexOf(keep)>=0?keep:(on.length===1?on[0].id:(SCR.pcs.length===1?SCR.pcs[0].id:null));
+    }
+    scrRenderList();scrSync();
+  });
+}
+function scrPc(){return SCR.pcs.find(p=>p.id===SCR.sel)||null;}
+// The list is rebuilt from the board's answer, which arrives every few seconds
+// while a pairing is under way. A code half typed must survive that, and keep
+// its focus, or the box empties under your thumb.
+function scrRenderList(){
+  const l=$('scrList');if(!l)return;
+  const typed={},act=document.activeElement;
+  l.querySelectorAll('[data-scrcode]').forEach(i=>{typed[i.dataset.scrcode]=i.value;});
+  const focused=act&&act.dataset&&act.dataset.scrcode;
+  let h='';
+  if(!SCR.pinSet){
+    h+='<div class="item">'+ico('shield')+'<div class="tx"><b>Set an access PIN first</b>'+
+      '<span style="white-space:normal">A computer\u2019s screen is only shared with a board that has one.</span></div>'+
+      '<button class="btn sm" id="scrToSetup">Settings</button></div>';
+  }
+  SCR.pend.forEach(p=>{
+    const n=SCR.notes[p.id]||'';
+    h+='<div class="item scrpc" data-pend="'+p.id+'">'+ico('devices')+'<div class="tx"><b>'+esc(p.name)+'</b>';
+    if(p.state==='pending'){
+      h+='<span>wants to share its screen \u00b7 '+esc(p.ip)+'</span></div>'+
+        '<button class="btn sm ok" data-scrpair="'+p.id+'">Pair</button>'+
+        '<button class="btn sm" data-scrno="'+p.id+'">Not now</button></div>';
+    }else if(p.state==='aborted'){
+      h+='<span style="white-space:normal">Three wrong codes. Choose Pair again in HID-Fi Companion on that computer.</span></div>'+
+        '<button class="btn sm" data-scrno="'+p.id+'">Dismiss</button></div>';
+    }else{
+      h+='<span style="white-space:normal">Type the six digits HID-Fi Companion shows on '+esc(p.name)+'.</span>'+
+        '<div class="scrcode"><input data-scrcode="'+p.id+'" inputmode="numeric" pattern="[0-9]*" maxlength="6" '+
+        'autocomplete="one-time-code" placeholder="000000" aria-label="Pairing code shown on '+esc(p.name)+'">'+
+        '<button class="btn sm ok" data-scrok="'+p.id+'">Pair</button></div>'+
+        (n?'<p class="scrnote'+(n.bad?' bad':'')+'">'+esc(n.t)+'</p>':'')+'</div>'+
+        '<button class="btn sm" data-scrno="'+p.id+'">Cancel</button></div>';
+    }
+  });
+  SCR.pcs.forEach(p=>{
+    const watching=p.id===SCR.sel&&(SCR.state==='live'||SCR.state==='reconnecting');
+    h+='<div class="item scrpc" data-pc="'+p.id+'">'+ico('monitor')+'<div class="tx"><b>'+esc(p.name)+'</b><span>'+
+      (watching?'on screen':p.online?'ready':'not running - start HID-Fi Companion on it')+
+      (p.online&&p.ip?' \u00b7 '+esc(p.ip):'')+'</span></div>'+
+      (p.id===SCR.sel&&(SCR.h||SCR.retryT)?'':'<button class="btn sm" data-scrwatch="'+p.id+'"'+(p.online?'':' disabled')+'>Show</button>')+
+      '<button class="iconbtn" data-scrdel="'+p.id+'" aria-label="Remove '+esc(p.name)+'">'+ico('trash','ic-sm')+'</button></div>';
+  });
+  if(!h)h='<p class="hint">No computers yet.</p>';
+  l.innerHTML=h;
+  l.querySelectorAll('[data-scrcode]').forEach(i=>{
+    if(typed[i.dataset.scrcode])i.value=typed[i.dataset.scrcode];
+    if(focused===i.dataset.scrcode)i.focus();
+  });
+  $('scrHelp').textContent=SCR.pcs.length?'':
+    'Install HID-Fi Companion on the computer this board is plugged into. It finds the board by itself and asks to pair here.';
+}
+function scrNote(id,t,bad){SCR.notes[id]={t:t,bad:!!bad};scrRenderList();}
+function scrPair(id){
+  send({cmd:'companion_pair',id:id},r=>{
+    if(r&&r.status==='ok'){delete SCR.notes[id];buzz(8);}
+    else toast((r&&r.message)||'Could not start pairing','bad');
+    scrList();
+  });
+}
+function scrConfirm(id){
+  const i=document.querySelector('[data-scrcode="'+id+'"]');
+  const code=(i&&i.value||'').replace(/\D/g,'');
+  if(code.length!==6)return scrNote(id,'The code has six digits.',true);
+  send({cmd:'companion_pair',id:id,code:code},r=>{
+    if(r&&r.status==='ok'){delete SCR.notes[id];toast('Paired with '+(r.name||'the computer'),'ok');buzz(14);}
+    else if(r&&r.reply==='wrong_code'){if(i)i.value='';scrNote(id,'That is not the code on the computer. '+r.tries_left+' '+(r.tries_left===1?'try':'tries')+' left.',true);}
+    else if(r&&r.reply==='not_ready')scrNote(id,'The computer has not shown its code yet. Give it a second.',true);
+    else toast((r&&r.message)||'Pairing failed','bad');
+    scrList();
+  });
+}
+function scrForget(id,pending){
+  const pc=SCR.pcs.find(p=>p.id===id);
+  if(!pending&&!confirm('Remove "'+((pc&&pc.name)||'this computer')+'"?\n\nIts screen can no longer be shown here until it is paired again.'))return;
+  if(id===SCR.sel){scrStop('idle');SCR.sel=null;try{localStorage.removeItem('scrpc');}catch(e){}}
+  delete SCR.notes[id];
+  send({cmd:'companion_unpair',id:id},()=>scrList());
+}
+function scrChoose(id){
+  if(SCR.sel!==id)scrStop('idle');
+  SCR.sel=id;SCR.tries=0;try{localStorage.setItem('scrpc',id);}catch(e){}
+  if(curView!=='screen'&&!SCR.float)go('screen');
+  scrSync();scrRenderList();
+}
+function scrWant(){return (curView==='screen'||SCR.float)&&!document.hidden&&!!SCR.sel;}
+function scrSync(){
+  if(scrWant()){if(!SCR.h&&!SCR.retryT&&SCR.state!=='ticket')scrStart();}
+  else if(SCR.h||SCR.retryT||SCR.state==='ticket')scrStop('idle');
+  scrPaint();
+}
+function scrStart(){
+  const pc=scrPc();if(!pc)return;
+  SCR.name=pc.name;SCR.ip=pc.ip||'';
+  if(!pc.online){SCR.state='offline';scrPaint();return;}   // a companion_online event retries
+  SCR.state='ticket';scrPaint();
+  send({cmd:'screen_ticket',id:pc.id},r=>{
+    if(SCR.state!=='ticket')return;            // stopped while the ticket was on its way
+    if(!scrWant()){SCR.state='idle';scrPaint();return;}
+    if(!r||r.status!=='ok'){
+      if(r&&r.reply==='pc_offline'){pc.online=false;SCR.state='offline';scrRenderList();}
+      else{SCR.state='refused';SCR.why=(r&&r.reply)||'error';scrRetry();}
+      scrPaint();return;
+    }
+    SCR.ip=r.ip;SCR.state='connecting';
+    SCR.h=watchScreen(r,scrVideo,scrOn);
+  });
+}
+function scrOn(s){
+  if(s==='connecting')SCR.state='connecting';
+  else if(s==='live'){SCR.state='live';SCR.tries=0;SCR.why='';scrStage.classList.remove('empty');scrRenderList();}
+  else if(s==='reconnect')SCR.state='reconnecting';
+  else if(s.indexOf('stats:')===0){SCR.fps=parseInt(s.slice(6),10)||0;}
+  else{
+    SCR.h=null;
+    const why=s.slice(s.indexOf(':')+1);
+    SCR.state=s.indexOf('refused')===0?'refused':'ended';SCR.why=why;
+    if(why!=='stopped'){scrStage.classList.add('empty');scrRenderList();}
+    // A wrong certificate is someone in the middle and busy is another phone:
+    // retrying either would only repeat it. Everything else is the network.
+    if(why!=='stopped'&&why!=='fingerprint'&&why!=='busy')scrRetry();
+  }
+  scrPaint();
+}
+function scrRetry(){
+  if(SCR.retryT||!scrWant())return;
+  const d=Math.min(15000,1000*Math.pow(2,SCR.tries++));
+  SCR.retryT=setTimeout(()=>{SCR.retryT=0;if(scrWant()&&!SCR.h)scrStart();},d);
+}
+function scrStop(state){
+  if(SCR.retryT){clearTimeout(SCR.retryT);SCR.retryT=0;}
+  const h=SCR.h;SCR.h=null;
+  if(h)h.stop();
+  try{scrVideo.srcObject=null;}catch(e){}
+  scrStage.classList.add('empty');
+  SCR.state=state||'idle';SCR.fps=0;SCR.tries=0;
+  scrPaint();
+}
+function scrMsgHtml(){
+  const n=esc(SCR.name||'the computer');
+  if(!SCR.loaded)return '<span>Asking the board...</span>';
+  if(!SCR.pinSet)return ico('shield')+'<b>Set an access PIN to share screens</b><span>Settings, Access PIN.</span>';
+  if(!SCR.pcs.length)return ico('screen')+'<b>See a computer\u2019s screen here</b>'+
+    '<span>Install HID-Fi Companion on the computer this board is plugged into. It asks to pair below.</span>';
+  if(!SCR.sel)return ico('screen')+'<b>Choose a computer below</b>';
+  switch(SCR.state){
+    case 'live':return '';
+    case 'offline':return ico('monitor')+'<b>'+n+' is not reachable</b><span>Start HID-Fi Companion on it. The picture appears by itself once it is running.</span>';
+    case 'ticket':case 'connecting':case 'idle':
+      // Retrying after a failure: keep saying why, not just "connecting".
+      if(!(SCR.tries&&SCR.why))return '<span>Connecting to '+n+'...</span>';
+    case 'reconnecting':return '';
+  }
+  const w=SCR.why;
+  if(w==='busy')return ico('eye')+'<b>Two dashboards are already watching '+n+'</b><span>Close one of them, then choose Show again.</span>';
+  if(w==='fingerprint')return ico('shield')+'<b>Stopped for your safety</b><span>'+n+' answered with a certificate this board did not vouch for. Someone on the network may be in the middle. Remove it below and pair it again.</span>';
+  if(w==='closed')return ico('cpu')+'<b>HID-Fi is not plugged into '+n+'</b><span>Plug the board\u2019s USB port into it.</span>';
+  if(w==='unreachable'||w==='network')return onBoardAp()
+    ?ico('wifi')+'<b>This phone cannot reach '+n+'</b><span>It is on the board\u2019s own WiFi. Join the same WiFi as the computer, or turn on Internet sharing in Settings.</span>'
+    :ico('wifi')+'<b>Cannot reach '+n+(SCR.ip?' at '+esc(SCR.ip):'')+'</b><span>A firewall on the computer may be blocking HID-Fi Companion. Trying again...</span>';
+  return '<span>Reconnecting to '+n+'...</span>';
+}
+function scrPaint(){
+  const m=$('scrMsg');if(!m)return;
+  const html=scrMsgHtml();
+  if(m.innerHTML!==html)m.innerHTML=html;
+  const live=SCR.state==='live'||SCR.state==='reconnecting';
+  scrStage.classList.toggle('live',SCR.state==='live');
+  const z=SCR.z.s>1.01?' \u00b7 '+Math.round(SCR.z.s*100)+'%':'';
+  const badge=live?'<span class="dot '+(SCR.state==='live'?'ok':'warn')+'"></span><b>'+esc(SCR.name)+'</b>'+
+    (SCR.state==='reconnecting'?' reconnecting':(SCR.fps?' \u00b7 '+SCR.fps+' fps':''))+z:'';
+  const b=$('scrBadge');if(b.innerHTML!==badge)b.innerHTML=badge;
+  $('scrFName').textContent=SCR.name||'Screen';
+  $('scrFDot').className='dot '+(SCR.state==='live'?'ok':live?'warn':'');
+}
+// ---- zoom and pan: pinch, wheel, double tap, the buttons ----
+function scrClamp(){
+  const W=scrStage.clientWidth,H=scrStage.clientHeight,z=SCR.z;
+  z.s=Math.min(6,Math.max(1,z.s));
+  z.x=Math.min(0,Math.max(W*(1-z.s),z.x));
+  z.y=Math.min(0,Math.max(H*(1-z.s),z.y));
+}
+function scrApplyZoom(){
+  scrClamp();
+  const z=SCR.z;
+  scrVideo.style.transform=z.s===1?'':'translate('+z.x.toFixed(1)+'px,'+z.y.toFixed(1)+'px) scale('+z.s.toFixed(3)+')';
+  scrPaint();
+}
+function scrZoomAt(f,px,py){
+  const z=SCR.z,s2=Math.min(6,Math.max(1,z.s*f)),k=s2/z.s;
+  z.x=px-(px-z.x)*k;z.y=py-(py-z.y)*k;z.s=s2;
+  scrApplyZoom();
+}
+function scrFit(){SCR.z={s:1,x:0,y:0};scrApplyZoom();}
+(function(){
+  const pts=new Map();let pinch=null,pan=null,tap=null,lastTap=0;
+  const local=e=>{const r=scrStage.getBoundingClientRect(),Z=pgZoom();return {x:(e.clientX-r.left)/Z,y:(e.clientY-r.top)/Z};};
+  scrStage.addEventListener('pointerdown',e=>{
+    if(e.target.closest('button'))return;
+    try{scrStage.setPointerCapture(e.pointerId);}catch(x){}
+    const p=local(e);pts.set(e.pointerId,p);
+    if(pts.size===2){
+      const [a,b]=[...pts.values()];
+      pinch={d:Math.hypot(a.x-b.x,a.y-b.y)||1,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};pan=null;tap=null;
+    }else if(pts.size===1){pan={x:p.x,y:p.y};tap={x:p.x,y:p.y,t:Date.now()};}
+  });
+  scrStage.addEventListener('pointermove',e=>{
+    if(!pts.has(e.pointerId))return;
+    const p=local(e);pts.set(e.pointerId,p);
+    if(pinch&&pts.size>=2){
+      const [a,b]=[...pts.values()];
+      const d=Math.hypot(a.x-b.x,a.y-b.y)||1,mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      SCR.z.x+=mx-pinch.mx;SCR.z.y+=my-pinch.my;   // two fingers also pan
+      scrZoomAt(d/pinch.d,mx,my);
+      pinch={d:d,mx:mx,my:my};
+    }else if(pan&&SCR.z.s>1){
+      SCR.z.x+=p.x-pan.x;SCR.z.y+=p.y-pan.y;pan={x:p.x,y:p.y};scrApplyZoom();
+    }
+    if(tap&&Math.hypot(p.x-tap.x,p.y-tap.y)>10)tap=null;
+  });
+  const up=e=>{
+    if(!pts.has(e.pointerId))return;
+    pts.delete(e.pointerId);
+    if(pts.size<2)pinch=null;
+    if(pts.size===0){
+      pan=null;
+      if(tap&&Date.now()-tap.t<300){
+        if(Date.now()-lastTap<320){lastTap=0;SCR.z.s>1.01?scrFit():scrZoomAt(2.5,tap.x,tap.y);}
+        else lastTap=Date.now();
+      }
+      tap=null;
+    }
+  };
+  scrStage.addEventListener('pointerup',up);
+  scrStage.addEventListener('pointercancel',up);
+  // Ctrl+wheel zooms - which is also what a laptop trackpad's pinch sends. A
+  // plain wheel pans a zoomed picture and otherwise scrolls the page, so the
+  // Computers card below stays reachable with a mouse.
+  scrStage.addEventListener('wheel',e=>{
+    if(e.ctrlKey){
+      e.preventDefault();const p=local(e);
+      scrZoomAt(Math.exp(-Math.max(-60,Math.min(60,e.deltaY))*0.01),p.x,p.y);
+    }else if(SCR.z.s>1.01){
+      e.preventDefault();SCR.z.x-=e.deltaX;SCR.z.y-=e.deltaY;scrApplyZoom();
+    }
+  },{passive:false});
+  if(window.ResizeObserver)new ResizeObserver(()=>{scrApplyZoom();if(SCR.float)flPlace();}).observe(scrStage);
+})();
+$('scrIn').onclick=()=>scrZoomAt(1.5,scrStage.clientWidth/2,scrStage.clientHeight/2);
+$('scrOut').onclick=()=>scrZoomAt(1/1.5,scrStage.clientWidth/2,scrStage.clientHeight/2);
+$('scrFit').onclick=scrFit;
+// ---- the floating window ----
+// The picture itself moves into it, so nothing restarts: the same video element,
+// the same zoom. It is kept inside the visible area on every resize and turn,
+// clear of the phone's tab bar, and remembers where it was put on this device.
+// Very large displays zoom the whole page (:root zoom), while innerWidth and
+// pointer positions stay in screen pixels. Everything placed by hand converts.
+function pgZoom(){return parseFloat(getComputedStyle(document.documentElement).zoom)||1;}
+function flSaved(){try{return JSON.parse(localStorage.getItem('scrfloat')||'null');}catch(e){return null;}}
+function flSave(){
+  const el=$('scrFloat');
+  try{localStorage.setItem('scrfloat',JSON.stringify({x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth}));}catch(e){}
+}
+function flPlace(x,y,w){
+  const el=$('scrFloat'),s=flSaved()||{};
+  if(SCR.min)return flTuck();       // minimised: stays tucked, whatever resized
+  const Z=pgZoom(),W=innerWidth/Z,H=innerHeight/Z;
+  const tab=W<=767?60:0;
+  // As wide as asked, but never taller than the room there is (a phone on its side).
+  const maxW=Math.max(160,Math.min(W-16,(H-tab-16-36)*1.6));
+  w=Math.round(Math.min(Math.max(w||s.w||Math.min(360,W-24),160),maxW));
+  if(!SCR.min)el.style.width=w+'px';
+  const h=el.offsetHeight||Math.round(w*10/16)+36;
+  const fx=x!==undefined?x:(s.x!==undefined?s.x:W-w-12),fy=y!==undefined?y:(s.y!==undefined?s.y:H-tab-h-12);
+  el.style.left=Math.round(Math.min(Math.max(8,fx),Math.max(8,W-el.offsetWidth-8)))+'px';
+  el.style.top=Math.round(Math.min(Math.max(8,fy),Math.max(8,H-tab-h-8)))+'px';
+  flRoom();
+}
+// Scroll room on the side the window sits, the height of the window.
+function flRoom(){
+  const el=$('scrFloat'),r=document.documentElement.style;
+  const h=SCR.float?el.offsetHeight+16:0,low=el.offsetTop+el.offsetHeight/2>innerHeight/pgZoom()/2;
+  r.setProperty('--flpad',(low?h:0)+'px');r.setProperty('--flpadtop',(low?0:h)+'px');
+}
+function scrFloat(on){
+  on=!!on;if(on===SCR.float)return;
+  SCR.float=on;
+  const el=$('scrFloat');
+  if(on){$('scrFBody').appendChild(scrStage);el.classList.add('on');flPlace();}
+  else{$('scrStageSlot').insertBefore(scrStage,$('scrHole'));el.classList.remove('on','min');SCR.min=false;}
+  $('scrHole').style.display=on?'flex':'none';
+  $('scrFMin').innerHTML=ico('min','ic-sm');
+  flRoom();
+  scrApplyZoom();scrSync();
+}
+function scrMinimise(){
+  SCR.min=!SCR.min;
+  const el=$('scrFloat');el.classList.toggle('min',SCR.min);
+  $('scrFMin').innerHTML=ico(SCR.min?'max':'min','ic-sm');
+  $('scrFMin').setAttribute('aria-label',SCR.min?'Show the screen':'Minimise the screen');
+  if(!SCR.min){el.classList.remove('tiny');flPlace();}
+  else{SCR.side=el.offsetLeft+el.offsetWidth/2>innerWidth/pgZoom()/2;flTuck();}
+}
+// The pill tucks in along the bottom edge, on the side the window was, so it
+// never sits in the middle of the page (the saved spot is for restoring). On a
+// screen under 400px tall the bottom is all controls, so it shrinks to the
+// restore button and sits over the top bar's logo tile, which is not a control.
+function flTuck(){
+  const el=$('scrFloat'),Z=pgZoom(),W=innerWidth/Z,H=innerHeight/Z,tab=W<=767?60:0;
+  const tiny=H<400;
+  el.classList.toggle('tiny',tiny);
+  if(tiny){el.style.top='6px';el.style.left='6px';}
+  else{
+    el.style.top=Math.max(8,H-tab-el.offsetHeight-8)+'px';
+    el.style.left=(SCR.side?Math.max(8,W-el.offsetWidth-8):8)+'px';
+  }
+  flRoom();
+}
+(function(){
+  const head=$('scrFHead'),grip=$('scrFSize'),el=$('scrFloat');
+  let d=null,r=null;
+  head.addEventListener('pointerdown',e=>{
+    if(e.target.closest('button'))return;
+    try{head.setPointerCapture(e.pointerId);}catch(x){}
+    const Z=pgZoom();d={dx:e.clientX/Z-el.offsetLeft,dy:e.clientY/Z-el.offsetTop};head.classList.add('drag');
+  });
+  head.addEventListener('pointermove',e=>{if(d){const Z=pgZoom();flPlace(e.clientX/Z-d.dx,e.clientY/Z-d.dy,el.offsetWidth);}});
+  const end=()=>{if(d){d=null;head.classList.remove('drag');flSave();}};
+  head.addEventListener('pointerup',end);head.addEventListener('pointercancel',end);
+  grip.addEventListener('pointerdown',e=>{
+    try{grip.setPointerCapture(e.pointerId);}catch(x){}
+    r={x:e.clientX/pgZoom(),w:el.offsetWidth};e.stopPropagation();
+  });
+  grip.addEventListener('pointermove',e=>{if(r)flPlace(el.offsetLeft,el.offsetTop,r.w+e.clientX/pgZoom()-r.x);});
+  const rend=()=>{if(r){r=null;flSave();}};
+  grip.addEventListener('pointerup',rend);grip.addEventListener('pointercancel',rend);
+  addEventListener('resize',()=>{if(SCR.float)flPlace();});
+})();
+$('scrPop').onclick=()=>{scrFloat(true);buzz(8);};
+$('scrHoleDock').onclick=()=>scrFloat(false);
+$('scrFDock').onclick=()=>{scrFloat(false);go('screen');};
+$('scrFClose').onclick=()=>{scrFloat(false);scrSync();};
+$('scrFMin').onclick=scrMinimise;
+$('scrList').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='scrToSetup')return go('setup');
+  if(b.dataset.scrpair)return scrPair(b.dataset.scrpair);
+  if(b.dataset.scrok)return scrConfirm(b.dataset.scrok);
+  if(b.dataset.scrno)return scrForget(b.dataset.scrno,true);
+  if(b.dataset.scrwatch)return scrChoose(b.dataset.scrwatch);
+  if(b.dataset.scrdel)return scrForget(b.dataset.scrdel,false);
+});
+$('scrList').addEventListener('keydown',e=>{
+  const i=e.target.dataset&&e.target.dataset.scrcode;
+  if(i&&e.key==='Enter'){e.preventDefault();scrConfirm(i);}
+});
+// The trackpad lives in this tab while it is open, and goes home afterwards.
+function scrView(id){
+  const slot=$('scrPadSlot');
+  if(!FS.on){
+    if(id==='screen'&&padwrap.parentNode!==slot){slot.appendChild(padwrap);if(DECK.on&&$('kbd2'))buildKbdIn('kbd2');}
+    else if(id!=='screen'&&padwrap.parentNode===slot){
+      PADHOME.parent.insertBefore(padwrap,PADHOME.next);if(DECK.on&&$('kbd2'))buildKbdIn('kbd2');
+    }
+  }
+  if(id==='screen')scrList();
+  scrSync();
+}
+addEventListener('pagehide',()=>scrStop('idle'));
+
+// HID-Fi screen viewer - kept identical to companion/web/viewer.js (tests/static checks).
+// HID-Fi screen viewer: the browser half of companion/DESIGN.md "Viewer tickets".
+// Written to drop into the dashboard (web_ui.h) unchanged: no modules, no
+// WebCrypto (the dashboard is plain http, not a secure context), no emoji.
+//
+// watchScreen(t, video, on) where t = the board's screen_ticket reply
+// ({ip, port, fp, tn, vn, ticket}) and `on` gets state changes:
+//   'connecting' | 'live' | 'reconnect' | 'ended:<why>' | 'refused:<why>'
+// Returns {stop()}. Keyframes are asked for by WebRTC itself when a picture breaks.
+function watchScreen(t, video, on){
+  let pc=null, ws=null, done=false, live=false;
+  const say=s=>{ if(!done||s.indexOf('ended')===0||s.indexOf('refused')===0) on(s); };
+  const finish=s=>{ if(done)return; done=true; say(s);
+    try{ws&&ws.readyState===1&&ws.send(JSON.stringify({t:'bye'}));}catch(e){}
+    try{ws&&ws.close();}catch(e){} try{pc&&pc.close();}catch(e){} };
+  // The answer must carry the certificate the paired app registered with the
+  // board. Anything else is someone in the middle: refuse it.
+  const fpOf=sdp=>{ const m=/a=fingerprint:sha-256 ([0-9A-Fa-f:]+)/.exec(sdp);
+    return m?m[1].replace(/:/g,'').toLowerCase():''; };
+  try{ ws=new WebSocket('ws://'+t.ip+':'+t.port+'/'); }
+  catch(e){ finish('refused:unreachable'); return {stop(){}}; }
+  say('connecting');
+  const opened=setTimeout(()=>{ if(!live)finish('refused:unreachable'); },12000);
+  ws.onopen=()=>ws.send(JSON.stringify({t:'hello',tn:t.tn,vn:t.vn,ticket:t.ticket}));
+  ws.onerror=()=>{ if(!live)finish('refused:unreachable'); };
+  ws.onclose=()=>{ clearTimeout(opened); finish(live?'ended:closed':'refused:unreachable'); };
+  ws.onmessage=async ev=>{
+    let m; try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.t==='error'){ return finish('refused:'+(m.reason||'error')); }
+    if(m.t==='end'){ return finish('ended:'+(m.reason||'')); }
+    if(m.t==='stats'){ on('stats:'+(m.fps|0)); return; }
+    if(m.t==='ready'){
+      pc=new RTCPeerConnection({iceServers:[]});
+      const tr=pc.addTransceiver('video',{direction:'recvonly'});
+      try{ // H.264 first: the PC encodes it in hardware
+        const caps=RTCRtpReceiver.getCapabilities&&RTCRtpReceiver.getCapabilities('video');
+        if(caps&&tr.setCodecPreferences){
+          const h=caps.codecs.filter(c=>/h264/i.test(c.mimeType));
+          if(h.length) tr.setCodecPreferences(h.concat(caps.codecs.filter(c=>!/h264/i.test(c.mimeType))));
+        }
+      }catch(e){}
+      pc.ontrack=e=>{ video.srcObject=e.streams[0]||new MediaStream([e.track]); };
+      pc.onconnectionstatechange=()=>{
+        const s=pc.connectionState;
+        if(s==='connected'){ live=true; clearTimeout(opened); say('live'); }
+        else if(s==='disconnected'){ say('reconnect'); }
+        else if(s==='failed'){ finish(live?'ended:network':'refused:network'); }
+      };
+      const offer=await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({t:'offer',sdp:pc.localDescription.sdp}));
+      return;
+    }
+    if(m.t==='answer'){
+      if(!t.fp||fpOf(m.sdp)!==String(t.fp).toLowerCase()) return finish('refused:fingerprint');
+      try{ await pc.setRemoteDescription({type:'answer',sdp:m.sdp}); }
+      catch(e){ finish('refused:answer'); }
+    }
+  };
+  return {
+    stop(){ finish('ended:stopped'); }
+  };
+}
+
+// =====================================================================
 //  boot
 // =====================================================================
 buildNav();buildKbd();kbWatch();bindAll();bindGpButtons();
 RAIL.init();$('btnRail').onclick=()=>RAIL.toggle();
 document.querySelectorAll('[data-nofill]').forEach(guardAutofill);
 DECK.set((()=>{try{return localStorage.getItem('deck')==='1';}catch(e){return false;}})(),true);
-loadClients();loadStorage();
 bindStick($('stickL'),'l');bindStick($('stickR'),'r');
 renderQuick();renderKnobs();renderMacros();renderSC();gpSync();FS.sync();paintOsUi();paintGestureLabels();
 go(VIEWS.some(v=>v.id===location.hash.replace('#',''))?location.hash.replace('#',''):'pad');
@@ -5054,6 +5666,7 @@ zoomWatch();
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)aswClose(true);   // never leave the PC with Alt stuck down
   else refresh();
+  scrSync();                           // a hidden page watches nothing
 });
 </script>
 </body>

@@ -1,0 +1,25 @@
+[package]
+name = "hidfi-companion"
+description = "HID-Fi Companion: shows this computer's screen on the HID-Fi dashboard."
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hidfi-companion"
+path = "src/main.rs"
+
+[dependencies]
+hidfi-core = { path = "../hidfi-core" }
+hidfi-agent = { path = "../hidfi-agent" }
+hidfi-stream = { path = "../hidfi-stream" }
+dirs = "7.0.0"
+log = "0.4.34"
+hex = "0.4.3"
+serde_json = "1.0.154"
+getrandom = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+tray-icon = "0.24.2"
+tao = "0.37.1"
+png = "0.18.1"

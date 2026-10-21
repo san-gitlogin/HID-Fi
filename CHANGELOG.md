@@ -7,6 +7,38 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+### Fixed
+
+- **Settings: Connected clients and Storage no longer sit on "Asking the
+  board..." / "Reading...".** Both were read once, over HTTP, as the page
+  loaded - before the access PIN was entered - so a fresh tab got "PIN
+  required" and the lists never filled in until their refresh buttons were
+  tapped. When they did load, they described the moment before the page's own
+  socket existed, so a dashboard could read "No dashboards are open". They now
+  load over the socket when it opens, after every sign-in, and each time
+  Settings is opened. Reproduced and verified against a v3.11 board; two
+  regression scenarios in `settings.feature`.
+
+### Added (not yet released or flashed)
+
+- **Screen tab: see the computer's own screen.** With HID-Fi Companion running
+  on the computer, its screen appears live in a new Screen tab, above the
+  trackpad on a phone held upright and beside it on anything wider. Pinch,
+  double tap, Ctrl+wheel or the buttons to zoom; the float button keeps the
+  picture on top, draggable and resizable, while you use the other tabs. Pairing
+  happens in the same tab: tap Pair, type the six digits the computer shows.
+  The picture goes from the computer to the phone directly (WebRTC, encrypted)
+  and stops whenever nobody can see it.
+- **Board side** (`hid_fi/companion.h`): pairing with a committed six-digit
+  code, heartbeats and one-use viewer tickets (`POST /api/companion`,
+  `companion_list`, `companion_pair`, `companion_unpair`, `screen_ticket`).
+  No access PIN, no screen sharing; a PIN set without the old one removes every
+  paired computer. See `companion/DESIGN.md` and SECURITY.md.
+
+---
+
 ## v3.11 - 2026-10-20
 
 Remembers your networks, like a phone - take it from one home to another.
