@@ -201,3 +201,22 @@ screen / login window (system service), multi-display picker in the window.
   the code in 44px type, buttons from the same model as the tray. Opens by itself
   on first run and when the user must act (needs_window, tested), not again for
   something already dismissed. 34 MB RSS without it, 73 MB while open.
+
+### 2026-10-21 (owner at work, remote; "go")
+- Flashing BLOCKED: only the board's native USB enumerates on this Mac (serial
+  B81F3FDA1A2C); the COM cable carries no data (no CH343 on the bus). Firmware
+  has no OTA or reboot-to-bootloader, so a data cable in COM is required.
+- Multi-viewer: limit 4, bitrate follows the slowest viewer (per-viewer
+  estimates), busy viewers wait and join. multi_view.py: 4 Chrome viewers at
+  1080p 26-30 fps, CPU flat 1 -> 4 viewers.
+- Watch only (#watch): no dashboard flash (:target CSS), fading bar, full screen,
+  keys, chooser, wording; bug fixed: bar never faded after going live.
+- dashboard_live.py: phone + watch screen + third dashboard, one PIN, together.
+  "closed" reason sent when unplugged.
+- Linux: ksni tray + notifications, X11 capture (XDamage, XFixes cursor),
+  OpenH264 via Cisco binary (SHA-checked; bitrate via rebuild). Zig as a cross C
+  compiler for checking (tools/). All three targets clippy -D warnings clean.
+- Media on UDP 47820-47859 (firewall-friendly). Installers + docs/COMPANION.md +
+  dashboard links. Bug fixed: links inside the picture were untappable.
+- CI workflow companion.yml (manual) to RUN everything on real Windows/Ubuntu.
+- Full suite PASSED (ui 503).
