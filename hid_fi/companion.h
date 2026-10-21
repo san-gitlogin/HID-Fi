@@ -95,10 +95,12 @@ void compLoad() {
         char k[3];
         CompPaired& c = compPaired[i];
         compNvsKey('i', i, k);
-        if (preferences.getBytesLength(k) != 16) continue;
+        // isKey first: asking the length of a key that is not there makes some
+        // core debug levels log an error per empty slot at every boot.
+        if (!preferences.isKey(k) || preferences.getBytesLength(k) != 16) continue;
         preferences.getBytes(k, c.id, 16);
         compNvsKey('k', i, k);
-        if (preferences.getBytesLength(k) != 32) { comp_wipe(&c, sizeof(c)); continue; }
+        if (!preferences.isKey(k) || preferences.getBytesLength(k) != 32) { comp_wipe(&c, sizeof(c)); continue; }
         preferences.getBytes(k, c.key, 32);
         compNvsKey('n', i, k);
         String n = preferences.getString(k, "Computer");
