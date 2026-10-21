@@ -123,6 +123,12 @@ someone in between. Three wrong codes end the attempt; start again from the app.
 The lock screen, the login window and the BIOS are not shown yet: the app runs
 inside your user session. For those, an HDMI capture device is the route today.
 
+## Update
+
+macOS: drag the new version over the old one in Applications; the running app
+notices and restarts itself into it. Windows and Linux: run the install line
+again; it stops the running app first.
+
 ## Remove
 
 - macOS: Quit from the menu bar, delete the app from Applications.

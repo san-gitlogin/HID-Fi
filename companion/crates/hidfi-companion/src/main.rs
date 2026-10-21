@@ -5,6 +5,8 @@
 
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+mod replaced;
 mod act;
 mod autostart;
 #[cfg(any(target_os = "macos", windows))]
@@ -75,6 +77,8 @@ fn main() {
     let handle = service::start(store, env);
 
     #[cfg(any(target_os = "macos", windows))]
+    #[cfg(target_os = "macos")]
+    replaced::watch();
     desktop::run(handle, state, store_for_settings, first_run);
     #[cfg(target_os = "linux")]
     linux::run(handle, state, store_for_settings, first_run);
