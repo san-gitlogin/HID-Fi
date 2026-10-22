@@ -7,7 +7,8 @@
 //! refused, never run.
 //!
 //! Set for screen sharing: screen-content mode, bitrate rate control, no
-//! skipped frames, a keyframe at least every 4 s and on request. OpenH264
+//! skipped frames, a keyframe on request (and at least every
+//! `frame::KEYFRAME_EVERY_SECS`). OpenH264
 //! produces constrained baseline, which every browser decodes.
 //!
 //! NOT YET RUN ON LINUX: compiled and checked from macOS only.
@@ -111,7 +112,9 @@ fn config(bps: u32, fps: u32) -> OhConfig {
         .usage_type(UsageType::ScreenContentRealTime)
         .rate_control_mode(RateControlMode::Bitrate)
         .skip_frames(false)
-        .intra_frame_period(IntraFramePeriod::from_num_frames(fps * 4))
+        .intra_frame_period(IntraFramePeriod::from_num_frames(
+            fps * crate::frame::KEYFRAME_EVERY_SECS,
+        ))
 }
 
 impl OhH264 {

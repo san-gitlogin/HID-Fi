@@ -3,7 +3,8 @@
 //!
 //! Configured for screen sharing, like the macOS encoder: low-latency mode, no
 //! B-frames, constrained baseline (what every browser decodes), constant bitrate,
-//! a keyframe at least every 4 s and on request. Frames go in as NV12
+//! a keyframe on request (and at least every
+//! `frame::KEYFRAME_EVERY_SECS`). Frames go in as NV12
 //! (convert::bgra_to_nv12, tested); out comes Annex B, with SPS and PPS put in
 //! front of any keyframe that arrives without them.
 //!
@@ -108,7 +109,10 @@ impl MfEncoder {
                 );
                 let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
                 let _ = c.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
-                let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(fps * 4));
+                let _ = c.SetValue(
+                    &CODECAPI_AVEncMPVGOPSize,
+                    &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
+                );
             }
             set_rate(c, cfg.bitrate_bps);
         }
@@ -129,7 +133,10 @@ impl MfEncoder {
             // SAFETY: as above.
             unsafe {
                 let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
-                let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(fps * 4));
+                let _ = c.SetValue(
+                    &CODECAPI_AVEncMPVGOPSize,
+                    &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
+                );
             }
             set_rate(c, cfg.bitrate_bps);
         }

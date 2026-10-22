@@ -374,8 +374,8 @@ impl Pipeline {
     /// change, rotation), since an H.264 stream has one size.
     pub fn start<S, E>(fps: u32, initial_bps: u32, source: S, encoder: E) -> Pipeline
     where
-        S: Fn(Option<u32>) -> Result<Box<dyn Source>, String> + Send + 'static,
-        E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String> + Send + 'static,
+        S: Fn(Option<u32>) -> Result<Box<dyn Source>, String> + Send + Sync + 'static,
+        E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String> + Send + Sync + 'static,
     {
         let shared: Arc<(Mutex<Shared>, Condvar)> = Arc::default();
         let s = shared.clone();
@@ -533,6 +533,11 @@ fn display_name(d: u32) -> String {
     }
 }
 
+/// One worker per watched display, each on its own thread: capturing and
+/// encoding one display never waits for another. With one loop for all, a
+/// computer encoding in software (Windows' Media Foundation encoder) did two
+/// 1080p monitors and their extra sizes on one core - 20 fps and turns of
+/// 70-120 ms in a 4-core Windows VM, the other cores idle.
 fn run<S, E>(
     shared: Arc<(Mutex<Shared>, Condvar)>,
     fps: u32,
@@ -540,20 +545,77 @@ fn run<S, E>(
     make_source: S,
     make_encoder: E,
 ) where
-    S: Fn(Option<u32>) -> Result<Box<dyn Source>, String>,
-    E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String>,
+    S: Fn(Option<u32>) -> Result<Box<dyn Source>, String> + Send + Sync + 'static,
+    E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String> + Send + Sync + 'static,
 {
-    let period = Duration::from_micros(1_000_000 / fps as u64);
+    let (make_source, make_encoder) = (Arc::new(make_source), Arc::new(make_encoder));
     let t0 = Instant::now();
+    let mut workers: HashMap<u32, std::thread::JoinHandle<()>> = HashMap::new();
     loop {
-        // Park until someone watches.
-        {
+        let watched: std::collections::BTreeSet<u32> = {
             let (m, cv) = &*shared;
             let mut s = m.lock().unwrap_or_else(|e| e.into_inner());
-            while s.viewers.is_empty() && !s.stop {
+            if s.viewers.is_empty() && !s.stop && workers.is_empty() {
                 s = cv.wait(s).unwrap_or_else(|e| e.into_inner());
             }
             if s.stop {
+                break;
+            }
+            s.viewers
+                .iter()
+                .map(|v| v.s.display.load(Ordering::Relaxed))
+                .collect()
+        };
+        workers.retain(|_, h| !h.is_finished());
+        for d in watched {
+            if workers.contains_key(&d) {
+                continue;
+            }
+            let (s, src, enc) = (shared.clone(), make_source.clone(), make_encoder.clone());
+            match std::thread::Builder::new()
+                .name(format!("encode {}", display_name(d)))
+                .spawn(move || run_display(s, fps, initial_bps, &*src, &*enc, d, t0))
+            {
+                Ok(h) => {
+                    workers.insert(d, h);
+                }
+                Err(e) => log::error!("cannot start encoding the {}: {e}", display_name(d)),
+            }
+        }
+        // A new viewer, or one changing display, is seen within this.
+        let (m, cv) = &*shared;
+        let s = m.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = cv.wait_timeout(s, Duration::from_millis(50));
+    }
+    for (_, h) in workers {
+        let _ = h.join();
+    }
+}
+
+/// Captures and encodes one display while anyone watches it, then returns.
+fn run_display<S, E>(
+    shared: Arc<(Mutex<Shared>, Condvar)>,
+    fps: u32,
+    initial_bps: u32,
+    make_source: &S,
+    make_encoder: &E,
+    only: u32,
+    t0: Instant,
+) where
+    S: Fn(Option<u32>) -> Result<Box<dyn Source>, String> + ?Sized,
+    E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String> + ?Sized,
+{
+    let period = Duration::from_micros(1_000_000 / fps as u64);
+    loop {
+        // While anyone watches this display.
+        {
+            let s = shared.0.lock().unwrap_or_else(|e| e.into_inner());
+            if s.stop
+                || !s
+                    .viewers
+                    .iter()
+                    .any(|v| v.s.display.load(Ordering::Relaxed) == only)
+            {
                 return;
             }
         }
@@ -569,8 +631,12 @@ fn run<S, E>(
             // Who watches what, this turn.
             let seen: Vec<Seen> = {
                 let s = shared.0.lock().unwrap_or_else(|e| e.into_inner());
+                if s.stop {
+                    return; // the pipeline is going away, viewers or not
+                }
                 s.viewers
                     .iter()
+                    .filter(|v| v.s.display.load(Ordering::Relaxed) == only)
                     .map(|v| Seen {
                         display: v.s.display.load(Ordering::Relaxed),
                         tier: (v.s.tier.load(Ordering::Relaxed) as usize).min(TIERS - 1),
@@ -957,6 +1023,8 @@ mod tests {
         encoders: Arc<AtomicUsize>,
         keys: Arc<AtomicUsize>,
         frames: Arc<AtomicUsize>,
+        /// Each encode takes this many milliseconds (a software encoder).
+        slow_ms: Arc<AtomicUsize>,
         /// The encoder drops this many of every 10 frames (over its bitrate).
         drops: Arc<AtomicUsize>,
         tried: Arc<AtomicUsize>,
@@ -1002,6 +1070,10 @@ mod tests {
         ) -> Result<Option<Encoded>, EncodeError> {
             if self.fail {
                 return Err(EncodeError::Failed("planted".into()));
+            }
+            let slow = self.c.slow_ms.load(Ordering::SeqCst);
+            if slow > 0 {
+                std::thread::sleep(Duration::from_millis(slow as u64));
             }
             let n = self.c.tried.fetch_add(1, Ordering::SeqCst);
             if !key && n % 10 < self.c.drops.load(Ordering::SeqCst) {
@@ -1448,6 +1520,30 @@ mod tests {
             "the half-size stream keeps its own rate"
         );
         assert_eq!(lanes[&(MAIN, QUARTER)], 400_000);
+    }
+
+    #[test]
+    fn two_displays_encode_in_parallel_not_one_after_the_other() {
+        let c = Counts::default();
+        c.slow_ms.store(25, Ordering::SeqCst); // 25 ms a frame: ~40 fps at most, alone
+        let p = pipe(&c, Arc::new(Mutex::new((64, 48))), true, false); // 50 fps capture
+        let (atx, arx) = sync_channel(1024);
+        let (btx, brx) = sync_channel(1024);
+        p.subscribe(atx);
+        let b = p.subscribe(btx);
+        p.control(b).set_display(2);
+        std::thread::sleep(Duration::from_millis(1500));
+        let _ = (arx.try_iter().count(), brx.try_iter().count());
+        std::thread::sleep(Duration::from_secs(2));
+        let (a, b) = (
+            arx.try_iter().count() as f64 / 2.0,
+            brx.try_iter().count() as f64 / 2.0,
+        );
+        // One loop for both: 50 ms a turn, 20 fps each. In parallel: ~40 each.
+        assert!(
+            a > 28.0 && b > 28.0,
+            "each display keeps its own frame rate: {a:.0} and {b:.0} fps"
+        );
     }
 
     fn width_of(rx: &std::sync::mpsc::Receiver<ToViewer>) -> u8 {

@@ -38,6 +38,13 @@ pub enum EncodeError {
     Failed(String),
 }
 
+/// A keyframe at least this often, so a viewer whose request for one was lost
+/// still recovers. Rare on purpose: keyframes come when a viewer asks (joins,
+/// loss), and a forced one every 4 s - a 1080p keyframe takes a few hundred
+/// milliseconds to arrive - showed as a short freeze on every screen, 1.5 s in
+/// 28 (tests/overload.py).
+pub const KEYFRAME_EVERY_SECS: u32 = 20;
+
 pub struct EncoderConfig {
     pub width: u32,
     pub height: u32,

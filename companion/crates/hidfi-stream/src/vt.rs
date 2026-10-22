@@ -356,17 +356,16 @@ impl VtEncoder {
                 kVTCompressionPropertyKey_AllowFrameReordering,
                 f.as_CFTypeRef(),
             )?;
-            // A keyframe at least every 4 s, so a viewer that lost one recovers
-            // even if its request for a new one is lost too.
+            // A keyframe at least every KEYFRAME_EVERY_SECS (see there).
             set(
                 session,
                 kVTCompressionPropertyKey_MaxKeyFrameInterval,
-                CFNumber::from(fps * 4).as_CFTypeRef(),
+                CFNumber::from(fps * crate::frame::KEYFRAME_EVERY_SECS as i32).as_CFTypeRef(),
             )?;
             set(
                 session,
                 kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
-                CFNumber::from(4.0f64).as_CFTypeRef(),
+                CFNumber::from(crate::frame::KEYFRAME_EVERY_SECS as f64).as_CFTypeRef(),
             )?;
             set(
                 session,
