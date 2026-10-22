@@ -56,6 +56,7 @@ adding a login item - for development and tests.
 | `tests/e2e_view.py` | hardware H.264 → WebRTC → real Chrome; refused tickets and certificates; CPU |
 | `tests/overload.py` | everything at once: six viewers on two monitors, a link swinging 0.4-12 Mbit/s, a stalling device, a viewer rejoining every 5 s, a link that drops to 1.5 Mbit/s, three viewers on jittery WiFi (`WIFI=mild`: measured on a real home network; default: a crowded channel), busy or light content (`CONTENT=bar`); `ONLY=p1|drop|wifi` runs one phase |
 | `tests/system.py` | the real service + board model + Chrome: pair, live, unplug, replug |
+| `tests/open_dashboard.py` | the menu's Open the dashboard page in Chrome: goes to the board, prefers its own name, explains (and opens the setting) when the browser is kept off the network |
 | `tests/boards.py` | two board models + the real service + Chrome: a board paired with another (now off) computer offered here, both pair and watch, unplug one (its viewers end, the other plays), replug (no new pairing), one removes this computer (only it re-pairs) |
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
 | `tests/panel_review.py` | the app's window in every state: fits, nothing cut off, each step says what to do (`cargo run --example panel_states` first) |

@@ -68,6 +68,9 @@ jobs:
       - name: Whole system - service, board model, Chrome
         if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM (companion/tests/linux/run.sh covers it)
         run: python tests/system.py
+      - name: The menu's Open the dashboard, in Chrome
+        if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM
+        run: python tests/open_dashboard.py
       - name: Boards moving between computers, two boards on one computer
         if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM
         run: python tests/boards.py

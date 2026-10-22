@@ -749,6 +749,12 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   one exists. After an ad-hoc rebuild: `tccutil reset ScreenCapture in.hidfi.companion`.
   Never rebuild the bundle under a running app without expecting it to restart
   itself (macOS drops a replaced app's local network access; `replaced.rs`).
+- **The app never opens a raw board address in the browser.** "Open the
+  dashboard" goes through `opener.rs`: a page the app serves on 127.0.0.1
+  (Host-checked, per-launch token) tries the board's `.local` name, then its
+  address, from the browser itself, and explains when the browser is kept off
+  the network. Seen live: macOS allowed the app on the local network but not
+  Chrome - ERR_ADDRESS_UNREACHABLE, with no word why. `companion/tests/open_dashboard.py`.
 - **Nothing sits over the picture** in the Screen tab: the picture is a frame -
   a slim title bar (who, which monitor, fps) above, a slim toolbar below (on a
   phone on its side, both share one row), the stage taking the computer's own

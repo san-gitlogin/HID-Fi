@@ -31,6 +31,12 @@ Companion.
 - **A board with only its COM cable in a computer never said why no computer
   showed up.** The Screen tab now says the board's USB port is in no computer,
   and which port to plug in.
+- **The app's Open the dashboard showed "This site can't be reached"** when
+  macOS keeps the browser off the local network (its Local Network switch is
+  per app: the app had it, Chrome did not). It now opens a page from the app
+  itself, which goes to the board by its own name (it follows the board to a
+  new address) or its address, and otherwise says which switch to turn on,
+  with a button that opens the setting.
 - **A board that restarted stayed "Reconnecting" in the app for good**, so
   its dashboard showed the computer as not running. The app found it again
   but never resumed; it does now, with the same pairing.
