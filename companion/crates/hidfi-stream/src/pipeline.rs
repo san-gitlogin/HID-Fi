@@ -1177,11 +1177,18 @@ mod tests {
         let p = pipe(&c, size.clone(), true, false);
         let (tx, rx) = sync_channel(256);
         p.subscribe(tx);
-        std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(c.encoders.load(Ordering::SeqCst), 1);
+        // Waits for the condition, not a fixed time (a CI runner is slow).
+        let until = |n: usize| {
+            let end = Instant::now() + Duration::from_secs(5);
+            while c.encoders.load(Ordering::SeqCst) < n && Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            c.encoders.load(Ordering::SeqCst)
+        };
+        assert_eq!(until(1), 1);
         *size.lock().unwrap() = (128, 72);
-        std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(c.encoders.load(Ordering::SeqCst), 2);
+        assert_eq!(until(2), 2);
         // Find the first frame after the switch: it is a keyframe.
         let mut keys = 0;
         while let Ok(ToViewer::Frame(f, _)) = rx.try_recv() {
@@ -1591,11 +1598,15 @@ mod tests {
             "a: the main display at half size (64 / 2)"
         );
         assert_eq!(width_of(&brx), 20, "b: display 2 at half size (40 / 2)");
-        // a switches too: from its next keyframe it gets display 2.
+        // a switches too: from its next keyframe it gets display 2 (frames
+        // already on their way may still be the old display's).
         p.control(a).set_display(2);
-        std::thread::sleep(Duration::from_millis(200));
-        while arx.try_recv().is_ok() {}
-        assert_eq!(width_of(&arx), 20);
+        let end = Instant::now() + Duration::from_secs(5);
+        let mut w = 0;
+        while w != 20 && Instant::now() < end {
+            w = width_of(&arx);
+        }
+        assert_eq!(w, 20);
         assert_eq!(p.control(a).display(), 2);
     }
 
@@ -1606,7 +1617,10 @@ mod tests {
         let (tx, rx) = sync_channel(512);
         let id = p.subscribe(tx);
         p.control(id).set_display(9); // unplugged, say
-        std::thread::sleep(Duration::from_millis(300));
+        let end = Instant::now() + Duration::from_secs(5);
+        while p.control(id).display() != MAIN && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         assert_eq!(p.control(id).display(), MAIN);
         while rx.try_recv().is_ok() {}
         assert_eq!(width_of(&rx), 32, "the main display, still streaming");
