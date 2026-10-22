@@ -33,7 +33,7 @@ def rate(name, cond, detail=""):
 import tempfile
 LOG = os.environ.get("STREAM_LOG") or os.path.join(tempfile.mkdtemp(prefix="hidfi-mv-"), "stream.log")
 srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "1920", "1080", "30", "busy"],   # scrolling text: as hard as a real desktop
-                       stdout=subprocess.PIPE, stderr=open(LOG, "w"), text=True)
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=open(LOG, "w"), text=True)
 info = json.loads(srv.stdout.readline())
 html = ("<!doctype html><meta charset=utf-8><video id=v autoplay muted playsinline></video><script>" +
         "(()=>{const O=RTCPeerConnection;window.PC=null;window.RTCPeerConnection=function(c){const p=new O(c);PC=p;"

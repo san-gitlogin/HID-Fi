@@ -104,7 +104,10 @@ fn main() {
         "{}",
         serde_json::json!({"port": srv.port, "tn": tn, "fp": fp, "tickets": tickets})
     );
-    // stdin: "unplug <id>" takes a pretend display away; "still" and "move"
+    // stdin (tests give it a pipe, or nothing - never their own: on Windows an
+    // inherited SSH console is asynchronous, and Rust's standard library aborts
+    // the process on such a read, "operation failed to complete synchronously").
+    // "unplug <id>" takes a pretend display away; "still" and "move"
     // stop and restart the patterns (a desktop at rest, then a window dragged).
     std::thread::spawn(move || {
         for line in std::io::stdin().lines().map_while(Result::ok) {

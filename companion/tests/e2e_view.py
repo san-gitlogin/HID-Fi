@@ -23,7 +23,7 @@ def lan_ip():
 
 IP = lan_ip()
 srv = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), str(W), str(H), str(FPS)]
-                       + (["still"] if os.environ.get("STILL") else []),
+                       + (["still"] if os.environ.get("STILL") else []), stdin=subprocess.DEVNULL,
                        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 info = json.loads(srv.stdout.readline())
 page_html = "<!doctype html><meta charset=utf-8><video id=v autoplay muted playsinline></video><script>" + \
@@ -91,7 +91,7 @@ try:
         # A Mac where Screen Recording is not allowed: the viewer is told why
         # (it used to stay connected, receiving nothing, at 0 fps).
         bad = subprocess.Popen([str(ROOT / "target/release/examples" / ("serve.exe" if os.name == "nt" else "serve")), "640", "360", "30"],
-                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                                env=dict(os.environ, HIDFI_FAIL_CAPTURE="Screen Recording is not allowed for HID-Fi Companion"))
         try:
             binfo = json.loads(bad.stdout.readline())

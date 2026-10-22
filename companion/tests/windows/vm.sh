@@ -155,7 +155,10 @@ case "${1:-}" in
     rel="${HIDFI_WIN_TARGET_DIR:-/Volumes/HIDFi-WinBuild/target}/$tgt/release"
     [ -f "$rel/hidfi-companion.exe" ] || die "no Windows build in $rel (see companion/tests/windows/README.md)"
     repo="$(cd "$here/../../.." && pwd)"
-    ssh_vm "Remove-Item -Recurse -Force C:/hidfi/companion -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force C:/hidfi/companion/target/release/examples, C:/hidfi/companion/package | Out-Null"
+    # Stop anything running from there first (an app started from C:\hidfi
+    # registers itself to start at login, and a running .exe cannot be replaced).
+    ssh_vm "Get-Process | Where-Object { \$_.Path -like 'C:\hidfi\*' } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 1;
+            Remove-Item -Recurse -Force C:/hidfi/companion -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force C:/hidfi/companion/target/release/examples, C:/hidfi/companion/package | Out-Null"
     scp_vm "$repo/companion/tests" "$repo/companion/web" "$repo/companion/vectors" "C:/hidfi/companion/"
     scp_vm "$repo/companion/package/install-windows.ps1" "C:/hidfi/companion/package/"
     scp_vm "$rel/hidfi-companion.exe" "C:/hidfi/companion/target/release/"
