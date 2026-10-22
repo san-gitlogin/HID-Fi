@@ -38,7 +38,7 @@ def check(name, cond, detail=""):
     global ok
     ok &= bool(cond); print(("ok  " if cond else "FAIL"), name, detail, flush=True)
 
-sim = BoardSim(pin="4826")
+sim = BoardSim(pin="4826", mac="02:00:5E:10:00:0A")   # never a real board's MAC
 class Board(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def _send(self, code, obj):
@@ -59,7 +59,7 @@ class Board(BaseHTTPRequestHandler):
 board = ThreadingHTTPServer((IP, 0), Board); threading.Thread(target=board.serve_forever, daemon=True).start()
 
 app = subprocess.Popen([str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app")), tempfile.mkdtemp(prefix="hidfi-dash-"),
-                        f"http://{IP}:{board.server_address[1]}", "B8:1F:3F:DA:1A:2C"],
+                        f"http://{IP}:{board.server_address[1]}", "02:00:5E:10:00:0A"],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                        stderr=open(os.environ.get("APP_LOG", os.devnull), "w"),
                        env=dict(os.environ, HIDFI_DISPLAYS="4"))   # main 1280x720, then 1280x1024, 1080x1920, 1600x900

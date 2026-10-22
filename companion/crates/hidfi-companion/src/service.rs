@@ -330,6 +330,7 @@ fn run(
                 match here.get_mut(&b.mac) {
                     Some(h) => {
                         h.session.set_base(b.url.clone());
+                        h.session.found_again();
                         (h.url, h.firmware) = (b.url, b.firmware);
                     }
                     None => {

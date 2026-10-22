@@ -311,6 +311,33 @@ fn a_board_that_goes_away_is_retried_with_backoff_and_the_pairing_kept() {
 }
 
 #[test]
+fn a_board_found_again_after_a_restart_goes_back_online_with_the_same_pairing() {
+    // Seen live: a board restarted (a flash), the session went Reconnecting,
+    // the service stopped stepping it and found the board again - but the
+    // session never heard, and stayed Reconnecting for good.
+    let m = Model::start("4826");
+    let mut s = session(&m, "PC");
+    pair(&m, &mut s);
+    s.set_listener(listener());
+    run_until(&mut s, &m, 3, |st| *st == Status::Online);
+    let key = s.identity.key.clone();
+    // The board stops answering (a dead address stands in for a restart).
+    s.set_base("http://127.0.0.1:9".into());
+    let http = UreqHttp::new(Duration::from_millis(300));
+    s.step(&http, &SystemClock);
+    assert!(s.lost());
+    // The search finds it answering again.
+    s.set_base(m.base.clone());
+    s.found_again();
+    assert!(!s.lost(), "found again, the session must be stepped again");
+    assert_eq!(
+        run_until(&mut s, &m, 3, |st| *st == Status::Online),
+        Status::Online
+    );
+    assert!(s.identity.key == key, "no new pairing");
+}
+
+#[test]
 fn firmware_without_the_endpoint_is_named() {
     let m = Model::start("4826");
     let mut s = session(&m, "PC");

@@ -12,7 +12,8 @@ per computer, and re-pairing one board threw the other's pairing away.
      to board A, B's dashboard lists the old computer AND this one, asking to
      pair; so does A's - and still does long after the board's request expiry,
      because this computer keeps asking.
-  2. Both pair; a viewer from EITHER dashboard gets the screen.
+  2. Both pair; a viewer from EITHER dashboard gets the screen. Board A
+     restarts: the app brings it back Online by itself, no new pairing.
   3. B unplugged: B's viewer ends, B's new viewers are refused, A keeps going.
   4. B plugged back: online again with no new pairing.
   5. A removes this computer on its dashboard: A asks to pair again, B's
@@ -27,7 +28,8 @@ from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 APP = str(ROOT / "target/release/examples" / ("system_app.exe" if os.name == "nt" else "system_app"))
-MAC_A, MAC_B = "B8:1F:3F:DA:1A:2C", "DC:B4:D9:09:F7:C8"
+# Never a real board's MAC (see model_board.py): B plays the part of 09F7C8.
+MAC_A, MAC_B = "02:00:5E:10:00:0A", "02:00:5E:10:00:0B"
 
 
 def lan_ip():
@@ -190,6 +192,24 @@ try:
                 check(f"a viewer from board {name}'s dashboard sees this screen", True)
             except Exception:
                 check(f"a viewer from board {name}'s dashboard sees this screen", False, str(pg.evaluate("S")))
+
+        # 2b. Board A restarts (a flash, a power blip): it answers nothing for
+        # a few seconds. Seen live: the app found it again but stayed
+        # "Reconnecting" for good, so its dashboard never saw this computer.
+        urllib.request.urlopen(urllib.request.Request(A.url + "/__restart", data=b'{"s": 4}', method="POST"), timeout=5)
+        try:
+            app.wait(lambda v: (app.board(MAC_A) or {}).get("session") == "Reconnecting", 20, "A noticed gone")
+            app.wait(lambda v: (app.board(MAC_A) or {}).get("session") == "Online", 40, "A back online")
+            check("A restarted: back Online by itself, no new pairing", not A.dash(cmd="companion_list").get("pending"))
+        except SystemExit as e:
+            check("A restarted: back Online by itself, no new pairing", False, str(e))
+        va2 = watch(A, pc_a)
+        try:
+            va2.wait_for_function("S.includes('live')", timeout=15000)
+            check("...and A's dashboard can watch again", True)
+        except Exception:
+            check("...and A's dashboard can watch again", False, str(va2.evaluate("S")))
+        va2.close()
 
         # 3. Board B leaves this computer.
         app.say(f"unplug {MAC_B}")

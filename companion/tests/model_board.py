@@ -26,8 +26,17 @@ import os  # noqa: E402
 if os.environ.get("PENDING_S"):
     from support import companion_sim as _cs  # noqa: E402
     _cs.PENDING_S = float(os.environ["PENDING_S"])
-sim = BoardSim(pin=sys.argv[1] if len(sys.argv) > 1 else "4826", mac=os.environ.get("MAC", "B8:1F:3F:DA:1A:2C"))
+# Locally administered (first byte 02): no real board has it. Seen: a model
+# with a real board's MAC led the app under test to that real board on the
+# home network as soon as the model stopped answering.
+MODEL_MAC = os.environ.get("MAC", "02:00:5E:10:00:0A")
+if not int(MODEL_MAC.split(":")[0], 16) & 0x02:
+    sys.exit(f"model_board: {MODEL_MAC} could be a real board's MAC - use a locally administered one (02:...)")
+sim = BoardSim(pin=sys.argv[1] if len(sys.argv) > 1 else "4826", mac=MODEL_MAC)
 lock = threading.Lock()
+# /__restart: like a real board restarting (a flash, a power blip) - it answers
+# nothing for a few seconds, then comes back with its pairings (they are in NVS).
+away_until = [0.0]
 
 
 class H(BaseHTTPRequestHandler):
@@ -47,7 +56,16 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         return self.rfile.read(n).decode("utf-8", "replace")
 
+    def _away(self):
+        import time
+        if self.path.startswith("/api/") and time.time() < away_until[0]:
+            self.close_connection = True      # no reply at all, as a board that is off
+            return True
+        return False
+
     def do_GET(self):
+        if self._away():
+            return
         if self.path == "/api/status":
             with lock:
                 return self._send(200, sim.status())
@@ -55,7 +73,14 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = self._body()
+        if self._away():
+            return
         with lock:
+            if self.path == "/__restart":
+                import time
+                sim.reboot()
+                away_until[0] = time.time() + json.loads(body).get("s", 5)
+                return self._send(200, {"ok": True})
             if self.path == "/api/companion":
                 return self._send(*sim.comp.http(body, self.client_address[0]))
             if self.path == "/__dash":

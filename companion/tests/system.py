@@ -15,7 +15,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-MAC = "B8:1F:3F:DA:1A:2C"   # what the model's status reports
+MAC = "02:00:5E:10:00:0A"   # what the model's status reports (never a real board's: see model_board.py)
 
 def lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

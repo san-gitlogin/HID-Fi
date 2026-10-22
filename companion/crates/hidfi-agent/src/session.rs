@@ -149,6 +149,17 @@ impl Session {
         self.base = base;
     }
 
+    /// The board this session lost has been found answering again. Seen live:
+    /// a board restarted, the service stopped stepping its "lost" session and
+    /// waited for the search, the search found it - and nothing told the
+    /// session, so it stayed Reconnecting for good.
+    pub fn found_again(&mut self) {
+        if self.lost() {
+            self.status = Status::Connecting;
+            self.backoff = BACKOFF_MIN;
+        }
+    }
+
     pub fn set_listener(&mut self, l: Listener) {
         self.listener = Some(l);
     }
