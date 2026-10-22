@@ -222,7 +222,8 @@ code{background:#16202d;padding:1px 6px;border-radius:6px;color:var(--fg)}
 <h1>This browser cannot reach the board</h1>
 <p>HID-Fi Companion reaches the board on your network, so the board is fine. <b id="who">This browser</b> is being kept off the local network.</p>
 <div id="mac" hidden><p>macOS gives every app its own switch for this:</p><ol>
-<li>Open <b>System Settings, Privacy &amp; Security, Local Network</b> (the button below goes there).</li>
+<li>Choose <b>Open Privacy &amp; Security</b> below, then choose <b>Local Network</b> in that list
+(macOS has no direct link to it).</li>
 <li>Switch on <b id="who2">your browser</b>. Listed more than once, or already on? Switch each one off and on
 again: macOS adds an entry each time a browser updates itself, and can keep the old setting for the copy that runs.</li>
 <li><b>Quit the browser completely</b> (<b>Cmd+Q</b>, not just closing the window) and open it again - macOS
@@ -233,7 +234,7 @@ a VPN, or a firewall or security app. Is this Mac on the same WiFi as the board?
 Windows itself does not block it.</p></div>
 <div id="lin" hidden><p>Is a VPN, a proxy, or a browser sandbox (Flatpak, Snap) in the way? Those can keep a browser off the local network.</p></div>
 <p>Or use another browser: <span id="addrs"></span></p>
-<div class="row"><button class="pri" id="again">Try again</button><button id="settings" hidden>Open Local Network settings</button></div>
+<div class="row"><button class="pri" id="again">Try again</button><button id="settings" hidden>Open Privacy &amp; Security</button></div>
 </div></main>
 <script>
 const C=@CANDIDATES@, OS="@OS@", DEF=@BROWSER@;
