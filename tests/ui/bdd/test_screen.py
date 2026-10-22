@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
@@ -86,6 +87,91 @@ def paired_running_displays(ctx, browser, name, n):
     with ctx["sim"].lock:
         app.beat()
     pc.serve(ctx["ui"].page)
+
+
+@given(parsers.parse('a computer "{name}" is paired and running, its screen {w:d} by {h:d}'))
+def paired_running_sized(ctx, browser, name, w, h):
+    app = _new_app(ctx, name)
+    pc = FakePc(browser, app, "live", size=(w, h))
+    _pcs(ctx)[name] = pc
+    _pair(ctx, app)
+    with ctx["sim"].lock:
+        app.beat()
+    pc.serve(ctx["ui"].page)
+
+
+@when(parsers.parse("the window is {w:d} by {h:d}"))
+def window_size(ctx, w, h):
+    # A phone turned on its side, a tablet, a desktop window, a split screen.
+    ctx["ui"].page.set_viewport_size({"width": w, "height": h})
+    ctx["ui"].idle(400)
+
+
+# Where the picture, its title bar and its toolbar are, and what is on top at
+# each point of the picture. Seen live: the name badge and the buttons sat over
+# the picture and hid what was under them.
+FRAME_JS = r"""() => {
+  const r = id => document.getElementById(id).getBoundingClientRect();
+  const st = r('scrStage'), head = r('scrBadge'), tools = r('scrTools'), fr = r('scrFrame');
+  const tb = document.getElementById('tabbar'), tbr = tb.getBoundingClientRect();
+  const bottom = getComputedStyle(tb).display !== 'none' && tbr.height ? tbr.top : innerHeight;
+  const cover = [];
+  for (let i = 1; i < 10; i++) for (let j = 1; j < 10; j++) {
+    const x = st.left + st.width * i / 10, y = st.top + st.height * j / 10;
+    if (x < 0 || y < 0 || x >= innerWidth || y >= bottom) continue;
+    const top = document.elementFromPoint(x, y);
+    if (top && !document.getElementById('scrStage').contains(top)) cover.push((top.id || top.className || top.tagName) + '');
+  }
+  const btns = [...document.querySelectorAll('#scrTools .iconbtn')].filter(b => b.offsetParent)
+    .map(b => { const q = b.getBoundingClientRect(); return {id: b.id, l: q.left, r: q.right, t: q.top, b: q.bottom}; });
+  return {st: [st.left, st.top, st.width, st.height], head: [head.left, head.top, head.width, head.height],
+          tools: [tools.left, tools.top, tools.width, tools.height], fr: [fr.left, fr.top, fr.right, fr.bottom],
+          vw: innerWidth, bottom, cover: [...new Set(cover)], btns};
+}"""
+
+
+@then("nothing covers the picture")
+def nothing_covers(ctx):
+    ui = ctx["ui"]
+    ui.page.evaluate("scrollTo(0, 0)")
+    ui.idle(200)
+    g = ui.page.evaluate(FRAME_JS)
+    sl, stp, sw, sh = g["st"]
+    hl, ht, hw, hh = g["head"]
+    tl, tt, tw, th = g["tools"]
+    assert not g["cover"], f"over the picture: {g['cover']} ({g})"
+    assert ht + hh <= stp + 0.5, f"the title bar overlaps the picture: {g}"
+    # Below the picture, or (a phone on its side) beside the name in the title bar.
+    assert tt >= stp + sh - 0.5 or tt + th <= stp + 0.5, f"the toolbar overlaps the picture: {g}"
+    # Slim, like a browser tab and a status bar: the picture gets the room.
+    assert 24 <= hh <= 36 and th <= 44, f"title bar {hh}px, toolbar {th}px: {g}"
+    assert g["fr"][0] >= -0.5 and g["fr"][2] <= g["vw"] + 0.5, f"the frame is wider than the screen: {g}"
+    assert g["fr"][3] <= g["bottom"] + 0.5, f"the frame runs under the tab bar or off the screen: {g}"
+    for b in g["btns"]:
+        assert tl - 0.5 <= b["l"] and b["r"] <= tl + tw + 0.5 and tt - 0.5 <= b["t"] and b["b"] <= tt + th + 0.5, \
+            f"{b['id']} is outside the toolbar: {g}"
+    assert sw >= 120 and sh >= 90, f"the picture is too small to use: {g}"
+    if os.environ.get("HIDFI_SHOTS"):
+        ui.page.screenshot(path=os.path.join(os.environ["HIDFI_SHOTS"], "screen-%dx%d.png" % (g["vw"], ui.page.viewport_size["height"])))
+
+
+@then("the name and frame rate are in the title bar above the picture")
+def name_fps_in_title(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: "fps" in ui.page.inner_text("#scrBadge"), f'#scrBadge reads {ui.page.inner_text("#scrBadge")!r}')
+
+
+@then("the picture is far taller than a 16:10 box would let it be")
+def picture_tall(ctx):
+    # The frame takes the monitor's shape, up to the room the trackpad leaves:
+    # in a fixed 16:10 box a portrait monitor's picture was a sliver.
+    ui = ctx["ui"]
+    js = """(() => { const r = document.getElementById('scrStage').getBoundingClientRect(), v = document.getElementById('scrVideo');
+      const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+      const bh = r.width * 10 / 16, kb = Math.min(r.width / v.videoWidth, bh / v.videoHeight);
+      return {shown: v.videoHeight * k, boxed: v.videoHeight * kb, w: r.width, h: r.height}; })()"""
+    _wait(ui, lambda: (lambda g: g["shown"] >= 1.4 * g["boxed"])(ui.page.evaluate(js)),
+          f"a portrait monitor still gets a 16:10 box: {ui.page.evaluate(js)}")
 
 
 @when("the phone sleeps, and the board forgets its sign-in")
@@ -465,7 +551,7 @@ def float_fps_in_title(ctx):
     # Seen live: the badge covered the top left of a small floating picture.
     ui = ctx["ui"]
     _wait(ui, lambda: "fps" in ui.page.inner_text("#scrFHead"), "no frame rate in the title bar")
-    assert not ui.page.locator("#scrFloat .scrbadge").is_visible(), "a badge still covers the picture"
+    assert not ui.page.locator("#scrFloat .scrhead").is_visible(), "the frame's title bar repeats the window's"
 
 
 @then("the floating window is inside the screen")

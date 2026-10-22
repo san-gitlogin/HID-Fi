@@ -21,3 +21,6 @@ The essentials, in case only this file is loaded:
 - Screen sharing lives in `companion/` (Rust) and the dashboard's Screen tab:
   read AGENTS.md "Screen sharing" first. Never write the access PIN into a file;
   real-board tests take it from `HIDFI_PIN`.
+- Before calling a change done, list the stories a person lives (a board moved
+  to another computer, two boards on one, a phone turned on its side) and make
+  each a test; AGENTS.md "Think in scenarios" says where they go.

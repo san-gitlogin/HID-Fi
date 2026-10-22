@@ -7,6 +7,43 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.0.2 - 2026-10-22
+
+Two boards, boards that move between computers, and a Screen tab where nothing
+covers the picture. Flash the board (the dashboard changed) and update HID-Fi
+Companion.
+
+### Fixed
+
+- **A board moved to another computer was never offered there.** Seen live: a
+  board paired with a Windows laptop, plugged into a Mac that already had a
+  board, showed only the old laptop ("not reachable") on its dashboard. HID-Fi
+  Companion served one board per computer and kept one pairing key, which it
+  moved between boards - so re-pairing one board also lost the other's
+  pairing. Now every HID-Fi on the computer's USB is served, each with its own
+  pairing (`pairing-<MAC>.key`); the tray names them when there are two. An
+  existing pairing carries over: nobody pairs again after updating.
+- **A board pulled out stops its viewers at once**, and only its own: with two
+  boards, the other board's viewers carry on.
+- **The Screen tab hid parts of the picture**: the computer's name and frame
+  rate sat over its top left, the buttons over its bottom right. The picture
+  is now in a frame like a window's - a slim title bar above, a slim toolbar
+  below, both sharing one row on a phone on its side - and takes the shape of
+  the computer's screen (a portrait monitor gets a tall picture). On a small
+  phone on its side the picture no longer runs under the tab bar.
+
+### Tests
+
+- `companion/tests/boards.py` (in CI): two board models, the real service and
+  Chrome - a board paired with another computer offered here, both pair and
+  watch, unplug one, plug it back, one removes this computer.
+- Screen scenarios: nothing covers the picture at nine screen sizes, both ways
+  up, checked by hit-testing; a portrait monitor.
+- The layout matrix waits up to 15 s for a dialog that opens on the board's
+  reply (it once took more than 6 s under the full parallel run).
+
+---
+
 ## v4.0.1 - 2026-10-22
 
 HID-Fi Companion's screen sharing, above all on Windows: found by an overload

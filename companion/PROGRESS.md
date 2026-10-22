@@ -16,6 +16,22 @@ Newest first. Read REQUIREMENTS.md and DESIGN.md before continuing any work.
 
 ## Log
 
+### 2026-10-22 - v4.0.2: boards that move, two boards, a frame round the picture
+- Seen live after flashing: board 09F7C8, paired with a Windows laptop, plugged
+  into the Mac next to a second board - its dashboard showed only the old
+  laptop, never the Mac. The app served one board per computer and moved its
+  single key between boards. Now every board on this USB is served with its
+  own session and key (find_all, per-board store with migration, a gate that
+  tags viewers by board), and companion/tests/boards.py plays the whole story
+  end to end (in CI).
+- Seen live: the name/fps badge and the buttons covered parts of the picture
+  in the Screen tab. The picture is now a frame (title bar, picture, toolbar;
+  one row on a phone on its side), shaped like the computer's screen; the
+  scenarios hit-test it at nine sizes, both ways up, and a portrait monitor.
+- The layout matrix's "nothing is drawn" flake: a sheet that opens on the
+  board's reply waited 6 s; under the full parallel tier that was once not
+  enough. 15 s, and a timeout now says so.
+
 ### 2026-10-21
 - Studied AGENTS.md, ARCHITECTURE.md, SECURITY.md and the firmware's WS, mDNS,
   status and USB identity code.

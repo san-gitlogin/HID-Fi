@@ -117,10 +117,20 @@ is not `fp`.
   core turns `"__MAC__"` into `%02X x6` in `USB.cpp` `ESPUSB::begin`. The agent
   lists USB devices with Espressif VID 0x303A and reads `iSerial` driverlessly
   (SetupAPI / IOKit / sysfs).
-- **A board is only auto-selected when its network MAC equals the iSerial of a
-  device on this PC's own USB.** Another HID-Fi on the LAN, or another Espressif
-  device on this PC, never matches. Two matches: the tray asks, once, and
-  remembers.
+- **A board is only served when its network MAC equals the iSerial of a device
+  on this PC's own USB.** Another HID-Fi on the LAN, or another Espressif device
+  on this PC, never matches.
+- **Every match is served, each on its own** (`locate::find_all`, since
+  v4.0.2): one session and one pairing key per board (`pairing-<MAC>.key`,
+  owner-only), so a board moved here from another computer is offered to pair
+  while the other board stays paired. The tray asked "which one?" before, and
+  the one key moved between boards: re-pairing one deleted the other's pairing.
+  The 4.0.1 `pairing.key` migrates to its board's file on first start.
+- **A board that leaves keeps its pairing; its viewers do not stay.** The
+  ticket gate holds every paired board's key with "plugged in here now", and
+  tags each viewer with the board that admitted it: within a turn of unplugging,
+  that board's viewers end and its new tickets get `closed`, while the other
+  board's viewers go on.
 - No firmware USB change is needed (F8).
 
 ## Topologies

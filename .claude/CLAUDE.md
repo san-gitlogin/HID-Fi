@@ -17,7 +17,11 @@ BIOS.
   (~3,900 lines): HTML, CSS, JS and an SVG icon sprite
 - `flash_esp.ps1` / `flash_esp.sh` — build, flash, verify
 - `companion/` — HID-Fi Companion, the Rust app that shows the computer's screen
-  on the Screen tab; rules in AGENTS.md "Screen sharing"
+  on the Screen tab; rules in AGENTS.md "Screen sharing" (every board on this
+  computer's USB is served with its own pairing; nothing sits over the picture).
+  Before "done", list the stories a person lives - a board moved between
+  computers, two boards on one, a phone on its side - and test each
+  (`companion/tests/boards.py`, the Screen BDD feature)
 - `hid_fi/build_opt.h` — compiler flags for every file, libraries included (the
   WebSockets page limit); a change rebuilds from clean
 - `tests/run.py` — **the** test command; tiers, safety rules and golden files are in

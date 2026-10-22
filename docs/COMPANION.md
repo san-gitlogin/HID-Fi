@@ -92,10 +92,22 @@ No `sudo`. It installs for your user, downloads the H.264 encoder from Cisco
 The code proves the phone and the computer are talking to each other and not to
 someone in between. Three wrong codes end the attempt; start again from the app.
 
+**Moving a board, or using two.** Each board pairs with each computer once. A
+board moved to another computer asks that computer to pair (its dashboard keeps
+the old one listed, as not reachable, until you remove it), and comes back to
+the first one already paired. Two boards plugged into one computer are both
+served: each pairs on its own, the app's menu names them by the end of their
+MAC (*HID-Fi 09F7C8*), and either dashboard can watch. A board pulled out stops
+its viewers at once; the other carries on.
+
 ## Watch
 
 - **Screen tab**: the picture above the trackpad (phone upright) or beside it
-  (wider screens). Pinch, double tap or the buttons to zoom.
+  (wider screens), in a frame like a window's: the computer's name, monitor and
+  frame rate in a slim bar above it, the buttons in a slim bar below (on a phone
+  on its side, both share one row) - nothing sits over the picture. The frame
+  takes the shape of the computer's screen, so a portrait monitor gets a tall
+  picture. Pinch, double tap or the buttons to zoom.
 - **Float** (window icon): keep the picture on top while you use other tabs. Drag
   it by its title, resize it from the corner, minimise or close it.
 - **On its own** (arrow-out icon): a separate screen that only watches - a

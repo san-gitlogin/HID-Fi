@@ -15,6 +15,7 @@ or software on the host.
 |---|---|
 | `hid_fi/hid_fi.ino` | All firmware — transports, command dispatch, HID, NVS |
 | `hid_fi/web_ui.h` | The **entire dashboard** as one PROGMEM raw string |
+| `companion/` | HID-Fi Companion (Rust): streams the computer's screen to the Screen tab. Rules: AGENTS.md "Screen sharing" - every board on this computer's USB is served with its own pairing, nothing sits over the picture, and each story a person lives (a board moved between computers, two boards on one) is a test (`companion/tests/boards.py`) |
 | `flash_esp.ps1` / `flash_esp.sh` | Build, flash and verify; auto-detects board and toolchain |
 | `tests/run.py` | **The** test command - every tier, a pass/fail/skip table. Guide: `docs/TESTING.md` |
 | `docs/` | Hardware, flashing, command reference, architecture |

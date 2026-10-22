@@ -794,7 +794,7 @@ The Rust app has its own tests, listed in `companion/README.md`:
 | Where | Command | What it proves |
 |---|---|---|
 | any | `cd companion && cargo test --workspace` | pairing vectors, the session against the board model, the pipeline (qualities, keyframes, displays) |
-| any | `python3 companion/tests/e2e_view.py`, `multi_view.py`, `system.py`, `dashboard_live.py` | hardware H.264 over WebRTC into real Chrome; six viewers, a slow one and a poor link; the real service; the real dashboard |
+| any | `python3 companion/tests/e2e_view.py`, `multi_view.py`, `system.py`, `boards.py`, `dashboard_live.py` | hardware H.264 over WebRTC into real Chrome; six viewers, a slow one and a poor link; the real service; two boards moving between computers; the real dashboard |
 | macOS (Apple silicon) | `companion/tests/windows/` (`build.sh`, `vm.sh`) | Windows builds made on the Mac, and a Windows 11 VM to run them and the tests above in - see its README |
 | any | `python3 companion/tests/overload.py` | the field conditions together: six viewers on two monitors, a swinging link, a stalling device, rejoins, a link that drops, jittery WiFi, light and busy content - judged per second from each browser's own WebRTC statistics |
 | any | `python3 companion/tests/panel_review.py` | the app's window in every state fits and says what to do |

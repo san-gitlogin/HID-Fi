@@ -151,7 +151,12 @@ SETTLE_JS = """window.__hidfiSettle = async () => {
 window.__hidfiState = async (name, enter, leave, waitFor) => {
   await (new Function(enter))();
   // Some sheets open on the board's reply; under a full parallel run that can take seconds.
-  if (waitFor) for (let i = 0; i < 120 && !document.querySelector(waitFor); i++) await new Promise(r => setTimeout(r, 50));
+  // Seen: 6 s was not enough once (sheet macro, 529 scenarios in parallel).
+  if (waitFor) {
+    for (let i = 0; i < 300 && !document.querySelector(waitFor); i++) await new Promise(r => setTimeout(r, 50));
+    if (!document.querySelector(waitFor))
+      return {bad: [name + ': did not open within 15 s - the board model never answered (a loaded machine?)'], info: {}};
+  }
   await window.__hidfiSettle();
   // A message from an earlier step (the sign-in's "Unlocked") would sit over the
   // top bar and read as covering it; messages are measured in their own state.

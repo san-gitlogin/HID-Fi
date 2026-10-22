@@ -961,29 +961,36 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
    rather than a copy that could drift. */
 .scrwrap{display:flex;flex-direction:column;gap:var(--sp);max-width:1600px;margin:0 auto}
 .scrstageslot{min-width:0;position:relative}
-.scrstage{position:relative;width:100%;aspect-ratio:16/10;max-height:56vh;max-height:56dvh;min-height:150px;
-  background:#05070c;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+/* The picture in a frame, like a window: a slim title bar above (who, which
+   monitor, fps), a slim toolbar below, and nothing over the picture itself -
+   seen live: the name badge and the buttons hid what was under them. */
+.scrframe{position:relative;display:flex;flex-direction:column;background:#05070c;
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.scrframe.live{border-color:rgba(0,210,255,.32)}
+.scrhead{display:flex;align-items:center;gap:7px;flex:0 0 auto;height:32px;padding:0 12px;
+  background:rgba(13,17,25,.97);border-bottom:1px solid var(--line);font-size:12px;color:var(--fg2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.scrhead b{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.scrhead .dot{flex:0 0 auto}
+/* --scrar: the computer's own screen shape, set from the video, so a portrait
+   monitor is not a thin strip in a wide box. */
+.scrstage{position:relative;width:100%;aspect-ratio:var(--scrar,16/10);max-height:calc(56vh - 72px);max-height:calc(56dvh - 72px);
+  min-height:150px;flex:0 0 auto;background:#05070c;overflow:hidden;
   touch-action:none;user-select:none;-webkit-user-select:none}
 .scrstage video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;
   transform-origin:0 0;background:#05070c;pointer-events:none}
 .scrstage.empty video{visibility:hidden}
-.scrstage.live{box-shadow:inset 0 0 0 1px rgba(0,210,255,.25)}
 .scrmsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:9px;padding:20px 22px;text-align:center;color:var(--fg2);font-size:13px;line-height:1.5}
 .scrmsg b{color:var(--fg);font-size:15px;font-weight:620}
 .scrmsg .ic{width:30px;height:30px;color:var(--acc)}
 .scrmsg .btn{margin-top:4px}
 .scrmsg:empty{display:none}
-.scrtools{position:absolute;right:8px;bottom:8px;display:flex;gap:6px;z-index:2}
-.scrtools .iconbtn{width:34px;height:34px;border-radius:10px;background:rgba(8,11,17,.74);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-.scrstage.empty .scrtools .zm{display:none}
-.scrbadge{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:7px;height:26px;padding:0 10px;
-  border-radius:999px;background:rgba(8,11,17,.74);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  font-size:11.5px;color:var(--fg2);z-index:2;max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-.scrbadge b{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis}
-.scrbadge:empty{display:none}
+.scrtools{display:flex;justify-content:flex-end;align-items:center;gap:4px;flex:0 0 auto;min-height:40px;
+  padding:3px 6px;background:rgba(13,17,25,.97);border-top:1px solid var(--line)}
+.scrtools .iconbtn{width:34px;height:34px;border-radius:9px;background:none;border:1px solid transparent}
+@media(hover:hover){.scrtools .iconbtn:hover{background:rgba(255,255,255,.06);border-color:var(--line)}}
+.scrframe.empty .scrtools .zm{display:none}
 /* Docked slot while the picture is floating: says where it went, and brings it back. */
 .scrhole{display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:120px;
   padding:18px;border:1px dashed var(--line);border-radius:var(--r);color:var(--fg3);font-size:13px;text-align:center}
@@ -1004,13 +1011,26 @@ a.btn{color:inherit;text-decoration:none}
 @media(orientation:landscape) and (min-width:700px){
   .scrwrap{flex-direction:row;align-items:stretch}
   .scrstageslot{flex:1 1 auto}
-  .scrstage{aspect-ratio:auto;height:calc(100vh - 128px);height:calc(100dvh - 128px);max-height:none;min-height:220px}
+  .scrframe{height:calc(100vh - 128px);height:calc(100dvh - 128px);min-height:220px}
+  .scrstage{aspect-ratio:auto;flex:1 1 auto;height:auto;max-height:none;min-height:0}
   .scrpadslot{flex:0 0 clamp(280px,34%,520px)}
   .scrpadslot .padwrap{--padh:calc(100vh - 130px);--padh:calc(100dvh - 130px)}
 }
+/* A phone on its side: height is what is scarce, so the buttons share the
+   title bar's row (name left, buttons right) and the picture gets the rest. */
 @media(orientation:landscape) and (max-height:500px){
-  .scrstage{height:calc(100vh - 72px);height:calc(100dvh - 72px);min-height:150px}
+  .scrframe{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);
+    height:calc(100vh - 72px);height:calc(100dvh - 72px);min-height:150px}
+  .scrhead{grid-column:1;grid-row:1;height:auto;min-height:32px}
+  .scrtools{grid-column:2;grid-row:1;min-height:32px;padding:1px 4px;border-top:none;border-bottom:1px solid var(--line)}
+  .scrtools .iconbtn{width:30px;height:30px}
+  .scrstage{grid-column:1/3;grid-row:2;aspect-ratio:auto;height:auto;max-height:none;min-height:0}
   .scrpadslot .padwrap{--padh:calc(100vh - 74px);--padh:calc(100dvh - 74px)}
+}
+/* ...and below 768px the tab bar sits at the bottom: the frame stops above it. */
+@media(orientation:landscape) and (max-height:500px) and (max-width:767px){
+  .scrframe{height:calc(100vh - 72px - var(--tab) - var(--sab));height:calc(100dvh - 72px - var(--tab) - var(--sab));min-height:120px}
+  .scrpadslot .padwrap{--padh:calc(100vh - 74px - var(--tab) - var(--sab));--padh:calc(100dvh - 74px - var(--tab) - var(--sab))}
 }
 /* ---- watch only (#watch): the picture alone, for a screen that just watches ----
    Decided before the first paint, so a screen opened to watch never shows the
@@ -1020,12 +1040,17 @@ html.watch .app,html.watch .tabbar,html.watch .scrfloat,
 html:has(#watch:target) .app,html:has(#watch:target) .tabbar{display:none!important}
 .watchwrap{display:none}
 html.watch .watchwrap,html:has(#watch:target) .watchwrap{display:block;position:fixed;inset:0;z-index:300;background:#000}
+html.watch .watchwrap .scrframe{position:absolute;inset:0;border:none;border-radius:0;background:#000}
+html.watch .watchwrap .scrhead{display:none}
 html.watch .watchwrap .scrstage{position:absolute;inset:0;width:auto;height:auto;max-height:none;aspect-ratio:auto;
   border:none;border-radius:0;background:#000}
 html.watch .watchwrap .scrstage video{background:#000}
-html.watch .watchwrap .scrtools{right:calc(10px + var(--sar));bottom:calc(10px + var(--sab))}
+/* Full screen, the video player way: the controls float and fade when idle. */
+html.watch .watchwrap .scrtools{position:absolute;z-index:2;right:calc(10px + var(--sar));bottom:calc(10px + var(--sab));
+  min-height:0;padding:0;gap:6px;background:none;border:none;transition:opacity .25s var(--ease)}
+html.watch .watchwrap .scrtools .iconbtn{border-radius:10px;background:rgba(8,11,17,.74);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 html.watch .watchwrap #scrPop{display:none}
-html.watch .watchwrap .scrbadge{display:none}
 .watchbar{position:absolute;left:0;right:0;top:0;z-index:3;display:flex;align-items:center;gap:8px;
   padding:calc(10px + var(--sat)) calc(10px + var(--sar)) 10px calc(10px + var(--sal));
   background:linear-gradient(rgba(5,7,12,.86),rgba(5,7,12,0));transition:opacity .25s var(--ease)}
@@ -1051,11 +1076,13 @@ html.watch .watchwrap.idle .watchbar,html.watch .watchwrap.idle .scrtools{opacit
 .scrfloat .fhead b{flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .scrfloat .fhead .iconbtn{width:30px;height:30px;border-radius:8px;background:none;border:none}
 .scrfloat .fbody{position:relative}
-.scrfloat .scrstage{border:none;border-radius:0;max-height:none;height:auto;aspect-ratio:16/10;min-height:0}
+.scrfloat .scrframe{border:none;border-radius:0}
+.scrfloat .scrstage{max-height:none;height:auto;aspect-ratio:16/10;min-height:0}
+.scrfloat .scrtools{min-height:34px;padding:2px 4px}
 .scrfloat .scrtools .iconbtn{width:30px;height:30px}
 .scrfloat #scrPop,.scrfloat #scrSolo,html.watch #scrSolo{display:none}
-/* The title bar says what the badge would: nothing covers a small picture. */
-.scrfloat .scrbadge{display:none}
+/* Its own title bar says who and how fast: the frame's would repeat it. */
+.scrfloat .scrhead{display:none}
 .scrtools [hidden]{display:none}
 /* All monitors at once (#wall): a grid of live tiles, each with its own strip -
    nothing over the pictures. Shown before any script runs, like #watch. */
@@ -1410,11 +1437,13 @@ main::after{height:var(--flpad,0px)}
     <section class="view" id="v-screen">
       <div class="scrwrap" id="scrWrap">
         <div class="scrstageslot" id="scrStageSlot">
+          <div class="scrframe empty" id="scrFrame">
+          <div class="scrhead" id="scrBadge"></div>
           <div class="scrstage empty" id="scrStage">
             <video id="scrVideo" autoplay muted playsinline></video>
             <div class="scrmsg" id="scrMsg"></div>
-            <div class="scrbadge" id="scrBadge"></div>
-            <div class="scrtools">
+          </div>
+            <div class="scrtools" id="scrTools">
               <button class="iconbtn zm" id="scrOut" aria-label="Zoom out"><svg class="ic ic-sm"><use href="#i-zoomout"/></svg></button>
               <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
               <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
@@ -5307,7 +5336,16 @@ const SCR={
 const WATCH={on:location.hash==='#watch',idleT:0};
 // All monitors at once (#wall): declared here, before anything at load reads it.
 const WALL={on:location.hash==='#wall',want:0,list:[],tiles:[]};
-const scrVideo=$('scrVideo'),scrStage=$('scrStage');
+const scrVideo=$('scrVideo'),scrStage=$('scrStage'),scrFrame=$('scrFrame');
+// The picture's frame (title bar, picture, toolbar) is what moves between the
+// tab, the floating window and the watch view; zoom and pan work on the stage.
+function scrEmpty(on){scrStage.classList.toggle('empty',on);scrFrame.classList.toggle('empty',on);}
+function scrShape(){
+  const w=scrVideo.videoWidth,h=scrVideo.videoHeight;
+  if(w&&h)scrFrame.style.setProperty('--scrar',(w/h).toFixed(4));
+}
+scrVideo.addEventListener('resize',scrShape);
+scrVideo.addEventListener('loadedmetadata',scrShape);
 const PADHOME={parent:padwrap.parentNode,next:padwrap.nextSibling};
 function scrList(){
   send({cmd:'companion_list'},r=>{
@@ -5485,7 +5523,7 @@ function scrStart(){
 }
 function scrOn(s){
   if(s==='connecting')SCR.state='connecting';
-  else if(s==='live'){SCR.state='live';SCR.tries=0;SCR.why='';scrStage.classList.remove('empty');scrRenderList();}
+  else if(s==='live'){SCR.state='live';SCR.tries=0;SCR.why='';scrEmpty(false);scrRenderList();}
   else if(s==='reconnect')SCR.state='reconnecting';
   else if(s.indexOf('stats:')===0){SCR.fps=parseInt(s.slice(6),10)||0;}
   else if(s.indexOf('displays:')===0){
@@ -5511,7 +5549,7 @@ function scrOn(s){
     SCR.h=null;
     const why=s.slice(s.indexOf(':')+1);
     SCR.state=s.indexOf('refused')===0?'refused':'ended';SCR.why=why;
-    if(why!=='stopped'){scrStage.classList.add('empty');scrRenderList();}
+    if(why!=='stopped'){scrEmpty(true);scrRenderList();}
     // A wrong certificate is someone in the middle: retrying would only repeat
     // it. Busy means six screens already watch: wait for one to close, slowly.
     // Everything else is the network.
@@ -5563,7 +5601,7 @@ function scrStop(state){
   const h=SCR.h;SCR.h=null;
   if(h)h.stop();
   try{scrVideo.srcObject=null;}catch(e){}
-  scrStage.classList.add('empty');
+  scrEmpty(true);
   SCR.state=state||'idle';SCR.fps=0;SCR.tries=0;SCR.displays=[];SCR.disp=null;
   scrPaint();
 }
@@ -5608,12 +5646,16 @@ function scrPaint(){
   if(m.innerHTML!==html)m.innerHTML=html;
   const live=SCR.state==='live'||SCR.state==='reconnecting';
   scrStage.classList.toggle('live',SCR.state==='live');
+  scrFrame.classList.toggle('live',SCR.state==='live');
   const z=SCR.z.s>1.01?' \u00b7 '+Math.round(SCR.z.s*100)+'%':'';
   // With several displays, which one: the name says it, in every view.
   const dn=SCR.displays.length>1?scrDispName(SCR.disp):'';
+  // The title bar always says whose screen this is (or that none is shown), so
+  // the frame never changes height when a picture arrives.
   const badge=live?'<span class="dot '+(SCR.state==='live'?'ok':'warn')+'"></span><b>'+esc(SCR.name)+'</b>'+
     (dn?' \u00b7 '+esc(dn):'')+
-    (SCR.state==='reconnecting'?' reconnecting':(SCR.fps?' \u00b7 '+SCR.fps+' fps':''))+z:'';
+    (SCR.state==='reconnecting'?' reconnecting':(SCR.fps?' \u00b7 '+SCR.fps+' fps':''))+z
+    :'<span class="dot"></span><b>'+esc(SCR.name||'Screen')+'</b>';
   $('scrDisp').hidden=!(live&&SCR.displays.length>1);
   $('scrWall').hidden=!(live&&SCR.displays.length>1);
   const b=$('scrBadge');if(b.innerHTML!==badge)b.innerHTML=badge;
@@ -5719,10 +5761,10 @@ function flPlace(x,y,w){
   const Z=pgZoom(),W=innerWidth/Z,H=innerHeight/Z;
   const tab=W<=767?60:0;
   // As wide as asked, but never taller than the room there is (a phone on its side).
-  const maxW=Math.max(160,Math.min(W-16,(H-tab-16-36)*1.6));
+  const maxW=Math.max(160,Math.min(W-16,(H-tab-16-36-34)*1.6));   // its title bar and toolbar
   w=Math.round(Math.min(Math.max(w||s.w||Math.min(360,W-24),160),maxW));
   if(!SCR.min)el.style.width=w+'px';
-  const h=el.offsetHeight||Math.round(w*10/16)+36;
+  const h=el.offsetHeight||Math.round(w*10/16)+36+34;
   const fx=x!==undefined?x:(s.x!==undefined?s.x:W-w-12),fy=y!==undefined?y:(s.y!==undefined?s.y:H-tab-h-12);
   el.style.left=Math.round(Math.min(Math.max(8,fx),Math.max(8,W-el.offsetWidth-8)))+'px';
   el.style.top=Math.round(Math.min(Math.max(8,fy),Math.max(8,H-tab-h-8)))+'px';
@@ -5738,8 +5780,8 @@ function scrFloat(on){
   on=!!on;if(on===SCR.float)return;
   SCR.float=on;
   const el=$('scrFloat');
-  if(on){$('scrFBody').appendChild(scrStage);el.classList.add('on');flPlace();}
-  else{$('scrStageSlot').insertBefore(scrStage,$('scrHole'));el.classList.remove('on','min');SCR.min=false;}
+  if(on){$('scrFBody').appendChild(scrFrame);el.classList.add('on');flPlace();}
+  else{$('scrStageSlot').insertBefore(scrFrame,$('scrHole'));el.classList.remove('on','min');SCR.min=false;}
   $('scrHole').style.display=on?'flex':'none';
   $('scrFMin').innerHTML=ico('min','ic-sm');
   flRoom();
@@ -5977,7 +6019,7 @@ function watchEnter(){
   WATCH.on=true;
   document.documentElement.classList.add('watch');
   if(SCR.float)scrFloat(false);
-  const w=$('watchWrap');w.insertBefore(scrStage,w.firstChild);
+  const w=$('watchWrap');w.insertBefore(scrFrame,w.firstChild);
   const fsOk=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
   $('watchFs').style.display=fsOk?'':'none';
   watchWake();scrApplyZoom();scrList();scrSync();
@@ -5990,7 +6032,7 @@ function watchLeave(){
   if(document.fullscreenElement||document.webkitFullscreenElement){
     try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch(e){}
   }
-  $('scrStageSlot').insertBefore(scrStage,$('scrHole'));
+  $('scrStageSlot').insertBefore(scrFrame,$('scrHole'));
   scrApplyZoom();scrSync();
 }
 function watchPaint(){

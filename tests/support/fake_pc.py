@@ -57,12 +57,13 @@ def lan_ip():
 
 
 class FakePc:
-    def __init__(self, browser, app, behaviour="live", displays=1):
+    def __init__(self, browser, app, behaviour="live", displays=1, size=(640, 360)):
         """`app` is the companion_sim.FakeApp whose ip/port/fp the board hands out.
-        `displays`: how many monitors it has (main first, as the app lists them)."""
+        `displays`: how many monitors it has (main first, as the app lists them).
+        `size`: the picture it sends (a portrait monitor is taller than wide)."""
         self.ctx = browser.new_context()
         self.page = self.ctx.new_page()
-        self.page.set_content(PAGE)
+        self.page.set_content(PAGE.replace("640", str(size[0])).replace("360", str(size[1])))
         self.page.wait_for_function("window.CERT !== null")
         fp = self.page.evaluate("CERT.getFingerprints().find(f => f.algorithm === 'sha-256').value")
         self.fp = fp.replace(":", "").lower()

@@ -704,8 +704,18 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   board is a directory and trust anchor (pairing, signed one-use tickets, the
   app's certificate fingerprint). The app never holds a board WebSocket (it would
   break release-all, radio sleep and AP auto-off): `POST /api/companion` only.
-- **The board picked is the one on this computer's USB**, matched by USB serial
-  (= efuse MAC = status `mac`). 303A:1001 is generic: never match by VID/PID.
+- **Every board on this computer's USB is served, each on its own**, matched by
+  USB serial (= efuse MAC = status `mac`). 303A:1001 is generic: never match by
+  VID/PID. Each board has its own session and its own pairing key
+  (`pairing-<MAC>.key`); one board's pairing is never reused for, or lost to,
+  another. A board that leaves keeps its pairing, but its viewers end at once and
+  its tickets get `closed` (the gate tags each viewer with its board): watching
+  one computer while typing into another is the one mistake this app must never
+  make. Seen live in v4.0.1: a board moved from a Windows laptop to a Mac that had
+  another board was never offered there, and re-pairing threw the other's key
+  away. `companion/tests/boards.py` plays that whole story (two board models,
+  the real service, Chrome) - run it after any change to `service.rs`,
+  `locate.rs`, `store.rs` or the ticket gate.
 - **Pages:** the board serves `ws_max` = 8 dashboard pages. The WebSockets
   library's own limit comes from `hid_fi/build_opt.h`; a `static_assert` ties it
   to `WS_MAX_CLIENTS`, and the flash scripts rebuild from clean when that file
@@ -739,9 +749,24 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   one exists. After an ad-hoc rebuild: `tccutil reset ScreenCapture in.hidfi.companion`.
   Never rebuild the bundle under a running app without expecting it to restart
   itself (macOS drops a replaced app's local network access; `replaced.rs`).
+- **Nothing sits over the picture** in the Screen tab: the picture is a frame -
+  a slim title bar (who, which monitor, fps) above, a slim toolbar below (on a
+  phone on its side, both share one row), the stage taking the computer's own
+  screen shape (`--scrar`). The frame (`#scrFrame`), not the stage, is what moves
+  to the floating window and the watch view. Only the full-screen watch view
+  floats its controls, and they fade when idle, as video players do. The
+  scenarios "Nothing covers the picture, on any screen, either way up" check
+  nine sizes, both orientations, by hit-testing the picture - add a size there
+  for any new layout rule.
 - **Every dashboard request gets an answer** (`send()` calls back with `null` when
   the link drops or the PIN is asked): a callback that waits forever left the
   Screen tab stuck on "Connecting..." after a phone slept.
+- **Think in scenarios a person lives, not in units.** Each bug a person found
+  after a release was a story no test told: a board moved between computers,
+  two boards on one computer, a phone on its side. Before calling a companion or
+  Screen-tab change done, list who plugs what where, in which order, on which
+  screen, and make each one a test (`boards.py`, `system.py`, the BDD Screen
+  feature) - then run them.
 - **Tests:** `companion/README.md` lists them. Real-board ones (`hardware.py`,
   `board_pages.py`, `multi_monitor_mac.py`) need `HIDFI_PIN` in the environment
   - never write a PIN into a file. Linux: `companion/tests/linux/run.sh` (Docker;

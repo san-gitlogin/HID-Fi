@@ -142,6 +142,38 @@ Feature: Screen - seeing the computer's own picture
     When I hold Ctrl and scroll up on the screen
     Then the screen is zoomed in
 
+  # Seen live: in the tab, the name and fps sat over the top left of the
+  # picture and the buttons over the bottom right, hiding what was under them.
+  # Like a window: a slim title bar above, a slim toolbar below, nothing over it.
+  Scenario Outline: Nothing covers the picture, on any screen, either way up
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When the window is <width> by <height>
+    And I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the name and frame rate are in the title bar above the picture
+    And nothing covers the picture
+
+    Examples:
+      | width | height |
+      | 390   | 844    |
+      | 844   | 390    |
+      | 320   | 568    |
+      | 568   | 320    |
+      | 820   | 1180   |
+      | 1180  | 820    |
+      | 1400  | 900    |
+      | 1920  | 1080   |
+      | 700   | 1000   |
+
+  Scenario: A portrait monitor gets a tall picture, not a strip in a wide box
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running, its screen 360 by 640
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the picture is far taller than a 16:10 box would let it be
+    And nothing covers the picture
+
   Scenario: Floating the picture over other tabs
     Given the dashboard is open and signed in with "4826"
     And a computer "Studio PC" is paired and running

@@ -1693,7 +1693,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hidfi-agent"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "getrandom 0.3.4",
  "hex",
@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "hidfi-companion"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "dirs 7.0.0",
  "getrandom 0.4.3",
@@ -1729,7 +1729,7 @@ dependencies = [
 
 [[package]]
 name = "hidfi-core"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "getrandom 0.3.4",
  "hex",
@@ -1746,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "hidfi-stream"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "block2",
  "core-foundation",
