@@ -23,6 +23,14 @@ Companion.
   pairing. Now every HID-Fi on the computer's USB is served, each with its own
   pairing (`pairing-<MAC>.key`); the tray names them when there are two. An
   existing pairing carries over: nobody pairs again after updating.
+- **A computer asking to pair vanished after two minutes.** Seen live: the
+  request expired 2 minutes after the first ask, although the app kept
+  asking, and the dashboard opened later never showed the computer. A waiting
+  request now stays as long as its computer keeps asking; it goes 2 minutes
+  after the app stops, or on Not now.
+- **A board with only its COM cable in a computer never said why no computer
+  showed up.** The Screen tab now says the board's USB port is in no computer,
+  and which port to plug in.
 - **A board pulled out stops its viewers at once**, and only its own: with two
   boards, the other board's viewers carry on.
 - **The Screen tab hid parts of the picture**: the computer's name and frame
@@ -39,6 +47,9 @@ Companion.
   watch, unplug one, plug it back, one removes this computer.
 - Screen scenarios: nothing covers the picture at nine screen sizes, both ways
   up, checked by hit-testing; a portrait monitor.
+- 52 board-model tests (pairing protocol, Mac/PC detection) had no tier and
+  never ran under `tests/run.py`; they do now, and a test without a tier stops
+  the run.
 - The layout matrix waits up to 15 s for a dialog that opens on the board's
   reply (it once took more than 6 s under the full parallel run).
 
