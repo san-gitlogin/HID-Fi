@@ -192,6 +192,28 @@ def usb_note_gone(ctx):
     _wait(ui, lambda: not ui.page.locator("#scrUsbOff").count(), "the USB note stays after plugging in")
 
 
+@when("I note where the picture is")
+def note_picture(ctx):
+    ctx["notes"]["picture"] = ctx["ui"].page.evaluate("JSON.stringify(SCR.z)")
+
+
+@then("the picture has moved")
+def picture_moved(ctx):
+    now = ctx["ui"].page.evaluate("JSON.stringify(SCR.z)")
+    assert now != ctx["notes"]["picture"], f"the pan did not reach the picture: {now}"
+
+
+@then("the watch view is still shown")
+def watch_still(ctx):
+    ui = ctx["ui"]
+    assert ui.page.evaluate("WATCH.on && document.documentElement.classList.contains('watch')"), "left the watch view"
+
+
+@then("the wall is still shown")
+def wall_still(ctx):
+    assert ctx["ui"].page.evaluate("WALL.on"), "left the wall"
+
+
 @when("the phone sleeps, and the board forgets its sign-in")
 def phone_sleeps(ctx):
     # Asleep: the board cannot be reached, the video session to the computer

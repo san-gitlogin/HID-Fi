@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## v4.0.2 - 2026-10-22
+## v4.0.2 - 2026-10-23
 
 Two boards, boards that move between computers, and a Screen tab where nothing
 covers the picture. Flash the board (the dashboard changed) and update HID-Fi
@@ -31,6 +31,20 @@ Companion.
 - **A board with only its COM cable in a computer never said why no computer
   showed up.** The Screen tab now says the board's USB port is in no computer,
   and which port to plug in.
+- **A sideways swipe changed tab while you were using something.** Seen
+  live: zoomed into the computer's screen, a sideways pan switched to the next
+  tab and took the picture away. A flick still changes tab on empty space, but
+  never when it starts on anything that handles its own touches - the picture
+  and its frame, the trackpad and the keyboard beside it, the keyboard, knobs,
+  sticks, the D-pad - and never anywhere on the Screen tab while a screen is
+  shown there. That covers new surfaces too: whatever claims its own touches
+  (CSS `touch-action`) keeps them.
+- **PIN digits could land in the wrong boxes, and the focus flicker between
+  two boxes for good.** A digit typed the instant a PIN box took focus (a fast
+  thumb, a paste, a password manager) left a late select() that pulled the
+  focus back, and two boxes then handed it to and fro every few milliseconds.
+  Found by a test that failed once in a full run; a box now selects itself only
+  while it still has the focus.
 - **The app's Open the dashboard showed "This site can't be reached"** when
   macOS keeps the browser off the local network (its Local Network switch is
   per app: the app had it, Chrome did not). It now opens a page from the app
@@ -56,6 +70,15 @@ Companion.
   watch, unplug one, plug it back, one removes this computer.
 - Screen scenarios: nothing covers the picture at nine screen sizes, both ways
   up, checked by hit-testing; a portrait monitor.
+- Tab swipes: every gesture (flick, two- and three-finger, pinch, double tap,
+  hold and drag, slow drag), both ways, on the picture in every way of watching
+  (docked, zoomed, floating, alone, the wall), the trackpad and keyboard, and
+  every surface the page itself reports on each tab, at phone, tablet and
+  sideways sizes - and the controls that a flick on empty space still works.
+  Proven to fail on the old code.
+- PIN rows typed at speed: each digit in its own box, and the focus still
+  afterwards (fails on the old code). The reply-queue check types like a
+  person and waits for conditions, not fixed sleeps.
 - Test boards use made-up MAC addresses only: a model board had a real
   board's, and the app under test found the real board on the home network.
 - 52 board-model tests (pairing protocol, Mac/PC detection) had no tier and

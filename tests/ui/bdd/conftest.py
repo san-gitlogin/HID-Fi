@@ -412,3 +412,216 @@ def switched_off(ctx, label):
 def confirm_shown(ctx, text):
     msgs = [d["message"] for d in _ui(ctx).dialogs]
     assert any(text in m for m in msgs), f"questions asked: {msgs}"
+
+
+# ---- tab swipes: what must never change tab, and what must -------------------
+# A quick sideways flick across empty space changes tab. Anything that handles
+# its own touches - the pad, the keyboard, a knob, a stick, the computer's
+# screen - keeps every gesture, in every direction. Seen live: panning a
+# zoomed-in picture changed tab and took the picture away.
+GESTURES = r"flick|pan two fingers|swipe three fingers|pinch out|pinch in|double tap then flick|hold then drag|drag slowly"
+
+
+def gesture(ui, x, y, kind, dx):
+    """One gesture at (x, y) that would change tab if it began on empty space."""
+    t = ui._touch
+    w = ui.page.wait_for_timeout
+
+    def path(fingers, spread=0, steps=(0.25, 0.5, 0.75, 1.0), step_ms=30, hold_ms=0):
+        def at(f):
+            pts = []
+            for i in range(fingers):
+                off = (i - (fingers - 1) / 2) * 40
+                grow = spread * f * (1 if i else -1) if fingers == 2 and spread else 0
+                pts.append((x + off + dx * f + grow, y + 3 * f, i))
+            return pts
+        t("touchStart", at(0))
+        if hold_ms:
+            w(hold_ms)
+        for f in steps:
+            w(step_ms)
+            t("touchMove", at(f))
+        w(step_ms)
+        t("touchEnd", at(1))
+
+    if kind == "flick":
+        path(1)
+    elif kind == "pan two fingers":
+        path(2)
+    elif kind == "swipe three fingers":
+        path(3)
+    elif kind == "pinch out":
+        path(2, spread=60)
+    elif kind == "pinch in":
+        path(2, spread=-15)
+    elif kind == "double tap then flick":
+        for _ in range(2):
+            t("touchStart", [(x, y, 0)]); w(40); t("touchEnd", [(x, y, 0)]); w(80)
+        path(1)
+    elif kind == "hold then drag":
+        path(1, hold_ms=450)
+    elif kind == "drag slowly":
+        path(1, step_ms=300)
+    else:
+        raise ValueError(kind)
+    ui.idle(300)
+
+
+@when(parsers.re(r'I (?P<kind>' + GESTURES + r') (?P<direction>left|right) on "(?P<selector>[^"]+)"'))
+def gesture_on(ctx, kind, direction, selector):
+    ui = _ui(ctx)
+    x, y = ui._center(selector)
+    ctx["notes"]["view_before"] = ui.view()
+    gesture(ui, x, y, kind, -160 if direction == "left" else 160)
+
+
+@then(parsers.parse('the "{tab}" tab is still shown'))
+def tab_still_shown(ctx, tab):
+    assert _ui(ctx).view() == TABS[tab], f"the tab changed to {_ui(ctx).view()!r}"
+
+
+# Every visible surface on the current tab that handles its own touches, as the
+# page's CSS says (touch-action), plus the keyboards: one point on each, clear
+# of anything on top. Surfaces added later are swept without anyone listing them.
+SURFACES_JS = r"""() => {
+  const view = document.querySelector('.view.on'); if (!view) return [];
+  const owns = e => { const ta = getComputedStyle(e).touchAction;
+    return /none|pan-y|pinch-zoom/.test(ta) && !/pan-x|manipulation|auto/.test(ta); };
+  const out = [], seen = new Set();
+  for (const e of view.querySelectorAll('*')) {
+    if (!(owns(e) || e.matches('.kbd'))) continue;
+    if (e.parentElement && e.parentElement.closest('.kbd')) continue;   // a key: its keyboard is the surface
+    let p = e.parentElement, inner = false;
+    for (; p && p !== view; p = p.parentElement) if (owns(p)) { inner = true; break; }
+    if (inner) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width < 24 || r.height < 24 || getComputedStyle(e).visibility === 'hidden') continue;
+    const name = e.id ? '#' + e.id : (e.dataset && Object.keys(e.dataset).length ? '[data-' + Object.keys(e.dataset)[0] + '="' + Object.values(e.dataset)[0] + '"]' : e.className.toString().split(' ')[0]);
+    if (seen.has(name)) continue; seen.add(name);
+    out.push(name);
+  }
+  return out;
+}"""
+
+POINT_JS = r"""(name) => {
+  const view = document.querySelector('.view.on');
+  const e = name.startsWith('#') || name.startsWith('[') ? view.querySelector(name) : view.querySelector('.' + name);
+  if (!e) return null;
+  e.scrollIntoView({block: 'center', inline: 'center'});
+  const r = e.getBoundingClientRect();
+  // A point on the surface itself, not under the tab bar or a toolbar.
+  for (const [fx, fy] of [[.5, .5], [.3, .5], [.7, .5], [.5, .3], [.5, .7]]) {
+    const x = r.left + r.width * fx, y = r.top + r.height * fy, top = document.elementFromPoint(x, y);
+    if (top && e.contains(top)) return [x, y];
+  }
+  return null;
+}"""
+
+
+@when("I try every tab-changing gesture on every surface that handles its own touches")
+def sweep_surfaces(ctx):
+    ui = _ui(ctx)
+    start = ui.view()
+    names = ui.page.evaluate(SURFACES_JS)
+    ctx["notes"]["swept"], ctx["notes"]["left_tab"] = names, []
+    assert names, f"no surface found on {start!r}"
+    for name in names:
+        for kind, dx in (("flick", -160), ("flick", 160), ("pan two fingers", -160), ("hold then drag", -160)):
+            pt = ui.page.evaluate(POINT_JS, name)
+            if not pt:
+                continue
+            gesture(ui, pt[0], pt[1], kind, dx)
+            if ui.view() != start:
+                ctx["notes"]["left_tab"].append(f"{kind} {'left' if dx < 0 else 'right'} on {name} -> {ui.view()}")
+                ui.page.evaluate(f"go({start!r})")
+                ui.idle(200)
+
+
+@then(parsers.parse('the "{tab}" tab was never left'))
+def never_left(ctx, tab):
+    assert _ui(ctx).view() == TABS[tab]
+    assert not ctx["notes"]["left_tab"], "changed tab: " + "; ".join(ctx["notes"]["left_tab"])
+    print("swept:", ctx["notes"]["swept"])
+
+
+# Empty space: nothing there handles a touch of its own (the page's rule).
+EMPTY_JS = r"""([span]) => {
+  const main = document.getElementById('main'), m = main.getBoundingClientRect();
+  const KEEP = '#padwrap,.kbd,.knob,.mouse,.seg,input,textarea,select,button,a,label,[data-k],[data-mb],[data-md],' +
+               '[contenteditable],.scrframe,.scrstage,.scrhead,.scrtools,.scrhole,.scrpadslot,.stick,.dpad,[data-gs]';
+  const owned = el => { for (let e = el; e && e !== main; e = e.parentElement) {
+      if (e.matches(KEEP)) return true;
+      const cs = getComputedStyle(e);
+      if (/none|pan-y|pinch-zoom/.test(cs.touchAction) && !/pan-x|manipulation|auto/.test(cs.touchAction)) return true;
+      if (/auto|scroll/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 1) return true; }
+    return !el || !el.closest('#main'); };
+  const tb = document.getElementById('tabbar').getBoundingClientRect();
+  const bottom = Math.min(m.bottom, innerHeight, tb.height ? tb.top : innerHeight) - 20;
+  for (let y = m.top + 60; y < bottom; y += 12)
+    for (let x = m.left + 20; x < m.right - 20; x += 12) {
+      if (x + span > m.right - 10 || x + span < m.left + 10) continue;
+      const clear = (px, py) => [[0,0],[28,0],[-28,0],[0,28],[0,-28],[20,20],[-20,-20],[20,-20],[-20,20]]
+        .every(([ox, oy]) => !owned(document.elementFromPoint(px + ox, py + oy)));
+      if (clear(x, y) && !owned(document.elementFromPoint(x + span, y))) return [x, y];
+    }
+  return null; }"""
+
+
+@when(parsers.parse("I flick {direction} across empty space"))
+def flick_empty(ctx, direction):
+    ui = _ui(ctx)
+    dx, dy = {"left": (-160, 0), "right": (160, 0), "up": (0, -160), "down": (0, 160)}[direction]
+    pt = None
+    for _ in range(6):
+        pt = ui.page.evaluate(EMPTY_JS, [dx])
+        if pt:
+            break
+        ui.page.evaluate("document.getElementById('main').scrollBy(0, 300)")
+        ui.idle(150)
+    assert pt, f"no empty space to flick across on {ui.view()!r}"
+    x, y = pt
+    if dy:
+        gesture_vertical(ui, x, y, dy)
+    else:
+        gesture(ui, x, y, "flick", dx)
+
+
+def gesture_vertical(ui, x, y, dy):
+    t = ui._touch
+    t("touchStart", [(x, y, 0)])
+    for f in (0.3, 0.7, 1.0):
+        ui.page.wait_for_timeout(30)
+        t("touchMove", [(x + 3 * f, y + dy * f, 0)])
+    ui.page.wait_for_timeout(30)
+    t("touchEnd", [(x + 3, y + dy, 0)])
+    ui.idle(300)
+
+
+# ---- PIN rows typed at speed -------------------------------------------------
+# A key the instant a box took focus once set two boxes handing the focus to
+# and fro every few ms for good (bindPin's late select()), and the digits
+# landed in the wrong boxes. Tap and type at once, as a fast thumb, a paste or
+# a password manager does.
+@when(parsers.parse('I tap the first box of "#{row}" and type "{digits}" at once'))
+def type_at_once(ctx, row, digits):
+    ui = _ui(ctx)
+    ui.page.evaluate("""() => { window.__focusins = 0;
+        document.addEventListener('focusin', () => window.__focusins++, true); }""")
+    ui.page.click(f"#{row} .pinbox >> nth=0")
+    ui.page.keyboard.type(digits, delay=60)
+    ui.idle(150)
+
+
+@then(parsers.parse('the boxes of "#{row}" read "{digits}"'))
+def boxes_read(ctx, row, digits):
+    got = "".join(_ui(ctx).page.evaluate(f"[...document.querySelectorAll('#{row} .pinbox')].map(b => b.value)"))
+    assert got == digits, f"#{row} reads {got!r}"
+
+
+@then("the focus stays put")
+def focus_still(ctx):
+    ui = _ui(ctx)
+    before = ui.page.evaluate("window.__focusins")
+    ui.idle(400)
+    after = ui.page.evaluate("window.__focusins")
+    assert after == before, f"the focus moved {after - before} times in 0.4 s with nobody typing"

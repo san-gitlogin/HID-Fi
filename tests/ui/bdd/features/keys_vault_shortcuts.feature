@@ -116,6 +116,20 @@ Feature: The Keys tab - the password vault and the shortcuts
     And "#btnVaultPin" reads "Change vault PIN"
     And "#vaultHint" contains "vault PIN"
 
+  Scenario Outline: Four digits typed the instant a PIN box is tapped each land in their own box
+    Given the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I tap "Add a vault PIN"
+    And I tap the first box of "#<row>" and type "<digits>" at once
+    Then the boxes of "#<row>" read "<digits>"
+    And the focus stays put
+
+    Examples:
+      | row   | digits |
+      | vpCur | 4826   |
+      | vpNew | 7391   |
+      | vpCur | 1111   |
+
   Scenario: Changing the vault PIN with the wrong current one says so, and changes nothing
     Given the vault holds a password "Netflix"
     And the vault has its own PIN "7391"

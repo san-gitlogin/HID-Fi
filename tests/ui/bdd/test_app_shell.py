@@ -57,12 +57,6 @@ def _flick(ui, dx, dy=0, step_ms=30, fingers=1, start=None):
     ui.idle(300)
 
 
-@when(parsers.parse("I flick {direction} across empty space"))
-def flick(ctx, direction):
-    dx, dy = {"left": (-160, 0), "right": (160, 0), "up": (0, -160), "down": (0, 160)}[direction]
-    _flick(ctx["ui"], dx, dy=dy)
-
-
 @when("the page is hidden")
 def page_hidden(ctx):
     ctx["ui"].page.evaluate("""() => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => true});

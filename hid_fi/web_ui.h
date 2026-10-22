@@ -2277,7 +2277,11 @@ function bindPin(rowId,onFull){
       bs[Math.min(d.length,bs.length-1)].focus();
       if(d.length===bs.length&&onFull)onFull(d);
     });
-    b.addEventListener('focus',()=>setTimeout(()=>b.select(),0));
+    // Only while it still has the focus: select() on a box that lost it takes
+    // the focus back, and two boxes' late select()s then hand it to and fro
+    // every few ms for good - a digit typed the instant a box was focused set
+    // that off, and the next digits landed in the wrong boxes.
+    b.addEventListener('focus',()=>setTimeout(()=>{if(document.activeElement===b)b.select();},0));
   });
   return{
     value:val,
@@ -2566,7 +2570,27 @@ window.addEventListener('hashchange',()=>{
   // Anything that already interprets a finger opts out entirely. The pad is the
   // whole point of this list: it owns its own gestures and must never share one.
   const KEEP='#padwrap,.kbd,.knob,.mouse,.seg,input,textarea,select,button,a,label,'
-            +'[data-k],[data-mb],[data-md],[contenteditable]';
+            +'[data-k],[data-mb],[data-md],[contenteditable],'
+            // The computer's screen, every part of its frame. Seen live: panning a
+            // zoomed-in picture sideways changed tab and took the picture away.
+            +'.scrframe,.scrstage,.scrhead,.scrtools,.scrhole,.scrpadslot,.stick,.dpad,[data-gs]';
+  // Whatever handles its own touches says so with touch-action: the pad, the
+  // knobs, the sticks, the picture. A swipe that starts on one belongs to it -
+  // including surfaces added later that nobody remembers to list here. A row
+  // that scrolls sideways owns a sideways finger too.
+  const owned=el=>{
+    for(let e=el;e&&e!==main;e=e.parentElement){
+      if(e.matches(KEEP))return true;
+      const cs=getComputedStyle(e);
+      if(/none|pan-y|pinch-zoom/.test(cs.touchAction)&&!/pan-x|manipulation|auto/.test(cs.touchAction))return true;
+      if(/auto|scroll/.test(cs.overflowX)&&e.scrollWidth>e.clientWidth+1)return true;
+    }
+    return false;
+  };
+  // While a computer's screen is being watched on its tab - connecting, live or
+  // reconnecting, fitted or zoomed - no sideways finger on that tab is a tab
+  // change: the person is looking at the picture, not navigating away from it.
+  const watching=()=>curView==='screen'&&!!(SCR.h||SCR.retryT||SCR.state==='live'||SCR.state==='reconnecting');
   const DIST=64;      // shorter than this is a stray finger, not a swipe
   const RATIO=2.2;    // and it has to be decisively sideways, not a diagonal
   const MAXMS=600;    // a flick. Anything slower is a drag or a scroll
@@ -2583,7 +2607,7 @@ window.addEventListener('hashchange',()=>{
   main.addEventListener('touchstart',e=>{
     if(id!==-1||e.touches.length>1){dead=true;return;}   // a second finger cancels it
     const t=e.changedTouches[0];
-    if(e.target.closest&&e.target.closest(KEEP)){dead=true;return;}
+    if(watching()||owned(e.target)){dead=true;return;}
     id=t.identifier;x0=t.clientX;y0=t.clientY;t0=performance.now();
     dead=false;moved=false;
   },{passive:true});
@@ -2607,7 +2631,7 @@ window.addEventListener('hashchange',()=>{
     id=-1;
     if(dead||!moved)return;
     // Never while the pad owns the host: a held button or key would be stranded.
-    if(FS.on||dragging||grabLock||held.size||pts.size)return;
+    if(FS.on||dragging||grabLock||held.size||pts.size||watching())return;
     if(dt>MAXMS||Math.abs(dx)<DIST||Math.abs(dx)<RATIO*Math.abs(dy))return;
     const i=VIEWS.findIndex(v=>v.id===curView)+(dx<0?1:-1);
     if(i<0||i>=VIEWS.length)return;   // stop at the ends rather than wrap around
@@ -4649,7 +4673,7 @@ const HELP={
   ['layers','Three fingers','Slide sideways and the app switcher opens while your fingers are still down, stepping window by window - lift when the one you want is highlighted, exactly like a Windows touchpad. Up is task view, down shows the desktop. Tap for middle click.'],
   ['appswitch','Hold Switch app','Holds Alt down so the host keeps its switcher open. Slide to pick a window, let go to raise it.'],
   ['keyboard','Keyboard button','Flips this card between the trackpad and a keyboard, so you can click and then type without leaving the page. Grab is released for you on the way in, and any held key on the way out.'],
-  ['layers','Swipe sideways','A quick flick across empty space moves to the next or previous tab. It is ignored on the pad, on a key, during a hold, and on anything slower than a flick.']
+  ['layers','Swipe sideways','A quick flick across empty space moves to the next or previous tab. It is ignored on the pad, the keyboard, a key, a knob, a stick, the computer\'s screen, during a hold, with two fingers, on anything slower than a flick, and anywhere on the Screen tab while a screen is shown there.']
  ],'For long drags use Grab in the pad toolbar - it holds the button down until you tap it again. If you drag windows a lot, turn on Three finger drag under Feel: it never sends a click first, so nothing can be misread as a double click.'],
 
  keys:['Keyboard',[

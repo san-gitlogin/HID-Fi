@@ -755,6 +755,12 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   address, from the browser itself, and explains when the browser is kept off
   the network. Seen live: macOS allowed the app on the local network but not
   Chrome - ERR_ADDRESS_UNREACHABLE, with no word why. `companion/tests/open_dashboard.py`.
+- **A swipe never changes tab from under a working finger.** The tab swipe
+  (`swipe between tabs` in web_ui.h) gives up on anything that claims its own
+  touches - the KEEP list, any `touch-action: none` ancestor, a row that scrolls
+  sideways - and anywhere on the Screen tab while a screen is shown. A new
+  surface gets `touch-action: none` and is covered; `tab_swipe.feature` sweeps
+  every such surface on every tab by itself.
 - **Nothing sits over the picture** in the Screen tab: the picture is a frame -
   a slim title bar (who, which monitor, fps) above, a slim toolbar below (on a
   phone on its side, both share one row), the stage taking the computer's own

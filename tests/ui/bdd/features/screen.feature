@@ -142,6 +142,148 @@ Feature: Screen - seeing the computer's own picture
     When I hold Ctrl and scroll up on the screen
     Then the screen is zoomed in
 
+  # Seen live: zoomed into the picture, a sideways pan changed tab and took the
+  # picture away. While a screen is watched - fitted, zoomed, docked, floating,
+  # alone on a screen, on the wall - no gesture on it, on its frame or on the
+  # trackpad and keyboard beside it changes tab.
+  Scenario Outline: While a screen is shown, no gesture on it or beside it changes tab
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I <gesture> <direction> on "<surface>"
+    Then the "Screen" tab is still shown
+    And the screen shows "Studio PC" live
+
+    Examples:
+      | gesture               | direction | surface    |
+      | flick                 | left      | #scrStage  |
+      | flick                 | right     | #scrStage  |
+      | pan two fingers       | left      | #scrStage  |
+      | pan two fingers       | right     | #scrStage  |
+      | swipe three fingers   | left      | #scrStage  |
+      | pinch out             | left      | #scrStage  |
+      | pinch in              | right     | #scrStage  |
+      | double tap then flick | left      | #scrStage  |
+      | double tap then flick | right     | #scrStage  |
+      | hold then drag        | left      | #scrStage  |
+      | hold then drag        | right     | #scrStage  |
+      | drag slowly           | left      | #scrStage  |
+      | flick                 | left      | #scrBadge  |
+      | flick                 | right     | #scrBadge  |
+      | flick                 | left      | #scrTools  |
+      | flick                 | right     | #scrTools  |
+      | flick                 | left      | #pad       |
+      | flick                 | right     | #pad       |
+      | pan two fingers       | left      | #pad       |
+      | swipe three fingers   | right     | #pad       |
+      | pinch out             | left      | #pad       |
+      | hold then drag        | left      | #pad       |
+      | double tap then flick | right     | #pad       |
+
+  Scenario Outline: Zoomed in, a sideways pan moves the picture, never the tab
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#scrIn" control
+    And I tap the "#scrIn" control
+    And I note where the picture is
+    And I <gesture> <direction> on "#scrStage"
+    Then the "Screen" tab is still shown
+    And the picture has moved
+    And the screen shows "Studio PC" live
+
+    Examples:
+      | gesture         | direction |
+      | flick           | left      |
+      | flick           | right     |
+      | drag slowly     | left      |
+      | hold then drag  | right     |
+
+  Scenario: While a screen is shown, a flick anywhere on its tab stays on it
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I flick left across empty space
+    Then the "Screen" tab is still shown
+    When I flick right across empty space
+    Then the "Screen" tab is still shown
+    And the screen shows "Studio PC" live
+
+  Scenario: With nothing being watched, a flick on the Screen tab still changes tab
+    Given the dashboard is open and signed in with "4826"
+    When I open the "Screen" tab
+    And I flick left across empty space
+    Then the "Keyboard" tab is shown
+
+  Scenario: The keyboard beside the picture keeps its gestures
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#btnDeck" control
+    And I flick left on "#kbd2"
+    And I pan two fingers right on "#kbd2"
+    And I hold then drag left on "#kbd2"
+    Then the "Screen" tab is still shown
+    And the screen shows "Studio PC" live
+
+  Scenario Outline: Watching on a tablet or a phone on its side, nothing on the tab changes it
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When the window is <width> by <height>
+    And I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I try every tab-changing gesture on every surface that handles its own touches
+    Then the "Screen" tab was never left
+    And the screen shows "Studio PC" live
+
+    Examples:
+      | width | height |
+      | 390   | 844    |
+      | 844   | 390    |
+      | 568   | 320    |
+      | 820   | 1180   |
+      | 1180  | 820    |
+
+  Scenario: Floating over another tab, gestures on the picture stay with the picture
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#scrPop" control
+    And I open the "Session" tab
+    And I flick left on "#scrStage"
+    And I pan two fingers right on "#scrStage"
+    And I pinch out left on "#scrStage"
+    Then the "Session" tab is still shown
+    And the floating window is shown, still live
+    # Moving between tabs while it floats is what floating is for.
+    When I flick left across empty space
+    Then the "Settings" tab is shown
+    And the floating window is shown, still live
+
+  Scenario: Watching alone on a screen, gestures on the picture never leave it
+    Given "Studio PC" is paired and running and this screen opens "#watch"
+    Then the screen shows "Studio PC" live
+    When I flick left on "#scrStage"
+    And I flick right on "#scrStage"
+    And I pan two fingers left on "#scrStage"
+    And I pinch out right on "#scrStage"
+    Then the watch view is still shown
+    And the screen shows "Studio PC" live
+
+  Scenario: On the wall, gestures on the monitors never leave it
+    Given a computer "Studio PC" with 3 displays is paired and running, and this screen opens "#wall"
+    Then the wall shows 3 monitors, all live
+    When I flick left on "#wallGrid"
+    And I flick right on "#wallGrid"
+    And I pan two fingers left on "#wallGrid"
+    Then the wall is still shown
+    And the wall shows 3 monitors, all live
+
   # Seen live: a board moved from a Windows laptop to a Mac by its COM cable
   # only. Its dashboard listed the old laptop "not running" and never said
   # that its USB port - the one a computer is controlled and watched through -

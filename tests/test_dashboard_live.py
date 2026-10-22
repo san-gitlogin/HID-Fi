@@ -229,9 +229,12 @@ class Run:
 
 
 def type_pin(p, row, digits):
-    for i, d in enumerate(digits):
-        p.fill(f"#{row} .pinbox >> nth={i}", d)
-        p.wait_for_timeout(60)
+    # As a person does: tap the first box and type at once; the boxes advance
+    # by themselves. A key the instant a box took focus once set two boxes
+    # handing the focus to and fro for good (bindPin's late select()), and the
+    # digits scattered - fixed in the dashboard; this keeps it exercised.
+    p.click(f"#{row} .pinbox >> nth=0")
+    p.keyboard.type(digits, delay=60)
 
 
 def main():
@@ -287,22 +290,34 @@ def main():
         r.check("auth state reached the vault card", p.evaluate("V_AUTH") is True)
 
         print("\n-- and stays aligned as the user works --")
+        # Conditions, not fixed sleeps: under the full parallel suite a reply
+        # took longer than 1.2 s once, and the next click hit a dialog still open.
+        def until(js, ms=8000):
+            try:
+                p.wait_for_function(js, timeout=ms)
+            except Exception:
+                pass
         p.click("#btnVaultNew")
-        p.wait_for_timeout(400)
+        p.wait_for_selector("#v_l", state="visible", timeout=8000)
         p.fill("#v_l", "Netflix")
         p.fill("#v_s", "hunter2")
         p.click("#v_ok")
-        p.wait_for_timeout(1200)
+        until("document.querySelectorAll('[data-vtype]').length === 2 && !document.getElementById('sheet').classList.contains('on')")
         r.check("a save shows up without a reload", p.locator("[data-vtype]").count() == 2)
         r.check("queue aligned after a save", p.evaluate("waiters.length") == 0)
 
         p.click("#btnVaultPin")
-        p.wait_for_timeout(400)
+        p.wait_for_selector("#vpCur", state="visible", timeout=8000)
         type_pin(p, "vpCur", "1234")
         type_pin(p, "vpNew", "4321")
         p.click("#vp_ok")
-        p.wait_for_timeout(1200)
-        r.check("a vault PIN sticks in the UI", p.evaluate("V_PINSET") is True)
+        until("V_PINSET === true && !document.getElementById('sheet').classList.contains('on')")
+        r.check("a vault PIN sticks in the UI", p.evaluate("V_PINSET") is True,
+                "" if p.evaluate("V_PINSET") else p.evaluate("""() => JSON.stringify({
+                  sheet: document.getElementById('sheet').classList.contains('on'),
+                  msg: (document.getElementById('vp_msg')||{}).textContent,
+                  boxes: [...document.querySelectorAll('#sheetin .pinbox')].map(b => b.value),
+                  toasts: [...document.querySelectorAll('#toasts .toast')].map(t => t.textContent)})"""))
         r.check("queue aligned after a vault PIN change", p.evaluate("waiters.length") == 0)
 
         p.click("[data-vshow]")
