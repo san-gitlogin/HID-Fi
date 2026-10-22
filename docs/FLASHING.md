@@ -26,7 +26,7 @@ firmware, then asks the board what it is running and prints the answer. Expect:
 == Flashing COM13
    Flashed COM13
 == Verifying COM13
-   Running hid_fi_v4.0, USB HID ready
+   Running hid_fi_v4.0.1, USB HID ready
    Dashboard: join WiFi 'ESP32-HID-09F7C8' with password  k7m2-x9qp-4tre
               Write the password down now. Forgot it later? .\flash_esp.ps1 -Recover shows it again.
               then open http://192.168.4.1/

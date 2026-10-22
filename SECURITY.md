@@ -236,7 +236,7 @@ secret belongs.
 
 ## What never returns a secret
 
-Audited against the firmware, current as of v4.0:
+Audited against the firmware, current as of v4.0.1:
 
 | Command | What it gives back |
 |---|---|

@@ -359,7 +359,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 2048
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v4.0"
+#define  FW_VERSION "hid_fi_v4.0.1"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button

@@ -7,7 +7,11 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased - HID-Fi Companion (the board's firmware is unchanged)
+## v4.0.1 - 2026-10-22
+
+HID-Fi Companion's screen sharing, above all on Windows: found by an overload
+test and a Windows 11 test VM. The board's firmware is unchanged except for its
+version number (no need to reflash for this).
 
 ### Fixed
 
