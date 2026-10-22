@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## v4.0.1 (not released yet)
+## Unreleased - HID-Fi Companion (the board's firmware is unchanged)
 
 ### Fixed
 
