@@ -78,7 +78,11 @@ pub fn prepare(
         .set_dtls_cert(cert)
         .clear_codecs()
         .enable_h264(true)
-        .enable_bwe(Some(str0m::bwe::Bitrate::mbps(3)))
+        // Where the estimate starts: its first probes test 3x and 6x this, so
+        // a home network shows a full-size picture within a second or two (at
+        // 3 Mbit/s, busy content waited ~6 s for full size). A thin link is
+        // found by the same probes, and the first picture is half size anyway.
+        .enable_bwe(Some(str0m::bwe::Bitrate::bps(START_BPS)))
         // Loss and round-trip time once a second: what tells a congested link
         // from WiFi jitter (see `Steady`).
         .set_stats_interval(Some(Duration::from_secs(1)))
@@ -138,6 +142,8 @@ pub const CONNECT_DEADLINE: Duration = Duration::from_secs(20);
 /// [`ENCODE_SHARE`] - and tests/overload.py now drops a link to 1.5 Mbit/s
 /// with a router queue of half a second to keep it honest.)
 pub const DESIRED_MIN_BPS: u64 = 6_000_000;
+/// The link estimate a viewer starts at, before anything is measured.
+pub const START_BPS: u64 = 6_000_000;
 pub const DESIRED_MAX_BPS: u64 = 12_000_000;
 
 fn desired(estimate: u64) -> u64 {
@@ -319,7 +325,7 @@ pub fn run(
                     Event::Connected => {
                         connected = true;
                         rtc.bwe()
-                            .set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(3_000_000)));
+                            .set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(START_BPS)));
                         control.joined();
                     }
                     Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
