@@ -85,7 +85,8 @@ AP_IP, LAN_IP = "192.168.4.2", "192.168.1.50"
 class BoardSim:
     URL = URL
 
-    def __init__(self, pin="", host_os="mac", detected=None, firmware="hid_fi_v3.10"):
+    def __init__(self, pin="", host_os="mac", detected=None, firmware="hid_fi_v3.10", mac="B8:1F:3F:DA:1A:2C"):
+        self.mac = mac             # what /api/status reports (two boards: two MACs)
         self.lock = threading.RLock()
         # Things the firmware does a moment after replying (a reboot, an AP restart,
         # closing a socket that never signed in). They used to run on
@@ -215,7 +216,7 @@ class BoardSim:
             "wifi_ssid": self.sta["ssid"] if online else "",
             "wifi_rssi": -48 if online else 0, "wifi_quality": "excellent" if online else "",
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
-            "mac": "B8:1F:3F:DA:1A:2C", "ap_mac": "BA:1F:3F:DA:1A:2C", "ws_clients": sum(1 for k in self.sockets if k["open"]),
+            "mac": self.mac, "ap_mac": "BA" + self.mac[2:], "ws_clients": sum(1 for k in self.sockets if k["open"]),
             "ws_devices": len({k.get("ip") or AP_IP for k in self.sockets if k["open"]}),
             "ws_max": self.ws_max,
             "mdns": "esp-hid-da1a2c", "pc_state": self.pc_state, "host_os": self.host_os(),

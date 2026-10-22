@@ -5,6 +5,8 @@
 //! something, the next line says exactly what; actions appear only when they
 //! do something in this state.
 
+#[cfg(test)]
+use crate::service::BoardView;
 use crate::service::{BoardState, View};
 use hidfi_agent::session::Status;
 
@@ -24,9 +26,9 @@ pub enum Icon {
 pub enum Action {
     OpenDashboard(String),
     AllowScreenRecording,
-    PairAgain,
-    ChooseBoard(String, String),
-    Forget,
+    /// For this board (its MAC), or the only one.
+    PairAgain(Option<String>),
+    Forget(Option<String>),
     /// The OS's own page for what can block the network (macOS Local Network
     /// privacy, Windows network profile).
     OpenNetworkSettings,
@@ -64,6 +66,67 @@ fn code_spaced(c: &str) -> String {
 }
 
 pub fn model(v: &View) -> Model {
+    if v.boards.len() <= 1 {
+        return model_one(v, None);
+    }
+    // Several boards plugged in: each one's lines, named by the last six
+    // digits of its MAC (what its WiFi and dashboard are called), and its
+    // actions for it alone. The icon is the most urgent of them.
+    let rank = |i: Icon| match i {
+        Icon::Attention => 3,
+        Icon::Live => 2,
+        Icon::Ready => 1,
+        Icon::Idle => 0,
+    };
+    let mut out = Model {
+        icon: Icon::Idle,
+        title: None,
+        tooltip: String::new(),
+        lines: Vec::new(),
+        actions: Vec::new(),
+    };
+    for b in &v.boards {
+        let one = View {
+            board: b.board.clone(),
+            session: b.session.clone(),
+            boards: vec![b.clone()],
+            ..v.clone()
+        };
+        let m = model_one(&one, Some(&b.mac));
+        let name = crate::service::short_mac(&b.mac);
+        if rank(m.icon) > rank(out.icon) {
+            out.icon = m.icon;
+        }
+        if out.title.is_none() {
+            out.title = m.title;
+        }
+        for l in m.lines {
+            // Lines about this computer, not a board, once.
+            if l.contains("Screen Recording") {
+                if !out.lines.contains(&l) {
+                    out.lines.push(l);
+                }
+            } else {
+                out.lines.push(format!("HID-Fi {name}: {l}"));
+            }
+        }
+        for (label, a) in m.actions {
+            let label = match &a {
+                Action::AllowScreenRecording | Action::OpenNetworkSettings => label,
+                _ => format!("{label} (HID-Fi {name})"),
+            };
+            if !out.actions.iter().any(|(l, _)| *l == label) {
+                out.actions.push((label, a));
+            }
+        }
+    }
+    out.tooltip = format!("HID-Fi Companion: {} boards plugged in", v.boards.len());
+    out
+}
+
+/// The menu for one board (`mac` names it in actions when there are several).
+fn model_one(v: &View, mac: Option<&str>) -> Model {
+    let which = mac.map(str::to_string);
     let mut lines = Vec::new();
     let mut actions = Vec::new();
     let mut title = None;
@@ -91,17 +154,6 @@ pub fn model(v: &View) -> Model {
                 actions.push((
                     "Open network settings\u{2026}".into(),
                     Action::OpenNetworkSettings,
-                ));
-            }
-        }
-        BoardState::Choose(boards) => {
-            icon = Icon::Attention;
-            lines.push("More than one HID-Fi is plugged in".into());
-            lines.push("Choose the one to use:".into());
-            for (mac, url) in boards {
-                actions.push((
-                    format!("Use the board at {}", short_url(url)),
-                    Action::ChooseBoard(mac.clone(), url.clone()),
                 ));
             }
         }
@@ -134,12 +186,12 @@ pub fn model(v: &View) -> Model {
                 Status::PairingFailed => {
                     icon = Icon::Attention;
                     lines.push("Pairing did not complete".into());
-                    actions.push(("Pair again".into(), Action::PairAgain));
+                    actions.push(("Pair again".into(), Action::PairAgain(which.clone())));
                 }
                 Status::PairingExpired => {
                     icon = Icon::Attention;
                     lines.push("The pairing request was not accepted in time".into());
-                    actions.push(("Pair again".into(), Action::PairAgain));
+                    actions.push(("Pair again".into(), Action::PairAgain(which.clone())));
                 }
                 Status::Online => {
                     icon = if v.watching > 0 {
@@ -172,7 +224,7 @@ pub fn model(v: &View) -> Model {
                 ),
             );
             if matches!(v.session, Status::Online) || matches!(v.session, Status::Reconnecting) {
-                actions.push(("Forget this pairing…".into(), Action::Forget));
+                actions.push(("Forget this pairing…".into(), Action::Forget(which.clone())));
             }
         }
     }
@@ -218,10 +270,53 @@ pub enum Step {
     Later,
 }
 
+/// The window's three steps: a title, where it stands, and what to do.
+pub type Steps = [(&'static str, Step, String); 3];
+
 /// The three steps, each with a line saying what happened or what to do -
 /// so the window never moves on without saying why (seen live: step 1 ticked
 /// itself and the owner thought someone had done something behind their back).
-pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
+pub fn steps(v: &View) -> Steps {
+    if v.boards.len() <= 1 {
+        return steps_one(v);
+    }
+    // Several boards: each step is done when it is done for every board, and
+    // says how each one stands.
+    let per: Vec<(String, Steps)> = v
+        .boards
+        .iter()
+        .map(|b| {
+            let one = View {
+                board: b.board.clone(),
+                session: b.session.clone(),
+                boards: vec![b.clone()],
+                ..v.clone()
+            };
+            (crate::service::short_mac(&b.mac), steps_one(&one))
+        })
+        .collect();
+    let mut out = steps_one(v);
+    for (i, step) in out.iter_mut().enumerate() {
+        step.1 = if per.iter().all(|(_, s)| s[i].1 == Step::Done) {
+            Step::Done
+        } else if per.iter().any(|(_, s)| s[i].1 != Step::Later) {
+            Step::Now
+        } else {
+            Step::Later
+        };
+        step.2 = per
+            .iter()
+            .map(|(n, s)| format!("HID-Fi {n}: {}", s[i].2))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if out[0].1 == Step::Done {
+        out[0].0 = "Plug HID-Fi into this computer (two or more are)";
+    }
+    out
+}
+
+fn steps_one(v: &View) -> Steps {
     let found = matches!(v.board, BoardState::Found { .. });
     let paired = found && matches!(v.session, Status::Online | Status::Reconnecting);
     let ready = paired && v.capture_allowed;
@@ -244,7 +339,6 @@ pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
              Settings, Home network.{}",
             net_hint().map(|h| format!(" {h}.")).unwrap_or_default()
         ),
-        BoardState::Choose(_) => "More than one is plugged in: choose one below.".to_string(),
         BoardState::Found { url, .. } => format!(
             "Found on this computer's USB, and on your WiFi at {}. Nothing to do.",
             short_url(url)
@@ -302,15 +396,33 @@ pub fn steps(v: &View) -> [(&'static str, Step, String); 3] {
 /// Whether the window should come forward on its own: the user has to do
 /// something they cannot see from the menu bar alone.
 pub fn needs_window(v: &View) -> bool {
+    if v.boards.len() > 1 {
+        return v.boards.iter().any(|b| {
+            needs_window(&View {
+                board: b.board.clone(),
+                session: b.session.clone(),
+                boards: vec![],
+                ..v.clone()
+            })
+        });
+    }
     matches!(
         v.session,
         Status::ShowCode(_) | Status::WaitingForApproval | Status::NeedsPin
     ) && matches!(v.board, BoardState::Found { .. })
-        || matches!(v.board, BoardState::NotOnNetwork | BoardState::Choose(_))
+        || matches!(v.board, BoardState::NotOnNetwork)
 }
 
 /// A name for "the thing the user is being asked to do now".
 pub fn episode(v: &View) -> String {
+    if v.boards.len() > 1 {
+        return v
+            .boards
+            .iter()
+            .map(|b| format!("{}:{:?}|{:?}", b.mac, b.board, b.session))
+            .collect::<Vec<_>>()
+            .join(";");
+    }
     format!("{:?}|{:?}", v.board, v.session)
 }
 
@@ -390,6 +502,7 @@ mod tests {
         View {
             board,
             session,
+            boards: vec![],
             watching: 0,
             capture_allowed: true,
             port: Some(47800),
@@ -465,7 +578,7 @@ mod tests {
             assert!(model(&view(found(), s))
                 .actions
                 .iter()
-                .any(|a| a.1 == Action::PairAgain));
+                .any(|a| a.1 == Action::PairAgain(None)));
         }
         for s in [
             Status::Online,
@@ -475,21 +588,80 @@ mod tests {
             assert!(!model(&view(found(), s))
                 .actions
                 .iter()
-                .any(|a| a.1 == Action::PairAgain));
+                .any(|a| a.1 == Action::PairAgain(None)));
+        }
+    }
+
+    fn board(mac: &str, board: BoardState, session: Status) -> BoardView {
+        BoardView {
+            mac: mac.into(),
+            board,
+            session,
         }
     }
 
     #[test]
-    fn several_boards_are_offered_by_address() {
-        let m = model(&view(
-            BoardState::Choose(vec![
-                ("AA".into(), "http://10.0.0.2".into()),
-                ("BB".into(), "http://10.0.0.3".into()),
-            ]),
-            Status::Connecting,
-        ));
-        assert_eq!(m.actions.len(), 2);
-        assert!(m.actions[1].0.contains("10.0.0.3"));
+    fn two_boards_plugged_in_are_both_served_each_with_its_own_actions() {
+        // Seen live: a second board on the Mac was never offered to pair.
+        let found = |ip: &str| BoardState::Found {
+            url: format!("http://{ip}"),
+            firmware: "hid_fi_v4.0.1".into(),
+        };
+        let mut v = view(found("192.168.0.101"), Status::Online);
+        v.boards = vec![
+            board("DCB4D90A0BB8", found("192.168.0.101"), Status::Online),
+            board(
+                "DCB4D909F7C8",
+                found("192.168.0.102"),
+                Status::WaitingForApproval,
+            ),
+        ];
+        let m = model(&v);
+        assert_eq!(m.icon, Icon::Attention, "one still needs pairing");
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.starts_with("HID-Fi 0A0BB8: Ready")),
+            "{:?}",
+            m.lines
+        );
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.starts_with("HID-Fi 09F7C8: Waiting for you to tap Pair")),
+            "{:?}",
+            m.lines
+        );
+        assert!(m.actions.iter().any(|(l, a)| l.contains("09F7C8")
+            && matches!(a, Action::OpenDashboard(u) if u.ends_with(".102"))));
+        assert!(m
+            .actions
+            .iter()
+            .any(|(_, a)| *a == Action::Forget(Some("DCB4D90A0BB8".into()))));
+        assert!(
+            needs_window(&v),
+            "the window comes forward for the one to pair"
+        );
+        let s = steps(&v);
+        assert_eq!(s[0].1, Step::Done, "both plugged in and found");
+        assert_eq!(s[1].1, Step::Now, "one still to pair");
+        assert!(s[1].2.contains("HID-Fi 09F7C8") && s[1].2.contains("HID-Fi 0A0BB8"));
+    }
+
+    #[test]
+    fn two_boards_paired_say_ready_and_the_window_stays_away() {
+        let found = BoardState::Found {
+            url: "http://192.168.0.101".into(),
+            firmware: "hid_fi_v4.0.1".into(),
+        };
+        let mut v = view(found.clone(), Status::Online);
+        v.boards = vec![
+            board("DCB4D90A0BB8", found.clone(), Status::Online),
+            board("DCB4D909F7C8", found, Status::Online),
+        ];
+        assert_eq!(model(&v).icon, Icon::Ready);
+        assert!(!needs_window(&v));
+        assert!(steps(&v).iter().all(|s| s.1 == Step::Done));
     }
 
     #[test]
@@ -552,7 +724,6 @@ mod tests {
             BoardState::Looking,
             BoardState::NotPluggedIn { elsewhere: 0 },
             BoardState::NotOnNetwork,
-            BoardState::Choose(vec![]),
         ] {
             assert!(!steps(&view(b, Status::Connecting))[0].2.is_empty());
         }

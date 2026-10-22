@@ -73,7 +73,9 @@ fn main() {
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");
     // Not paired yet: the window opens by itself to say what to do.
-    let first_run = store.key().is_none();
+    // Paired with no board yet (a pairing from before 4.0.2, not yet moved to
+    // its board's file, counts).
+    let first_run = store.keys().is_empty() && !store.dir().join("pairing.key").exists();
     let handle = service::start(store, env);
 
     #[cfg(target_os = "macos")]

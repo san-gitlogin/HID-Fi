@@ -7,7 +7,7 @@ fn main() {
     use hidfi_agent::session::Status;
     use hidfi_companion::menu;
     use hidfi_companion::panel::view_json;
-    use hidfi_companion::service::{BoardState, View};
+    use hidfi_companion::service::{BoardState, BoardView, View};
     let found = || BoardState::Found {
         url: "http://192.168.0.106".into(),
         firmware: "hid_fi_v3.11".into(),
@@ -15,6 +15,7 @@ fn main() {
     let v = |board: BoardState, session: Status, allowed: bool, watching: usize| View {
         board,
         session,
+        boards: vec![],
         watching,
         capture_allowed: allowed,
         port: Some(47800),
@@ -40,16 +41,26 @@ fn main() {
             v(BoardState::NotOnNetwork, Status::Connecting, true, 0),
         ),
         (
-            "choose",
-            v(
-                BoardState::Choose(vec![
-                    ("aa".into(), "http://192.168.0.106".into()),
-                    ("bb".into(), "http://192.168.0.120".into()),
-                ]),
-                Status::Connecting,
-                true,
-                0,
-            ),
+            // Two boards plugged in: one paired, one waiting for Pair.
+            "two-boards",
+            View {
+                boards: vec![
+                    BoardView {
+                        mac: "DCB4D90A0BB8".into(),
+                        board: found(),
+                        session: Status::Online,
+                    },
+                    BoardView {
+                        mac: "DCB4D909F7C8".into(),
+                        board: BoardState::Found {
+                            url: "http://192.168.0.102".into(),
+                            firmware: "hid_fi_v4.0.1".into(),
+                        },
+                        session: Status::WaitingForApproval,
+                    },
+                ],
+                ..v(found(), Status::Online, true, 0)
+            },
         ),
         ("needs-pin", v(found(), Status::NeedsPin, true, 0)),
         ("waiting", v(found(), Status::WaitingForApproval, false, 0)),

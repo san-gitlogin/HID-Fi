@@ -29,13 +29,28 @@ pub struct State {
     pub id: String,
     /// What the dashboard calls this computer.
     pub name: String,
+    /// Before 4.0.2 (one board per computer). Read once, into `boards`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub board_mac: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub board_url: Option<String>,
+    /// Every board this computer has used, with the address that worked last:
+    /// tried first next time (no name lookup). Its pairing key is a file of
+    /// its own (`pairing-<MAC>.key`).
+    #[serde(default)]
+    pub boards: Vec<KnownBoard>,
     /// Which display to share (a CGDirectDisplayID on macOS); None = main.
     pub display: Option<u32>,
     /// Start when the user logs in. On by default (A16).
     #[serde(default = "yes")]
     pub start_at_login: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct KnownBoard {
+    /// 12 hex digits, upper case.
+    pub mac: String,
+    pub url: String,
 }
 
 fn yes() -> bool {
@@ -95,15 +110,33 @@ impl Store {
         write_atomic(&self.dir.join("state.json"), &body, false)
     }
 
-    pub fn key(&self) -> Option<PairKey> {
-        let t = fs::read_to_string(self.dir.join("pairing.key")).ok()?;
-        let mut b = [0u8; 32];
-        hex::decode_to_slice(t.trim(), &mut b).ok()?;
-        Some(PairKey::from_bytes(b))
+    fn key_path(&self, mac: &Mac) -> PathBuf {
+        self.dir.join(format!("pairing-{}.key", mac.hex()))
     }
 
-    pub fn save_key(&self, k: Option<&PairKey>) -> std::io::Result<()> {
-        let p = self.dir.join("pairing.key");
+    /// The pairing key with this board, if paired.
+    pub fn key_for(&self, mac: &Mac) -> Option<PairKey> {
+        read_key(&self.key_path(mac))
+    }
+
+    /// Every board this computer is paired with.
+    pub fn keys(&self) -> Vec<(Mac, PairKey)> {
+        let mut v: Vec<(Mac, PairKey)> = fs::read_dir(&self.dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name().into_string().ok()?;
+                let mac = Mac::parse(name.strip_prefix("pairing-")?.strip_suffix(".key")?)?;
+                Some((mac, read_key(&e.path())?))
+            })
+            .collect();
+        v.sort_by_key(|(m, _)| *m);
+        v
+    }
+
+    pub fn save_key_for(&self, mac: &Mac, k: Option<&PairKey>) -> std::io::Result<()> {
+        let p = self.key_path(mac);
         match k {
             Some(k) => write_atomic(&p, hex::encode(k.as_bytes()).as_bytes(), true),
             None => match fs::remove_file(&p) {
@@ -135,9 +168,60 @@ impl Store {
         Some(made)
     }
 
-    pub fn board(&self, s: &State) -> Option<(Mac, String)> {
-        Some((Mac::parse(s.board_mac.as_deref()?)?, s.board_url.clone()?))
+    /// Brings a store from before 4.0.2 (one board, one `pairing.key`) to one
+    /// key per board, so an update never loses a pairing. Idempotent.
+    pub fn migrate(&self, s: &mut State) -> std::io::Result<()> {
+        let legacy = self.dir.join("pairing.key");
+        if let Some(mac) = s.board_mac.as_deref().and_then(Mac::parse) {
+            if let Some(url) = s.board_url.take() {
+                if !s.boards.iter().any(|b| b.mac == mac.hex()) {
+                    s.boards.push(KnownBoard {
+                        mac: mac.hex(),
+                        url,
+                    });
+                }
+            }
+            if let Some(k) = read_key(&legacy) {
+                if self.key_for(&mac).is_none() {
+                    self.save_key_for(&mac, Some(&k))?;
+                }
+            }
+            s.board_mac = None;
+            self.save_state(s)?;
+        }
+        match fs::remove_file(&legacy) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
     }
+
+    /// Remembers the address that worked for this board.
+    pub fn remember(&self, s: &mut State, mac: &Mac, url: &str) -> std::io::Result<()> {
+        match s.boards.iter_mut().find(|b| b.mac == mac.hex()) {
+            Some(b) if b.url == url => return Ok(()),
+            Some(b) => b.url = url.to_string(),
+            None => s.boards.push(KnownBoard {
+                mac: mac.hex(),
+                url: url.to_string(),
+            }),
+        }
+        self.save_state(s)
+    }
+
+    /// The remembered addresses, for finding.
+    pub fn remembered(s: &State) -> Vec<(Mac, String)> {
+        s.boards
+            .iter()
+            .filter_map(|b| Some((Mac::parse(&b.mac)?, b.url.clone())))
+            .collect()
+    }
+}
+
+fn read_key(p: &Path) -> Option<PairKey> {
+    let t = fs::read_to_string(p).ok()?;
+    let mut b = [0u8; 32];
+    hex::decode_to_slice(t.trim(), &mut b).ok()?;
+    Some(PairKey::from_bytes(b))
 }
 
 /// The name a person would recognise: the computer's own name.
@@ -230,16 +314,26 @@ mod tests {
     }
 
     #[test]
-    fn the_key_round_trips_is_private_and_can_be_forgotten() {
+    fn each_board_has_its_own_key_private_and_forgettable() {
         let s = tmp();
-        assert!(s.key().is_none());
-        let k = PairKey::from_bytes([9; 32]);
-        s.save_key(Some(&k)).unwrap();
-        assert!(s.key().unwrap() == k);
+        let (a, b) = (
+            Mac::parse("DCB4D909F7C8").unwrap(),
+            Mac::parse("D4F98DB4A1B0").unwrap(),
+        );
+        assert!(s.key_for(&a).is_none() && s.keys().is_empty());
+        let (ka, kb) = (PairKey::from_bytes([9; 32]), PairKey::from_bytes([7; 32]));
+        s.save_key_for(&a, Some(&ka)).unwrap();
+        s.save_key_for(&b, Some(&kb)).unwrap();
+        assert!(s.key_for(&a).unwrap() == ka && s.key_for(&b).unwrap() == kb);
+        assert_eq!(
+            s.keys().len(),
+            2,
+            "both pairings kept: moving a board never costs the other"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(s.dir().join("pairing.key"))
+            let mode = fs::metadata(s.dir().join("pairing-DCB4D909F7C8.key"))
                 .unwrap()
                 .permissions()
                 .mode()
@@ -248,11 +342,45 @@ mod tests {
             let dmode = fs::metadata(s.dir()).unwrap().permissions().mode() & 0o777;
             assert_eq!(dmode, 0o700);
         }
-        s.save_key(None).unwrap();
-        s.save_key(None).unwrap(); // forgetting twice is fine
-        assert!(s.key().is_none());
-        fs::write(s.dir().join("pairing.key"), "short").unwrap();
-        assert!(s.key().is_none(), "a damaged key is no key");
+        s.save_key_for(&a, None).unwrap();
+        s.save_key_for(&a, None).unwrap(); // forgetting twice is fine
+        assert!(s.key_for(&a).is_none());
+        assert!(
+            s.key_for(&b).is_some(),
+            "forgetting one board keeps the other"
+        );
+        fs::write(s.dir().join("pairing-DCB4D909F7C8.key"), "short").unwrap();
+        assert!(s.key_for(&a).is_none(), "a damaged key is no key");
+        fs::remove_dir_all(s.dir()).unwrap();
+    }
+
+    #[test]
+    fn an_install_from_before_keeps_its_pairing() {
+        // 4.0.1 and earlier: one board in state.json, its key in pairing.key.
+        let s = tmp();
+        let k = PairKey::from_bytes([5; 32]);
+        fs::write(s.dir().join("pairing.key"), hex::encode(k.as_bytes())).unwrap();
+        let mut st = s.state();
+        st.board_mac = Some("DCB4D909F7C8".into());
+        st.board_url = Some("http://192.168.0.101".into());
+        s.save_state(&st).unwrap();
+        let mut st = s.state();
+        s.migrate(&mut st).unwrap();
+        let mac = Mac::parse("DCB4D909F7C8").unwrap();
+        assert!(
+            s.key_for(&mac).unwrap() == k,
+            "the pairing moved to its board's file"
+        );
+        assert!(!s.dir().join("pairing.key").exists());
+        assert_eq!(
+            Store::remembered(&st),
+            vec![(mac, "http://192.168.0.101".to_string())]
+        );
+        let again = s.state();
+        assert_eq!(again.board_mac, None);
+        assert_eq!(again.boards.len(), 1, "and it is saved");
+        s.migrate(&mut s.state()).unwrap(); // twice is harmless
+        assert!(s.key_for(&mac).unwrap() == k);
         fs::remove_dir_all(s.dir()).unwrap();
     }
 

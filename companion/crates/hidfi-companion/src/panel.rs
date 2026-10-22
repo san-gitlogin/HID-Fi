@@ -192,6 +192,7 @@ mod tests {
                 firmware: "hid_fi_v3.12".into(),
             },
             session: Status::ShowCode("042117".into()),
+            boards: vec![],
             watching: 0,
             capture_allowed: true,
             port: Some(47800),

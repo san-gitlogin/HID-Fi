@@ -48,22 +48,51 @@ const BAD_WINDOW: Duration = Duration::from_secs(600);
 pub const PORTS: std::ops::RangeInclusive<u16> = 47800..=47819;
 
 /// Decides whether a ticket lets a viewer in.
+/// What the gate says to a viewer's ticket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Admit {
+    /// In, on behalf of the board with this tag.
+    Yes(u64),
+    /// A good ticket, from a board that is not plugged into this computer now.
+    Closed,
+    No,
+}
+
 pub trait Gate: Send + Sync {
-    fn admit(&self, tn: &str, vn: &str, ticket: &[u8]) -> bool;
+    fn admit(&self, tn: &str, vn: &str, ticket: &[u8]) -> Admit;
+    /// Whether viewers admitted for this board may go on watching: false once
+    /// it has left this computer's USB.
+    fn still_open(&self, _tag: u64) -> bool {
+        true
+    }
 }
 
 /// The real gate: the pairing key, the nonces this app announced, and every
 /// `vn` already used (a ticket works once).
+/// A board this computer is paired with, as the gate sees it.
+#[derive(Clone)]
+pub struct GateKey {
+    /// Which board (its MAC as a number): viewers are tied to it.
+    pub tag: u64,
+    pub key: PairKey,
+    /// Plugged into this computer now. A board that leaves loses its viewers
+    /// at once: watching computer A while typing into computer B is the one
+    /// mistake this app must never make.
+    pub here: bool,
+}
+
 pub struct TicketGate {
-    pub key: Arc<RwLock<Option<PairKey>>>,
+    /// One per board this computer is paired with: a computer can have two
+    /// boards plugged in, and either's dashboard may watch.
+    pub keys: Arc<RwLock<Vec<GateKey>>>,
     pub nonces: TicketNonces,
     used: Mutex<VecDeque<(String, Instant)>>,
 }
 
 impl TicketGate {
-    pub fn new(key: Arc<RwLock<Option<PairKey>>>, nonces: TicketNonces) -> Self {
+    pub fn new(keys: Arc<RwLock<Vec<GateKey>>>, nonces: TicketNonces) -> Self {
         TicketGate {
-            key,
+            keys,
             nonces,
             used: Mutex::default(),
         }
@@ -71,22 +100,39 @@ impl TicketGate {
 }
 
 impl Gate for TicketGate {
-    fn admit(&self, tn: &str, vn: &str, ticket: &[u8]) -> bool {
+    fn admit(&self, tn: &str, vn: &str, ticket: &[u8]) -> Admit {
         let now = Instant::now();
-        let key = self.key.read().unwrap_or_else(|e| e.into_inner());
-        let Some(key) = key.as_ref() else {
-            return false;
+        if !self.nonces.is_live(tn, now) {
+            return Admit::No;
+        }
+        let (tag, here) = {
+            let keys = self.keys.read().unwrap_or_else(|e| e.into_inner());
+            match keys
+                .iter()
+                .find(|k| pairing::ticket_ok(&k.key, tn, vn, ticket))
+            {
+                Some(k) => (k.tag, k.here),
+                None => return Admit::No,
+            }
         };
-        if !self.nonces.is_live(tn, now) || !pairing::ticket_ok(key, tn, vn, ticket) {
-            return false;
+        if !here {
+            return Admit::Closed;
         }
         let mut used = self.used.lock().unwrap_or_else(|e| e.into_inner());
         used.retain(|(_, at)| now.duration_since(*at) < Duration::from_secs(300));
         if used.iter().any(|(v, _)| v == vn) {
-            return false;
+            return Admit::No;
         }
         used.push_back((vn.to_string(), now));
-        true
+        Admit::Yes(tag)
+    }
+
+    fn still_open(&self, tag: u64) -> bool {
+        self.keys
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|k| k.tag == tag && k.here)
     }
 }
 
@@ -354,12 +400,22 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
         return Err("closed".into());
     }
     let ticket = hex::decode(&ticket).unwrap_or_default();
-    if !c.gate.admit(&tn, &vn, &ticket) {
-        c.strike(peer.ip());
-        let _ = send(&mut ws, serde_json::json!({"t":"error","reason":"ticket"}));
-        let _ = ws.close(None);
-        return Err("bad ticket".into());
-    }
+    let tag = match c.gate.admit(&tn, &vn, &ticket) {
+        Admit::Yes(tag) => tag,
+        Admit::Closed => {
+            // A good ticket from a board that has left this computer: the
+            // dashboard says the computer is not reachable, not "bad ticket".
+            let _ = send(&mut ws, serde_json::json!({"t":"error","reason":"closed"}));
+            let _ = ws.close(None);
+            return Err("its board is not plugged in here".into());
+        }
+        Admit::No => {
+            c.strike(peer.ip());
+            let _ = send(&mut ws, serde_json::json!({"t":"error","reason":"ticket"}));
+            let _ = ws.close(None);
+            return Err("bad ticket".into());
+        }
+    };
     // Claim a viewer slot; give it back on every way out.
     if c.viewers.0.fetch_add(1, Ordering::SeqCst) >= MAX_VIEWERS {
         c.viewers.0.fetch_sub(1, Ordering::SeqCst);
@@ -487,6 +543,7 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     while !stop.load(Ordering::Relaxed)
         && !c.stop.load(Ordering::Relaxed)
         && c.open.load(Ordering::Relaxed)
+        && c.gate.still_open(tag)
     {
         match read(&mut ws, Instant::now() + Duration::from_millis(1000)) {
             Ok(Got::Msg(Some(FromViewer::Key))) => control.browser_wants_keyframe(),
@@ -569,7 +626,7 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
         .unwrap_or_else(|e| e.into_inner())
         .take()
         .unwrap_or(End::Stopped);
-    let reason = if !c.open.load(Ordering::Relaxed) {
+    let reason = if !c.open.load(Ordering::Relaxed) || !c.gate.still_open(tag) {
         "closed".to_string()
     } else if end == End::PipelineGone {
         // Capture failed: "permission" lets the dashboard say exactly what to
@@ -585,4 +642,65 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let _ = send(&mut ws, serde_json::json!({"t":"end","reason":reason}));
     let _ = ws.close(None);
     Ok(())
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+    use hidfi_core::pairing::{ticket, PairKey};
+
+    #[test]
+    fn a_ticket_from_any_board_plugged_in_gets_in_and_no_other() {
+        // Two boards plugged into this computer, paired with both: a viewer
+        // from either board's dashboard is welcome; a board it is not paired
+        // with is not; a paired board that left this computer is "closed".
+        let (a, b, stranger) = (
+            PairKey::from_bytes([1; 32]),
+            PairKey::from_bytes([2; 32]),
+            PairKey::from_bytes([3; 32]),
+        );
+        let nonces = TicketNonces::default();
+        nonces.announce("tn-a".into(), Instant::now());
+        nonces.announce("tn-b".into(), Instant::now());
+        let gk = |tag, key: &PairKey, here| GateKey {
+            tag,
+            key: key.clone(),
+            here,
+        };
+        let keys = Arc::new(RwLock::new(vec![gk(1, &a, true), gk(2, &b, true)]));
+        let gate = TicketGate::new(keys.clone(), nonces);
+        assert_eq!(
+            gate.admit("tn-a", "v1", &ticket(&a, "tn-a", "v1")),
+            Admit::Yes(1)
+        );
+        assert_eq!(
+            gate.admit("tn-b", "v2", &ticket(&b, "tn-b", "v2")),
+            Admit::Yes(2)
+        );
+        assert_eq!(
+            gate.admit("tn-a", "v3", &ticket(&stranger, "tn-a", "v3")),
+            Admit::No
+        );
+        assert_eq!(
+            gate.admit("tn-a", "v1", &ticket(&a, "tn-a", "v1")),
+            Admit::No,
+            "each ticket once"
+        );
+        // Board 2 leaves this computer's USB.
+        keys.write().unwrap()[1].here = false;
+        assert!(
+            gate.still_open(1) && !gate.still_open(2),
+            "its viewers end; the other's go on"
+        );
+        assert_eq!(
+            gate.admit("tn-b", "v5", &ticket(&b, "tn-b", "v5")),
+            Admit::Closed
+        );
+        let none = TicketGate::new(Arc::new(RwLock::new(vec![])), TicketNonces::default());
+        assert_eq!(
+            none.admit("tn-a", "v4", &ticket(&a, "tn-a", "v4")),
+            Admit::No,
+            "unpaired: nobody"
+        );
+    }
 }

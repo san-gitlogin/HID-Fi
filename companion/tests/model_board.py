@@ -19,7 +19,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tests"))
 from support.board_sim import BoardSim  # noqa: E402
 
-sim = BoardSim(pin=sys.argv[1] if len(sys.argv) > 1 else "4826")
+import os  # noqa: E402
+# MAC=...: a second board (a computer can have two plugged in).
+sim = BoardSim(pin=sys.argv[1] if len(sys.argv) > 1 else "4826", mac=os.environ.get("MAC", "B8:1F:3F:DA:1A:2C"))
 lock = threading.Lock()
 
 

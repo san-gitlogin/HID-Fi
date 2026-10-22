@@ -153,6 +153,75 @@ pub fn find(
     }
 }
 
+/// Every HID-Fi plugged into this computer, for an app that serves them all
+/// (a computer can have two boards plugged in; each has its own pairing).
+#[derive(Debug, Default)]
+pub struct FoundAll {
+    /// On this USB and answering on the network, by MAC.
+    pub here: Vec<NetBoard>,
+    /// On this USB but not answering (yet): not on this network, or still
+    /// starting. Only MACs that look like a board: any Espressif device.
+    pub offline: Vec<Mac>,
+    /// Boards seen on the network that are plugged in elsewhere.
+    pub elsewhere: usize,
+    /// Addresses tried that did not answer as a board, and why.
+    pub misses: Vec<(String, String)>,
+}
+
+/// Finds every board on this computer's USB. `remembered` are the addresses
+/// that worked last time, per board (tried first: no name lookup).
+pub fn find_all(
+    usb: &dyn UsbList,
+    http: &dyn Http,
+    browse: &dyn Browse,
+    remembered: &[(Mac, String)],
+) -> FoundAll {
+    let macs = discovery::usb_macs(&usb.list());
+    if macs.is_empty() {
+        return FoundAll::default();
+    }
+    let mut urls: Vec<String> = remembered
+        .iter()
+        .filter(|(m, _)| macs.contains(m))
+        .map(|(_, u)| u.clone())
+        .collect();
+    for u in candidates(&macs, None, &browse.boards()) {
+        if !urls.contains(&u) {
+            urls.push(u);
+        }
+    }
+    let mut seen: Vec<NetBoard> = Vec::new();
+    let mut misses = Vec::new();
+    for url in urls {
+        // A board already answered at a cheaper address: skip its other names.
+        match probe_why(http, &url) {
+            Ok(b) => {
+                if !seen.iter().any(|s| s.mac == b.mac) {
+                    seen.push(b);
+                }
+            }
+            Err(why) => misses.push((url, why)),
+        }
+    }
+    let mut here: Vec<NetBoard> = seen
+        .iter()
+        .filter(|b| macs.contains(&b.mac))
+        .cloned()
+        .collect();
+    here.sort_by_key(|b| b.mac);
+    let offline = macs
+        .iter()
+        .copied()
+        .filter(|m| !here.iter().any(|b| b.mac == *m))
+        .collect();
+    FoundAll {
+        here,
+        offline,
+        elsewhere: seen.iter().filter(|b| !macs.contains(&b.mac)).count(),
+        misses,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +273,73 @@ mod tests {
             200,
             format!(r#"{{"status":"ok","firmware":"hid_fi_v3.12","mac":"{mac}"}}"#),
         )
+    }
+
+    const M2: &str = "DCB4D9AABBCC";
+
+    #[test]
+    fn two_boards_on_this_computer_are_both_found() {
+        // Seen live: a second board plugged into the Mac was never offered to
+        // pair - the app served only the board it already knew.
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://esp-hid-09f7c8.local/api/status".into(), status(M1));
+        http.status
+            .insert("http://esp-hid-aabbcc.local/api/status".into(), status(M2));
+        let f = find_all(
+            &FakeUsb(vec![usb(M1), usb(M2)]),
+            &http,
+            &FakeBrowse(vec![]),
+            &[],
+        );
+        let macs: Vec<String> = f.here.iter().map(|b| b.mac.hex()).collect();
+        assert_eq!(macs.len(), 2, "{macs:?}");
+        assert!(f.offline.is_empty());
+    }
+
+    #[test]
+    fn a_board_on_this_usb_that_does_not_answer_is_offline_not_forgotten() {
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://esp-hid-09f7c8.local/api/status".into(), status(M1));
+        let f = find_all(
+            &FakeUsb(vec![usb(M1), usb(M2)]),
+            &http,
+            &FakeBrowse(vec![]),
+            &[],
+        );
+        assert_eq!(f.here.len(), 1);
+        assert_eq!(f.offline, vec![Mac::parse(M2).unwrap()]);
+    }
+
+    #[test]
+    fn a_board_plugged_into_another_computer_is_counted_not_served() {
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://esp-hid-09f7c8.local/api/status".into(), status(M1));
+        http.status
+            .insert("http://192.168.0.50/api/status".into(), status(M2));
+        let f = find_all(
+            &FakeUsb(vec![usb(M1)]),
+            &http,
+            &FakeBrowse(vec!["http://192.168.0.50".into()]),
+            &[],
+        );
+        assert_eq!(f.here.len(), 1);
+        assert_eq!(f.elsewhere, 1);
+    }
+
+    #[test]
+    fn nothing_on_this_usb_touches_no_network() {
+        let http = FakeHttp::default();
+        let f = find_all(
+            &FakeUsb(vec![]),
+            &http,
+            &FakeBrowse(vec!["http://x".into()]),
+            &[],
+        );
+        assert!(f.here.is_empty() && f.offline.is_empty());
+        assert!(http.asked.lock().unwrap().is_empty());
     }
 
     #[test]

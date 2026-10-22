@@ -54,7 +54,11 @@ fn main() {
     let tn = "1c".repeat(16);
     nonces.announce(tn.clone(), Instant::now());
     let gate = Arc::new(TicketGate::new(
-        Arc::new(RwLock::new(Some(key.clone()))),
+        Arc::new(RwLock::new(vec![hidfi_stream::server::GateKey {
+            tag: 0,
+            key: key.clone(),
+            here: true,
+        }])),
         nonces,
     ));
     let fake = FakeDisplays::from_env(w, h);

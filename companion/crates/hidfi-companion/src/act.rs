@@ -41,14 +41,11 @@ pub fn run(handle: &Handle, a: Action) {
                 open("ms-settings:network-status");
             }
         }
-        Action::PairAgain => {
-            let _ = handle.tx.send(Cmd::PairAgain);
+        Action::PairAgain(mac) => {
+            let _ = handle.tx.send(Cmd::PairAgain(mac));
         }
-        Action::ChooseBoard(mac, _) => {
-            let _ = handle.tx.send(Cmd::ChooseBoard(mac));
-        }
-        Action::Forget => {
-            let _ = handle.tx.send(Cmd::Forget);
+        Action::Forget(mac) => {
+            let _ = handle.tx.send(Cmd::Forget(mac));
         }
     }
 }

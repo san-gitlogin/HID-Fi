@@ -83,7 +83,7 @@ try:
     wait_for(lambda v: v["session"] == "Online", 10, "online")
     check("the board lists it online", dash(cmd="companion_list")["paired"][0]["online"])
     # The key never left the app's folder unprotected.
-    mode = oct(os.stat(os.path.join(store, "pairing.key")).st_mode & 0o777)
+    mode = oct(os.stat(os.path.join(store, "pairing-" + MAC.replace(":", "") + ".key")).st_mode & 0o777)
     # Unix permissions mean nothing on Windows: there the key is in the user's
     # own profile folder (%APPDATA%), which other accounts cannot read.
     if os.name != "nt":

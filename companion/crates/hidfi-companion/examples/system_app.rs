@@ -1,8 +1,10 @@
 //! The real service with a fake USB bus and a test-pattern screen, for the
 //! system test (companion/tests/system.py). Test tool only.
 //!
-//! args: STORE_DIR BOARD_URL BOARD_MAC
-//! stdin: "unplug" / "plug" / "pair" / "quit"
+//! args: STORE_DIR BOARD_URL BOARD_MAC [BOARD_URL BOARD_MAC ...] - one or more
+//! boards plugged into this pretend computer (a computer can have two).
+//! stdin: "unplug" / "plug" (every board), "unplug <MAC>" / "plug <MAC>"
+//! (one), "pair", "quit"
 //! stdout: one JSON line per change of what the tray would show.
 
 use hidfi_agent::env::{Browse, UsbList};
@@ -16,18 +18,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-struct FakeUsb(String, Arc<AtomicBool>);
+/// The boards on this pretend USB: (MAC, plugged in).
+struct FakeUsb(Vec<(String, Arc<AtomicBool>)>);
 impl UsbList for FakeUsb {
     fn list(&self) -> Vec<UsbDevice> {
-        if self.1.load(Ordering::Relaxed) {
-            vec![UsbDevice {
+        self.0
+            .iter()
+            .filter(|(_, p)| p.load(Ordering::Relaxed))
+            .map(|(mac, _)| UsbDevice {
                 vid: 0x303a,
                 pid: 0x1001,
-                serial: Some(self.0.clone()),
-            }]
-        } else {
-            vec![]
-        }
+                serial: Some(mac.clone()),
+            })
+            .collect()
     }
 }
 struct NoBrowse;
@@ -56,15 +59,26 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let store = Store::open(a[1].clone().into()).unwrap();
     let mut st = store.state();
-    st.name = "System Test PC".into();
-    st.board_url = Some(a[2].clone());
-    st.board_mac = Some(a[3].replace(':', ""));
+    // HIDFI_TEST_NAME: what the dashboard calls this pretend computer.
+    st.name = std::env::var("HIDFI_TEST_NAME").unwrap_or_else(|_| "System Test PC".into());
+    let boards: Vec<(String, Arc<AtomicBool>)> = a[2..]
+        .chunks(2)
+        .map(|c| {
+            (
+                c[1].replace(':', "").to_uppercase(),
+                Arc::new(AtomicBool::new(true)),
+            )
+        })
+        .collect();
+    for c in a[2..].chunks(2) {
+        let mac = hidfi_core::discovery::Mac::parse(&c[1].replace(':', "")).expect("a MAC");
+        store.remember(&mut st, &mac, &c[0]).unwrap();
+    }
     store.save_state(&st).unwrap();
-    let plugged = Arc::new(AtomicBool::new(true));
     // HIDFI_DISPLAYS=n pretends to have n displays; stdin "unplug-display <id>" pulls one.
     let fake = FakeDisplays::from_env(1280, 720);
     let env = Env {
-        usb: Box::new(FakeUsb(a[3].replace(':', ""), plugged.clone())),
+        usb: Box::new(FakeUsb(boards.clone())),
         http: Box::new(UreqHttp::new(Duration::from_secs(2))),
         browse: Box::new(NoBrowse),
         source: {
@@ -85,6 +99,9 @@ fn main() {
             let v = view.lock().unwrap().clone();
             let line = serde_json::json!({
                 "board": format!("{:?}", v.board), "session": format!("{:?}", v.session),
+                "boards": v.boards.iter().map(|b| serde_json::json!({
+                    "mac": b.mac, "board": format!("{:?}", b.board), "session": format!("{:?}", b.session),
+                })).collect::<Vec<_>>(),
                 "watching": v.watching, "port": v.port, "problem": v.problem,
             })
             .to_string();
@@ -105,11 +122,26 @@ fn main() {
             fake.unplug(id);
             continue;
         }
+        let set = |mac: Option<&str>, on: bool| {
+            for (m, p) in &boards {
+                if mac.is_none_or(|x| x.replace(':', "").eq_ignore_ascii_case(m)) {
+                    p.store(on, Ordering::Relaxed);
+                }
+            }
+        };
+        if let Some(m) = line.trim().strip_prefix("unplug ") {
+            set(Some(m), false);
+            continue;
+        }
+        if let Some(m) = line.trim().strip_prefix("plug ") {
+            set(Some(m), true);
+            continue;
+        }
         match line.trim() {
-            "unplug" => plugged.store(false, Ordering::Relaxed),
-            "plug" => plugged.store(true, Ordering::Relaxed),
+            "unplug" => set(None, false),
+            "plug" => set(None, true),
             "pair" => {
-                let _ = h.tx.send(Cmd::PairAgain);
+                let _ = h.tx.send(Cmd::PairAgain(None));
             }
             "quit" | "" => {
                 let _ = h.tx.send(Cmd::Quit);
