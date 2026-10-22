@@ -7,6 +7,9 @@
 #                                       for Linux layout baselines - heavy (about an hour), only
 #                                       after a layout change
 #   tests/docker/run.sh static,unit,ui,hostsim   everything CI runs, minus the firmware build
+#   HIDFI_K="<pytest -k>" tests/docker/run.sh ui   only the matching tests
+#   HIDFI_SHM=3g, HIDFI_VM_MEMORY_GB=8 (vm.sh up)  the 5K-8K layout screens crash
+#                                       Chromium in a 4 GB VM with 1 GB of /dev/shm
 #
 # The repository is mounted read-only and copied inside, so nothing the run
 # writes (reports, caches, new golden files) lands in your working tree as root.
@@ -38,13 +41,13 @@ docker build -q -t "$IMAGE" -f tests/docker/Dockerfile tests >/dev/null
 rm -rf "$OUT" && mkdir -p "$OUT"
 echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}}'))"
 set +e
-docker run --rm --init --shm-size=1g \
+docker run --rm --init --shm-size="${HIDFI_SHM:-1g}" \
     -v "$PWD":/src:ro -v "$OUT":/out \
-    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" \
+    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" -e HIDFI_K="${HIDFI_K:-}" \
     "$IMAGE" bash -c '
         rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" /src/ /work/ && cd /work &&
         ls tests/golden > /tmp/before &&
-        python3 tests/run.py --tier "$TIERS"; code=$?
+        python3 tests/run.py --tier "$TIERS" ${HIDFI_K:+-k "$HIDFI_K"}; code=$?
         cp -r tests/.reports/. /out/ 2>/dev/null
         for f in tests/golden/*; do grep -qx "$(basename "$f")" /tmp/before || cp "$f" /out/; done
         exit $code'
