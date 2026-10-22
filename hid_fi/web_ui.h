@@ -4509,6 +4509,9 @@ function applyStatus(d){
   if(d.wifi_connected&&d.wifi_ip)noteHomeIp(d.wifi_ip);
   if(d.wifi_connected!==undefined&&SCR.homeNet!==!!d.wifi_connected){SCR.homeNet=!!d.wifi_connected;if(!SCR.pcs.length)scrRenderList();}
   if(!d)return;
+  // Seen live: a board with only its COM cable in the Mac listed just the old
+  // laptop, "not running", and never said why the Mac did not show up.
+  if(d.usb_mounted!==undefined&&SCR.usbOff!==(d.usb_mounted===false)){SCR.usbOff=d.usb_mounted===false;scrRenderList();}
   if(d.host_os)applyHostOs(d.host_os,d.host_os_source,d.host_os_detected);  // The evidence behind the verdict, in the UI rather than only on the serial
   // port: a detection argument is settled by reading these, not by guessing at
   // what a given host does during enumeration.
@@ -5426,6 +5429,11 @@ function scrRenderList(){
       '<span style="white-space:normal">A computer\u2019s screen is only shared with a board that has one.</span></div>'+
       '<button class="btn sm" id="scrToSetup">Settings</button></div>';
   }
+  if(SCR.usbOff){
+    h+='<div class="item" id="scrUsbOff">'+ico('info')+'<div class="tx"><b>This board\u2019s USB port is not in a computer</b>'+
+      '<span style="white-space:normal">To control and watch a computer, plug the port marked USB (not COM) into it. '+
+      'HID-Fi Companion on that computer then asks to pair here, or shows it ready if it already is.</span></div></div>';
+  }
   SCR.pend.forEach(p=>{
     const n=SCR.notes[p.id]||'';
     h+='<div class="item scrpc" data-pend="'+p.id+'">'+ico('devices')+'<div class="tx"><b>'+esc(p.name)+'</b>';
@@ -5448,7 +5456,7 @@ function scrRenderList(){
   SCR.pcs.forEach(p=>{
     const watching=p.id===SCR.sel&&(SCR.state==='live'||SCR.state==='reconnecting');
     h+='<div class="item scrpc" data-pc="'+p.id+'">'+ico('monitor')+'<div class="tx"><b>'+esc(p.name)+'</b><span>'+
-      (watching?'on screen':p.online?'ready':'not running - start HID-Fi Companion on it')+
+      (watching?'on screen':p.online?'ready':SCR.usbOff?'not reachable - the board is not plugged into it':'not running - start HID-Fi Companion on it')+
       (p.online&&p.ip?' \u00b7 '+esc(p.ip):'')+'</span></div>'+
       (p.id===SCR.sel&&(SCR.h||SCR.retryT)?'':'<button class="btn sm" data-scrwatch="'+p.id+'"'+(p.online?'':' disabled')+'>Show</button>')+
       '<button class="iconbtn" data-scrdel="'+p.id+'" aria-label="Remove '+esc(p.name)+'">'+ico('trash','ic-sm')+'</button></div>';

@@ -142,6 +142,20 @@ Feature: Screen - seeing the computer's own picture
     When I hold Ctrl and scroll up on the screen
     Then the screen is zoomed in
 
+  # Seen live: a board moved from a Windows laptop to a Mac by its COM cable
+  # only. Its dashboard listed the old laptop "not running" and never said
+  # that its USB port - the one a computer is controlled and watched through -
+  # was in no computer at all.
+  Scenario: A board whose USB port is in no computer says which port to plug in
+    Given the board's USB port is not plugged into any computer
+    And the dashboard is open and signed in with "4826"
+    And a computer "Old Laptop" is paired and running
+    When I open the "Screen" tab
+    Then I see "This board’s USB port is not in a computer"
+    And I see "plug the port marked USB (not COM) into it"
+    When the board's USB port is plugged into a computer
+    Then the board does not say its USB port is out
+
   # Seen live: in the tab, the name and fps sat over the top left of the
   # picture and the buttons over the bottom right, hiding what was under them.
   # Like a window: a slim title bar above, a slim toolbar below, nothing over it.

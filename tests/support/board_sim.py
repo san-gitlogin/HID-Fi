@@ -111,6 +111,7 @@ class BoardSim:
         self.firmware = firmware
         self.host_manual = None
         self.host_detected = detected or host_os
+        self.usb_mounted = True       # False: the USB port is in no computer (only COM, or a charger)
         self.unicode = {"mac": False, "linux": False}
         self.power_mode, self.ap_auto_off = "balanced", False
         # v3.10: a board that was never given a password makes its own at first start.
@@ -200,7 +201,7 @@ class BoardSim:
         return {
             "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up,
             "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "total_psram": 8388608,
-            "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": True,
+            "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": self.usb_mounted,
             "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
             "ap_auto_off": self.ap_auto_off, "ap_running": True,
             "ap_share": self.ap_share, "ap_share_active": self.ap_share and online, "lan_exposed": online and not self.pin,

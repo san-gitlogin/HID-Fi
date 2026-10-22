@@ -174,6 +174,24 @@ def picture_tall(ctx):
           f"a portrait monitor still gets a 16:10 box: {ui.page.evaluate(js)}")
 
 
+@given("the board's USB port is not plugged into any computer")
+def usb_unplugged(ctx):
+    ctx["sim"].usb_mounted = False
+
+
+@when("the board's USB port is plugged into a computer")
+def usb_plugged(ctx):
+    ctx["sim"].usb_mounted = True
+    ctx["ui"].page.evaluate("send({cmd:'status'})")     # what the 8 s status poll does
+    ctx["ui"].idle(400)
+
+
+@then("the board does not say its USB port is out")
+def usb_note_gone(ctx):
+    ui = ctx["ui"]
+    _wait(ui, lambda: not ui.page.locator("#scrUsbOff").count(), "the USB note stays after plugging in")
+
+
 @when("the phone sleeps, and the board forgets its sign-in")
 def phone_sleeps(ctx):
     # Asleep: the board cannot be reached, the video session to the computer
