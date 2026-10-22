@@ -12,12 +12,34 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 ### Fixed
 
 - **Screen sharing stuttering at 3-4 fps on Windows**, worst with two monitors
-  and several viewers. A viewer that joined or changed quality while busy made
-  every frame a keyframe for everyone on its stream; a noisy WiFi estimate
-  switched quality every few seconds; and the Windows encoder ran up to 2.5x
-  over its bitrate. Now one keyframe a second at most, a quality change only
-  after the link has stayed changed for 3 s, and a hard rate cap on Windows as
-  on macOS.
+  and several viewers, from a field log. Reproduced on a Mac by
+  `companion/tests/overload.py` (six viewers, two monitors, swinging and
+  dropping links, a stalling device, rejoins, jittery WiFi) and fixed:
+  - *Keyframe storm:* a viewer that joined or changed size while busy made
+    every frame a keyframe for everyone on its stream (125 of 125).
+  - *Quality flapping:* a noisy WiFi estimate switched size every few seconds,
+    each switch a keyframe. A size change now needs the link to stay changed
+    (1 s down, 3 s up); real packet loss steps down at once.
+  - *The estimate sinking to a tenth of the link:* after a still screen the
+    WebRTC library cut its estimate to 85% of what an idle screen had sent; its
+    pacer also held bursts at 1.1x the estimate. A patched copy of the library
+    (`companion/vendor/str0m`, see `PATCH.md`) does what libwebrtc does.
+  - *Probes that could not run:* the picture filled the whole estimate, so the
+    library never probed its way back after a drop. It now gets 60%.
+  - *A rule meant for a still screen* sent a keyframe after 2 s without a frame
+    - on a thin link, 5 of every 6 frames.
+  - *The Windows encoder* ran up to 2.5x over its bitrate: now a hard ceiling.
+- **Light content was held to 15 fps and half size on thin links** by fixed
+  thresholds. A viewer now gets the largest size whose cost for what is on
+  screen fits its link; frame rate is lowered only when the encoder really drops
+  frames.
+
+### Added
+
+- **A third size, quarter, for very thin links:** such a viewer gets its own
+  small stream instead of setting the pace for everyone at half size.
+- The app's log says how long the slowest encoding turn took, and (at debug
+  level) when each encoder was made.
 
 ## v4.0 - 2026-10-22
 

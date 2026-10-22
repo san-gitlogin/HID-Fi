@@ -13,3 +13,8 @@ lto = "thin"
 codegen-units = 1
 strip = true
 panic = "unwind"
+
+# str0m with one fix from libwebrtc it does not port yet (vendor/str0m/PATCH.md):
+# after an idle screen, the bandwidth estimate no longer collapses on WiFi.
+[patch.crates-io]
+str0m = { path = "vendor/str0m" }

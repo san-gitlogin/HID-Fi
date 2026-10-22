@@ -14,21 +14,35 @@ use hidfi_stream::server::{self, TicketGate};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
+/// Info and up; HIDFI_DEBUG=1 adds hidfi_stream's debug lines, each with the
+/// milliseconds since start (to trace congestion control in tests).
 struct Stderr;
+static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+fn debug() -> bool {
+    std::env::var("HIDFI_DEBUG").is_ok_and(|v| v == "1")
+}
 impl log::Log for Stderr {
     fn enabled(&self, m: &log::Metadata) -> bool {
         m.level() <= log::Level::Info
+            || (debug() && m.level() <= log::Level::Debug && m.target().starts_with("hidfi_stream"))
     }
     fn log(&self, r: &log::Record) {
         if self.enabled(r.metadata()) {
-            eprintln!("{} {}", r.level(), r.args());
+            let ms = START.get_or_init(Instant::now).elapsed().as_millis();
+            eprintln!("{} {ms} {}", r.level(), r.args());
         }
     }
     fn flush(&self) {}
 }
 
 fn main() {
-    let _ = log::set_logger(&Stderr).map(|()| log::set_max_level(log::LevelFilter::Info));
+    START.get_or_init(Instant::now);
+    let level = if debug() {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+    let _ = log::set_logger(&Stderr).map(|()| log::set_max_level(level));
     let a: Vec<String> = std::env::args().collect();
     let w: u32 = a.get(1).and_then(|s| s.parse().ok()).unwrap_or(1280);
     let h: u32 = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(720);
@@ -80,7 +94,7 @@ fn main() {
         })
     })
     .expect("listening");
-    let tickets: Vec<_> = (0..12)
+    let tickets: Vec<_> = (0..40)
         .map(|i| {
             let vn = format!("{:032x}", i + 1);
             serde_json::json!({"vn": vn, "ticket": hex::encode(pairing::ticket(&key, &tn, &vn))})
@@ -90,9 +104,19 @@ fn main() {
         "{}",
         serde_json::json!({"port": srv.port, "tn": tn, "fp": fp, "tickets": tickets})
     );
-    // stdin: "unplug <id>" takes a pretend display away.
+    // stdin: "unplug <id>" takes a pretend display away; "still" and "move"
+    // stop and restart the patterns (a desktop at rest, then a window dragged).
     std::thread::spawn(move || {
         for line in std::io::stdin().lines().map_while(Result::ok) {
+            match line.trim() {
+                "still" => {
+                    hidfi_stream::pattern::HELD.store(true, std::sync::atomic::Ordering::Relaxed)
+                }
+                "move" => {
+                    hidfi_stream::pattern::HELD.store(false, std::sync::atomic::Ordering::Relaxed)
+                }
+                _ => {}
+            }
             if let Some(id) = line
                 .trim()
                 .strip_prefix("unplug ")

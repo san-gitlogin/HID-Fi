@@ -54,6 +54,7 @@ adding a login item - for development and tests.
 | `vectors/check.py` | the pairing vectors, recomputed with Python `cryptography` |
 | `vectors/check_board.sh` | the board's own crypto (`hid_fi/companion_crypto.h`, mbedTLS 3.6.4) gives the same bytes |
 | `tests/e2e_view.py` | hardware H.264 → WebRTC → real Chrome; refused tickets and certificates; CPU |
+| `tests/overload.py` | everything at once: six viewers on two monitors, a link swinging 0.4-12 Mbit/s, a stalling device, a viewer rejoining every 5 s, a link that drops to 1.5 Mbit/s, three viewers on jittery WiFi (`WIFI=mild`: measured on a real home network; default: a crowded channel), busy or light content (`CONTENT=bar`); `ONLY=p1|drop|wifi` runs one phase |
 | `tests/system.py` | the real service + board model + Chrome: pair, live, unplug, replug |
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
 | `tests/panel_review.py` | the app's window in every state: fits, nothing cut off, each step says what to do (`cargo run --example panel_states` first) |

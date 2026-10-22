@@ -95,7 +95,8 @@ impl Source for Pattern {
         (self.w, self.h)
     }
     fn grab(&mut self, force: bool, f: &mut dyn FnMut(&Frame)) -> Result<bool, String> {
-        let changed = self.moving || !self.drawn;
+        let changed =
+            (self.moving && !HELD.load(std::sync::atomic::Ordering::Relaxed)) || !self.drawn;
         if changed {
             self.t = self.t.wrapping_add(1);
             self.draw();
@@ -118,6 +119,10 @@ impl Source for Pattern {
 /// first, at `w`x`h`; then 1280x1024, then a portrait 1080x1920...), each
 /// streaming a pattern of its own size. `unplug(id)` takes one away: it leaves
 /// the list, and capturing it fails, as a monitor pulled out does.
+/// Tests: while set, every moving pattern stands still (a desktop at rest),
+/// and moves again when cleared (a window dragged). See examples/serve.rs.
+pub static HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[derive(Clone)]
 pub struct FakeDisplays(Arc<Mutex<Vec<Display>>>);
 

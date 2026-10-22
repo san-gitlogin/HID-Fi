@@ -489,7 +489,7 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
         && c.open.load(Ordering::Relaxed)
     {
         match read(&mut ws, Instant::now() + Duration::from_millis(1000)) {
-            Ok(Got::Msg(Some(FromViewer::Key))) => control.request_keyframe(),
+            Ok(Got::Msg(Some(FromViewer::Key))) => control.browser_wants_keyframe(),
             Ok(Got::Msg(Some(FromViewer::Display { id }))) => {
                 asked = Some(id);
                 // Only a display this computer has; the main one by its id

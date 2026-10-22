@@ -79,6 +79,9 @@ pub fn prepare(
         .clear_codecs()
         .enable_h264(true)
         .enable_bwe(Some(str0m::bwe::Bitrate::mbps(3)))
+        // Loss and round-trip time once a second: what tells a congested link
+        // from WiFi jitter (see `Steady`).
+        .set_stats_interval(Some(Duration::from_secs(1)))
         .build(Instant::now());
     let socket = bind_media(local_ip)?;
     let addr = socket.local_addr()?;
@@ -126,15 +129,80 @@ pub enum End {
 pub const CONNECT_DEADLINE: Duration = Duration::from_secs(20);
 
 /// What the bandwidth estimator probes towards: twice what the link carries
-/// now, within these bounds, so it climbs step by step. Without a target it
-/// never probed, and an estimate that fell (a moment of WiFi trouble) never
-/// climbed back. A fixed high target was no better on a poor link: its probe
-/// bursts overflowed the router's queue and crashed the estimate again.
-pub const DESIRED_MIN_BPS: u64 = 1_500_000;
-pub const DESIRED_MAX_BPS: u64 = 8_000_000;
+/// now, within these bounds. Without a target it never probed, and an
+/// estimate that fell (a moment of WiFi trouble) never climbed back. The floor
+/// is what a full-size picture needs: with 1.5 Mbit/s, an estimate knocked down
+/// by WiFi jitter probed only to 3 and crawled back. (A fixed high target once
+/// crashed a poor link: its probe bursts overflowed the router's queue. That
+/// was before the probes ran only while the picture leaves room - see
+/// [`ENCODE_SHARE`] - and tests/overload.py now drops a link to 1.5 Mbit/s
+/// with a router queue of half a second to keep it honest.)
+pub const DESIRED_MIN_BPS: u64 = 6_000_000;
+pub const DESIRED_MAX_BPS: u64 = 12_000_000;
 
 fn desired(estimate: u64) -> u64 {
     (estimate * 2).clamp(DESIRED_MIN_BPS, DESIRED_MAX_BPS)
+}
+
+/// What the picture is sized for: the link estimate without its WiFi noise.
+///
+/// The estimator (delay-based, libwebrtc's) reads a radio waiting for the air
+/// as congestion: on a 25 Mbit/s link with stalls and no loss it swung 0.4 - 16
+/// Mbit/s, and the picture followed every dip - quality switches, keyframes,
+/// 2-5 fps (the field log on Windows: estimates of 0.25 - 1.3 Mbit/s on home
+/// WiFi). The estimator still decides how fast packets leave (the pacer: 2.5x
+/// the estimate); this decides how much to encode: the best estimate of the
+/// last [`STEADY_HOLD`], never above twice the current one (so the pacer can
+/// send it), and the current one at once when packets are really being lost.
+pub struct Steady {
+    seen: std::collections::VecDeque<(Instant, u64)>,
+}
+pub const STEADY_HOLD: Duration = Duration::from_millis(2500);
+/// The share of the link the picture is encoded for. Below the estimator's
+/// "application-limited" line (65%) on purpose: there it probes the link
+/// (every 5 s, and at once after a large drop), so an estimate knocked down by
+/// a loss burst climbs back in seconds. At 85% the media filled the estimate,
+/// no probe ever ran, and recovery crawled at 8% a second (0.2 Mbit/s for 10 s
+/// on a 25 Mbit/s link).
+pub const ENCODE_SHARE: f64 = 0.6;
+/// Loss at which a drop is real, not jitter: 5% of packets.
+pub const STEADY_LOSS: f32 = 0.05;
+
+impl Steady {
+    pub fn new() -> Steady {
+        Steady {
+            seen: std::collections::VecDeque::new(),
+        }
+    }
+    /// A new estimate; returns the rate to encode for.
+    pub fn estimate(&mut self, bps: u64, now: Instant) -> u64 {
+        self.seen.push_back((now, bps));
+        while self
+            .seen
+            .front()
+            .is_some_and(|(t, _)| now.duration_since(*t) > STEADY_HOLD)
+        {
+            self.seen.pop_front();
+        }
+        self.rate(bps)
+    }
+    /// Packets are being lost: the link really is smaller. Follow it now.
+    pub fn loss(&mut self, fraction: f32, current: u64, now: Instant) {
+        if fraction >= STEADY_LOSS {
+            self.seen.clear();
+            self.seen.push_back((now, current));
+        }
+    }
+    fn rate(&self, current: u64) -> u64 {
+        let best = self.seen.iter().map(|(_, b)| *b).max().unwrap_or(current);
+        best.min(current.saturating_mul(2)).max(current)
+    }
+}
+
+impl Default for Steady {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// A viewer's own pace: a safety valve, not the rate control. The encoder
@@ -228,6 +296,8 @@ pub fn run(
     let mut sent_frames = 0u32;
     let mut stats_at = Instant::now();
     let mut pace = Pace::new(3_000_000, Instant::now());
+    let mut steady = Steady::new();
+    let (mut sec_at, mut sec_sent) = (Instant::now(), 0u32);
     let mut waiting_key = true;
     let (mut log_at, mut log_sent, mut log_held, mut log_bytes, mut estimate) =
         (Instant::now(), 0u32, 0u32, 0u64, 0u64);
@@ -275,12 +345,30 @@ pub fn run(
                             None => break End::Failed("no H.264 baseline in the offer".into()),
                         }
                     }
-                    Event::KeyframeRequest(_) => control.request_keyframe(),
+                    Event::KeyframeRequest(_) => control.browser_wants_keyframe(),
+                    Event::MediaEgressStats(s) => {
+                        if let Some(l) = s.loss {
+                            log::debug!("viewer {}: loss {:.3}", local.port(), l);
+                            steady.loss(l, estimate, Instant::now());
+                            if l >= STEADY_LOSS {
+                                let rate = steady.estimate(estimate, Instant::now());
+                                control.link_lost((rate as f64 * ENCODE_SHARE) as u32);
+                                pace.set_rate(rate);
+                            }
+                        }
+                    }
                     Event::EgressBitrateEstimate(BweKind::Twcc { estimate: b, .. }) => {
                         // Leave headroom: the estimate is the ceiling, not the target.
                         estimate = b.as_u64();
-                        control.offer_bitrate((estimate as f64 * 0.85) as u32);
-                        pace.set_rate(estimate);
+                        let rate = steady.estimate(estimate, Instant::now());
+                        log::debug!(
+                            "viewer {}: estimate {} kbit/s, steady {} kbit/s",
+                            local.port(),
+                            estimate / 1000,
+                            rate / 1000
+                        );
+                        control.offer_bitrate((rate as f64 * ENCODE_SHARE) as u32);
+                        pace.set_rate(rate);
                         rtc.bwe()
                             .set_desired_bitrate(str0m::bwe::Bitrate::bps(desired(estimate)));
                     }
@@ -344,6 +432,7 @@ pub fn run(
                 }
                 sent_frames += 1;
                 log_sent += 1;
+                sec_sent += 1;
                 log_bytes += frame.data.len() as u64;
             }
         }
@@ -351,6 +440,14 @@ pub fn run(
             on_stats(sent_frames);
             sent_frames = 0;
             stats_at = Instant::now();
+        }
+        if sec_at.elapsed() >= Duration::from_secs(1) {
+            log::debug!(
+                "viewer {}: sent {} frames this second",
+                local.port(),
+                sec_sent
+            );
+            (sec_at, sec_sent) = (Instant::now(), 0);
         }
         if log_at.elapsed() >= Duration::from_secs(10) {
             let secs = log_at.elapsed().as_secs_f64();
@@ -378,9 +475,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_dip_without_loss_does_not_shrink_the_picture_but_loss_does() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let mut s = Steady::new();
+        assert_eq!(s.estimate(8_000_000, ms(0)), 8_000_000);
+        // WiFi jitter: the estimate dips to 5, then 2 Mbit/s for a moment.
+        assert_eq!(s.estimate(5_000_000, ms(500)), 8_000_000, "a dip is held");
+        assert_eq!(
+            s.estimate(2_000_000, ms(1000)),
+            4_000_000,
+            "but never above twice the estimate: the pacer must be able to send it"
+        );
+        // Still low after the hold: the link really is slower.
+        s.estimate(2_000_000, ms(2000));
+        assert_eq!(s.estimate(2_000_000, ms(3600)), 2_000_000);
+        // Back up: followed at once.
+        assert_eq!(s.estimate(9_000_000, ms(4000)), 9_000_000);
+        // A real drop, with packets lost: followed at once, not held.
+        s.loss(0.20, 1_500_000, ms(4500));
+        assert_eq!(s.estimate(1_500_000, ms(4600)), 1_500_000);
+        // Light loss is WiFi as usual: no effect.
+        s.estimate(6_000_000, ms(5000));
+        s.loss(0.01, 3_000_000, ms(5100));
+        assert_eq!(s.estimate(3_000_000, ms(5200)), 6_000_000);
+    }
+
+    #[test]
     fn the_probe_target_climbs_with_the_link_within_bounds() {
         assert_eq!(desired(300_000), DESIRED_MIN_BPS);
-        assert_eq!(desired(1_400_000), 2_800_000);
+        assert_eq!(desired(4_000_000), 8_000_000);
         assert_eq!(desired(20_000_000), DESIRED_MAX_BPS);
     }
 

@@ -711,8 +711,23 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   to `WS_MAX_CLIENTS`, and the flash scripts rebuild from clean when that file
   changes (a stale library object would corrupt memory). Never remove it.
 - **Viewers:** six per computer (`MAX_VIEWERS`), each choosing a monitor; capture
-  and encoding are per (monitor, quality) lane and shared. Keyframes are per
+  and encoding are per (monitor, size) lane and shared. Keyframes are per
   viewer and rate limited - one slow viewer must never make keyframes for all.
+- **Rate control** (`pipeline.rs`, `rtc.rs`): three sizes (full, half,
+  quarter) as simulcast layers, so a thin link gets its own small stream instead
+  of setting the pace for everyone. A viewer gets the largest size whose cost
+  *for the content on screen* fits its link (light content fits full size on 1.5
+  Mbit/s; busy content steps down before it becomes a slideshow). The encoder
+  gets 60% of the link (`ENCODE_SHARE`, below the estimator's
+  application-limited line, so it can probe its way back after a drop); WiFi
+  dips without loss are held (`Steady`), real loss is followed at once. The
+  WebRTC library is a patched copy in `companion/vendor/str0m` - read its
+  `PATCH.md` before touching it or bumping str0m.
+- **Judge streaming changes with `companion/tests/overload.py`** (six viewers,
+  two monitors, a swinging link, a stalling device, a rejoining viewer, a link
+  that drops, jittery WiFi measured from a real home network, light and busy
+  content). Single runs vary on one loaded Mac: run each phase twice. A green
+  unit test proved nothing here more than once.
 - **macOS signing:** an ad-hoc signed app gets a new identity every build; macOS
   then refuses Screen Recording while System Settings still shows the switch on.
   `companion/package/macos.sh` signs with a local "HID-Fi Local" certificate when
