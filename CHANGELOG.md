@@ -34,8 +34,25 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   screen fits its link; frame rate is lowered only when the encoder really drops
   frames.
 
+- **Windows: the app did not start on a clean PC** ("VCRUNTIME140_1.dll was not
+  found") - it needed Microsoft's Visual C++ runtime, which GitHub's build
+  machines have and a fresh Windows does not. The C runtime is now inside the
+  `.exe`; CI checks it stays that way.
+- **Windows: full size ignored its bitrate** - 27-37 Mbit/s for busy content
+  whatever the link (the encoder's rate control was set too late). Every
+  full-size viewer on Windows flooded the WiFi, and the PC's own uplink with it
+  (the dashboard's mouse waited behind the video). Now it follows its target;
+  CI checks it (`rate_check --check`).
+- **Two monitors no longer share one encoding thread:** each watched monitor is
+  captured and encoded on its own, so a computer encoding in software
+  (Windows) uses more than one core.
+- **A forced keyframe every 20 s instead of every 4 s:** a 1080p keyframe arrives
+  as a short freeze; keyframes now come when a viewer needs one.
+
 ### Added
 
+- **A Windows 11 test VM and Windows builds on the Mac**
+  (`companion/tests/windows`): how the bugs above were found.
 - **A third size, quarter, for very thin links:** such a viewer gets its own
   small stream instead of setting the pace for everyone at half size.
 - The app's log says how long the slowest encoding turn took, and (at debug

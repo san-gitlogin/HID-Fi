@@ -328,10 +328,9 @@ impl Encoder for MfEncoder {
     }
 }
 
-/// The rate, as a ceiling and not only an average: with the mean alone the
-/// encoder was seen sending 1.5 - 2.5 times its target, so frames were held back
-/// and each gap cost a keyframe. A half-second buffer bounds every burst, as
-/// DataRateLimits does on macOS.
+/// The rate, as a ceiling and not only an average: without a maximum and a
+/// buffer, Microsoft's encoder ran 1080p at a fixed quality (28 Mbit/s whatever
+/// the target). The buffer is half a second at the rate, with a floor.
 fn set_rate(c: &ICodecAPI, bps: u32) {
     let bps = bps.clamp(100_000, 50_000_000);
     // SAFETY: documented dynamic codec properties with VT_UI4 values; an encoder
@@ -339,7 +338,14 @@ fn set_rate(c: &ICodecAPI, bps: u32) {
     unsafe {
         let _ = c.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bps));
         let _ = c.SetValue(&CODECAPI_AVEncCommonMaxBitRate, &VARIANT::from(bps));
-        let _ = c.SetValue(&CODECAPI_AVEncCommonBufferSize, &VARIANT::from(bps / 2));
+        // Never smaller than a busy 1080p frame (~500 kB): with half a second at
+        // a low rate (56 kB at 0.9 Mbit/s) the encoder gave up rate control for
+        // good once retargeted often - 28-39 Mbit/s whatever the target after
+        // that (rate_check, RATE_JITTER=1, in the Windows VM).
+        let _ = c.SetValue(
+            &CODECAPI_AVEncCommonBufferSize,
+            &VARIANT::from((bps / 2).max(4_000_000)),
+        );
     }
 }
 

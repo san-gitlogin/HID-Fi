@@ -23,11 +23,21 @@ const SECS: u32 = 4;
 fn run(enc: &mut dyn Encoder, src: &mut Pattern, rates: &[u32]) -> Vec<(u32, f64, u32, u32, u32)> {
     let mut out = Vec::new();
     let mut pts = 0u64;
+    // RATE_JITTER=1: the target moves +-15% every 200 ms, as the app's does
+    // when a link estimate moves (it re-sets the encoder on each >10% change).
+    let jitter = std::env::var("RATE_JITTER").is_ok_and(|v| v == "1");
     for &bps in rates {
         enc.set_bitrate(bps);
         let (mut bytes, mut made, mut keys) = (0usize, 0u32, 0u32);
         let n = FPS * SECS;
         for i in 0..n {
+            if jitter && i % 6 == 5 {
+                enc.set_bitrate(if (i / 6) % 2 == 0 {
+                    bps * 115 / 100
+                } else {
+                    bps * 85 / 100
+                });
+            }
             let mut got = None;
             src.grab(true, &mut |f: &Frame| {
                 got = Some(enc.encode(f, pts, i == 0 && pts == 0));
@@ -55,7 +65,12 @@ fn main() {
     );
     for (w, h) in [(1920, 1080), (960, 540), (480, 270)] {
         let mut src = Pattern::new(w, h).busy();
-        let first = 3_000_000;
+        // RATE_FIRST: the rate the encoder is made with (the app makes it at
+        // the link's rate, which can be high).
+        let first: u32 = std::env::var("RATE_FIRST")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3_000_000);
         let mut enc = match hidfi_stream::encoder(w, h, FPS, first) {
             Ok(e) => e,
             Err(e) => {
@@ -64,7 +79,9 @@ fn main() {
             }
         };
         // Steady rates, then down and up again on the same encoder.
-        let rates = [3_000_000, 1_000_000, 500_000, 6_000_000, 900_000];
+        let rates = [
+            first, 3_000_000, 1_000_000, 500_000, 6_000_000, 900_000, 9_000_000, 12_000_000,
+        ];
         for (bps, got, made, n, keys) in run(enc.as_mut(), &mut src, &rates) {
             worst = worst.max(got / bps as f64);
             println!(

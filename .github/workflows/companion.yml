@@ -93,7 +93,10 @@ jobs:
               bad += found
           sys.exit(1 if bad else 0)
       - name: The encoder follows its bitrate (every platform; Windows ignored it at 1080p in v4.0)
-        run: cargo run --release -p hidfi-stream --example rate_check -- --check
+        run: |
+          cargo run --release -p hidfi-stream --example rate_check -- --check
+          RATE_JITTER=1 cargo run --release -p hidfi-stream --example rate_check -- --check
+        shell: bash
       - name: Real screen capture + encode (Windows desktop)
         if: runner.os == 'Windows'
         continue-on-error: true   # hosted runners may have no duplicable display; reported, not hidden
