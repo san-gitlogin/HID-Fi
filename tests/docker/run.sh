@@ -8,6 +8,7 @@
 #                                       after a layout change
 #   tests/docker/run.sh static,unit,ui,hostsim   everything CI runs, minus the firmware build
 #   HIDFI_K="<pytest -k>" tests/docker/run.sh ui   only the matching tests
+#   HIDFI_RUN_ARGS=--update-golden ...           record Linux baselines (review them)
 #   HIDFI_SHM=3g, HIDFI_VM_MEMORY_GB=8 (vm.sh up)  the 5K-8K layout screens crash
 #                                       Chromium in a 4 GB VM with 1 GB of /dev/shm
 #
@@ -43,11 +44,11 @@ echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}
 set +e
 docker run --rm --init --shm-size="${HIDFI_SHM:-1g}" \
     -v "$PWD":/src:ro -v "$OUT":/out \
-    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" -e HIDFI_K="${HIDFI_K:-}" \
+    -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" -e HIDFI_K="${HIDFI_K:-}" -e HIDFI_RUN_ARGS="${HIDFI_RUN_ARGS:-}" \
     "$IMAGE" bash -c '
         rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" /src/ /work/ && cd /work &&
         ls tests/golden > /tmp/before &&
-        python3 tests/run.py --tier "$TIERS" ${HIDFI_K:+-k "$HIDFI_K"}; code=$?
+        python3 tests/run.py --tier "$TIERS" ${HIDFI_K:+-k "$HIDFI_K"} $HIDFI_RUN_ARGS; code=$?
         cp -r tests/.reports/. /out/ 2>/dev/null
         for f in tests/golden/*; do grep -qx "$(basename "$f")" /tmp/before || cp "$f" /out/; done
         exit $code'
