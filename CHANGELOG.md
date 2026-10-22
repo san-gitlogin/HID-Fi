@@ -31,6 +31,9 @@ Companion.
 - **A board with only its COM cable in a computer never said why no computer
   showed up.** The Screen tab now says the board's USB port is in no computer,
   and which port to plug in.
+- **A board that restarted stayed "Reconnecting" in the app for good**, so
+  its dashboard showed the computer as not running. The app found it again
+  but never resumed; it does now, with the same pairing.
 - **A board pulled out stops its viewers at once**, and only its own: with two
   boards, the other board's viewers carry on.
 - **The Screen tab hid parts of the picture**: the computer's name and frame
@@ -47,6 +50,8 @@ Companion.
   watch, unplug one, plug it back, one removes this computer.
 - Screen scenarios: nothing covers the picture at nine screen sizes, both ways
   up, checked by hit-testing; a portrait monitor.
+- Test boards use made-up MAC addresses only: a model board had a real
+  board's, and the app under test found the real board on the home network.
 - 52 board-model tests (pairing protocol, Mac/PC detection) had no tier and
   never ran under `tests/run.py`; they do now, and a test without a tier stops
   the run.
