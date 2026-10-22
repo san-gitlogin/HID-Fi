@@ -157,7 +157,11 @@ case "${1:-}" in
     repo="$(cd "$here/../../.." && pwd)"
     # Stop anything running from there first (an app started from C:\hidfi
     # registers itself to start at login, and a running .exe cannot be replaced).
-    ssh_vm "Get-Process | Where-Object { \$_.Path -like 'C:\hidfi\*' } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 1;
+    # A test copy must not start at login either (it re-points that entry to
+    # itself when it runs, and a restart then locked it before the next sync).
+    ssh_vm "\$run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run';
+            if ((Get-ItemProperty \$run).'HID-Fi Companion' -like '*C:\hidfi\*') { Remove-ItemProperty \$run -Name 'HID-Fi Companion' };
+            Get-Process | Where-Object { \$_.Path -like 'C:\hidfi\*' } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 1;
             Remove-Item -Recurse -Force C:/hidfi/companion -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force C:/hidfi/companion/target/release/examples, C:/hidfi/companion/package | Out-Null"
     scp_vm "$repo/companion/tests" "$repo/companion/web" "$repo/companion/vectors" "C:/hidfi/companion/"
     scp_vm "$repo/companion/package/install-windows.ps1" "C:/hidfi/companion/package/"

@@ -43,6 +43,13 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   full-size viewer on Windows flooded the WiFi, and the PC's own uplink with it
   (the dashboard's mouse waited behind the video). Now it follows its target;
   CI checks it (`rate_check --check`).
+- **Windows: asking for a keyframe broke rate control for good** (and viewers
+  ask whenever they join or lose packets): a keyframe now comes from a fresh
+  encoder. **...and frequent rate changes broke it too** (its buffer was smaller
+  than one 1080p frame). CI checks both.
+- **Keyframes are paced by their cost:** at most half a stream's rate (one a
+  second on a good link, up to 5 s apart on a thin one) - one a second at 1
+  Mbit/s overran Windows' encoder 10x and starved macOS's.
 - **Two monitors no longer share one encoding thread:** each watched monitor is
   captured and encoded on its own, so a computer encoding in software
   (Windows) uses more than one core.
