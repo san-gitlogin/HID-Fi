@@ -39,10 +39,15 @@ pub struct MfEncoder {
     fps: u32,
     nv12: Vec<u8>,
     seq_header: Vec<u8>,
+    /// The rate last set (a rebuilt transform starts at it).
+    bps: u32,
+    /// Frames given to this transform: a fresh one starts on a keyframe.
+    fed: u64,
 }
 
-// SAFETY: the transform is used only through &mut self, from the pipeline
-// thread; COM is initialised multithreaded there.
+// SAFETY: the transform is used only through &mut self, from the thread that
+// made it (one pipeline worker per display); COM is initialised multithreaded
+// there, in MfEncoder::new.
 unsafe impl Send for MfEncoder {}
 
 fn pack(hi: u32, lo: u32) -> u64 {
@@ -90,63 +95,7 @@ impl MfEncoder {
             MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET)
                 .map_err(|e| unavailable("Media Foundation", e))?;
         }
-        // SAFETY: creating the system's H.264 encoder.
-        let mft: IMFTransform =
-            unsafe { CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER) }
-                .map_err(|e| unavailable("H.264 encoder", e))?;
-        // Codec settings before the media types: Microsoft's H.264 encoder reads
-        // the rate control mode (and some others) only at SetOutputType. Set
-        // after, it ignored them at 1080p and ran at a fixed quality - 27
-        // Mbit/s for busy content whatever the target (rate_check, Windows VM).
-        let codec: Option<ICodecAPI> = mft.cast().ok();
-        if let Some(c) = &codec {
-            // Best effort: an encoder that ignores one of these still works.
-            // SAFETY: documented codec properties with matching VARIANT types.
-            unsafe {
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncCommonRateControlMode,
-                    &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
-                );
-                let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
-                let _ = c.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncMPVGOPSize,
-                    &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
-                );
-            }
-            set_rate(c, cfg.bitrate_bps);
-        }
-        // Output first: the encoder decides what input it accepts from it.
-        let out = video_type(&MFVideoFormat_H264, (w, h, fps), Some(cfg.bitrate_bps))
-            .map_err(|e| unavailable("output type", e))?;
-        let inp = video_type(&MFVideoFormat_NV12, (w, h, fps), None)
-            .map_err(|e| unavailable("input type", e))?;
-        // SAFETY: setting types on a fresh transform.
-        unsafe {
-            mft.SetOutputType(0, &out, 0)
-                .map_err(|e| unavailable("H.264 output", e))?;
-            mft.SetInputType(0, &inp, 0)
-                .map_err(|e| unavailable("NV12 input", e))?;
-        }
-        // And again after: some settings only stick on a configured encoder.
-        if let Some(c) = &codec {
-            // SAFETY: as above.
-            unsafe {
-                let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncMPVGOPSize,
-                    &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
-                );
-            }
-            set_rate(c, cfg.bitrate_bps);
-        }
-        // SAFETY: start streaming on a configured transform.
-        unsafe {
-            mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)
-                .map_err(|e| fail("begin", e))?;
-            mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
-                .map_err(|e| fail("start", e))?;
-        }
+        let (mft, codec) = transform(w, h, fps, cfg.bitrate_bps)?;
         let mut me = MfEncoder {
             mft,
             codec,
@@ -155,6 +104,8 @@ impl MfEncoder {
             fps,
             nv12: vec![0; (w * h * 3 / 2) as usize],
             seq_header: Vec::new(),
+            bps: cfg.bitrate_bps,
+            fed: 0,
         };
         me.read_seq_header();
         Ok(me)
@@ -303,14 +254,22 @@ impl Encoder for MfEncoder {
             self.h as usize,
             &mut self.nv12,
         );
-        if force_key {
-            if let Some(c) = &self.codec {
-                // SAFETY: documented per-frame property.
-                unsafe {
-                    let _ = c.SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &VARIANT::from(1u32));
-                }
+        if force_key && self.fed > 0 {
+            // A keyframe from a fresh transform, not CODECAPI_AVEncVideoForceKeyFrame:
+            // after that, Microsoft's encoder left rate control for good (27
+            // Mbit/s at 1080p whatever the target; rate_check RATE_KEYS=1). A new
+            // one starts on an IDR at the current rate; a few ms, at most once a
+            // second per stream (the pipeline's KEY_GAP).
+            let (mft, codec) = transform(self.w, self.h, self.fps, self.bps)?;
+            // SAFETY: ending the old transform's stream before it is released.
+            unsafe {
+                let _ = self.mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+                let _ = self.mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
             }
+            (self.mft, self.codec, self.fed) = (mft, codec, 0);
+            self.read_seq_header();
         }
+        self.fed += 1;
         let s = self.input(pts_ms)?;
         // SAFETY: a configured, streaming transform and a valid sample.
         unsafe { self.mft.ProcessInput(0, &s, 0) }.map_err(|e| fail("ProcessInput", e))?;
@@ -318,6 +277,7 @@ impl Encoder for MfEncoder {
     }
 
     fn set_bitrate(&mut self, bps: u32) {
+        self.bps = bps;
         if let Some(c) = &self.codec {
             set_rate(c, bps);
         }
@@ -347,6 +307,73 @@ fn set_rate(c: &ICodecAPI, bps: u32) {
             &VARIANT::from((bps / 2).max(4_000_000)),
         );
     }
+}
+
+/// A configured, streaming H.264 transform at this size, rate and frame rate.
+fn transform(
+    w: u32,
+    h: u32,
+    fps: u32,
+    bps: u32,
+) -> Result<(IMFTransform, Option<ICodecAPI>), EncodeError> {
+    // SAFETY: creating the system's H.264 encoder.
+    let mft: IMFTransform =
+        unsafe { CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|e| unavailable("H.264 encoder", e))?;
+    // Codec settings before the media types: Microsoft's H.264 encoder reads
+    // the rate control mode (and some others) only at SetOutputType. Set
+    // after, it ignored them at 1080p and ran at a fixed quality - 27
+    // Mbit/s for busy content whatever the target (rate_check, Windows VM).
+    let codec: Option<ICodecAPI> = mft.cast().ok();
+    if let Some(c) = &codec {
+        // Best effort: an encoder that ignores one of these still works.
+        // SAFETY: documented codec properties with matching VARIANT types.
+        unsafe {
+            let _ = c.SetValue(
+                &CODECAPI_AVEncCommonRateControlMode,
+                &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
+            );
+            let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
+            let _ = c.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
+            let _ = c.SetValue(
+                &CODECAPI_AVEncMPVGOPSize,
+                &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
+            );
+        }
+        set_rate(c, bps);
+    }
+    // Output first: the encoder decides what input it accepts from it.
+    let out = video_type(&MFVideoFormat_H264, (w, h, fps), Some(bps))
+        .map_err(|e| unavailable("output type", e))?;
+    let inp = video_type(&MFVideoFormat_NV12, (w, h, fps), None)
+        .map_err(|e| unavailable("input type", e))?;
+    // SAFETY: setting types on a fresh transform.
+    unsafe {
+        mft.SetOutputType(0, &out, 0)
+            .map_err(|e| unavailable("H.264 output", e))?;
+        mft.SetInputType(0, &inp, 0)
+            .map_err(|e| unavailable("NV12 input", e))?;
+    }
+    // And again after: some settings only stick on a configured encoder.
+    if let Some(c) = &codec {
+        // SAFETY: as above.
+        unsafe {
+            let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
+            let _ = c.SetValue(
+                &CODECAPI_AVEncMPVGOPSize,
+                &VARIANT::from(fps * crate::frame::KEYFRAME_EVERY_SECS),
+            );
+        }
+        set_rate(c, bps);
+    }
+    // SAFETY: start streaming on a configured transform.
+    unsafe {
+        mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)
+            .map_err(|e| fail("begin", e))?;
+        mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
+            .map_err(|e| fail("start", e))?;
+    }
+    Ok((mft, codec))
 }
 
 impl Drop for MfEncoder {

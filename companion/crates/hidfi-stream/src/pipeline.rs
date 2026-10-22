@@ -293,6 +293,18 @@ fn note_cap(d: u32, t: usize, changed: Option<(u32, f32)>) {
     }
 }
 
+/// How soon a lane may make another keyframe someone asks for: at least
+/// KEY_GAP, and long enough that keyframes take at most half of the lane's
+/// rate - never over KEY_GAP_MAX, so a viewer that lost packets recovers
+/// within it. A busy 1080p keyframe is 2-3 Mbit: one a second at 1 Mbit/s made
+/// Windows' encoder run 10x over its rate and starved macOS's (1 frame in 120;
+/// rate_check RATE_KEYS=1). A joining viewer still gets one at once.
+fn key_gap(key_bytes: u32, bps: u32) -> Duration {
+    let spend = key_bytes as f64 * 8.0 * 2.0 / bps.max(MIN_BITRATE) as f64;
+    KEY_GAP.max(Duration::from_secs_f64(spend)).min(KEY_GAP_MAX)
+}
+pub const KEY_GAP_MAX: Duration = Duration::from_secs(5);
+
 /// A lane's frame rate, from what its encoder manages. An encoder over its
 /// bitrate drops frames itself, at random - jerky motion. When it drops more
 /// than one in five, the lane asks for a third fewer (evenly spaced, each with
@@ -483,6 +495,8 @@ struct Lane {
     bytes: u64,
     skipped: u32,
     fps_cap: FpsCap,
+    /// The size of its last keyframe, for `key_gap`.
+    key_bytes: u32,
     /// Bytes out since `win_at`, for `out_bps` (the lane's real output rate).
     win_bytes: u64,
     win_at: Option<Instant>,
@@ -710,7 +724,7 @@ fn run_display<S, E>(
                     let asked = seen.iter().filter(on).any(|v| v.need_key)
                         && lane
                             .last_key
-                            .is_none_or(|k| now.duration_since(k) >= KEY_GAP);
+                            .is_none_or(|k| now.duration_since(k) >= key_gap(lane.key_bytes, bps));
                     // A still screen sends nothing, but a frame every 2 s keeps
                     // the stream alive. Not a keyframe: joins and losses have
                     // their own, and on a thin link (where the encoder skips
@@ -859,6 +873,7 @@ fn run_display<S, E>(
                 lane.last_sent = Some(sent_at);
                 if enc_frame.keyframe {
                     lane.last_key = Some(sent_at);
+                    lane.key_bytes = enc_frame.data.len() as u32;
                     lane.keys += 1;
                 }
                 lane.encoded += 1;
@@ -1734,6 +1749,18 @@ mod rate_tests {
             QUARTER,
             "below HALF_MIN_BPS"
         );
+    }
+
+    #[test]
+    fn keyframes_take_at_most_half_a_lanes_rate() {
+        // Small keyframes on a good link: one a second, as before.
+        assert_eq!(key_gap(20_000, 8_000_000), KEY_GAP);
+        // A 300 kB keyframe (busy 1080p) at 4 Mbit/s: 1.2 s apart.
+        assert_eq!(key_gap(300_000, 4_000_000), Duration::from_millis(1200));
+        // ...at 1 Mbit/s: 4.8 s.
+        assert_eq!(key_gap(300_000, 1_000_000), Duration::from_millis(4800));
+        // Never longer than KEY_GAP_MAX, so a viewer that lost packets recovers.
+        assert_eq!(key_gap(400_000, 1_000_000), KEY_GAP_MAX);
     }
 
     /// An estimate that stays where it is past TIER_HOLD (the wait itself is

@@ -20,9 +20,12 @@ MAC = "B8:1F:3F:DA:1A:2C"   # what the model's status reports
 def lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("192.168.0.1", 9)); return s.getsockname()[0]
+        s.connect(("192.168.0.1", 9)); ip = s.getsockname()[0]
     finally:
         s.close()
+    import ipaddress
+    # No home LAN (an IPv6-only hotspot gives 192.0.0.2): the viewers are here.
+    return ip if ipaddress.ip_address(ip).is_private and not ip.startswith("192.0.0.") else "127.0.0.1"
 
 IP = lan_ip()
 ok = True

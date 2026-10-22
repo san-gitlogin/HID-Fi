@@ -16,6 +16,9 @@ from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.168.0.1", 9)); IP = s.getsockname()[0]; s.close()
+import ipaddress
+if not ipaddress.ip_address(IP).is_private or IP.startswith("192.0.0."):
+    IP = "127.0.0.1"   # no home LAN (an IPv6-only hotspot gives 192.0.0.2): the viewers are on this computer
 ok = True
 def check(name, cond, detail=""):
     global ok

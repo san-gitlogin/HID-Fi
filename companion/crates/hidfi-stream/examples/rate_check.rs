@@ -26,6 +26,10 @@ fn run(enc: &mut dyn Encoder, src: &mut Pattern, rates: &[u32]) -> Vec<(u32, f64
     // RATE_JITTER=1: the target moves +-15% every 200 ms, as the app's does
     // when a link estimate moves (it re-sets the encoder on each >10% change).
     let jitter = std::env::var("RATE_JITTER").is_ok_and(|v| v == "1");
+    // RATE_KEYS=1: a keyframe asked for every second, as viewers joining or
+    // losing packets do. RATE_TS=1: frame times as uneven as a busy capture's.
+    let keys_often = std::env::var("RATE_KEYS").is_ok_and(|v| v == "1");
+    let uneven = std::env::var("RATE_TS").is_ok_and(|v| v == "1");
     for &bps in rates {
         enc.set_bitrate(bps);
         let (mut bytes, mut made, mut keys) = (0usize, 0u32, 0u32);
@@ -40,10 +44,18 @@ fn run(enc: &mut dyn Encoder, src: &mut Pattern, rates: &[u32]) -> Vec<(u32, f64
             }
             let mut got = None;
             src.grab(true, &mut |f: &Frame| {
-                got = Some(enc.encode(f, pts, i == 0 && pts == 0));
+                got = Some(enc.encode(
+                    f,
+                    pts,
+                    (i == 0 && pts == 0) || (keys_often && i % FPS == FPS - 1),
+                ));
             })
             .expect("pattern");
-            pts += 1000 / FPS as u64;
+            pts += if uneven {
+                [20, 45, 33, 60, 15, 27][i as usize % 6]
+            } else {
+                1000 / FPS as u64
+            };
             if let Some(Ok(Some(e))) = got {
                 bytes += e.data.len();
                 made += 1;
