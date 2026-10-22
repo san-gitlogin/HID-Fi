@@ -849,7 +849,11 @@ fn run<S, E>(
                     }
                     let bps = rates.get(&(*d, *t)).copied().unwrap_or(0);
                     let rate = lane_fps(bps, fps).min(lane.fps_cap.get(fps));
-                    by_display.entry(*d).or_default()[*t] = Some((lane.out_bps, rate));
+                    // An encoder far over its target is not telling what the
+                    // content costs (Windows ran a quarter-size stream at 4.6x):
+                    // trust at most 1.5x the target.
+                    let out = lane.out_bps.min(bps.max(MIN_BITRATE).saturating_mul(3) / 2);
+                    by_display.entry(*d).or_default()[*t] = Some((out, rate));
                 }
                 for (d, l) in by_display {
                     let before = need.get(&d).copied().unwrap_or(0);

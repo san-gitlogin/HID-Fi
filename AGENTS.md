@@ -723,6 +723,11 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   dips without loss are held (`Steady`), real loss is followed at once. The
   WebRTC library is a patched copy in `companion/vendor/str0m` - read its
   `PATCH.md` before touching it or bumping str0m.
+- **Windows without a Windows PC:** `companion/tests/windows/README.md` - build
+  the `.exe` on the Mac (`build.sh`, never into an exFAT folder) and run it in a
+  Windows 11 VM (`vm.sh`). GitHub's runners have Visual C++ installed and no
+  real display; the VM found two release bugs they could not (a missing C
+  runtime on a clean Windows, and an encoder ignoring its bitrate at 1080p).
 - **Judge streaming changes with `companion/tests/overload.py`** (six viewers,
   two monitors, a swinging link, a stalling device, a rejoining viewer, a link
   that drops, jittery WiFi measured from a real home network, light and busy
