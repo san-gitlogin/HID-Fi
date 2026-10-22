@@ -16,6 +16,14 @@ What it found that CI on GitHub's Windows runners never did:
 - **At 1920x1080 the Windows encoder ignored its bitrate**: 27-37 Mbit/s for
   busy content whatever it was asked (`examples/rate_check`). The rate control
   mode has to be set before the output type. CI now runs `rate_check --check`.
+- **...and lost rate control for good when its target moved often** (as the app's
+  does with a WiFi estimate): its rate buffer was smaller than one busy 1080p
+  frame. `RATE_JITTER=1 rate_check --check` covers it; the buffer has a floor.
+- **One encoding thread did every monitor**: with software encoding, two
+  monitors shared one core. Each watched display now has its own thread.
+- **The test streamer crashed when started over SSH** (Rust aborts on an
+  asynchronous stdin; found from the crash offset and the PDB): tests now give
+  it its own stdin.
 - **Windows asks for the firewall again on a Public network**, which is what
   Windows calls a network it has just joined (`docs/COMPANION.md`).
 
