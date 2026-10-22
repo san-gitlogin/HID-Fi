@@ -52,7 +52,10 @@ fn open_dashboard(handle: &Handle, url: &str) {
             .map(|b| b.mac.clone())
     };
     match o {
-        Some(o) => open(&o.page_for(opener::candidates(url, mac.as_deref()))),
+        Some(o) => open(&o.page_for(
+            opener::candidates(url, mac.as_deref()),
+            hidfi_companion::browser::default_browser(),
+        )),
         None => open(&format!("{url}/#screen")),
     }
 }

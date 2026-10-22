@@ -29,7 +29,14 @@ const KEEP: usize = 8;
 pub struct Opener {
     port: u16,
     token: String,
-    pages: Arc<Mutex<Vec<Vec<String>>>>,
+    pages: Arc<Mutex<Vec<Page>>>,
+}
+
+/// One "Open the dashboard": where to look, and the browser it opened in.
+#[derive(Clone)]
+struct Page {
+    candidates: Vec<String>,
+    browser: Option<String>,
 }
 
 impl Opener {
@@ -41,7 +48,7 @@ impl Opener {
         let mut t = [0u8; 16];
         getrandom::fill(&mut t).expect("OS randomness");
         let token = hex::encode(t);
-        let pages: Arc<Mutex<Vec<Vec<String>>>> = Arc::default();
+        let pages: Arc<Mutex<Vec<Page>>> = Arc::default();
         let (tk, pg) = (token.clone(), pages.clone());
         let open_settings: Arc<dyn Fn() + Send + Sync> = Arc::from(open_settings);
         std::thread::Builder::new()
@@ -58,9 +65,14 @@ impl Opener {
     }
 
     /// The page to open for these addresses of one board, best first.
-    pub fn page_for(&self, candidates: Vec<String>) -> String {
+    /// `browser`: the default browser's name, as the OS tells this app (see
+    /// browser.rs) - the page's user agent cannot tell Arc from Chrome.
+    pub fn page_for(&self, candidates: Vec<String>, browser: Option<String>) -> String {
         let mut p = self.pages.lock().unwrap_or_else(|e| e.into_inner());
-        p.push(candidates);
+        p.push(Page {
+            candidates,
+            browser,
+        });
         if p.len() > KEEP {
             p.remove(0);
         }
@@ -88,7 +100,7 @@ fn serve(
     conn: TcpStream,
     port: u16,
     token: &str,
-    pages: &Mutex<Vec<Vec<String>>>,
+    pages: &Mutex<Vec<Page>>,
     open_settings: &(dyn Fn() + Send + Sync),
 ) -> std::io::Result<()> {
     conn.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -132,7 +144,7 @@ fn route(
     path: &str,
     ok_host: bool,
     token: &str,
-    pages: &Mutex<Vec<Vec<String>>>,
+    pages: &Mutex<Vec<Page>>,
     open_settings: &(dyn Fn() + Send + Sync),
 ) -> Reply {
     let nf = ("404 Not Found", "text/plain", "Not found".to_string());
@@ -155,7 +167,11 @@ fn route(
                 .get(n)
                 .cloned();
             match c {
-                Some(c) => ("200 OK", "text/html; charset=utf-8", page(&c, os())),
+                Some(c) => (
+                    "200 OK",
+                    "text/html; charset=utf-8",
+                    page(&c.candidates, os(), c.browser.as_deref()),
+                ),
                 None => nf,
             }
         }
@@ -175,9 +191,10 @@ fn os() -> &'static str {
 
 /// The page. `candidates` are http:// URLs the app built itself (a `.local`
 /// name from the MAC, an address it reached); JSON-encoded into the script.
-pub fn page(candidates: &[String], os: &str) -> String {
-    let list = serde_json::to_string(candidates).unwrap_or_else(|_| "[]".into());
-    PAGE.replace("@CANDIDATES@", &list.replace("</", "<\\/"))
+pub fn page(candidates: &[String], os: &str, browser: Option<&str>) -> String {
+    let js = |v: serde_json::Value| v.to_string().replace("</", "<\\/");
+    PAGE.replace("@CANDIDATES@", &js(serde_json::json!(candidates)))
+        .replace("@BROWSER@", &js(serde_json::json!(browser)))
         .replace("@OS@", os)
 }
 
@@ -208,6 +225,8 @@ code{background:#16202d;padding:1px 6px;border-radius:6px;color:var(--fg)}
 <li>Open <b>System Settings, Privacy &amp; Security, Local Network</b> (the button below goes there).</li>
 <li>Switch on <b id="who2">your browser</b>.</li>
 <li>Choose Try again. Still not? Quit the browser, open it again, and choose Open the dashboard in HID-Fi Companion once more.</li></ol></div>
+<div id="safari" hidden><p>macOS lets Safari on the local network without asking, so something else is in the way:
+a VPN, or a firewall or security app. Is this Mac on the same WiFi as the board?</p></div>
 <div id="win" hidden><p>Is a VPN or a security app on, or is this browser set to use a proxy? Those can keep a browser off the local network.
 Windows itself does not block it.</p></div>
 <div id="lin" hidden><p>Is a VPN, a proxy, or a browser sandbox (Flatpak, Snap) in the way? Those can keep a browser off the local network.</p></div>
@@ -215,11 +234,17 @@ Windows itself does not block it.</p></div>
 <div class="row"><button class="pri" id="again">Try again</button><button id="settings" hidden>Open Local Network settings</button></div>
 </div></main>
 <script>
-const C=@CANDIDATES@, OS="@OS@";
+const C=@CANDIDATES@, OS="@OS@", DEF=@BROWSER@;
+// Which browser this is. The app says which one it opened (the default);
+// the user agent wins only where it is unmistakable - someone who pasted the
+// link into another browser. Arc, Vivaldi and Chromium all claim "Chrome".
+const OWN_UA=['Brave','Microsoft Edge','Opera','Firefox'], WEBKIT=['Safari','Orion','DuckDuckGo'];
 function who(){const u=navigator.userAgent;
   if(navigator.brave)return 'Brave';if(/Edg\//.test(u))return 'Microsoft Edge';if(/OPR\//.test(u))return 'Opera';
-  if(/Arc\//.test(u))return 'Arc';if(/Vivaldi/.test(u))return 'Vivaldi';if(/Firefox\//.test(u))return 'Firefox';
-  if(/Chrome\//.test(u))return 'Google Chrome';if(/Safari\//.test(u))return 'Safari';return 'your browser';}
+  if(/Firefox\//.test(u))return 'Firefox';
+  if(/Chrome\//.test(u))return DEF&&!OWN_UA.includes(DEF)&&!WEBKIT.includes(DEF)?DEF:'Google Chrome';
+  if(/Safari\//.test(u))return DEF&&WEBKIT.includes(DEF)?DEF:'Safari';
+  return DEF||'your browser';}
 function probe(u,ms){return new Promise(res=>{const c=new AbortController();const t=setTimeout(()=>{c.abort();res(false)},ms);
   fetch(u+'/api/status',{mode:'no-cors',cache:'no-store',signal:c.signal}).then(()=>{clearTimeout(t);res(true)},()=>{clearTimeout(t);res(false)});});}
 async function go(){
@@ -230,8 +255,10 @@ async function go(){
   const i=ok.indexOf(true);
   if(i>=0){location.replace(C[i]+'/#screen');return;}
   const b=who();document.getElementById('who').textContent=b;document.getElementById('who2').textContent=b;
-  document.getElementById(OS==='mac'?'mac':OS==='windows'?'win':'lin').hidden=false;
-  document.getElementById('settings').hidden=OS!=='mac';
+  // Safari is never behind macOS's per-app switch: pointing there would mislead.
+  const safari=OS==='mac'&&b==='Safari';
+  document.getElementById(safari?'safari':OS==='mac'?'mac':OS==='windows'?'win':'lin').hidden=false;
+  document.getElementById('settings').hidden=OS!=='mac'||safari;
   document.getElementById('addrs').innerHTML=C.map(u=>'<code>'+u.replace(/[<>&"]/g,'')+'</code>').join(' or ');
   document.getElementById('wait').hidden=true;document.getElementById('fail').hidden=false;
 }
@@ -281,7 +308,7 @@ mod tests {
             p2.fetch_add(1, Ordering::SeqCst);
         }))
         .unwrap();
-        let url = o.page_for(vec!["http://192.168.0.101".into()]);
+        let url = o.page_for(vec!["http://192.168.0.101".into()], Some("Arc".into()));
         let path = url
             .split_once(&format!(":{}", o.port))
             .unwrap()
@@ -291,6 +318,7 @@ mod tests {
         let (code, body) = get(o.port, &path, &host, "GET");
         assert_eq!(code, 200);
         assert!(body.contains(r#"const C=["http://192.168.0.101"]"#));
+        assert!(body.contains(r#"DEF="Arc";"#));
         // A site that rebinds its name to 127.0.0.1 sends its own Host.
         assert_eq!(
             get(o.port, &path, &format!("evil.example:{}", o.port), "GET").0,
@@ -312,7 +340,12 @@ mod tests {
 
     #[test]
     fn an_address_cannot_break_out_of_the_script() {
-        let p = page(&["http://x</script><script>alert(1)//".into()], "mac");
+        let p = page(
+            &["http://x</script><script>alert(1)//".into()],
+            "mac",
+            Some("</script>"),
+        );
         assert!(!p.contains("</script><script>alert"));
+        assert!(!p.contains(r#"DEF="</script>""#));
     }
 }

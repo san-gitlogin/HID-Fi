@@ -36,8 +36,9 @@ def board(mac):
     return p, f"http://127.0.0.1:{int(p.stdout.readline())}"
 
 
-def opener(*urls):
-    p = subprocess.Popen([EX, *urls], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+def opener(*urls, browser=None):
+    env = dict(os.environ, **({"OPENER_BROWSER": browser} if browser else {}))
+    p = subprocess.Popen([EX, *urls], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
     return p, p.stdout.readline().strip()
 
 
@@ -72,6 +73,32 @@ try:
             line = o.stdout.readline().strip()
             check("...and its button has the app open the settings page", line == "settings", line)
         check("...and lists the addresses for another browser", "127.0.0.1:9" in text)
+
+        # Which browser it names. Arc, Vivaldi and Chromium all say "Chrome" in
+        # their user agent: the app tells the page which browser it opened.
+        def named(default, ua=None):
+            o, page = opener(DEAD, browser=default); procs.append(o)
+            ctx = br.new_context(user_agent=ua) if ua else br.new_context()
+            p = ctx.new_page(); p.goto(page)
+            p.wait_for_selector("#fail:not([hidden])", timeout=10000)
+            r = (p.inner_text("#who"), p.is_visible("#settings"), p.inner_text("#fail"))
+            ctx.close()
+            return r
+        w, _, _ = named("Arc")
+        check("default browser Arc: the page says Arc, not the Chrome its user agent claims", w == "Arc", w)
+        w, _, _ = named("Firefox")
+        check("link pasted into Chrome while Firefox is the default: it says Google Chrome", w == "Google Chrome", w)
+        if sys.platform == "darwin":
+            safari_ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+                         "(KHTML, like Gecko) Version/18.0 Safari/605.1.15")
+            w, btn, text = named("Safari", safari_ua)
+            check("Safari: not sent to a switch macOS does not give it", w == "Safari" and not btn
+                  and "without asking" in text and "Switch on" not in text, text[:120])
+        if sys.platform == "darwin":       # a fresh CI Windows or Linux may have no default set
+            o, page = opener(DEAD, browser="auto"); procs.append(o)
+            p = br.new_page(); p.goto(page); p.wait_for_selector("#fail:not([hidden])", timeout=10000)
+            check("this computer's default browser, read from the OS", p.inner_text("#who") not in ("", "your browser"),
+                  p.inner_text("#who"))
         br.close()
 finally:
     for p in procs:
