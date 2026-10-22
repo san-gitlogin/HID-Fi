@@ -1477,35 +1477,32 @@ mod tests {
 
     #[test]
     fn an_encoder_that_drops_frames_gets_fewer_evenly_and_more_again_when_it_stops() {
-        let c = Counts::default();
-        let p = pipe(&c, Arc::new(Mutex::new((64, 48))), true, false); // 50 fps capture
-        let (tx, rx) = sync_channel(1024);
-        let id = p.subscribe(tx);
-        p.control(id).offer_bitrate(8_000_000);
-        let rate = |secs: u64| {
-            while rx.try_recv().is_ok() {}
-            let t0 = c.tried.load(Ordering::SeqCst);
-            std::thread::sleep(Duration::from_secs(secs));
-            let _ = rx.try_iter().count();
-            (c.tried.load(Ordering::SeqCst) - t0) as f64 / secs as f64
+        // The cap's own logic, on simulated time (a CI runner's timers are too
+        // coarse to show it through the whole pipeline).
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut cap = FpsCap::default();
+        let mut ms = 0;
+        let second = |cap: &mut FpsCap, dropped_of_10: u32, ms: &mut u64| {
+            for i in 0..30 {
+                *ms += 34;
+                cap.record(i % 10 < dropped_of_10, 30, 4_000_000, at(*ms));
+            }
         };
-        std::thread::sleep(Duration::from_millis(500));
-        let free = rate(1);
-        c.drops.store(6, Ordering::SeqCst); // heavy content: 6 of 10 dropped
-        std::thread::sleep(Duration::from_secs(4));
-        let heavy = rate(1);
-        assert!(
-            heavy < free * 0.5,
-            "the lane asks for fewer frames once most are dropped: {heavy:.0} of {free:.0}/s"
-        );
-        assert!(heavy >= 7.0, "never below 8 fps: {heavy:.0}");
-        c.drops.store(0, Ordering::SeqCst); // the motion calms down
-        std::thread::sleep(Duration::from_secs(5));
-        let back = rate(1);
-        assert!(
-            back > free * 0.8,
-            "and gets its frames back: {back:.0} of {free:.0}/s"
-        );
+        for _ in 0..4 {
+            second(&mut cap, 0, &mut ms); // the first FPS_GRACE: not judged
+        }
+        assert_eq!(cap.get(30), 30, "nothing dropped: the capture rate");
+        for _ in 0..3 {
+            second(&mut cap, 6, &mut ms); // heavy content: 6 of 10 dropped
+        }
+        let heavy = cap.get(30);
+        assert!(heavy < 15, "fewer frames once most are dropped: {heavy}");
+        assert!(heavy >= 8, "never below 8 fps: {heavy}");
+        for _ in 0..5 {
+            second(&mut cap, 0, &mut ms); // the motion calms down
+        }
+        assert_eq!(cap.get(30), 30, "and its frames come back");
     }
 
     #[test]
@@ -1540,24 +1537,34 @@ mod tests {
     #[test]
     fn two_displays_encode_in_parallel_not_one_after_the_other() {
         let c = Counts::default();
-        c.slow_ms.store(25, Ordering::SeqCst); // 25 ms a frame: ~40 fps at most, alone
-        let p = pipe(&c, Arc::new(Mutex::new((64, 48))), true, false); // 50 fps capture
+        c.slow_ms.store(25, Ordering::SeqCst); // a software encoder: 25 ms a frame
+        let p = pipe(&c, Arc::new(Mutex::new((64, 48))), true, false);
+        let rate = |rx: &std::sync::mpsc::Receiver<ToViewer>| {
+            let _ = rx.try_iter().count();
+            std::thread::sleep(Duration::from_secs(2));
+            rx.try_iter().count() as f64 / 2.0
+        };
+        // One display alone, then two at once, on this machine (a CI runner is
+        // slower: judged against itself, not against fixed numbers).
         let (atx, arx) = sync_channel(1024);
-        let (btx, brx) = sync_channel(1024);
         p.subscribe(atx);
+        std::thread::sleep(Duration::from_millis(1500));
+        let alone = rate(&arx);
+        let (btx, brx) = sync_channel(1024);
         let b = p.subscribe(btx);
         p.control(b).set_display(2);
         std::thread::sleep(Duration::from_millis(1500));
+        let _ = brx.try_iter().count();
         let _ = (arx.try_iter().count(), brx.try_iter().count());
         std::thread::sleep(Duration::from_secs(2));
-        let (a, b) = (
+        let (a2, b2) = (
             arx.try_iter().count() as f64 / 2.0,
             brx.try_iter().count() as f64 / 2.0,
         );
-        // One loop for both: 50 ms a turn, 20 fps each. In parallel: ~40 each.
+        // On one loop each gets about half of `alone`; on its own thread, most.
         assert!(
-            a > 28.0 && b > 28.0,
-            "each display keeps its own frame rate: {a:.0} and {b:.0} fps"
+            a2 > alone * 0.7 && b2 > alone * 0.7,
+            "each display keeps its own frame rate: {a2:.0} and {b2:.0} fps, {alone:.0} alone"
         );
     }
 

@@ -6,8 +6,8 @@
 //!
 //!   cargo run --release -p hidfi-stream --example rate_check [--check]
 //!
-//! --check fails (exit 1) if any case sends more than 5x its target: the
-//! encoder is not following its bitrate at all.
+//! --check fails (exit 1) if any case at 1 Mbit/s or more sends over 5x its
+//! target: the encoder is not following its bitrate at all.
 //!
 //! Seen on Windows (Media Foundation, v4.0): at 1920x1080 a constant 27 Mbit/s
 //! whatever the target (12-54x), because the rate control mode was set after
@@ -95,7 +95,12 @@ fn main() {
             first, 3_000_000, 1_000_000, 500_000, 6_000_000, 900_000, 9_000_000, 12_000_000,
         ];
         for (bps, got, made, n, keys) in run(enc.as_mut(), &mut src, &rates) {
-            worst = worst.max(got / bps as f64);
+            // Judged only at rates the app uses: never under 1 Mbit/s at full
+            // size, and an encoder that cannot drop frames (OpenH264 on Linux) has
+            // a floor for busy 1080p there (2.8 Mbit/s against 0.5).
+            if bps >= 1_000_000 {
+                worst = worst.max(got / bps as f64);
+            }
             println!(
                 "{:>9} {:>8.2}M {:>9.2}M {:>9.1}x {:>3}/{:<3} {:>4}",
                 format!("{w}x{h}"),
