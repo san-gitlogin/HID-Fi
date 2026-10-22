@@ -12,6 +12,8 @@ import pytest
 from support.board_sim import BoardSim
 from support import companion_sim as cs
 
+pytestmark = pytest.mark.unit
+
 VECTORS = json.loads((pathlib.Path(__file__).resolve().parents[2] / "companion" / "vectors" / "pairing_v1.json").read_text())
 
 
@@ -220,6 +222,31 @@ def test_a_pending_request_expires(board):
     board.advance(cs.PENDING_S + 1)
     assert board.status()["comp_pending"] == 0
     assert ws(board, cmd="companion_pair", id=app.id)["reply"] == "not_found"
+
+
+def test_a_waiting_request_stays_while_its_computer_keeps_asking(board):
+    # Seen live: plugged in at 20:16, request gone at 20:18, dashboard opened at
+    # 20:32 - the computer never showed. The app polls; that keeps it.
+    app = cs.FakeApp(board.comp)
+    app.hello()
+    for _ in range(4):
+        board.advance(cs.PENDING_S - 10)
+        assert app._call(op="state", id=app.id)[1]["state"] == "pending"
+    assert [p["id"] for p in ws(board, cmd="companion_list")["pending"]] == [app.id]
+    # Another address polling with its id does not keep it.
+    other = cs.FakeApp(board.comp, ip="192.168.1.99")
+    board.advance(cs.PENDING_S - 10)
+    other._call(op="state", id=app.id)
+    board.advance(20)
+    assert board.status()["comp_pending"] == 0
+
+
+def test_not_now_stays_gone_while_the_computer_polls(board):
+    app = cs.FakeApp(board.comp)
+    app.hello()
+    ws(board, cmd="companion_unpair", id=app.id)       # the dashboard's "Not now"
+    assert app._call(op="state", id=app.id)[1]["state"] == "none"
+    assert board.status()["comp_pending"] == 0
 
 
 def test_rate_limit_per_address(board):

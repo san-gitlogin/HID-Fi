@@ -165,6 +165,9 @@ class CompanionBoard:
         if op == "state":
             if not hex_ok(b.get("id"), 16):
                 return self._refuse(400, "bad_request", "Malformed id")
+            p = self._find_pending(b["id"])
+            if p and p["phase"] == "pending" and p["ip"] == ip:
+                p["at"] = self._now()          # still asking: a waiting request stays
             return self._state(b["id"])
         if op == "reveal":
             return self._reveal(b)

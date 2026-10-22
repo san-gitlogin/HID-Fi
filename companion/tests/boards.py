@@ -10,7 +10,8 @@ per computer, and re-pairing one board threw the other's pairing away.
 
   1. Board B was paired with another computer (now off). Plugged in here next
      to board A, B's dashboard lists the old computer AND this one, asking to
-     pair; so does A's.
+     pair; so does A's - and still does long after the board's request expiry,
+     because this computer keeps asking.
   2. Both pair; a viewer from EITHER dashboard gets the screen.
   3. B unplugged: B's viewer ends, B's new viewers are refused, A keeps going.
   4. B plugged back: online again with no new pairing.
@@ -50,10 +51,13 @@ def check(name, cond, detail=""):
 
 class Board:
     """A board model on its own port, with its own MAC."""
-    def __init__(self, mac):
+    def __init__(self, mac, pending_s=None):
         self.mac = mac
+        env = dict(os.environ, HOST=IP, MAC=mac)
+        if pending_s:
+            env["PENDING_S"] = str(pending_s)
         self.p = subprocess.Popen([sys.executable, str(ROOT / "tests" / "model_board.py"), "4826"],
-                                  env=dict(os.environ, HOST=IP, MAC=mac), stdout=subprocess.PIPE, text=True)
+                                  env=env, stdout=subprocess.PIPE, text=True)
         self.url = f"http://{IP}:{int(self.p.stdout.readline())}"
 
     def dash(self, **cmd):
@@ -87,6 +91,12 @@ class App:
             if pred(self.last):
                 return self.last
         raise SystemExit(f"FAIL waiting for {what}; last view: {self.last}")
+
+    def latest(self):
+        """The newest view, skipping the ones queued since the last look."""
+        while not self.lines.empty():
+            self.last = self.lines.get()
+        return self.last
 
     def board(self, mac):
         m = mac.replace(":", "")
@@ -125,7 +135,9 @@ class Page(BaseHTTPRequestHandler):
 
 
 web = ThreadingHTTPServer((IP, 0), Page); threading.Thread(target=web.serve_forever, daemon=True).start()
-A, B = Board(MAC_A), Board(MAC_B)
+# Board A forgets a request 6 s after its computer stops asking (the real board:
+# 2 min), so the test can wait well past that before anyone looks.
+A, B = Board(MAC_A, pending_s=6), Board(MAC_B)
 apps = []
 try:
     # Board B, before: paired with another computer, which is now switched off.
@@ -147,6 +159,14 @@ try:
           "Old Laptop" in names_b and any(p["name"] == "System Test PC" for p in lb.get("pending", [])), str(lb))
     check("board A's dashboard lists this computer, asking to pair",
           any(p["name"] == "System Test PC" for p in A.dash(cmd="companion_list").get("pending", [])))
+    # Seen live: plugged in at 20:16, the request expired at 20:18, the
+    # dashboard was opened at 20:32 and this computer was not on it. A request
+    # stays while its computer keeps asking; nobody has to be quick.
+    time.sleep(15)
+    app.latest()
+    check("15 s later, past board A's 6 s expiry, A still lists this computer asking to pair",
+          any(p["name"] == "System Test PC" for p in A.dash(cmd="companion_list").get("pending", []))
+          and "WaitingForApproval" in str((app.board(MAC_A) or {}).get("session")), str(app.board(MAC_A)))
 
     # 2. Pair both; watch through each board's ticket.
     pc_a, pa = pair(app, A, "System Test PC")

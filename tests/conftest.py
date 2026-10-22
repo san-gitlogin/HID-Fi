@@ -73,6 +73,13 @@ def pytest_collection_modifyitems(config, items):
         "build": _have_cli(),
         "unit": _have_cxx(),
     }
+    # A test with no tier is never selected by run.py (it runs `-m <tiers>`):
+    # unit/test_companion.py's 36 pairing tests and unit/test_host_detect.py
+    # sat outside every run that way until v4.0.2. Refuse, loudly.
+    untiered = sorted({i.nodeid.split("::")[0] for i in items
+                       if not {m.name for m in i.iter_markers()} & set(TIER_ORDER)})
+    if untiered:
+        raise pytest.UsageError("tests with no tier marker (add pytestmark = pytest.mark.<tier>): " + ", ".join(untiered))
     for item in items:
         # Real markers only - item.keywords also holds parameter ids, so a test
         # parametrized with "linux" would be mistaken for a Linux-only test.

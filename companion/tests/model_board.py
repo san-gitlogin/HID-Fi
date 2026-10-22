@@ -21,6 +21,11 @@ from support.board_sim import BoardSim  # noqa: E402
 
 import os  # noqa: E402
 # MAC=...: a second board (a computer can have two plugged in).
+# PENDING_S: a short pairing-request expiry, so a test can show a waiting
+# request outlives it while the app keeps asking (the board's is 2 minutes).
+if os.environ.get("PENDING_S"):
+    from support import companion_sim as _cs  # noqa: E402
+    _cs.PENDING_S = float(os.environ["PENDING_S"])
 sim = BoardSim(pin=sys.argv[1] if len(sys.argv) > 1 else "4826", mac=os.environ.get("MAC", "B8:1F:3F:DA:1A:2C"))
 lock = threading.Lock()
 

@@ -27,7 +27,7 @@
 #define COMP_PENDING_MAX  4
 #define COMP_NAME_MAX     32
 #define COMP_BODY_MAX     768
-#define COMP_PENDING_MS   120000UL   // an unanswered pairing request is forgotten after 2 min
+#define COMP_PENDING_MS   120000UL   // an unanswered pairing request is forgotten 2 min after its computer stops asking
 #define COMP_ONLINE_MS    60000UL    // a computer counts as online for 60 s after a heartbeat
 #define COMP_CHAL_MS      30000UL
 #define COMP_CODE_TRIES   3
@@ -370,8 +370,15 @@ void handleCompanionHttp() {
     if      (!strcmp(op, "hello"))  compHello(in, ip);
     else if (!strcmp(op, "state")) {
         uint8_t id[16];
-        if (!comp_hex_parse(in["id"] | "", id, 16)) compRefuse(400, "bad_request", "Malformed id");
-        else compReplyState(id);
+        if (!comp_hex_parse(in["id"] | "", id, 16)) { compRefuse(400, "bad_request", "Malformed id"); return; }
+        // A request waiting for a person stays while its computer keeps asking
+        // (the app polls every second). Seen live: it expired 2 min after the
+        // first ask, before anyone looked at a dashboard, and was never shown.
+        // It goes when the app stops asking, or on "Not now"; the code steps
+        // after approval keep their fixed timer.
+        int pi = compFindPending(id);
+        if (pi >= 0 && compPending[pi].phase == CP_PENDING && compPending[pi].ip == ip) compPending[pi].at = millis();
+        compReplyState(id);
     }
     else if (!strcmp(op, "reveal")) compReveal(in);
     else if (!strcmp(op, "chal"))   compChal(in);

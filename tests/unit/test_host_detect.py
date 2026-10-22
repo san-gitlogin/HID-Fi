@@ -12,6 +12,8 @@ import tempfile
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 HEADER = pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "host_detect.h"
 CXX = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
 
