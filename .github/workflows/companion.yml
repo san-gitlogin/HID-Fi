@@ -69,6 +69,7 @@ jobs:
         if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM (companion/tests/linux/run.sh covers it)
         run: python tests/system.py
       - name: Boards moving between computers, two boards on one computer
+        if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM
         run: python tests/boards.py
       - name: Real X11 screen capture + encode (virtual display)
         if: runner.os == 'Linux'
