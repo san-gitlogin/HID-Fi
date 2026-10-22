@@ -223,8 +223,10 @@ code{background:#16202d;padding:1px 6px;border-radius:6px;color:var(--fg)}
 <p>HID-Fi Companion reaches the board on your network, so the board is fine. <b id="who">This browser</b> is being kept off the local network.</p>
 <div id="mac" hidden><p>macOS gives every app its own switch for this:</p><ol>
 <li>Open <b>System Settings, Privacy &amp; Security, Local Network</b> (the button below goes there).</li>
-<li>Switch on <b id="who2">your browser</b>.</li>
-<li>Choose Try again. Still not? Quit the browser, open it again, and choose Open the dashboard in HID-Fi Companion once more.</li></ol></div>
+<li>Switch on <b id="who2">your browser</b>. Listed more than once, or already on? Switch each one off and on
+again: macOS adds an entry each time a browser updates itself, and can keep the old setting for the copy that runs.</li>
+<li><b>Quit the browser completely</b> (<b>Cmd+Q</b>, not just closing the window) and open it again - macOS
+applies the switch only to a browser started after it. Then choose Open the dashboard in HID-Fi Companion.</li></ol></div>
 <div id="safari" hidden><p>macOS lets Safari on the local network without asking, so something else is in the way:
 a VPN, or a firewall or security app. Is this Mac on the same WiFi as the board?</p></div>
 <div id="win" hidden><p>Is a VPN or a security app on, or is this browser set to use a proxy? Those can keep a browser off the local network.
