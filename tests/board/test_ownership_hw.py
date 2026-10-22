@@ -33,8 +33,9 @@ def _lan(request, board):
 
 
 def _ws(url):
-    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
-    c = websocket.create_connection(url, timeout=5)
+    pytest.importorskip("websocket", reason="pip install websocket-client")
+    from support.board import ws_connect
+    c = ws_connect(url)
     c.settimeout(3)
     return c
 

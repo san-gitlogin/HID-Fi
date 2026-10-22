@@ -24,6 +24,8 @@ import time
 
 import pytest
 
+from support.board import ws_connect
+
 pytestmark = pytest.mark.board
 
 
@@ -58,11 +60,11 @@ def _wait(board, pred, timeout, what):
 
 def _reachable(request, ip):
     """Over the network, not the cable: the dashboard's socket answers."""
-    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
+    pytest.importorskip("websocket", reason="pip install websocket-client")
     end = time.time() + 20
     while time.time() < end:
         try:
-            c = websocket.create_connection(f"ws://{ip}:81/", timeout=4)
+            c = ws_connect(f"ws://{ip}:81/", timeout=4)
             c.send(json.dumps({"cmd": "ping"}))
             m = c.recv()
             c.close()
@@ -162,11 +164,11 @@ def test_the_name_follows_the_board(board, home):
 
 
 def test_network_tests_are_usb_only(board, home, request):
-    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
+    pytest.importorskip("websocket", reason="pip install websocket-client")
     if home.get("auth_set"):
         pytest.skip("needs a board without a PIN to talk to it over the network unsigned")
     url = f"ws://{home['wifi_ip']}:81"           # where it is now, whatever was typed
-    c = websocket.create_connection(url, timeout=5)
+    c = ws_connect(url, timeout=5)
     try:
         c.send(json.dumps({"cmd": "net_fault", "kind": "drop"}))
         r = json.loads(c.recv())

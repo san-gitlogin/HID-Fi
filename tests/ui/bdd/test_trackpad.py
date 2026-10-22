@@ -231,8 +231,9 @@ def _pointer_frames(sim):
 def tap_then_drag(ctx):
     # Inside the double-tap window (450 ms): no scrolling or settling between.
     ui = ctx["ui"]
-    # lastTapAt starts at 0, so in the first 450 ms of a page's life any touch
-    # reads as the second tap of a double tap. No person is that fast; wait it out.
+    # lastTapAt used to start at 0, so a page's first 450 ms paired any tap with
+    # an imaginary first one (fixed in v4.0.2: it starts at -Infinity). The wait
+    # stays so this scenario measures the double tap and nothing else.
     ui.page.wait_for_function("performance.now() > 700")
     x, y = ui._center("#pad")
     ui._touch("touchStart", [(x, y)])

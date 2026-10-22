@@ -550,11 +550,16 @@ phone itself); every other action is unchanged within noise.
 
 Found but not tagged, because no person can hit them:
 
-- The PIN boxes' focus moves on the next tick (`select()` in a timeout), so
-  digits typed within the first few milliseconds after focusing can land in the
-  wrong box. Scenarios wait 120 ms after focusing, as a finger would.
-- `lastTapAt` starts at 0, so in the first 450 ms of a page's life any tap counts
-  as the second tap of a double tap.
+- (Fixed in v4.0.2, kept as a lesson.) The PIN boxes selected themselves on the
+  next tick, and that late `select()` took the focus back - two boxes then
+  handed it to and fro for good, scattering digits. This list called it
+  unreachable by a person; Linux CI hit it in four scenarios despite the 120 ms
+  wait, and a paste or a password manager can too. A test that steps around a
+  defect hides it: fix the defect, and give the scenario that would have caught
+  it (`keys_vault_shortcuts.feature`, typed "at once").
+- (Fixed in v4.0.2.) `lastTapAt` started at 0, the same clock `performance.now()`
+  starts at, so in a page's first 450 ms any tap counted as the second tap of a
+  double tap. It starts at -Infinity now.
 - `txAbs()` is never called. Not a defect: in absolute mode the firmware turns
   relative moves into absolute positions itself. It can go, or stay for a future
   touchscreen-style mode.

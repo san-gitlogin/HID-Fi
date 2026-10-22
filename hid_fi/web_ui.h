@@ -2656,7 +2656,7 @@ let aswBaseX=0,aswBaseY=0;
 const ASW_STEP=56;
 let mode=0,maxPts=0,startX=0,startY=0,fired=false;
 let pinchBase=0,pinchAcc=0;
-let dragging=false,grabLock=false,lastTapAt=0,holdTimer=0,downPt=null,primaryId=-1,dtapArmed=false;
+let dragging=false,grabLock=false,lastTapAt=-Infinity,holdTimer=0,downPt=null,primaryId=-1,dtapArmed=false;
 
 // Tuned to the platform values these gestures have to coexist with:
 //   TAP_MS/TAP_PX  - a tap the OS would accept as a click
@@ -2724,7 +2724,7 @@ pad.addEventListener('pointerdown',e=>{
     // double click, move or keep holding and it is a drag. Wait and see, the way
     // a precision trackpad does - deciding immediately broke double click.
     if(performance.now()-lastTapAt<DTAP_MS){
-      lastTapAt=0;dtapArmed=true;
+      lastTapAt=-Infinity;dtapArmed=true;   // never 0: performance.now() starts there, and a page's first taps would pair up
       clearTimeout(holdTimer);
       holdTimer=setTimeout(()=>{
         if(pts.size===1&&dtapArmed){dtapArmed=false;beginDrag(true);}

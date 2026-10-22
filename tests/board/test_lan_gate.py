@@ -21,6 +21,8 @@ import time
 
 import pytest
 
+from support.board import ws_connect
+
 pytestmark = pytest.mark.board
 
 
@@ -36,9 +38,9 @@ def test_binary_frames_from_the_lan_are_refused_without_a_pin(board, request):
         pytest.skip("the board has an access PIN - the LAN gate only applies without one")
     if not st.get("wifi_connected"):
         pytest.skip("the board is not on a home network")
-    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
+    pytest.importorskip("websocket", reason="pip install websocket-client")
 
-    conn = websocket.create_connection(url, timeout=5)
+    conn = ws_connect(url, timeout=5)
     try:
         # JSON from the LAN without a PIN: refused, and says why (the existing gate).
         conn.send(json.dumps({"cmd": "media", "key": "nope"}))
@@ -63,7 +65,7 @@ def test_binary_frames_from_the_lan_are_refused_without_a_pin(board, request):
     pin = "7316"
     assert board.cmd({"cmd": "set_auth", "token": pin}).get("auth_set") is True
     try:
-        conn = websocket.create_connection(url, timeout=5)
+        conn = ws_connect(url, timeout=5)
         conn.settimeout(2)
         conn.send(json.dumps({"cmd": "auth", "token": pin}))
         authed = False

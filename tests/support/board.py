@@ -176,3 +176,19 @@ def lan_url(url, board):
     if st.get("wifi_connected") and ip and f"//{ip}:" not in url:
         return f"ws://{ip}:81"
     return url
+
+
+def ws_connect(url, timeout=5, wait=20):
+    """A WebSocket to the board, retried while it comes up: opening the COM port
+    resets the board, and the serial tests that run first leave it rejoining
+    WiFi - a WiFi test that connects at once timed out (seen in a full run)."""
+    import time
+    import websocket
+    end = time.time() + wait
+    while True:
+        try:
+            return websocket.create_connection(url, timeout=timeout)
+        except Exception:
+            if time.time() > end:
+                raise
+            time.sleep(1)
