@@ -62,3 +62,10 @@ source zip; `v3.10` onwards also with the firmware zip.
 
 `v4.0` (2026-10-22): the firmware zip and HID-Fi Companion for macOS, Windows and
 Linux (x86-64, ARM64), with one `SHA256SUMS` for all of them.
+
+`v4.0.1` (2026-10-22) and `v4.0.2` (2026-10-23): the same set. v4.0.2 was the
+first release whose `pinned` job (the whole suite on Ubuntu, about 75 minutes)
+passed, with the Linux layout baselines in `tests/golden/`.
+
+Do not name a working branch like a tag (`v4.0.2`): `git push origin v4.0.2`
+then refuses as ambiguous. Push `refs/tags/vX.Y` explicitly if one exists.
