@@ -117,11 +117,8 @@ impl MfEncoder {
                     &CODECAPI_AVEncCommonRateControlMode,
                     &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
                 );
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncCommonMeanBitRate,
-                    &VARIANT::from(cfg.bitrate_bps),
-                );
             }
+            set_rate(c, cfg.bitrate_bps);
         }
         // SAFETY: start streaming on a configured transform.
         unsafe {
@@ -302,18 +299,27 @@ impl Encoder for MfEncoder {
 
     fn set_bitrate(&mut self, bps: u32) {
         if let Some(c) = &self.codec {
-            // SAFETY: documented dynamic property.
-            unsafe {
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncCommonMeanBitRate,
-                    &VARIANT::from(bps.clamp(100_000, 50_000_000)),
-                );
-            }
+            set_rate(c, bps);
         }
     }
 
     fn size(&self) -> (u32, u32) {
         (self.w, self.h)
+    }
+}
+
+/// The rate, as a ceiling and not only an average: with the mean alone the
+/// encoder was seen sending 1.5 - 2.5 times its target, so frames were held back
+/// and each gap cost a keyframe. A half-second buffer bounds every burst, as
+/// DataRateLimits does on macOS.
+fn set_rate(c: &ICodecAPI, bps: u32) {
+    let bps = bps.clamp(100_000, 50_000_000);
+    // SAFETY: documented dynamic codec properties with VT_UI4 values; an encoder
+    // that ignores one still encodes.
+    unsafe {
+        let _ = c.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bps));
+        let _ = c.SetValue(&CODECAPI_AVEncCommonMaxBitRate, &VARIANT::from(bps));
+        let _ = c.SetValue(&CODECAPI_AVEncCommonBufferSize, &VARIANT::from(bps / 2));
     }
 }
 

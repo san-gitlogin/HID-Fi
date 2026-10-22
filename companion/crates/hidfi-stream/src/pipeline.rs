@@ -64,6 +64,9 @@ pub const MIN_BITRATE: u32 = 300_000;
 pub const MAX_BITRATE: u32 = 12_000_000;
 /// Keyframes asked for while streaming: at most one per this, per lane.
 pub const KEY_GAP: Duration = Duration::from_millis(1000);
+/// How long the link estimate must stay across a quality threshold before the
+/// viewer changes quality (each change costs a keyframe).
+pub const TIER_HOLD: Duration = Duration::from_secs(3);
 /// How often the pipeline writes a line to the log while someone watches.
 const STATS_EVERY: Duration = Duration::from_secs(10);
 
@@ -78,6 +81,8 @@ struct Shared1 {
     /// Its latest bandwidth estimate, bit/s; 0 = none yet.
     est: AtomicU32,
     display: AtomicU32,
+    /// Since when the estimate has been across the threshold to the other quality.
+    crossed: Mutex<Option<Instant>>,
 }
 
 struct Viewer {
@@ -143,10 +148,25 @@ impl Control {
     pub fn offer_bitrate(&self, bps: u32) {
         self.s.est.store(bps, Ordering::Relaxed);
         let now = self.tier();
-        let next = match now {
+        let want = match now {
             FULL if bps < DOWN_BPS => HALF,
             HALF if bps > UP_BPS => FULL,
             t => t,
+        };
+        // Only once the estimate has stayed across for TIER_HOLD: a noisy
+        // estimate (seen swinging 0.25 - 13 Mbit/s on one WiFi) would otherwise
+        // switch quality, and send a keyframe, every few seconds.
+        let next = {
+            let mut c = self.s.crossed.lock().unwrap_or_else(|e| e.into_inner());
+            if want == now {
+                *c = None;
+                now
+            } else if c.get_or_insert_with(Instant::now).elapsed() >= TIER_HOLD {
+                *c = None;
+                want
+            } else {
+                now
+            }
         };
         if next != now {
             // The other stream's frames only make sense from its keyframe.
@@ -232,6 +252,7 @@ impl Pipeline {
             tier: AtomicU8::new(HALF as u8),
             est: AtomicU32::new(0),
             display: AtomicU32::new(MAIN),
+            crossed: Mutex::new(None),
         });
         s.viewers.push(Viewer { id, tx, s: v });
         cv.notify_all();
@@ -504,13 +525,21 @@ fn run<S, E>(
                 match err {
                     Some(e) => {
                         cap.failures += 1;
-                        log::warn!("{}: {e}", display_name(d));
+                        // Once, not once a frame (Windows repeated one 40 times a second).
+                        if cap.failures == 1 {
+                            log::warn!("{}: {e} (retrying)", display_name(d));
+                        }
                         for t in 0..TIERS {
                             if let Some(l) = lanes.get_mut(&(d, t)) {
                                 l.enc = None; // start clean next time
                             }
                         }
                         if cap.failures >= 50 {
+                            log::warn!(
+                                "{}: gave up after {} tries: {e}",
+                                display_name(d),
+                                cap.failures
+                            );
                             captures.remove(&d);
                             move_off(&shared, d, "capture or encoding keeps failing");
                         }
@@ -537,6 +566,12 @@ fn run<S, E>(
                         && (v.s.tier.load(Ordering::Relaxed) as usize).min(TIERS - 1) == k.1;
                     if !on {
                         return true;
+                    }
+                    if frame.keyframe {
+                        // The keyframe a join asked for is made: a viewer that could
+                        // not take it waits for the next one, within KEY_GAP, like
+                        // any other. Left set, it forced a keyframe on every frame.
+                        v.s.join.store(false, Ordering::Relaxed);
                     }
                     if !frame.keyframe && v.s.need_key.load(Ordering::Relaxed) {
                         lane.skipped += 1;
@@ -866,6 +901,87 @@ mod tests {
         drop(slow_rx);
     }
 
+    /// Seen on Windows: up to 50 keyframes in 10 s. A viewer that joined (or
+    /// changed quality) while its queue was full kept its "just joined" mark,
+    /// and that mark forced a keyframe on every frame, past KEY_GAP, for every
+    /// viewer of the lane.
+    #[test]
+    fn a_viewer_that_joins_with_a_full_queue_does_not_force_a_keyframe_every_frame() {
+        let c = Counts::default();
+        let p = pipe(&c, Arc::new(Mutex::new((64, 64))), true, false);
+        let (fast_tx, fast_rx) = sync_channel(256);
+        p.subscribe(fast_tx);
+        std::thread::sleep(Duration::from_millis(300));
+        let (slow_tx, slow_rx) = sync_channel(1);
+        let filler = Arc::new(Encoded {
+            data: vec![],
+            keyframe: false,
+        });
+        slow_tx.send(ToViewer::Frame(filler, 0)).unwrap(); // full before its first frame, never read
+        p.subscribe(slow_tx);
+        while fast_rx.try_recv().is_ok() {}
+        let start = Instant::now();
+        let (mut frames, mut keys) = (0, 0);
+        while start.elapsed() < Duration::from_millis(2500) {
+            if let Ok(ToViewer::Frame(f, _)) = fast_rx.recv_timeout(Duration::from_millis(20)) {
+                frames += 1;
+                keys += f.keyframe as usize;
+            }
+        }
+        let secs = start.elapsed().as_secs_f64();
+        assert!(frames > 20, "frames still flow: {frames}");
+        assert!(
+            keys as f64 <= 2.0 + secs,
+            "{keys} keyframes of {frames} in {secs:.1} s: one per KEY_GAP at most"
+        );
+        drop(slow_rx);
+    }
+
+    /// Seen on Windows: the link estimate swung between 0.25 and 13 Mbit/s
+    /// within seconds, and every swing across a threshold switched the viewer's
+    /// quality - each switch a keyframe. A quality change now waits until the
+    /// estimate has stayed on the other side for TIER_HOLD.
+    #[test]
+    fn a_swinging_link_estimate_does_not_flip_the_quality_back_and_forth() {
+        let c = Counts::default();
+        let p = pipe(&c, Arc::new(Mutex::new((64, 64))), true, false);
+        let (tx, rx) = sync_channel(256);
+        let id = p.subscribe(tx);
+        let ctl = p.control(id);
+        let start = Instant::now();
+        let mut flips = 0;
+        let mut last = ctl.tier();
+        let mut i = 0u32;
+        while start.elapsed() < Duration::from_millis(2500) {
+            i += 1;
+            ctl.offer_bitrate(if i.is_multiple_of(2) {
+                13_000_000
+            } else {
+                300_000
+            });
+            if ctl.tier() != last {
+                flips += 1;
+                last = ctl.tier();
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            while rx.try_recv().is_ok() {}
+        }
+        assert_eq!(flips, 0, "a link swinging every 100 ms keeps its quality");
+        // A real change still moves it, after TIER_HOLD.
+        let to = Instant::now() + TIER_HOLD + Duration::from_millis(500);
+        while Instant::now() < to {
+            ctl.offer_bitrate(13_000_000);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(ctl.tier(), FULL, "a link that stays fast gets full size");
+        let to = Instant::now() + TIER_HOLD + Duration::from_millis(500);
+        while Instant::now() < to {
+            ctl.offer_bitrate(300_000);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(ctl.tier(), HALF, "and one that stays slow gets half size");
+    }
+
     #[test]
     fn a_viewer_waiting_for_a_keyframe_gets_no_frames_it_cannot_decode() {
         let c = Counts::default();
@@ -887,8 +1003,14 @@ mod tests {
         let (poor_tx, poor_rx) = sync_channel(256);
         let good = p.subscribe(good_tx);
         let poor = p.subscribe(poor_tx);
-        p.control(good).offer_bitrate(8_000_000);
-        p.control(poor).offer_bitrate(1_000_000);
+        // Each holds its estimate past TIER_HOLD, as a steady link does.
+        let settle = Instant::now() + TIER_HOLD + Duration::from_millis(300);
+        while Instant::now() < settle {
+            p.control(good).offer_bitrate(8_000_000);
+            p.control(poor).offer_bitrate(1_000_000);
+            std::thread::sleep(Duration::from_millis(100));
+            let _ = (good_rx.try_iter().count(), poor_rx.try_iter().count());
+        }
         let (mut g, mut q) = (0, 0);
         let end = Instant::now() + Duration::from_secs(5);
         while (g <= 10 || q < 3) && Instant::now() < end {
@@ -904,9 +1026,12 @@ mod tests {
         // The poor one at 1 Mbit/s runs at 15 fps (lane_fps), the good one at 50.
         assert!(g > 10 && q >= 3, "both get frames: {g} and {q}");
         // The poor link recovers: back to one encoder, which it shares.
-        p.control(poor).offer_bitrate(6_000_000);
-        std::thread::sleep(Duration::from_millis(200));
-        while poor_rx.try_recv().is_ok() {}
+        let settle = Instant::now() + TIER_HOLD + Duration::from_millis(300);
+        while Instant::now() < settle {
+            p.control(poor).offer_bitrate(6_000_000);
+            std::thread::sleep(Duration::from_millis(100));
+            while poor_rx.try_recv().is_ok() {}
+        }
         let ToViewer::Frame(f, _) = poor_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         let _ = f;
         assert_eq!(p.control(poor).tier(), FULL);
@@ -1019,19 +1144,31 @@ mod rate_tests {
         assert_eq!(r.len(), 3, "nothing for a lane nobody watches");
     }
 
+    /// An estimate that stays where it is past TIER_HOLD (the wait itself is
+    /// tested with the real clock in `a_swinging_link_estimate_...`).
+    fn settle(c: &Control, bps: u32) {
+        c.offer_bitrate(bps);
+        if let Some(t) = c.s.crossed.lock().unwrap().as_mut() {
+            *t -= TIER_HOLD;
+        }
+        c.offer_bitrate(bps);
+    }
+
     #[test]
     fn a_viewer_moves_between_qualities_by_its_link_without_flapping() {
         let c = Control { s: Arc::default() };
         assert_eq!(c.tier(), FULL);
         c.offer_bitrate(1_200_000);
+        assert_eq!(c.tier(), FULL, "one low estimate is not a slow link");
+        settle(&c, 1_200_000);
         assert_eq!(c.tier(), HALF);
         assert!(
             c.needs_key(),
             "it starts the half-size stream on a keyframe"
         );
-        c.offer_bitrate(3_500_000);
+        settle(&c, 3_500_000);
         assert_eq!(c.tier(), HALF, "between the thresholds it stays");
-        c.offer_bitrate(5_000_000);
+        settle(&c, 5_000_000);
         assert_eq!(c.tier(), FULL, "a good link again: back to full size");
     }
 }
