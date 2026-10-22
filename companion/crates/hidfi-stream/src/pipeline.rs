@@ -83,6 +83,9 @@ struct Shared1 {
     display: AtomicU32,
     /// Since when the estimate has been across the threshold to the other quality.
     crossed: Mutex<Option<Instant>>,
+    /// Changed quality before: the next change waits TIER_HOLD. The first does
+    /// not - the starting quality was a guess, not a measurement.
+    switched: AtomicBool,
 }
 
 struct Viewer {
@@ -161,7 +164,9 @@ impl Control {
             if want == now {
                 *c = None;
                 now
-            } else if c.get_or_insert_with(Instant::now).elapsed() >= TIER_HOLD {
+            } else if !self.s.switched.swap(true, Ordering::Relaxed)
+                || c.get_or_insert_with(Instant::now).elapsed() >= TIER_HOLD
+            {
                 *c = None;
                 want
             } else {
@@ -253,6 +258,7 @@ impl Pipeline {
             est: AtomicU32::new(0),
             display: AtomicU32::new(MAIN),
             crossed: Mutex::new(None),
+            switched: AtomicBool::new(false),
         });
         s.viewers.push(Viewer { id, tx, s: v });
         cv.notify_all();
@@ -966,7 +972,11 @@ mod tests {
             std::thread::sleep(Duration::from_millis(100));
             while rx.try_recv().is_ok() {}
         }
-        assert_eq!(flips, 0, "a link swinging every 100 ms keeps its quality");
+        // The first estimate may move it once (the start was a guess); no more.
+        assert!(
+            flips <= 1,
+            "a link swinging every 100 ms keeps its quality: {flips} switches"
+        );
         // A real change still moves it, after TIER_HOLD.
         let to = Instant::now() + TIER_HOLD + Duration::from_millis(500);
         while Instant::now() < to {
@@ -1159,15 +1169,19 @@ mod rate_tests {
         let c = Control { s: Arc::default() };
         assert_eq!(c.tier(), FULL);
         c.offer_bitrate(1_200_000);
-        assert_eq!(c.tier(), FULL, "one low estimate is not a slow link");
-        settle(&c, 1_200_000);
-        assert_eq!(c.tier(), HALF);
+        assert_eq!(c.tier(), HALF, "the first measurement decides at once");
         assert!(
             c.needs_key(),
             "it starts the half-size stream on a keyframe"
         );
         settle(&c, 3_500_000);
         assert_eq!(c.tier(), HALF, "between the thresholds it stays");
+        c.offer_bitrate(5_000_000);
+        assert_eq!(
+            c.tier(),
+            HALF,
+            "after that, one good estimate is not a good link"
+        );
         settle(&c, 5_000_000);
         assert_eq!(c.tier(), FULL, "a good link again: back to full size");
     }

@@ -7,6 +7,18 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.0.1 (not released yet)
+
+### Fixed
+
+- **Screen sharing stuttering at 3-4 fps on Windows**, worst with two monitors
+  and several viewers. A viewer that joined or changed quality while busy made
+  every frame a keyframe for everyone on its stream; a noisy WiFi estimate
+  switched quality every few seconds; and the Windows encoder ran up to 2.5x
+  over its bitrate. Now one keyframe a second at most, a quality change only
+  after the link has stayed changed for 3 s, and a hard rate cap on Windows as
+  on macOS.
+
 ## v4.0 - 2026-10-22
 
 The computer's own screen on the dashboard, with the new HID-Fi Companion app
