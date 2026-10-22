@@ -93,6 +93,25 @@ impl MfEncoder {
         let mft: IMFTransform =
             unsafe { CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER) }
                 .map_err(|e| unavailable("H.264 encoder", e))?;
+        // Codec settings before the media types: Microsoft's H.264 encoder reads
+        // the rate control mode (and some others) only at SetOutputType. Set
+        // after, it ignored them at 1080p and ran at a fixed quality - 27
+        // Mbit/s for busy content whatever the target (rate_check, Windows VM).
+        let codec: Option<ICodecAPI> = mft.cast().ok();
+        if let Some(c) = &codec {
+            // Best effort: an encoder that ignores one of these still works.
+            // SAFETY: documented codec properties with matching VARIANT types.
+            unsafe {
+                let _ = c.SetValue(
+                    &CODECAPI_AVEncCommonRateControlMode,
+                    &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
+                );
+                let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
+                let _ = c.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
+                let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(fps * 4));
+            }
+            set_rate(c, cfg.bitrate_bps);
+        }
         // Output first: the encoder decides what input it accepts from it.
         let out = video_type(&MFVideoFormat_H264, (w, h, fps), Some(cfg.bitrate_bps))
             .map_err(|e| unavailable("output type", e))?;
@@ -105,18 +124,12 @@ impl MfEncoder {
             mft.SetInputType(0, &inp, 0)
                 .map_err(|e| unavailable("NV12 input", e))?;
         }
-        let codec: Option<ICodecAPI> = mft.cast().ok();
+        // And again after: some settings only stick on a configured encoder.
         if let Some(c) = &codec {
-            // Best effort: an encoder that ignores one of these still works.
-            // SAFETY: documented codec properties with matching VARIANT types.
+            // SAFETY: as above.
             unsafe {
                 let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
-                let _ = c.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
                 let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(fps * 4));
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncCommonRateControlMode,
-                    &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
-                );
             }
             set_rate(c, cfg.bitrate_bps);
         }

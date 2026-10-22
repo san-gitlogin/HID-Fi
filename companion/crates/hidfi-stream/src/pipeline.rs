@@ -282,6 +282,17 @@ pub fn lane_fps(bps: u32, fps: u32) -> u32 {
     fps.min(cap)
 }
 
+fn note_cap(d: u32, t: usize, changed: Option<(u32, f32)>) {
+    if let Some((cap, ratio)) = changed {
+        log::debug!(
+            "{} {}: frame rate cap {cap} ({:.0}% of frames dropped by the encoder)",
+            display_name(d),
+            ["full", "half", "quarter"][t.min(TIERS - 1)],
+            ratio * 100.0
+        );
+    }
+}
+
 /// A lane's frame rate, from what its encoder manages. An encoder over its
 /// bitrate drops frames itself, at random - jerky motion. When it drops more
 /// than one in five, the lane asks for a third fewer (evenly spaced, each with
@@ -314,15 +325,16 @@ impl FpsCap {
             self.cap = None;
         }
     }
-    fn record(&mut self, dropped: bool, fps: u32, bps: u32, now: Instant) {
+    /// Returns the new cap and the drop share when it changed (for the log).
+    fn record(&mut self, dropped: bool, fps: u32, bps: u32, now: Instant) -> Option<(u32, f32)> {
         if now.duration_since(*self.born.get_or_insert(now)) < FPS_GRACE {
-            return;
+            return None;
         }
         self.tried += 1;
         self.dropped += dropped as u32;
         let since = *self.since.get_or_insert(now);
         if now.duration_since(since) < Duration::from_secs(1) || self.tried < 5 {
-            return;
+            return None;
         }
         let cap = self.get(fps);
         let ratio = self.dropped as f32 / self.tried as f32;
@@ -337,6 +349,7 @@ impl FpsCap {
             cap
         });
         (self.tried, self.dropped, self.since) = (0, 0, Some(now));
+        (self.cap != Some(cap)).then(|| (self.get(fps), ratio))
     }
 }
 
@@ -733,10 +746,12 @@ fn run<S, E>(
                                 }
                                 match e.encode(&frame, pts, key) {
                                     Ok(Some(out)) => {
-                                        lane.fps_cap.record(false, fps, bps, now);
+                                        note_cap(d, t, lane.fps_cap.record(false, fps, bps, now));
                                         produced.push(((d, t), out))
                                     }
-                                    Ok(None) => lane.fps_cap.record(true, fps, bps, now),
+                                    Ok(None) => {
+                                        note_cap(d, t, lane.fps_cap.record(true, fps, bps, now))
+                                    }
                                     Err(e) => err = Some(e.to_string()),
                                 }
                             }

@@ -1,0 +1,10 @@
+# Windows: the C runtime goes into the .exe. Linked dynamically, the app needed
+# Microsoft's Visual C++ runtime (VCRUNTIME140.dll, VCRUNTIME140_1.dll), which a
+# clean Windows does not have: v4.0 showed "VCRUNTIME140_1.dll was not found"
+# and never started (seen in the Windows test VM, companion/tests/windows).
+# CI checks the built .exe needs no such DLL.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

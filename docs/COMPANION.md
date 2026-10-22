@@ -57,8 +57,10 @@ irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package
 Windows asks for administrator approval **once**, to let viewers on your home
 network connect (a firewall rule for Private networks only). The icon appears by
 the clock; Windows may hide it under the **^** arrow - drag it out to keep it visible.
-If you skip the approval, Windows Firewall asks the first time a viewer connects:
-tick **Private networks** and choose **Allow access**.
+If you skip the approval - or Windows calls your WiFi a **Public** network, which
+it does for a network you have just joined - Windows Firewall asks when the app
+starts: choose **Allow**. Better: set your home WiFi to Private (Settings,
+Network & internet, WiFi, your network, **Private network**).
 
 Your WiFi must be set to **Private**: Settings, Network & internet, your WiFi,
 Network profile type, Private.

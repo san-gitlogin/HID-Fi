@@ -77,6 +77,23 @@ jobs:
           DISPLAY=:99 xclock -update 1 -geometry 300x300+700+200 &
           sleep 1
           DISPLAY=:99 cargo run --release -p hidfi-stream --example check_capture
+      - name: The Windows app needs no Visual C++ runtime (a clean Windows has none)
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          # v4.0 linked it dynamically and showed "VCRUNTIME140_1.dll was not
+          # found" on a clean Windows (seen in companion/tests/windows): the C
+          # runtime must be inside the .exe (.cargo/config.toml, +crt-static).
+          import pathlib, re, sys
+          bad = []
+          for exe in ["target/release/hidfi-companion.exe", "target/release/examples/serve.exe"]:
+              data = pathlib.Path(exe).read_bytes()
+              found = sorted({m.decode().lower() for m in re.findall(rb"(?i)(?:vcruntime140[_0-9]*|msvcp140[_0-9]*|api-ms-win-crt-[a-z]+-l1-1-0)\.dll", data)})
+              print(exe, found or "no C runtime DLLs")
+              bad += found
+          sys.exit(1 if bad else 0)
+      - name: The encoder follows its bitrate (every platform; Windows ignored it at 1080p in v4.0)
+        run: cargo run --release -p hidfi-stream --example rate_check -- --check
       - name: Real screen capture + encode (Windows desktop)
         if: runner.os == 'Windows'
         continue-on-error: true   # hosted runners may have no duplicable display; reported, not hidden
