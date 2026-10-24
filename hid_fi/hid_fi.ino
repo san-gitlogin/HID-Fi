@@ -4732,12 +4732,20 @@ void handleMacroList() {
     sendJson(doc);
 }
 
-// Verbs: "key COMBO", "text literal", "delay ms", "click left|right|middle"
+// Verbs: "key COMBO", "text literal", "delay ms", "click left|right|middle", in
+// any case - a phone capitalises the first word ("Text ..."). A line with no verb
+// is typed as it is. Seen live: such lines were skipped without a word, and a
+// macro reported done having typed nothing.
+static bool macroVerb(const String& ln, const char* verb) {
+    size_t n = strlen(verb);
+    return ln.length() > n && strncasecmp(ln.c_str(), verb, n) == 0;
+}
 static void runMacroLine(const String& ln) {
-    if      (ln.startsWith("key "))   pressKeyCombo(ln.substring(4).c_str());
-    else if (ln.startsWith("text "))  typeString(ln.substring(5).c_str());
-    else if (ln.startsWith("delay ")) delay(constrain(ln.substring(6).toInt(), 0, 5000));
-    else if (ln.startsWith("click ")) hidMouseButtons(mapMouseButton(ln.substring(6).c_str()), 2, 1);
+    if      (macroVerb(ln, "key "))   pressKeyCombo(ln.substring(4).c_str());
+    else if (macroVerb(ln, "text "))  typeString(ln.substring(5).c_str());
+    else if (macroVerb(ln, "delay ")) delay(constrain(ln.substring(6).toInt(), 0, 5000));
+    else if (macroVerb(ln, "click ")) hidMouseButtons(mapMouseButton(ln.substring(6).c_str()), 2, 1);
+    else                              typeString(ln.c_str());
 }
 
 void handleMacroRun(const JsonDocument& inDoc) {

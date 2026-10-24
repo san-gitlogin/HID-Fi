@@ -3198,6 +3198,9 @@ function runQuick(q,el){
   else if(q.t==='media')send({cmd:'media',key:q.v});
   else if(q.t==='gesture')send({cmd:'gesture',name:q.v});
   else if(q.t==='cmd')send({cmd:q.v});
+  // Text typed into whatever field has the focus - for a form that refuses
+  // paste and Tab: click the field, tap the tile.
+  else if(q.t==='text')send({cmd:'type',text:q.v});
   buzz(10);
   if(el){
     el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');
@@ -3228,7 +3231,8 @@ function quickEditor(idx){
     '<div class="fld"><label>Icon</label><select id="q_i">'+ICON_CHOICES.map(n=>opt(n,n,n===q.i)).join('')+'</select></div>'+
     '<div class="fld"><label>Type</label><select id="q_t">'+
       opt('key','Keyboard combo',q.t==='key')+opt('media','Media key',q.t==='media')+
-      opt('gesture','Gesture',q.t==='gesture')+opt('cmd','Board command',q.t==='cmd')+'</select></div>'+
+      opt('gesture','Gesture',q.t==='gesture')+opt('cmd','Board command',q.t==='cmd')+
+      opt('text','Type text',q.t==='text')+'</select></div>'+
     '<div class="fld"><label>Value</label><input id="q_v" list="q_presets" value="'+esc(q.v)+'">'+
       '<datalist id="q_presets">'+keyPresets().map(k=>'<option value="'+k+'">').join('')+'</datalist></div>'+
     '<p class="hint">Mic mute and call keys vary by laptop and app. '+(OS==='mac'
@@ -4151,7 +4155,7 @@ function macroEditor(slot){
     sheet('Macro slot '+slot,
       '<div class="fld"><label>Name</label><input id="m_n" value="'+esc(name)+'"></div>'+
       '<div class="fld"><label>Steps, one per line</label><textarea id="m_s" spellcheck="false">'+esc(steps)+'</textarea></div>'+
-      '<p class="hint">Verbs: <b>key</b> COMBO &middot; <b>text</b> literal &middot; <b>delay</b> ms &middot; <b>click</b> left|right|middle</p>'+
+      '<p class="hint">Verbs: <b>key</b> COMBO &middot; <b>text</b> literal &middot; <b>delay</b> ms &middot; <b>click</b> left|right|middle. A line without a verb is typed as it is.</p>'+
       '<div class="row" style="margin-top:14px">'+
         '<button class="btn sm bad" id="m_del">'+ico('trash','ic-sm')+'Delete</button>'+
         '<button class="btn ok" id="m_ok">'+ico('check','ic-sm')+'Save</button></div>',

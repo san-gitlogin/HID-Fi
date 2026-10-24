@@ -120,3 +120,29 @@ def test_over_the_home_network_without_a_pin_they_are_locked_like_any_command():
     sim.sta.update(phase="online", ssid="home", ip="192.168.1.50")
     sim.phone_on_lan = True
     assert sim.handle({"cmd": "do", "a": "copy"}, "ws")[0]["reply"] == "lan_locked"
+
+
+# ---- macro lines -------------------------------------------------------------------
+# Seen live, hours before a time-critical booking: macros made on a phone typed
+# nothing. The phone capitalised each line ("Text ...") and runMacroLine() only
+# knew lowercase verbs, skipping everything else without a word.
+def test_macro_verbs_in_any_case_and_a_bare_line_is_typed():
+    from support.board_sim import macro_line
+    assert macro_line("text Thirumalai T") == ("text", "Thirumalai T")
+    assert macro_line("Text Thirumalai T") == ("text", "Thirumalai T")
+    assert macro_line("TEXT 60") == ("text", "60")
+    assert macro_line("Key ENTER") == ("key", "ENTER")
+    assert macro_line("Delay 300") == ("delay", "300")
+    assert macro_line("Click left") == ("click", "left")
+    assert macro_line("Pramila Revathi S N") == ("text", "Pramila Revathi S N")
+    assert macro_line("307978327645") == ("text", "307978327645")
+    assert macro_line("texture") == ("text", "texture"), "a word that starts like a verb is text"
+
+
+def test_the_firmware_parses_macro_lines_the_same_way():
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text()
+    body = src[src.index("static void runMacroLine(const String& ln) {"):src.index("void handleMacroRun(const JsonDocument& inDoc) {")]
+    assert "strncasecmp" in src[src.index("static bool macroVerb"):src.index("static void runMacroLine")]
+    assert "else                              typeString(ln.c_str());" in body, \
+        "a line without a verb must be typed, not skipped"

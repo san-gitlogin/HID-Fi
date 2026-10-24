@@ -57,6 +57,15 @@ ACTIONS = _load_actions()
 ACTION_COL = {"mac": 1, "windows": 2, "linux": 3}
 ALSO = "open <app> | run <command or url> | type <text> | key <combo> | wait <ms> | click left|right|middle"
 
+
+def macro_line(ln):
+    """What runMacroLine() in hid_fi.ino does with one macro line: (verb, argument).
+    Verbs in any case - a phone capitalises the first word; no verb types the line."""
+    for verb in ("key", "text", "delay", "click"):
+        if len(ln) > len(verb) + 1 and ln[:len(verb) + 1].lower() == verb + " ":
+            return (verb, ln[len(verb) + 1:])
+    return ("text", ln)
+
 class _Lock:
     """The firmware's escalating lockout: one free retry, then 5s, 15s, 60s, 5 min."""
     def __init__(self, sim):
@@ -107,6 +116,7 @@ class BoardSim:
         self.vault = {}            # slot -> {label, type, secret}
         self.pcs = {}              # slot -> {name, os, password}
         self.macros = {}           # slot -> {name, steps:[...]}
+        self.macro_ran = []        # the last macro_run, as (verb, argument) per line
         self.ui = ""
         self.firmware = firmware
         self.host_manual = None
@@ -1028,15 +1038,17 @@ class BoardSim:
             if c == "macro_run":
                 if s not in self.macros:
                     return E("slot is empty")
-                return OK("macro_done", slot=s, name=self.macros[s]["name"], steps=len(self.macros[s]["steps"]))
+                steps = [x.strip() for x in self.macros[s]["steps"] if x.strip()]
+                self.macro_ran = [macro_line(x) for x in steps]
+                return OK("macro_done", slot=s, name=self.macros[s]["name"], steps=len(steps))
             self.macros.pop(s, None)
             return OK("macro_deleted", slot=s)
         if c == "ui_get":
             return OK("ui", data=self.ui)
         if c == "ui_save":
             d = b.get("data", "")
-            if len(d) > 4096:
-                return E("layout too large", max=4096)
+            if len(d) > 3000:                       # UI_CONFIG_MAX in hid_fi.ino
+                return E("layout too large", max=3000)
             self.ui = d
             return OK("ui_saved", bytes=len(d))
 
