@@ -109,6 +109,10 @@ Feature: The Keyboard tab
     And I see the message "Macro saved"
     And the macro slot 0 is named "Greeting"
 
+  Scenario: With no macros yet, the Add tile opens a new one
+    When I tap the "#macroAdd" control
+    Then the dialog "New macro" is open
+
   Scenario: Tapping a saved macro runs it
     Given the board has a macro "Sign off" in slot 2
     When I reload the dashboard

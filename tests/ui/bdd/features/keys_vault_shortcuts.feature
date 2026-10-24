@@ -338,6 +338,16 @@ Feature: The Keys tab - the password vault and the shortcuts
     When I tap the text shortcut "Person 1 ID"
     Then the board receives {"cmd": "type", "text": "123412341234"}
 
+  Scenario: With no text shortcuts yet, Add opens one, and Test types it without saving
+    Given the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I tap the "#snipAdd" control
+    Then the dialog "New text shortcut" is open
+    When I enter "Hello there" in "Text it types"
+    And I tap the "#s_test" control
+    Then the board receives {"cmd": "type", "text": "Hello there"}
+    And the board does not receive "ui_save"
+
   Scenario: Text shortcuts are on the Keys tab, not among the media quick actions
     Given the board has 3 text shortcuts
     And the dashboard is open and signed in with "4826"
