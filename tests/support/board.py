@@ -117,10 +117,26 @@ class Board:
                          "is the USB port (not COM) plugged into this computer?")
 
     # ---- leave the board as it was found -------------------------------------
+    def macros(self):
+        """Every saved macro, slot -> (name, steps). Waits for the macro_list reply
+        itself: right after the port opens the board is still printing its boot
+        lines, and a reply taken at random once read as 'no macros' - a test then
+        took slot 0 and deleted a person's macro (seen on a real board)."""
+        r = self.cmd({"cmd": "macro_list"}, want="macro_list")
+        if not isinstance(r.get("macros"), list):
+            raise BoardError(f"no macro list from the board: {r}")
+        out = {}
+        for m in r["macros"]:
+            g = self.cmd({"cmd": "macro_get", "slot": m["slot"]}, want="macro")
+            out[m["slot"]] = (g.get("name", ""), list(g.get("steps") or []))
+        return out
+
     def snapshot(self):
         st = self.status()
-        macros = self.cmd({"cmd": "macro_list"}).get("macros") or []
+        saved = self.macros()
+        macros = [{"slot": s} for s in saved]
         return {
+            "macros": saved,
             "unicode_mac": bool(st.get("unicode_mac")),
             "unicode_linux": bool(st.get("unicode_linux")),
             "host_os_pin": st.get("host_os") if st.get("host_os_source") == "manual" else "auto",
@@ -146,12 +162,17 @@ class Board:
         for slot in set(now["macro_slots"]) - set(snap["macro_slots"]):
             self.cmd({"cmd": "macro_delete", "slot": slot})
             drift.append(f"macro_slot_{slot}")
+        # And every macro that was there goes back as it was: removed or changed.
+        for slot, (name, steps) in snap.get("macros", {}).items():
+            if now.get("macros", {}).get(slot) != (name, steps) and steps:
+                self.cmd({"cmd": "macro_save", "slot": slot, "name": name, "steps": steps}, want="macro_saved")
+                drift.append(f"macro_slot_{slot}_restored")
         self.cmd({"cmd": "key_release_all"})
         return drift
 
     def free_macro_slot(self):
-        used = {m.get("slot") for m in (self.cmd({"cmd": "macro_list"}).get("macros") or []) if isinstance(m, dict)}
-        for s in range(0, 8):               # firmware accepts slots 0-7
+        used = set(self.macros())           # refuses rather than guess (see macros())
+        for s in range(31, -1, -1):         # from the top: people fill slots from 0
             if s not in used:
                 return s
         raise BoardError("no free macro slot - refusing to overwrite a saved macro")

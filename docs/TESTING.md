@@ -550,6 +550,11 @@ phone itself); every other action is unchanged within noise.
 
 Found but not tagged, because no person can hit them:
 
+- (v4.0.3, a lesson.) A board test deleted a person's macro: a helper took a
+  boot line for the macro list, chose slot 0, saved over it and deleted it. The
+  snapshot noticed but held only slot numbers, so nothing could be put back.
+  Helpers that touch a person's data wait for the exact reply and refuse to
+  guess, pick from the far end of a range, and the snapshot keeps contents.
 - (Fixed in v4.0.2, kept as a lesson.) The PIN boxes selected themselves on the
   next tick, and that late `select()` took the focus back - two boxes then
   handed it to and fro for good, scattering digits. This list called it

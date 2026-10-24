@@ -24,7 +24,7 @@ READ_ONLY = [
     {"cmd": "status"}, {"cmd": "ping"}, {"cmd": "wifi_status"}, {"cmd": "storage_info"}, {"cmd": "clients"},
     {"cmd": "macro_list"}, {"cmd": "vault_list"}, {"cmd": "pc_list"}, {"cmd": "ui_get"}, {"cmd": "echo", "data": "x"},
     {"cmd": "definitely_not_a_command"}, {"cmd": "media", "key": "nope"}, {"cmd": "mouse_abs", "x": 1, "y": 1},
-    {"cmd": "gamepad", "button": 0, "pressed": True}, {"cmd": "macro_run", "slot": 7},
+    {"cmd": "gamepad", "button": 0, "pressed": True}, {"cmd": "macro_run", "slot": 32},
     {"cmd": "pc_delete", "slot": 99}, {"cmd": "ap_configure", "ssid": ""},
     {"cmd": "ap_configure", "ssid": "x" * 40}, {"cmd": "ap_configure", "ssid": "ok", "password": "short"},
     {"cmd": "wifi_configure", "ssid": ""}, {"cmd": "wifi_configure", "ssid": "x", "ip": "999.1.1.1", "gateway": "1.1.1.1"},
@@ -35,7 +35,7 @@ READ_ONLY = [
     {"cmd": "set_unicode", "os": "windows", "on": True}, {"cmd": "unicode_test", "os": "beos"},
     {"cmd": "type", "text": ""}, {"cmd": "set_auth", "token": "12"},
     {"cmd": "pc_save", "name": "", "password": ""}, {"cmd": "vault_save", "label": "", "secret": ""},
-    {"cmd": "macro_save", "slot": 9, "steps": ["text x"]}, {"cmd": "macro_save", "slot": 0, "steps": []},
+    {"cmd": "macro_save", "slot": 32, "steps": ["text x"]}, {"cmd": "macro_save", "slot": 0, "steps": []},
     {"cmd": "system", "action": "bogus"},
     {"cmd": "ap_password"},                                  # USB only: shape compared, never printed
     # Actions for agents: the lists, and refusals that press nothing.

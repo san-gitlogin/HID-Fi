@@ -47,6 +47,13 @@ find. Found on the morning of a time-critical booking. Flash the board.
   delete from the phone), 32 macros, macros full, storage nearly full, a phone
   written macro, and that a held finger opens nothing. A unit test keeps the
   board model's limits equal to the firmware's.
+- **A board test deleted a person's macro.** Right after the serial port
+  opened, the free-slot helper read a boot line as the macro list, saw no
+  macros, overwrote slot 0 and deleted it. The helpers now wait for the real
+  reply and refuse to guess; free slots are taken from the top; the snapshot
+  keeps every macro's content and puts back anything removed or changed; the
+  contract test's 'refused' and 'read-only' macro commands use slot 32, which
+  can never hold a macro.
 
 ---
 
