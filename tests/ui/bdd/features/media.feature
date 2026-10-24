@@ -117,17 +117,14 @@ Feature: The Media tab - knobs, playback and quick actions
     And I tap the quick action "Lock now"
     Then the board receives {"cmd": "lock"}
 
-  # Seen live, before a booking site that refuses paste and Tab: one tile per
-  # value - click the field on the computer, tap the tile, it is typed.
-  Scenario: A new quick action can type text into whatever field has the focus
-    When I tap the quick action "Add"
-    Then the dialog "New action" is open
-    When I enter "Person 1 ID" in "Label"
-    And I choose "Type text" for "Type"
-    And I enter "123412341234" in "Value"
-    And I tap the "#q_ok" control
-    And I tap the quick action "Person 1 ID"
-    Then the board receives {"cmd": "type", "text": "123412341234"}
+  Scenario: Edit mode: tapping a quick action opens it, and Delete removes it
+    When I tap the "#btnQuickEdit" control
+    And I tap the quick action "Hang up"
+    Then the dialog "Edit action" is open
+    And the board does not receive "press"
+    When I tap "Delete"
+    Then the quick action "Hang up" is gone
+    And I see the message "Saved to board"
 
   Scenario: Deleting a quick action removes it from the board's layout
     When I long-press the quick action "Hang up"

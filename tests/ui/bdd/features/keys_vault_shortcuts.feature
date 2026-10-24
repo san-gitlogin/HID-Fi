@@ -320,3 +320,104 @@ Feature: The Keys tab - the password vault and the shortcuts
     When I open the "Keys" tab
     And I tap the app "Notepad"
     Then I see the message "USB HID not initialized"
+
+
+  # ---- text shortcuts --------------------------------------------------------------
+  # Seen live, before a booking site that refuses paste and Tab: one tile per
+  # value - click the field on the computer, tap the tile, the board types it.
+  # They live on the Keys tab, where a person looks to type faster.
+  Scenario: A new text shortcut types its text, from the Keys tab
+    Given the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I tap the "#btnSnipNew" control
+    Then the dialog "New text shortcut" is open
+    When I enter "Person 1 ID" in "Label"
+    And I enter "123412341234" in "Text it types"
+    And I tap the "#s_ok" control
+    Then I see the message "Saved to board"
+    When I tap the text shortcut "Person 1 ID"
+    Then the board receives {"cmd": "type", "text": "123412341234"}
+
+  Scenario: Text shortcuts are on the Keys tab, not among the media quick actions
+    Given the board has 3 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    When I open the "Keys" tab
+    Then there are 3 text shortcuts
+    When I open the "Media" tab
+    Then no quick action types text
+
+  # The live case: 24 shortcuts (name, age, ID for eight people) make a layout of
+  # about 1.9 KB - over the old 2 KB message limit once escaped, so every delete
+  # from the phone was refused and the tile came back.
+  Scenario: With 24 shortcuts, Edit then Delete removes one, and it stays gone
+    Given the board has 24 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I tap the "#btnSnipEdit" control
+    And I tap the text shortcut "8 ID"
+    Then the dialog "Edit text shortcut" is open
+    And the board does not receive "type"
+    When I tap "Delete"
+    Then I see the message "Saved to board"
+    When I reload the dashboard
+    And I open the "Keys" tab
+    Then there are 23 text shortcuts
+    And the text shortcut "8 ID" is gone
+
+  Scenario: A long press on a text shortcut edits it and never types
+    Given the board has 3 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I long-press the text shortcut "1 Name"
+    Then the dialog "Edit text shortcut" is open
+    And the board does not receive "type"
+
+  # Seen while fixing deletes: the lift that ended a hold clicked the editor's
+  # backdrop, which closed it again - wherever the tile sat on the screen.
+  Scenario Outline: However long the hold, the editor stays open after the lift
+    Given the board has 24 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I hold the text shortcut "<tile>" for <ms> ms
+    Then the dialog "Edit text shortcut" is open
+    And the board does not receive "type"
+
+    Examples:
+      | tile   | ms   |
+      | 1 Name | 700  |
+      | 1 Name | 2500 |
+      | 8 ID   | 700  |
+      | 5 Age  | 2500 |
+
+  Scenario: A save the board refuses says why and shows what the board has
+    Given the board has 3 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    And the board will refuse the next "ui_save" with "layout too large"
+    When I tap the "#btnSnipEdit" control
+    And I tap the text shortcut "1 Name"
+    And I tap "Delete"
+    Then I see the message "Not saved: layout too large"
+    And there are 3 text shortcuts
+
+  Scenario: A shortcut with nothing to type is refused before it reaches the board
+    Given the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    When I tap the "#btnSnipNew" control
+    And I tap the "#s_ok" control
+    Then I see the message "Nothing to type"
+    And the board does not receive "ui_save"
+
+  # Seen while fixing deletes: on a PIN-locked board the layout asked for at
+  # connect was refused, and signing in did not ask again - the dashboard showed
+  # the default tiles, and an edit saved them over the board's real layout.
+  Scenario: Signing in shows the board's own layout, and an edit keeps the rest of it
+    Given the board has 24 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    When I open the "Keys" tab
+    Then there are 24 text shortcuts
+    When I tap the "#btnSnipEdit" control
+    And I tap the text shortcut "1 Name"
+    And I tap "Delete"
+    Then I see the message "Saved to board"
+    And the board's layout still has 23 text shortcuts

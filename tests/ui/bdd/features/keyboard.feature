@@ -124,9 +124,27 @@ Feature: The Keyboard tab
     And I long-press the macro slot 2
     Then the dialog "Macro slot 2" is open
     And the macro editor shows the steps of "Sign off"
+    # Seen live: the lift that ended the hold also ran the macro on the computer.
+    And the board does not receive "macro_run"
     When I tap "Delete"
     Then the board receives {"cmd": "macro_delete", "slot": 2}
     And the macro slot 2 is empty
+
+  # Seen live: nobody found the long press, so nobody could delete a macro.
+  Scenario: The Edit button turns macros into editors, and Delete removes one
+    Given the board has a macro "Sign off" in slot 2
+    When I reload the dashboard
+    And I open the "Keyboard" tab
+    And I tap the "#btnMacroEdit" control
+    And I tap the macro slot 2
+    Then the dialog "Macro slot 2" is open
+    And the board does not receive "macro_run"
+    When I tap "Delete"
+    Then the board receives {"cmd": "macro_delete", "slot": 2}
+    And the macro slot 2 is empty
+    When I tap the "#btnMacroEdit" control
+    And I tap the macro slot 0
+    Then the dialog "Macro slot 0" is open
 
   Scenario: A macro with no steps is refused before it reaches the board
     When I tap the macro slot 1

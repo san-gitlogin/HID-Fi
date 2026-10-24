@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
@@ -155,3 +157,78 @@ def type_app(ctx, text):
     ui.page.keyboard.type(text)
     ui.page.keyboard.press("Enter")
     ui.idle(200)
+
+
+# ---- text shortcuts --------------------------------------------------------------
+def _snip_layout(n):
+    """A board layout with n text shortcuts, in the live order: name, age, ID per
+    person (made-up values - never a real person's)."""
+    quick = [{"n": "Mic mute", "i": "mic", "t": "key", "v": "F20"}]
+    for i in range(n):
+        p, kind = i // 3 + 1, ("Name", "Age", "ID")[i % 3]
+        v = {"Name": f"Person {p}", "Age": str(20 + p), "ID": f"{p:04d}" * 3}[kind]
+        quick.append({"n": f"{p} {kind}", "i": "keycap", "t": "text", "v": v})
+    return json.dumps({"quick": quick, "knobs": []}, separators=(",", ":"))
+
+
+@given(parsers.parse("the board has {n:d} text shortcuts"))
+def has_snips(ctx, n):
+    ctx["sim"].ui = _snip_layout(n)
+
+
+def _snip(ui, label):
+    return ui.page.locator("#snipTiles [data-snip]", has_text=label).first
+
+
+@when(parsers.parse('I tap the text shortcut "{label}"'))
+def tap_snip(ctx, label):
+    ui = ctx["ui"]
+    _snip(ui, label).scroll_into_view_if_needed()
+    _snip(ui, label).click()
+    ui.idle(300)
+
+
+@when(parsers.parse('I long-press the text shortcut "{label}"'))
+def hold_snip(ctx, label):
+    ui = ctx["ui"]
+    _snip(ui, label).evaluate("e => e.setAttribute('data-hold-target', '1')")
+    ui.touch_hold('[data-hold-target="1"]', ms=750)
+    ui.page.evaluate("document.querySelectorAll('[data-hold-target]').forEach(e => e.removeAttribute('data-hold-target'))")
+    ui.idle(300)
+
+
+@then(parsers.parse("there are {n:d} text shortcuts"))
+def snip_count(ctx, n):
+    ui = ctx["ui"]
+    _wait(ui, lambda: ui.page.locator("#snipTiles [data-snip]").count() == n,
+          f'{ui.page.locator("#snipTiles [data-snip]").count()} text shortcuts, not {n}; '
+          f'CFG: {ui.page.evaluate("JSON.stringify(CFG).slice(0,200)")}; board: {ctx["sim"].ui[:120]!r}')
+
+
+@then(parsers.parse('the text shortcut "{label}" is gone'))
+def snip_gone(ctx, label):
+    labels = ctx["ui"].page.locator("#snipTiles [data-snip] span").all_inner_texts()
+    assert label not in labels, labels
+
+
+@then("no quick action types text")
+def no_text_in_media(ctx):
+    bad = ctx["ui"].page.evaluate(
+        "[...document.querySelectorAll('#quickTiles [data-q]')].map(b => CFG.quick[+b.dataset.q]).filter(q => q.t === 'text').map(q => q.n)")
+    assert not bad, f"text shortcuts among the media quick actions: {bad}"
+
+
+@then(parsers.parse("the board's layout still has {n:d} text shortcuts"))
+def board_snips(ctx, n):
+    q = json.loads(ctx["sim"].ui)["quick"]
+    got = [x["n"] for x in q if x.get("t") == "text"]
+    assert len(got) == n, f"the board now has {len(got)} text shortcuts: {got}"
+
+
+@when(parsers.parse('I hold the text shortcut "{label}" for {ms:d} ms'))
+def hold_snip_for(ctx, label, ms):
+    ui = ctx["ui"]
+    _snip(ui, label).evaluate("e => e.setAttribute('data-hold-target', '1')")
+    ui.touch_hold('[data-hold-target="1"]', ms=ms)
+    ui.page.evaluate("document.querySelectorAll('[data-hold-target]').forEach(e => e.removeAttribute('data-hold-target'))")
+    ui.idle(400)

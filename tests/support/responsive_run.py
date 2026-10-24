@@ -62,6 +62,7 @@ SHEET_STATES = [
     ("sheet knob", "knobEditor(0)"),
     ("sheet action", "quickEditor(0)"),
     ("sheet macro", "macroEditor(0)"),
+    ("sheet text shortcut", "textEditor(-1,{n:'',i:'keycap',t:'text',v:''})"),
     ("sheet vault ask", f"vaultAsk('Type {LONG}','Typed into whatever has focus.',()=>{{}})"),
     ("sheet vault secret", f"showSecret({{label:'{LONG}',type:'password',secret:'{'x' * 64}'}})"),
     ("sheet vault edit", "vaultEditor(VAULT[0])"),

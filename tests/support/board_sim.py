@@ -365,6 +365,8 @@ class BoardSim:
                 return
             if isinstance(msg, (bytes, bytearray)):
                 return self._binary(sock, bytes(msg))
+            if len(msg.encode()) > 4096:              # WS_TEXT_MAX in hid_fi.ino
+                return ws.send(json.dumps({"status": "error", "message": "Command too large"}))
             try:
                 body = json.loads(msg)
             except json.JSONDecodeError:

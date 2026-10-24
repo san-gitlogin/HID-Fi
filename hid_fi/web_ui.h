@@ -257,6 +257,8 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
 .tile:hover{border-color:var(--line2)}
 .tile:active{transform:scale(.94);background:rgba(0,210,255,.16)}
 .tile.on{background:rgba(0,210,255,.2);border-color:var(--acc)}
+/* Edit mode: a tap opens the tile's editor; the dashed edge says so. */
+.tile.editing{border-style:dashed;border-color:var(--acc)}
 /* latched state - the dashboard cannot read the host back, so this is what we
    believe we set, shown clearly enough that a desync is obvious */
 .tile.act{background:rgba(255,90,90,.16);border-color:var(--bad);box-shadow:0 0 14px rgba(255,90,90,.22)}
@@ -1489,10 +1491,11 @@ main::after{height:var(--flpad,0px)}
 
         <div class="card span">
           <div class="ch"><svg class="ic"><use href="#i-term"/></svg><h2>Macros</h2>
+            <button class="iconbtn" id="btnMacroEdit" aria-label="Edit macros" aria-pressed="false"><svg class="ic"><use href="#i-edit"/></svg></button>
             <button class="iconbtn" id="btnMacroNew" aria-label="New macro"><svg class="ic"><use href="#i-plus"/></svg></button>
           </div>
           <div class="tiles" id="macroTiles"></div>
-          <p class="hint" style="margin-top:10px">Stored on the board, so every device that opens this dashboard sees the same macros.</p>
+          <p class="hint" id="macroHint" style="margin-top:10px"></p>
         </div>
       </div>
     </section>
@@ -1500,6 +1503,15 @@ main::after{height:var(--flpad,0px)}
     <!-- ============ SHORTCUTS ============ -->
     <section class="view" id="v-short">
       <div class="grid">
+        <div class="card span">
+          <div class="ch"><svg class="ic"><use href="#i-keycap"/></svg><h2>Text shortcuts</h2>
+            <button class="iconbtn" id="btnSnipEdit" aria-label="Edit text shortcuts" aria-pressed="false"><svg class="ic"><use href="#i-edit"/></svg></button>
+            <button class="iconbtn" id="btnSnipNew" aria-label="New text shortcut"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="tiles" id="snipTiles"></div>
+          <p class="hint" id="snipHint" style="margin-top:10px"></p>
+        </div>
+
         <div class="card span">
           <div class="ch"><svg class="ic"><use href="#i-shield"/></svg><h2>Passwords</h2>
             <button class="iconbtn" id="btnVaultNew" aria-label="New password"><svg class="ic"><use href="#i-plus"/></svg></button>
@@ -1564,6 +1576,7 @@ main::after{height:var(--flpad,0px)}
 
         <div class="card">
           <div class="ch"><svg class="ic"><use href="#i-bolt"/></svg><h2>Quick actions</h2>
+            <button class="iconbtn" id="btnQuickEdit" aria-label="Edit quick actions" aria-pressed="false"><svg class="ic"><use href="#i-edit"/></svg></button>
             <button class="iconbtn" id="btnQuickNew" aria-label="New action"><svg class="ic"><use href="#i-plus"/></svg></button>
           </div>
           <div class="tiles" id="quickTiles"></div>
@@ -2477,7 +2490,10 @@ function loadCfg(){
 function saveCfg(){
   cfgIsDefault=false;                   // this is the user's set now, not a per-OS default
   send({cmd:'ui_save',data:JSON.stringify(CFG)},r=>{
-    if(r&&r.status==='ok')toast('Saved to board','ok');else toast('Save failed','bad');
+    if(r&&r.status==='ok')toast('Saved to board','ok');
+    // Refused: the change only happened here. Say why, and show the board's set
+    // again - a deleted tile used to vanish, then come back on the next load.
+    else{toast('Not saved: '+((r&&r.message)||'no answer from the board'),'bad');loadCfg();}
   });
 }
 
@@ -3178,19 +3194,73 @@ function knobEditor(idx){
 const ICON_CHOICES=['bolt','mic','micoff','phone','phoneoff','monitor','vol','volx','sun','sundim',
   'lock','unlock','power','layers','present','search','home','copy','term','clock','knob','media',
   'command','keycap','appswitch','play','shield','cpu'];
+// Edit mode, per card: a tile opens its editor (with Delete) instead of running.
+// Seen live: a long press was the only way in, nothing said so, and nobody
+// found it - so a person could not delete a macro or a tile at all.
+const EDIT={snip:false,macro:false,quick:false};
+const EDIT_HINT={
+  snip:['Click a field on the computer, then tap a shortcut: it types the text, key by key - for forms that refuse paste. Stored on the board.',
+        'Tap a shortcut to change or delete it. Tap the tick when you are done.'],
+  macro:['Stored on the board, so every device that opens this dashboard sees the same macros.',
+         'Tap a macro to change or delete it. Tap the tick when you are done.'],
+  quick:['',
+         'Tap an action to change or delete it. Tap the tick when you are done.']};
+function paintEdit(k){
+  const b=$({snip:'btnSnipEdit',macro:'btnMacroEdit',quick:'btnQuickEdit'}[k]);
+  if(b){b.innerHTML=ico(EDIT[k]?'check':'edit');b.classList.toggle('on',EDIT[k]);b.setAttribute('aria-pressed',EDIT[k]?'true':'false');
+    b.setAttribute('aria-label',(EDIT[k]?'Done editing ':'Edit ')+{snip:'text shortcuts',macro:'macros',quick:'quick actions'}[k]);}
+  const h=$({snip:'snipHint',macro:'macroHint',quick:''}[k]);
+  if(h)h.textContent=EDIT_HINT[k][EDIT[k]?1:0];
+}
+function toggleEdit(k){EDIT[k]=!EDIT[k];paintEdit(k);({snip:renderSnips,macro:renderMacros,quick:renderQuick}[k])();buzz(8);}
+// Hold 0.6 s to edit. The lift that ends the hold must not also count as a tap -
+// it used to run the macro (typing on the computer) as its editor opened.
+// And the click the lift makes lands on whatever is under the finger by then -
+// the editor's backdrop, which closes it: the editor flashed open and shut. So
+// the one click that ends a hold is swallowed, wherever it lands.
+let holdClickUntil=0;
+document.addEventListener('click',e=>{
+  if(performance.now()<holdClickUntil){holdClickUntil=0;e.stopPropagation();e.preventDefault();}
+},true);
+function holdToEdit(b,open){
+  let t=0;b._held=false;
+  b.addEventListener('pointerdown',()=>{b._held=false;clearTimeout(t);
+    // Until the lift, however long the hold; then a moment for its click.
+    t=setTimeout(()=>{b._held=true;holdClickUntil=Infinity;open();},600);});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>{clearTimeout(t);
+    if(b._held&&holdClickUntil===Infinity)holdClickUntil=performance.now()+400;}));
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+}
+const heldTap=b=>{if(b._held){b._held=false;return true;}return false;};
+// Text shortcuts live in CFG.quick (t:'text') - stored with the layout - but are
+// shown on the Keys tab, where a person looks for typing, not on Media.
+function renderSnips(){
+  const host=$('snipTiles');if(!host)return;
+  const list=CFG.quick.map((q,i)=>[q,i]).filter(([q])=>q.t==='text');
+  host.innerHTML=list.map(([q,i])=>
+    '<button class="tile'+(EDIT.snip?' editing':'')+'" data-snip="'+i+'">'+ico(EDIT.snip?'edit':(q.i||'keycap'))+'<span>'+esc(q.n)+'</span></button>').join('')+
+    (list.length?'':'<button class="tile" id="snipAdd" style="color:var(--fg3)">'+ico('plus')+'<span>Add</span></button>');
+  host.querySelectorAll('[data-snip]').forEach(b=>{
+    const i=+b.dataset.snip;
+    b.onclick=()=>{if(heldTap(b))return;if(EDIT.snip)quickEditor(i,'text');else runQuick(CFG.quick[i],b);};
+    holdToEdit(b,()=>quickEditor(i,'text'));
+  });
+  const a=$('snipAdd');if(a)a.onclick=()=>quickEditor(-1,'text');
+  paintEdit('snip');
+}
 function renderQuick(){
-  $('quickTiles').innerHTML=CFG.quick.map((q,i)=>
-    '<button class="tile" data-q="'+i+'">'+ico(q.i)+'<span>'+esc(q.n)+'</span></button>').join('')+
+  $('quickTiles').innerHTML=CFG.quick.map((q,i)=>q.t==='text'?'':
+    '<button class="tile'+(EDIT.quick?' editing':'')+'" data-q="'+i+'">'+ico(EDIT.quick?'edit':q.i)+'<span>'+esc(q.n)+'</span></button>').join('')+
     '<button class="tile" id="quickAdd" style="color:var(--fg3)">'+ico('plus')+'<span>Add</span></button>';
   $('quickTiles').querySelectorAll('[data-q]').forEach(b=>{
     const i=+b.dataset.q;
     if(CFG.quick[i]&&CFG.quick[i].tog)b.classList.add('cy');
-    b.onclick=()=>runQuick(CFG.quick[i],b);
-    let t=0;
-    b.addEventListener('pointerdown',()=>{t=setTimeout(()=>quickEditor(i),600);});
-    ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(t)));
+    b.onclick=()=>{if(heldTap(b))return;if(EDIT.quick)quickEditor(i);else runQuick(CFG.quick[i],b);};
+    holdToEdit(b,()=>quickEditor(i));
   });
   $('quickAdd').onclick=()=>quickEditor(-1);
+  paintEdit('quick');
+  renderSnips();
 }
 function runQuick(q,el){
   if(!q)return;
@@ -3222,17 +3292,17 @@ function keyPresets(){
     ? ['GUI+SHIFT+M','GUI+SHIFT+4','GUI+SHIFT+5','GUI+SPACE','CTRL+UP','GUI+H','GUI+M','GUI+W','F10','F11','CTRL+GUI+Q','GUI+Q']
     : ['CTRL+SHIFT+M','ALT+A','CTRL+D','F4','F7','F10','F11','GUI+P','GUI+SHIFT+S','GUI+L','CTRL+SHIFT+S','CTRL+SHIFT+H'];
 }
-function quickEditor(idx){
+function quickEditor(idx,mode){
   const isNew=idx<0;
-  const q=isNew?{n:'New action',i:'bolt',t:'key',v:'F1'}:CFG.quick[idx];
+  const q=isNew?(mode==='text'?{n:'',i:'keycap',t:'text',v:''}:{n:'New action',i:'bolt',t:'key',v:'F1'}):CFG.quick[idx];
+  if(mode==='text'||q.t==='text')return textEditor(idx,q);
   const opt=(v,l,sel)=>'<option value="'+v+'"'+(sel?' selected':'')+'>'+esc(l)+'</option>';
   sheet(isNew?'New action':'Edit action',
     '<div class="fld"><label>Label</label><input id="q_n" value="'+esc(q.n)+'"></div>'+
     '<div class="fld"><label>Icon</label><select id="q_i">'+ICON_CHOICES.map(n=>opt(n,n,n===q.i)).join('')+'</select></div>'+
     '<div class="fld"><label>Type</label><select id="q_t">'+
       opt('key','Keyboard combo',q.t==='key')+opt('media','Media key',q.t==='media')+
-      opt('gesture','Gesture',q.t==='gesture')+opt('cmd','Board command',q.t==='cmd')+
-      opt('text','Type text',q.t==='text')+'</select></div>'+
+      opt('gesture','Gesture',q.t==='gesture')+opt('cmd','Board command',q.t==='cmd')+'</select></div>'+
     '<div class="fld"><label>Value</label><input id="q_v" list="q_presets" value="'+esc(q.v)+'">'+
       '<datalist id="q_presets">'+keyPresets().map(k=>'<option value="'+k+'">').join('')+'</datalist></div>'+
     '<p class="hint">Mic mute and call keys vary by laptop and app. '+(OS==='mac'
@@ -3254,6 +3324,36 @@ function quickEditor(idx){
       if(del)del.onclick=()=>{CFG.quick.splice(idx,1);renderQuick();saveCfg();closeSheet();};
     });
 }
+
+// A text shortcut: a label and the text it types. Saving re-checks that it fits
+// the board's layout before the tile is shown, so a tile never appears that the
+// board refused.
+function textEditor(idx,q){
+  const isNew=idx<0;
+  sheet(isNew?'New text shortcut':'Edit text shortcut',
+    '<div class="fld"><label>Label</label><input id="s_n" value="'+esc(q.n)+'" placeholder="Shown on the tile"></div>'+
+    '<div class="fld"><label>Text it types</label><input id="s_v" value="'+esc(q.v)+'" autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
+    '<p class="hint">Not for passwords: anyone with this board\'s USB cable can read a shortcut back. Use the vault for those.</p>'+
+    '<div class="row" style="margin-top:14px">'+
+      (isNew?'':'<button class="btn sm bad" id="s_del">'+ico('trash','ic-sm')+'Delete</button>')+
+      '<button class="btn sm" id="s_test">Test</button>'+
+      '<button class="btn ok" id="s_ok">'+ico('check','ic-sm')+'Save</button></div>',
+    ()=>{
+      const read=()=>({n:$('s_n').value.trim()||$('s_v').value.trim().slice(0,16)||'Text',i:'keycap',t:'text',v:$('s_v').value});
+      $('s_test').onclick=()=>{const o=read();if(!o.v)return toast('Nothing to type','bad');runQuick(o);};
+      $('s_ok').onclick=()=>{
+        const o=read();if(!o.v)return toast('Nothing to type','bad');
+        if(isNew)CFG.quick.push(o);else CFG.quick[idx]=o;
+        renderQuick();saveCfg();closeSheet();
+      };
+      const del=$('s_del');
+      if(del)del.onclick=()=>{CFG.quick.splice(idx,1);renderQuick();saveCfg();closeSheet();};
+    });
+}
+$('btnSnipNew').onclick=()=>quickEditor(-1,'text');
+$('btnSnipEdit').onclick=()=>toggleEdit('snip');
+$('btnQuickEdit').onclick=()=>toggleEdit('quick');
+$('btnMacroEdit').onclick=()=>toggleEdit('macro');
 
 // =====================================================================
 //  gamepad
@@ -4137,17 +4237,17 @@ function renderMacros(){
   let h='';
   for(let i=0;i<8;i++){
     const m=MACROS.find(x=>x.slot===i);
-    h+='<button class="tile'+(m?'':' ')+'" data-ms="'+i+'"'+(m?'':' style="opacity:.45"')+'>'+
-       ico(m?'term':'plus')+'<span>'+esc(m?m.name:'Slot '+i)+'</span></button>';
+    h+='<button class="tile'+(m&&EDIT.macro?' editing':'')+'" data-ms="'+i+'"'+(m?'':' style="opacity:.45"')+'>'+
+       ico(m?(EDIT.macro?'edit':'term'):'plus')+'<span>'+esc(m?m.name:'Slot '+i)+'</span></button>';
   }
   host.innerHTML=h;
   host.querySelectorAll('[data-ms]').forEach(b=>{
     const i=+b.dataset.ms, m=MACROS.find(x=>x.slot===i);
-    b.onclick=()=>{if(m){send({cmd:'macro_run',slot:i});buzz(12);toast('Running '+m.name);}else macroEditor(i);};
-    let t=0;
-    b.addEventListener('pointerdown',()=>{t=setTimeout(()=>macroEditor(i),600);});
-    ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(t)));
+    b.onclick=()=>{if(heldTap(b))return;
+      if(m&&!EDIT.macro){send({cmd:'macro_run',slot:i});buzz(12);toast('Running '+m.name);}else macroEditor(i);};
+    holdToEdit(b,()=>macroEditor(i));
   });
+  paintEdit('macro');
 }
 function macroEditor(slot){
   send({cmd:'macro_get',slot:slot},r=>{
@@ -4514,7 +4614,10 @@ function pcEditor(edit){
 // phone, and applyStatus() rebuilds whatever a change to the PIN affects.
 let AUTH_SET=null;
 let AP_OPEN=false;
-function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
+// loadCfg too: on a PIN-locked board the layout asked for at connect is refused
+// until the PIN is in. Without it a person saw the default tiles after signing
+// in - and editing one saved those defaults over the board's real layout.
+function syncAll(){refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
   scrAgain();if(curView==='screen'||SCR.float||WATCH.on||WALL.on)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});

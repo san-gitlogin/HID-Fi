@@ -355,7 +355,7 @@ bool heapWarned = false;
 
 // A WebSocket text frame is a JSON command, and commands are small. Anything
 // much larger is a bug or an attempt to exhaust the heap.
-#define  WS_TEXT_MAX  2048
+#define  WS_TEXT_MAX  4096   // a whole dashboard layout (UI_CONFIG_MAX 3000), escaped, in one save
 #define  SERIAL_LINE_MAX 4096   // a whole dashboard layout (UI_CONFIG_MAX 3000) fits in one line, escaped
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
