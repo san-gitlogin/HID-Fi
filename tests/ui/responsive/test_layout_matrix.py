@@ -26,11 +26,11 @@ def _known():
     return json.loads(KNOWN.read_text()) if KNOWN.exists() else None
 
 
-# On Linux, headless Chromium draws nothing at 5K-8K (5900x3200 and up, seen on
-# the GitHub runners; a 4 GB VM crashed outright). Those screens are measured on
-# macOS, where they draw; on Linux they are skipped rather than reported as
-# layout problems the dashboard does not have.
-HUGE_PX = 15_000_000
+# On Linux, headless Chromium draws nothing at 5K-8K (5900x3200 and up on the
+# GitHub runners, and now and then at 5000x2600; a 4 GB VM crashed outright).
+# Those screens are measured on macOS, where they draw; on Linux they are
+# skipped rather than reported as layout problems the dashboard does not have.
+HUGE_PX = 12_000_000
 
 
 @pytest.mark.parametrize("chunk", CHUNKS, ids=[f"{i:02d}-{c[0].name.replace(' ', '_')}-{c[0].w}x{c[0].h}"
