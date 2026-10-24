@@ -26,11 +26,22 @@ def _known():
     return json.loads(KNOWN.read_text()) if KNOWN.exists() else None
 
 
+# On Linux, headless Chromium draws nothing at 5K-8K (5900x3200 and up, seen on
+# the GitHub runners; a 4 GB VM crashed outright). Those screens are measured on
+# macOS, where they draw; on Linux they are skipped rather than reported as
+# layout problems the dashboard does not have.
+HUGE_PX = 15_000_000
+
+
 @pytest.mark.parametrize("chunk", CHUNKS, ids=[f"{i:02d}-{c[0].name.replace(' ', '_')}-{c[0].w}x{c[0].h}"
                                                 for i, c in enumerate(CHUNKS)])
 def test_every_state_on_every_screen(browser, chunk):
     found, errors = {}, []
+    if platform.system() == "Linux" and all(vp.w * vp.h > HUGE_PX for vp in chunk):
+        pytest.skip("5K-8K screens: Chromium on Linux draws nothing that large - measured on macOS")
     for vp in chunk:
+        if platform.system() == "Linux" and vp.w * vp.h > HUGE_PX:
+            continue
         ctx, page, sim, errs = RR.open_page(browser, vp)
         try:
             res = RR.walk(page)

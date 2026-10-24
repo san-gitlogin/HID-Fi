@@ -39,6 +39,10 @@ BUDGET_MS = {"load (work)": 400, "tab switch, slowest (work)": 60, "keyboard dec
 CLS_BUDGET = 0.1
 REGRESSION, NOISE_MS = 2.0, 20
 TRIES = 5
+# Committed for macOS only: it always runs on the same Mac. Linux runs on
+# machines of very different speed (a VM, GitHub's runners - 2.4x apart, which a
+# baseline recorded on one failed on the other), so there it is the budgets
+# above that apply, and each run records its own baseline in its workspace.
 BASE = paths.GOLDEN / f"ui_responsive_perf.{platform.system().lower()}.json"
 
 PAINTED = "() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)))"
