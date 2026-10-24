@@ -37,7 +37,7 @@ MEDIA = ["volume_up", "vol_up", "volume_down", "vol_down", "mute", "play_pause",
          "previous", "stop", "rewind", "fast_forward", "brightness_up", "brightness_down", "browser_back",
          "browser_forward", "search", "home", "calculator", "sleep", "power"]
 BACKOFF = [0, 0, 5, 15, 60, 300]
-VAULT_SLOTS, PC_SLOTS, MACRO_SLOTS = 12, 8, 8
+VAULT_SLOTS, PC_SLOTS, MACRO_SLOTS = 12, 8, 32   # hid_fi.ino: MACRO_SLOTS 32
 MEDIA_MSG = ("Unknown media key (volume_up|volume_down|mute|play_pause|next|prev|stop|brightness_up|"
              "brightness_down|browser_back|browser_forward|search|home|calculator|sleep|power)")
 
@@ -56,6 +56,14 @@ def _load_actions():
 ACTIONS = _load_actions()
 ACTION_COL = {"mac": 1, "windows": 2, "linux": 3}
 ALSO = "open <app> | run <command or url> | type <text> | key <combo> | wait <ms> | click left|right|middle"
+
+
+NVS_RESERVE = 160                   # hid_fi.ino: never let a save leave fewer entries free
+
+
+def nvs_entries(n):
+    """NVS entries a string of n bytes takes: a header, then 32-byte chunks (nvsEntriesFor)."""
+    return 1 + (n + 1 + 31) // 32
 
 
 def macro_line(ln):
@@ -117,6 +125,7 @@ class BoardSim:
         self.pcs = {}              # slot -> {name, os, password}
         self.macros = {}           # slot -> {name, steps:[...]}
         self.macro_ran = []        # the last macro_run, as (verb, argument) per line
+        self.nvs_free_entries = 373  # what storage_info reports free; a test lowers it to fill the store
         self.ui = ""
         self.firmware = firmware
         self.host_manual = None
@@ -1025,14 +1034,21 @@ class BoardSim:
         if c in ("macro_save", "macro_get", "macro_run", "macro_delete"):
             s = b.get("slot", -1)
             if not isinstance(s, int) or not (0 <= s < MACRO_SLOTS):
-                return E("slot must be 0-7")
+                return E("slot must be 0-31")
             if c == "macro_save":
                 steps = b.get("steps") or []
                 if not steps:
                     return E("steps[] is required")
-                if len("\n".join(steps)) > 1000:
+                joined = "\n".join(steps)
+                if len(joined) > 1000:
                     return E("macro too long (max 1000 chars)")
-                self.macros[s] = {"name": b.get("name", "macro"), "steps": list(steps)}
+                name = (b.get("name") or "macro")[:40]
+                others = sum(len("\n".join(m["steps"])) + len(m["name"]) for k, m in self.macros.items() if k != s)
+                if others + len(joined) + len(name) > 4000:
+                    return E("Macros are full (4000 characters in all) - delete one first")
+                if self.nvs_free_entries - nvs_entries(len(joined)) - nvs_entries(len(name)) < NVS_RESERVE:
+                    return E("The board's storage is nearly full - delete a macro or a text shortcut first")
+                self.macros[s] = {"name": name, "steps": list(steps)}
                 return OK("macro_saved", slot=s, steps=len(steps))
             if c == "macro_get":
                 m = self.macros.get(s, {"name": "", "steps": []})
@@ -1051,6 +1067,9 @@ class BoardSim:
             d = b.get("data", "")
             if len(d) > 3000:                       # UI_CONFIG_MAX in hid_fi.ino
                 return E("layout too large", max=3000)
+            grow = nvs_entries(len(d)) - (nvs_entries(len(self.ui)) if self.ui else 0)
+            if grow > 0 and self.nvs_free_entries - grow < NVS_RESERVE:
+                return E("The board's storage is nearly full - delete a macro or a text shortcut first")
             self.ui = d
             return OK("ui_saved", bytes=len(d))
 

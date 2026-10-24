@@ -625,3 +625,18 @@ def focus_still(ctx):
     ui.idle(400)
     after = ui.page.evaluate("window.__focusins")
     assert after == before, f"the focus moved {after - before} times in 0.4 s with nobody typing"
+
+
+
+@then("no dialog is open")
+def no_dialog(ctx):
+    ui = _ui(ctx)
+    ui.idle(300)
+    assert not ui.page.evaluate("document.getElementById('sheet').classList.contains('on')"), \
+        f"a dialog opened: {ui.sheet_title()!r}"
+
+
+@given("the board's storage is nearly full")
+def storage_nearly_full(ctx):
+    # The firmware keeps NVS_RESERVE (160) entries free for the WiFi settings, PIN and vault.
+    ctx["sim"].nvs_free_entries = 160      # exactly the reserve: any growth is refused

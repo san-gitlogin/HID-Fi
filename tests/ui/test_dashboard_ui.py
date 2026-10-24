@@ -95,6 +95,9 @@ def _exercise_all_controls(page):
               el.dispatchEvent(new PointerEvent('pointerdown',o));el.dispatchEvent(new PointerEvent('pointerup',o));el.click();}""",
                           [v, i, CLICKABLES])
             page.wait_for_timeout(40)
+            # Edit buttons switch a card's tiles to opening editors: measure every
+            # control in the normal state, whatever was tapped before it.
+            page.evaluate("()=>{if(typeof EDIT==='object')for(const k in EDIT)if(EDIT[k])toggleEdit(k);}")
             # Background traffic is not a control's output: status/list polls, and the
             # latency ping (binary op 4, OP.PING in web_ui.h) that drives the ms pill.
             sent = [m for m in page.evaluate("window.__sent") if not any(z in m for z in NOISE) and not m.startswith("B04")]

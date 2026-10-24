@@ -167,3 +167,19 @@ def saved_item(ctx, kind, name, want):
         it = lay and next((x for x in lay[key] if x[label] == name), None)
         return it and all(it.get(k) == v for k, v in want.items())
     _wait(ctx["ui"], found, f"saved: {_saved_layout(ctx['sim'])}")
+
+
+@when(parsers.parse('I note the quick action "{label}"'))
+def note_quick(ctx, label):
+    _quick(ctx["ui"], label).evaluate("e => { e.dataset.noted = '1'; }")
+
+
+@when("the dashboard syncs with the board")
+def sync_now(ctx):
+    ctx["ui"].page.evaluate("syncAll()")
+    ctx["ui"].idle(800)
+
+
+@then(parsers.parse('the quick action "{label}" is the one I noted'))
+def same_quick(ctx, label):
+    assert _quick(ctx["ui"], label).evaluate("e => e.dataset.noted === '1'"), "the tile was redrawn"

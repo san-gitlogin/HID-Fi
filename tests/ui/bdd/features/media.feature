@@ -97,8 +97,9 @@ Feature: The Media tab - knobs, playback and quick actions
     When I tap the quick action "Lock PC"
     Then the board receives {"cmd": "lock"}
 
-  Scenario: A long press edits a quick action, Test sends it without saving, Save keeps it
-    When I long-press the quick action "Answer"
+  Scenario: Edit opens a quick action, Test sends it without saving, Save keeps it
+    When I tap the "#btnQuickEdit" control
+    And I tap the quick action "Answer"
     Then the dialog "Edit action" is open
     When I enter "F9" in "Value"
     And I tap "Test"
@@ -126,8 +127,17 @@ Feature: The Media tab - knobs, playback and quick actions
     Then the quick action "Hang up" is gone
     And I see the message "Saved to board"
 
+  # Seen in a full run: the layout was reloaded on every sync - and the
+  # dashboard syncs after every write - so the tiles and knobs were redrawn
+  # under the person's finger.
+  Scenario: Syncing with the board does not redraw the quick actions
+    When I note the quick action "Answer"
+    And the dashboard syncs with the board
+    Then the quick action "Answer" is the one I noted
+
   Scenario: Deleting a quick action removes it from the board's layout
-    When I long-press the quick action "Hang up"
+    When I tap the "#btnQuickEdit" control
+    And I tap the quick action "Hang up"
     And I tap "Delete"
     Then the quick action "Hang up" is gone
     And I see the message "Saved to board"

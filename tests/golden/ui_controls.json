@@ -14,6 +14,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "1400|v-keys|macroAdd||Add": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
  "1400|v-keys||k=#ALT|⌥": [
   [
    "B0701414c54"
@@ -466,46 +471,6 @@
    "B07017a",
    "B07007a",
    "B07005348494654"
-  ]
- ],
- "1400|v-keys||ms=0|Slot 0": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":0}"
-  ]
- ],
- "1400|v-keys||ms=1|Slot 1": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":1}"
-  ]
- ],
- "1400|v-keys||ms=2|Slot 2": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":2}"
-  ]
- ],
- "1400|v-keys||ms=3|Slot 3": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":3}"
-  ]
- ],
- "1400|v-keys||ms=4|Slot 4": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":4}"
-  ]
- ],
- "1400|v-keys||ms=5|Slot 5": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":5}"
-  ]
- ],
- "1400|v-keys||ms=6|Slot 6": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":6}"
-  ]
- ],
- "1400|v-keys||ms=7|Slot 7": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":7}"
   ]
  ],
  "1400|v-media||md=brightness_down|Dimmer": [
@@ -1857,6 +1822,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "390|v-keys|macroAdd||Add": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
  "390|v-keys||k=#ALT|⌥": [
   [
    "B0701414c54"
@@ -2309,46 +2279,6 @@
    "B07017a",
    "B07007a",
    "B07005348494654"
-  ]
- ],
- "390|v-keys||ms=0|Slot 0": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":0}"
-  ]
- ],
- "390|v-keys||ms=1|Slot 1": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":1}"
-  ]
- ],
- "390|v-keys||ms=2|Slot 2": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":2}"
-  ]
- ],
- "390|v-keys||ms=3|Slot 3": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":3}"
-  ]
- ],
- "390|v-keys||ms=4|Slot 4": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":4}"
-  ]
- ],
- "390|v-keys||ms=5|Slot 5": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":5}"
-  ]
- ],
- "390|v-keys||ms=6|Slot 6": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":6}"
-  ]
- ],
- "390|v-keys||ms=7|Slot 7": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":7}"
   ]
  ],
  "390|v-media||md=brightness_down|Dimmer": [
@@ -3700,6 +3630,11 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "820|v-keys|macroAdd||Add": [
+  [
+   "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
  "820|v-keys||k=#ALT|⌥": [
   [
    "B0701414c54"
@@ -4152,46 +4087,6 @@
    "B07017a",
    "B07007a",
    "B07005348494654"
-  ]
- ],
- "820|v-keys||ms=0|Slot 0": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":0}"
-  ]
- ],
- "820|v-keys||ms=1|Slot 1": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":1}"
-  ]
- ],
- "820|v-keys||ms=2|Slot 2": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":2}"
-  ]
- ],
- "820|v-keys||ms=3|Slot 3": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":3}"
-  ]
- ],
- "820|v-keys||ms=4|Slot 4": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":4}"
-  ]
- ],
- "820|v-keys||ms=5|Slot 5": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":5}"
-  ]
- ],
- "820|v-keys||ms=6|Slot 6": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":6}"
-  ]
- ],
- "820|v-keys||ms=7|Slot 7": [
-  [
-   "J{\"cmd\":\"macro_get\",\"slot\":7}"
   ]
  ],
  "820|v-media||md=brightness_down|Dimmer": [

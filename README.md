@@ -300,7 +300,7 @@ password the flasher printed at the end, then open **<http://192.168.4.1/>**.
 
 ```
 == Verifying COM13
-   Running hid_fi_v4.0.2, USB HID ready
+   Running hid_fi_v4.0.3, USB HID ready
    Dashboard: join WiFi 'ESP32-HID-DA1A2C' with password  k7m2-x9qp-4tre
 ```
 

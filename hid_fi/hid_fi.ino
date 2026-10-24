@@ -359,7 +359,7 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 4096   // a whole dashboard layout (UI_CONFIG_MAX 3000) fits in one line, escaped
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v4.0.2"
+#define  FW_VERSION "hid_fi_v4.0.3"
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -4655,8 +4655,33 @@ void handleSetVerbose(const JsonDocument& inDoc) {
 }
 
 // ==================== MACROS (stored in NVS, 8 slots) ====================
+// Macros, in NVS next to the WiFi settings, the PIN and the vault - which must
+// always be able to save. So: 32 slots, 1000 characters each, 4000 in all, and
+// a save that would leave the store with under NVS_RESERVE free entries (one
+// page kept for NVS's own garbage collection, plus room for those) is refused.
+// Measured on two boards in use: 630 entries, 257-278 used.
+#define MACRO_SLOTS        32
+#define MACRO_STEPS_MAX    1000
+#define MACRO_NAME_MAX     40
+#define MACRO_TOTAL_MAX    4000
+#define NVS_RESERVE        160
+
+// Entries a string of n bytes takes in NVS: one header, then 32-byte chunks.
+static int nvsEntriesFor(size_t n) { return 1 + (int)((n + 1 + 31) / 32); }
+
+// Room for `need` more entries while keeping the reserve.
+static bool nvsHasRoomFor(int need) {
+    nvs_stats_t st;
+    if (nvs_get_stats(NULL, &st) != ESP_OK) return true;   // cannot tell: the write itself is checked
+    return (int)st.free_entries - need >= NVS_RESERVE;
+}
+
+static void macroError(const char* msg) {
+    StaticJsonDocument<224> d; d["status"]="error"; d["message"]=msg; sendJson(d);
+}
+
 static bool macroSlotKeys(int slot, char* nameKey, char* stepKey) {
-    if (slot < 0 || slot > 7) return false;
+    if (slot < 0 || slot >= MACRO_SLOTS) return false;
     snprintf(nameKey, 4, "n%d", slot);
     snprintf(stepKey, 4, "s%d", slot);
     return true;
@@ -4666,7 +4691,7 @@ void handleMacroSave(const JsonDocument& inDoc) {
     int slot = inDoc["slot"] | -1;
     char nk[4], sk[4];
     if (!macroSlotKeys(slot, nk, sk)) {
-        StaticJsonDocument<160> d; d["status"]="error"; d["message"]="slot must be 0-7"; sendJson(d); return;
+        macroError("slot must be 0-31"); return;
     }
     JsonArrayConst steps = inDoc["steps"].as<JsonArrayConst>();
     if (steps.isNull() || steps.size() == 0) {
@@ -4677,13 +4702,32 @@ void handleMacroSave(const JsonDocument& inDoc) {
         if (joined.length()) joined += '\n';
         joined += v.as<const char*>();
     }
-    if (joined.length() > 1000) {
-        StaticJsonDocument<160> d; d["status"]="error"; d["message"]="macro too long (max 1000 chars)"; sendJson(d); return;
-    }
+    if (joined.length() > MACRO_STEPS_MAX) { macroError("macro too long (max 1000 chars)"); return; }
+    String name = inDoc["name"] | "macro";
+    if (name.length() > MACRO_NAME_MAX) name = name.substring(0, MACRO_NAME_MAX);
+
+    // What all the other macros already take, so the total stays bounded.
     preferences.begin("macros", false);
-    preferences.putString(nk, String(inDoc["name"] | "macro"));
-    preferences.putString(sk, joined);
+    size_t others = 0;
+    for (int i = 0; i < MACRO_SLOTS; i++) {
+        if (i == slot) continue;
+        char n2[4], s2[4]; macroSlotKeys(i, n2, s2);
+        others += preferences.getString(s2, "").length() + preferences.getString(n2, "").length();
+    }
+    size_t had = preferences.getString(sk, "").length() + preferences.getString(nk, "").length();
+    if (others + joined.length() + name.length() > MACRO_TOTAL_MAX) {
+        preferences.end();
+        macroError("Macros are full (4000 characters in all) - delete one first"); return;
+    }
+    int need = nvsEntriesFor(joined.length()) + nvsEntriesFor(name.length()) - (had ? nvsEntriesFor(had) : 0);
+    if (need > 0 && !nvsHasRoomFor(need)) {
+        preferences.end();
+        macroError("The board's storage is nearly full - delete a macro or a text shortcut first"); return;
+    }
+    bool ok = preferences.putString(nk, name) == name.length() || name.length() == 0;
+    ok = ok && preferences.putString(sk, joined) == joined.length();
     preferences.end();
+    if (!ok) { macroError("Could not save - the board's storage is full"); return; }
 
     StaticJsonDocument<192> doc;
     doc["status"]="ok"; doc["reply"]="macro_saved"; doc["slot"]=slot; doc["steps"]=(int)steps.size();
@@ -4694,7 +4738,7 @@ void handleMacroGet(const JsonDocument& inDoc) {
     int slot = inDoc["slot"] | -1;
     char nk[4], sk[4];
     if (!macroSlotKeys(slot, nk, sk)) {
-        StaticJsonDocument<160> d; d["status"]="error"; d["message"]="slot must be 0-7"; sendJson(d); return;
+        macroError("slot must be 0-31"); return;
     }
     preferences.begin("macros", true);
     String name = preferences.getString(nk, "");
@@ -4719,7 +4763,7 @@ void handleMacroList() {
     StaticJsonDocument<768> doc;
     doc["status"]="ok"; doc["reply"]="macro_list";
     JsonArray arr = doc.createNestedArray("macros");
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < MACRO_SLOTS; i++) {
         char nk[4], sk[4];
         macroSlotKeys(i, nk, sk);
         String name = preferences.getString(nk, "");
@@ -4755,7 +4799,7 @@ void handleMacroRun(const JsonDocument& inDoc) {
     int slot = inDoc["slot"] | -1;
     char nk[4], sk[4];
     if (!macroSlotKeys(slot, nk, sk)) {
-        StaticJsonDocument<160> d; d["status"]="error"; d["message"]="slot must be 0-7"; sendJson(d); return;
+        macroError("slot must be 0-31"); return;
     }
     preferences.begin("macros", true);
     String name = preferences.getString(nk, "");
@@ -5055,7 +5099,7 @@ void handleMacroDelete(const JsonDocument& inDoc) {
     int slot = inDoc["slot"] | -1;
     char nk[4], sk[4];
     if (!macroSlotKeys(slot, nk, sk)) {
-        StaticJsonDocument<160> d; d["status"]="error"; d["message"]="slot must be 0-7"; sendJson(d); return;
+        macroError("slot must be 0-31"); return;
     }
     preferences.begin("macros", false);
     preferences.remove(nk);
@@ -5081,7 +5125,21 @@ void handleUiSave(const JsonDocument& inDoc) {
     }
     preferences.begin("hid_cfg", false);
     if (n == 0) preferences.remove("ui");
-    else        preferences.putString("ui", data);
+    else {
+        size_t had = preferences.getString("ui", "").length();
+        int need = nvsEntriesFor(n) - (had ? nvsEntriesFor(had) : 0);
+        if (need > 0 && !nvsHasRoomFor(need)) {
+            preferences.end();
+            StaticJsonDocument<224> d; d["status"]="error";
+            d["message"]="The board's storage is nearly full - delete a macro or a text shortcut first";
+            sendJson(d); return;
+        }
+        if (preferences.putString("ui", data) != n) {
+            preferences.end();
+            StaticJsonDocument<192> d; d["status"]="error"; d["message"]="Could not save - the board's storage is full";
+            sendJson(d); return;
+        }
+    }
     preferences.end();
 
     StaticJsonDocument<192> doc;

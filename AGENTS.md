@@ -755,6 +755,15 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   address, from the browser itself, and explains when the browser is kept off
   the network. Seen live: macOS allowed the app on the local network but not
   Chrome - ERR_ADDRESS_UNREACHABLE, with no word why. `companion/tests/open_dashboard.py`.
+- **The board's storage (NVS, 630 entries) is shared**: WiFi settings, the PIN,
+  the vault, companion pairings, macros and the dashboard layout. Anything a
+  person can grow (macros, text shortcuts in the layout) is capped, and refused
+  when a save would leave fewer than `NVS_RESERVE` (160) entries free - so the
+  WiFi settings, the PIN and the vault can always be saved. Every such write
+  checks `putString()` and says so when it fails. `board_sim.py` mirrors the
+  numbers; `tests/unit/test_actions.py` fails if they drift.
+- **No hold-to-edit.** People rest a finger on a tile to scroll; tiles run on a
+  tap, and an Edit button (Text shortcuts, Macros, Quick actions) opens them.
 - **A swipe never changes tab from under a working finger.** The tab swipe
   (`swipe between tabs` in web_ui.h) gives up on anything that claims its own
   touches - the KEEP list, any `touch-action: none` ancestor, a row that scrolls

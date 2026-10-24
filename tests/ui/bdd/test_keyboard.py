@@ -120,7 +120,8 @@ def slot_named(ctx, n, name):
 
 @then(parsers.parse("the macro slot {n:d} is empty"))
 def slot_empty(ctx, n):
-    _wait(ctx["ui"], lambda: f"Slot {n}" in _slot(ctx["ui"], n).inner_text(), f"slot {n} still {_slot(ctx['ui'], n).inner_text()!r}")
+    # Only saved macros have tiles now: an empty slot has none.
+    _wait(ctx["ui"], lambda: _slot(ctx["ui"], n).count() == 0, f"slot {n} still has a tile")
 
 
 @given(parsers.parse('the board has a macro "{name}" in slot {n:d}'))
@@ -130,7 +131,7 @@ def has_macro(ctx, name, n):
 
 @given("the board has macros in every slot")
 def all_macros(ctx):
-    for i in range(8):
+    for i in range(32):
         ctx["sim"].macros[i] = {"name": f"M{i}", "steps": ["key ENTER"]}
 
 
@@ -150,3 +151,27 @@ def kb_tier(ctx, tier):
 def deck_tier(ctx, tier):
     got = ctx["ui"].page.evaluate("kbTierOf['kbd2']")
     assert got == tier, got
+
+
+@then(parsers.parse("there are {n:d} macros"))
+def macro_count(ctx, n):
+    _wait(ctx["ui"], lambda: ctx["ui"].page.locator("#macroTiles [data-ms]").count() == n,
+          f'{ctx["ui"].page.locator("#macroTiles [data-ms]").count()} macro tiles, not {n}')
+
+
+@given(parsers.parse("the board's macros already hold {n:d} characters"))
+def macros_hold(ctx, n):
+    # One big macro (names count too): steps of n - len(name) characters.
+    name = "Big"
+    ctx["sim"].macros[5] = {"name": name, "steps": ["x" * (n - len(name))]}
+
+
+@given(parsers.parse('the board has a macro "{name}" in slot {n:d} with the lines "{a}", "{b}" and "{c}"'))
+def macro_lines(ctx, name, n, a, b, c):
+    ctx["sim"].macros[n] = {"name": name, "steps": [a, b, c]}
+
+
+@then(parsers.parse('the macro ran: type "{a}", press "{b}", type "{c}"'))
+def macro_ran(ctx, a, b, c):
+    _wait(ctx["ui"], lambda: ctx["sim"].macro_ran == [("text", a), ("key", b), ("text", c)],
+          f"the macro ran {ctx['sim'].macro_ran}")

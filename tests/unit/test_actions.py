@@ -146,3 +146,19 @@ def test_the_firmware_parses_macro_lines_the_same_way():
     assert "strncasecmp" in src[src.index("static bool macroVerb"):src.index("static void runMacroLine")]
     assert "else                              typeString(ln.c_str());" in body, \
         "a line without a verb must be typed, not skipped"
+
+
+def test_the_model_has_the_firmwares_macro_and_storage_limits():
+    # The dashboard scenarios run against board_sim: if its limits drift from
+    # hid_fi.ino, every macro and storage scenario proves the wrong thing.
+    import pathlib
+    import re
+    from support import board_sim
+    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text()
+    define = lambda n: int(re.search(rf"#define\s+{n}\s+(\d+)", src).group(1))
+    assert define("MACRO_SLOTS") == board_sim.MACRO_SLOTS == 32
+    assert define("NVS_RESERVE") == board_sim.NVS_RESERVE
+    assert (define("MACRO_STEPS_MAX"), define("MACRO_NAME_MAX"), define("MACRO_TOTAL_MAX")) == (1000, 40, 4000)
+    assert define("UI_CONFIG_MAX") == 3000 and define("WS_TEXT_MAX") == 4096 and define("SERIAL_LINE_MAX") == 4096
+    for n in (0, 31, 32, 1000, 3000):
+        assert board_sim.nvs_entries(n) == 1 + (n + 1 + 31) // 32

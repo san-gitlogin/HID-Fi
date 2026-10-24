@@ -2040,7 +2040,11 @@ function connect(){
     }
     if(m.reply==='auth_required'){authOK=false;askPin();return settle(m);}
     if(m.reply==='lan_locked'){lanLocked();return settle(m);}
-    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();}
+    // loadCfg here, once: on a PIN-locked board the layout asked for at connect
+    // was refused, so after signing in a person saw the default tiles - and an
+    // edit saved those over the board's real layout. Not in syncAll(), which
+    // runs after every write and would redraw tiles and knobs under a finger.
+    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();loadCfg();}
     if(m.reply==='auth_failed'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,m.retry_in?('Wrong PIN. Locked for '+m.retry_in+'s.'):'That PIN was not right.');}
     // Refused unchecked, so it may be wrong: kept, it would be re-sent on every
@@ -3213,25 +3217,9 @@ function paintEdit(k){
   if(h)h.textContent=EDIT_HINT[k][EDIT[k]?1:0];
 }
 function toggleEdit(k){EDIT[k]=!EDIT[k];paintEdit(k);({snip:renderSnips,macro:renderMacros,quick:renderQuick}[k])();buzz(8);}
-// Hold 0.6 s to edit. The lift that ends the hold must not also count as a tap -
-// it used to run the macro (typing on the computer) as its editor opened.
-// And the click the lift makes lands on whatever is under the finger by then -
-// the editor's backdrop, which closes it: the editor flashed open and shut. So
-// the one click that ends a hold is swallowed, wherever it lands.
-let holdClickUntil=0;
-document.addEventListener('click',e=>{
-  if(performance.now()<holdClickUntil){holdClickUntil=0;e.stopPropagation();e.preventDefault();}
-},true);
-function holdToEdit(b,open){
-  let t=0;b._held=false;
-  b.addEventListener('pointerdown',()=>{b._held=false;clearTimeout(t);
-    // Until the lift, however long the hold; then a moment for its click.
-    t=setTimeout(()=>{b._held=true;holdClickUntil=Infinity;open();},600);});
-  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>{clearTimeout(t);
-    if(b._held&&holdClickUntil===Infinity)holdClickUntil=performance.now()+400;}));
-  b.addEventListener('contextmenu',e=>e.preventDefault());
-}
-const heldTap=b=>{if(b._held){b._held=false;return true;}return false;};
+// No hold-to-edit anywhere: people rest a finger on a tile to scroll, and a
+// hold that opened an editor (and once also ran the macro, and once closed
+// again on the lift) got in their way. Editing is the Edit button only.
 // Text shortcuts live in CFG.quick (t:'text') - stored with the layout - but are
 // shown on the Keys tab, where a person looks for typing, not on Media.
 function renderSnips(){
@@ -3242,8 +3230,7 @@ function renderSnips(){
     (list.length?'':'<button class="tile" id="snipAdd" style="color:var(--fg3)">'+ico('plus')+'<span>Add</span></button>');
   host.querySelectorAll('[data-snip]').forEach(b=>{
     const i=+b.dataset.snip;
-    b.onclick=()=>{if(heldTap(b))return;if(EDIT.snip)quickEditor(i,'text');else runQuick(CFG.quick[i],b);};
-    holdToEdit(b,()=>quickEditor(i,'text'));
+    b.onclick=()=>{if(EDIT.snip)quickEditor(i,'text');else runQuick(CFG.quick[i],b);};
   });
   const a=$('snipAdd');if(a)a.onclick=()=>quickEditor(-1,'text');
   paintEdit('snip');
@@ -3255,8 +3242,7 @@ function renderQuick(){
   $('quickTiles').querySelectorAll('[data-q]').forEach(b=>{
     const i=+b.dataset.q;
     if(CFG.quick[i]&&CFG.quick[i].tog)b.classList.add('cy');
-    b.onclick=()=>{if(heldTap(b))return;if(EDIT.quick)quickEditor(i);else runQuick(CFG.quick[i],b);};
-    holdToEdit(b,()=>quickEditor(i));
+    b.onclick=()=>{if(EDIT.quick)quickEditor(i);else runQuick(CFG.quick[i],b);};
   });
   $('quickAdd').onclick=()=>quickEditor(-1);
   paintEdit('quick');
@@ -4234,39 +4220,49 @@ function loadMacros(){
 }
 function renderMacros(){
   const host=$('macroTiles');
-  let h='';
-  for(let i=0;i<8;i++){
-    const m=MACROS.find(x=>x.slot===i);
-    h+='<button class="tile'+(m&&EDIT.macro?' editing':'')+'" data-ms="'+i+'"'+(m?'':' style="opacity:.45"')+'>'+
-       ico(m?(EDIT.macro?'edit':'term'):'plus')+'<span>'+esc(m?m.name:'Slot '+i)+'</span></button>';
-  }
-  host.innerHTML=h;
+  // The saved macros, in slot order - not a grid of empty slots. Up to
+  // MACRO_SLOTS (32); the + in the card header adds one.
+  const saved=MACROS.slice().sort((a,b)=>a.slot-b.slot);
+  host.innerHTML=saved.map(m=>
+    '<button class="tile'+(EDIT.macro?' editing':'')+'" data-ms="'+m.slot+'">'+
+       ico(EDIT.macro?'edit':'term')+'<span>'+esc(m.name)+'</span></button>').join('')+
+    (saved.length?'':'<button class="tile" id="macroAdd" style="color:var(--fg3)">'+ico('plus')+'<span>Add</span></button>');
+  const add=$('macroAdd');if(add)add.onclick=newMacro;
   host.querySelectorAll('[data-ms]').forEach(b=>{
     const i=+b.dataset.ms, m=MACROS.find(x=>x.slot===i);
-    b.onclick=()=>{if(heldTap(b))return;
+    b.onclick=()=>{
       if(m&&!EDIT.macro){send({cmd:'macro_run',slot:i});buzz(12);toast('Running '+m.name);}else macroEditor(i);};
-    holdToEdit(b,()=>macroEditor(i));
   });
   paintEdit('macro');
+}
+const MACRO_SLOTS=32;     // hid_fi.ino
+function newMacro(){
+  for(let i=0;i<MACRO_SLOTS;i++)if(!MACROS.find(m=>m.slot===i))return macroEditor(i);
+  toast('All '+MACRO_SLOTS+' macros used - delete one first','bad');
 }
 function macroEditor(slot){
   send({cmd:'macro_get',slot:slot},r=>{
     const name=(r&&r.name)||'', steps=(r&&r.steps)?r.steps.join('\n'):'';
-    sheet('Macro slot '+slot,
+    sheet(r&&r.name?'Edit macro':'New macro',
       '<div class="fld"><label>Name</label><input id="m_n" value="'+esc(name)+'"></div>'+
       '<div class="fld"><label>Steps, one per line</label><textarea id="m_s" spellcheck="false">'+esc(steps)+'</textarea></div>'+
       '<p class="hint">Verbs: <b>key</b> COMBO &middot; <b>text</b> literal &middot; <b>delay</b> ms &middot; <b>click</b> left|right|middle. A line without a verb is typed as it is.</p>'+
       '<div class="row" style="margin-top:14px">'+
-        '<button class="btn sm bad" id="m_del">'+ico('trash','ic-sm')+'Delete</button>'+
+        (r&&r.name?'<button class="btn sm bad" id="m_del">'+ico('trash','ic-sm')+'Delete</button>':'')+
         '<button class="btn ok" id="m_ok">'+ico('check','ic-sm')+'Save</button></div>',
       ()=>{
         $('m_ok').onclick=()=>{
           const lines=$('m_s').value.split('\n').map(s=>s.trim()).filter(Boolean);
           if(!lines.length)return toast('No steps','bad');
-          send({cmd:'macro_save',slot:slot,name:$('m_n').value||('Slot '+slot),steps:lines},()=>{
-            toast('Macro saved','ok');loadMacros();closeSheet();});
+          send({cmd:'macro_save',slot:slot,name:$('m_n').value||('Macro '+(slot+1)),steps:lines},r=>{
+            // The board may refuse (too long, macros full, storage nearly full):
+            // say so and keep the editor open, never "saved".
+            if(r&&r.status==='ok'){toast('Macro saved','ok');loadMacros();closeSheet();}
+            else toast((r&&r.message)||'Not saved - no answer from the board','bad');});
         };
-        $('m_del').onclick=()=>send({cmd:'macro_delete',slot:slot},()=>{loadMacros();closeSheet();});
+        if($('m_del'))$('m_del').onclick=()=>send({cmd:'macro_delete',slot:slot},r=>{
+          if(r&&r.status==='ok'){toast('Macro deleted','ok');loadMacros();closeSheet();}
+          else toast((r&&r.message)||'Not deleted - no answer from the board','bad');});
       });
   });
 }
@@ -4614,10 +4610,7 @@ function pcEditor(edit){
 // phone, and applyStatus() rebuilds whatever a change to the PIN affects.
 let AUTH_SET=null;
 let AP_OPEN=false;
-// loadCfg too: on a PIN-locked board the layout asked for at connect is refused
-// until the PIN is in. Without it a person saw the default tiles after signing
-// in - and editing one saved those defaults over the board's real layout.
-function syncAll(){refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
+function syncAll(){refresh();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
   scrAgain();if(curView==='screen'||SCR.float||WATCH.on||WALL.on)scrList();}
 function refresh(){
   if(wsUp)send({cmd:'status'});
@@ -4967,10 +4960,7 @@ function bindAll(){
     if(e.key==='Enter'){e.preventDefault();$('btnCombo').click();}
   });
   $('btnCombo').onclick=()=>{const v=$('customKeys').value;if(v)send({cmd:'press',keys:v});};
-  $('btnMacroNew').onclick=()=>{
-    for(let i=0;i<8;i++)if(!MACROS.find(m=>m.slot===i))return macroEditor(i);
-    toast('All 8 slots used','bad');
-  };
+  $('btnMacroNew').onclick=newMacro;
   $('btnKnobNew').onclick=()=>knobEditor(-1);
   $('btnQuickNew').onclick=()=>quickEditor(-1);
   $('btnPcNew').onclick=()=>pcEditor();   // not pcEditor itself: the click event is not a PC to edit

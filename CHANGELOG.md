@@ -7,6 +7,49 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.0.3 - 2026-10-24
+
+Text shortcuts, macros that work as people write them, and editing anyone can
+find. Found on the morning of a time-critical booking. Flash the board.
+
+### Added
+
+- **Text shortcuts** on the Keys tab: a tile per piece of text. Click a field
+  on the computer, tap the tile, and the board types it - for forms that refuse
+  paste and Tab. Kept on the board with the dashboard layout.
+- **Up to 32 macros** (was 8), up to 1000 characters each and 4000 in all.
+
+### Fixed
+
+- **Macros typed nothing** when written on a phone: it capitalises each line
+  ("Text ...") and the board only knew lowercase verbs, skipping every other
+  line without a word. Verbs work in any case, and a line with no verb is typed.
+- **Nobody could edit or delete a macro or a tile**: the only way in was a
+  long press that nothing mentioned - and whose lift closed the editor again,
+  and for a macro also ran it. Long presses are gone (they also got in the way
+  of scrolling); an **Edit** button on Text shortcuts, Macros and Quick actions
+  opens a tile instead.
+- **A delete from the phone came back**: with a large layout the board refused
+  the save (anything over 2 KB over WiFi), the page had already removed the
+  tile, and it returned on the next load. The board takes a whole layout now,
+  and a refused save says why and shows what the board really has.
+- **After signing in, the dashboard showed the default tiles**, not the
+  board's - and an edit then saved the defaults over the board's layout.
+- **A refused macro said "Macro saved"**: the editor now shows the board's
+  reason and stays open.
+- **Storage guard**: macros and the layout can no longer fill the storage the
+  WiFi settings, the PIN and the vault need; such a save is refused with a
+  message, and every write is checked.
+
+### Tests
+
+- Scenarios for each of the above, including the live case (24 shortcuts,
+  delete from the phone), 32 macros, macros full, storage nearly full, a phone
+  written macro, and that a held finger opens nothing. A unit test keeps the
+  board model's limits equal to the firmware's.
+
+---
+
 ## v4.0.2 - 2026-10-23
 
 Two boards, boards that move between computers, and a Screen tab where nothing

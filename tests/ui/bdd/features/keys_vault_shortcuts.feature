@@ -364,30 +364,31 @@ Feature: The Keys tab - the password vault and the shortcuts
     Then there are 23 text shortcuts
     And the text shortcut "8 ID" is gone
 
-  Scenario: A long press on a text shortcut edits it and never types
-    Given the board has 3 text shortcuts
-    And the dashboard is open and signed in with "4826"
-    And I am on the "Keys" tab
-    When I long-press the text shortcut "1 Name"
-    Then the dialog "Edit text shortcut" is open
-    And the board does not receive "type"
-
-  # Seen while fixing deletes: the lift that ended a hold clicked the editor's
-  # backdrop, which closed it again - wherever the tile sat on the screen.
-  Scenario Outline: However long the hold, the editor stays open after the lift
+  # A finger resting on a tile to scroll must not open anything: editing is the
+  # Edit button only (the hold-to-edit that was here got in people's way).
+  Scenario Outline: Holding a finger on a text shortcut never opens an editor
     Given the board has 24 text shortcuts
     And the dashboard is open and signed in with "4826"
     And I am on the "Keys" tab
     When I hold the text shortcut "<tile>" for <ms> ms
-    Then the dialog "Edit text shortcut" is open
-    And the board does not receive "type"
+    Then no dialog is open
 
     Examples:
       | tile   | ms   |
       | 1 Name | 700  |
-      | 1 Name | 2500 |
-      | 8 ID   | 700  |
-      | 5 Age  | 2500 |
+      | 8 ID   | 2500 |
+
+  Scenario: With the board's storage nearly full, a new text shortcut is refused and the tiles stay as they were
+    Given the board has 3 text shortcuts
+    And the dashboard is open and signed in with "4826"
+    And I am on the "Keys" tab
+    And the board's storage is nearly full
+    When I tap the "#btnSnipNew" control
+    And I enter "Person 9 ID" in "Label"
+    And I enter "999999999999" in "Text it types"
+    And I tap the "#s_ok" control
+    Then I see the message "Not saved: The board's storage is nearly full - delete a macro or a text shortcut first"
+    And there are 3 text shortcuts
 
   Scenario: A save the board refuses says why and shows what the board has
     Given the board has 3 text shortcuts

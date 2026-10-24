@@ -99,9 +99,9 @@ Feature: The Keyboard tab
     And I press Enter in "#customKeys"
     Then the board receives {"cmd": "press", "keys": "ALT+F4"}
 
-  Scenario: An empty slot opens the editor, and a saved macro appears in its slot
-    When I tap the macro slot 0
-    Then the dialog "Macro slot 0" is open
+  Scenario: The + adds a macro, and it appears as a tile
+    When I tap the "#btnMacroNew" control
+    Then the dialog "New macro" is open
     When I enter "Greeting" in "Name"
     And I enter the macro steps "text Hello" and "key ENTER"
     And I tap "Save"
@@ -117,47 +117,73 @@ Feature: The Keyboard tab
     Then the board receives {"cmd": "macro_run", "slot": 2}
     And I see the message "Running Sign off"
 
-  Scenario: A long press on a saved macro edits it, and Delete removes it
-    Given the board has a macro "Sign off" in slot 2
-    When I reload the dashboard
-    And I open the "Keyboard" tab
-    And I long-press the macro slot 2
-    Then the dialog "Macro slot 2" is open
-    And the macro editor shows the steps of "Sign off"
-    # Seen live: the lift that ended the hold also ran the macro on the computer.
-    And the board does not receive "macro_run"
-    When I tap "Delete"
-    Then the board receives {"cmd": "macro_delete", "slot": 2}
-    And the macro slot 2 is empty
-
-  # Seen live: nobody found the long press, so nobody could delete a macro.
+  # Seen live: nobody found the long press, so nobody could delete a macro; and
+  # people rest a finger on a tile to scroll. Editing is the Edit button only.
   Scenario: The Edit button turns macros into editors, and Delete removes one
     Given the board has a macro "Sign off" in slot 2
     When I reload the dashboard
     And I open the "Keyboard" tab
     And I tap the "#btnMacroEdit" control
     And I tap the macro slot 2
-    Then the dialog "Macro slot 2" is open
+    Then the dialog "Edit macro" is open
+    And the macro editor shows the steps of "Sign off"
     And the board does not receive "macro_run"
     When I tap "Delete"
     Then the board receives {"cmd": "macro_delete", "slot": 2}
+    And I see the message "Macro deleted"
     And the macro slot 2 is empty
-    When I tap the "#btnMacroEdit" control
-    And I tap the macro slot 0
-    Then the dialog "Macro slot 0" is open
+
+  Scenario: Holding a finger on a macro never opens an editor
+    Given the board has a macro "Sign off" in slot 2
+    When I reload the dashboard
+    And I open the "Keyboard" tab
+    And I long-press the macro slot 2
+    Then no dialog is open
 
   Scenario: A macro with no steps is refused before it reaches the board
-    When I tap the macro slot 1
+    When I tap the "#btnMacroNew" control
     And I tap "Save"
     Then I see the message "No steps"
     And the board does not receive "macro_save"
 
-  Scenario: New macro picks the first free slot, and says so when all eight are used
+  Scenario: Thirty-two macros, and the + says so when all are used
     Given the board has macros in every slot
     When I reload the dashboard
     And I open the "Keyboard" tab
+    Then there are 32 macros
+    When I tap the "#btnMacroNew" control
+    Then I see the message "All 32 macros used - delete one first"
+
+  # The macros share the board's storage with the WiFi settings, the PIN and
+  # the vault, which must always be able to save.
+  Scenario: Macros past 4000 characters in all are refused, and the editor says why
+    Given the board's macros already hold 3990 characters
+    When I reload the dashboard
+    And I open the "Keyboard" tab
     And I tap the "#btnMacroNew" control
-    Then I see the message "All 8 slots used"
+    And I enter "Long one" in "Name"
+    And I enter the macro steps "text abcdefghijklmnop" and "key ENTER"
+    And I tap "Save"
+    Then I see the message "Macros are full (4000 characters in all) - delete one first"
+    And the dialog "New macro" is open
+
+  Scenario: With the board's storage nearly full, a macro is refused and nothing is lost
+    Given the board's storage is nearly full
+    When I tap the "#btnMacroNew" control
+    And I enter "Greeting" in "Name"
+    And I enter the macro steps "text Hello" and "key ENTER"
+    And I tap "Save"
+    Then I see the message "The board's storage is nearly full - delete a macro or a text shortcut first"
+    And the dialog "New macro" is open
+
+  # Seen live: a phone capitalises each line ("Text ..."), and those lines were
+  # skipped without a word. Any case works, and a line with no verb is typed.
+  Scenario: A macro written on a phone types every line
+    Given the board has a macro "Booking" in slot 0 with the lines "Text Thirumalai T", "KEY tab" and "60"
+    When I reload the dashboard
+    And I open the "Keyboard" tab
+    And I tap the macro slot 0
+    Then the macro ran: type "Thirumalai T", press "tab", type "60"
 
   # ---- one keyboard per size of screen ------------------------------------------------
 

@@ -417,7 +417,7 @@ waiting for its next poll.
 | `gamepad_enable` | `on`, `reboot` | Adds or removes the controller device |
 | `gamepad` | `lx`, `ly`, `rx`, `ry`, `hat`, `buttons` | |
 | `ui_save` / `ui_get` | `data` | Dashboard layout, stored on the board |
-| `macro_save` / `macro_get` / `macro_list` / `macro_run` / `macro_delete` | `slot`, `name`, `steps` | 8 slots |
+| `macro_save` / `macro_get` / `macro_list` / `macro_run` / `macro_delete` | `slot`, `name`, `steps` | 32 slots (0-31); a macro up to 1000 characters and its name up to 40, 4000 in all. Steps are `key`, `text`, `delay`, `click` in any case; a line with no verb is typed as it is. Refused, with a message, when the board's storage would drop below its reserve |
 | `set_verbose` | `on` | Echo every source to serial |
 | `storage_info` | — | What is kept in the board's permanent memory |
 | `clients` | — | Everything currently joined to the access point |
