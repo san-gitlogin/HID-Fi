@@ -4,6 +4,13 @@
 #   .\install-windows.ps1 -Uninstall
 #   .\install-windows.ps1 -From .\hidfi-companion.exe      (a build of your own)
 #
+# Updating is running it again: it closes the running app, replaces it and
+# starts the new one - no need to quit from the tray first. Starting a newer
+# hidfi-companion.exe by hand also works: it asks the running one to quit and
+# takes over (handover.rs). The installed version is in the tray menu, at the
+# top of the app's window, and from "hidfi-companion.exe --version" with its
+# output redirected (it has no console): Start-Process ... -RedirectStandardOutput.
+#
 # Puts the app in %LOCALAPPDATA%\Programs\HID-Fi Companion, adds a Start menu
 # shortcut, and starts it (the app adds its own start-at-login entry, which its
 # tray menu can turn off). Viewers connect to this computer, so Windows
@@ -34,7 +41,16 @@ function Set-FirewallRule([bool]$Add) {
     }
 }
 
-Get-Process -Name 'hidfi-companion' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# An update replaces the running app: stop it, and wait until Windows has let
+# go of its program file - Stop-Process returns at once, and a copy started
+# while the file was still locked failed with "in use" (seen live: people had
+# to quit the app from the tray first).
+$running = Get-Process -Name 'hidfi-companion' -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host 'Closing the running HID-Fi Companion...'
+    $running | Stop-Process -Force -ErrorAction SilentlyContinue
+    $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+}
 
 if ($Uninstall) {
     Remove-Item -Force -ErrorAction SilentlyContinue $Lnk
@@ -65,7 +81,14 @@ try {
         $got = (Get-FileHash -Algorithm SHA256 $new).Hash.ToLower()
         if (-not $want -or $want -ne $got) { throw 'The download does not match the release checksum - not installed.' }
     }
-    Copy-Item -Force -LiteralPath $new -Destination $Exe
+    # The file can stay locked a moment after the process is gone: try again.
+    for ($i = 1; ; $i++) {
+        try { Copy-Item -Force -LiteralPath $new -Destination $Exe; break }
+        catch {
+            if ($i -ge 20) { throw "Could not replace $Exe - is HID-Fi Companion still running? Quit it from the tray and run this again." }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }
@@ -77,8 +100,20 @@ $s.WorkingDirectory = $Dir
 $s.Description = "Shows this computer's screen on the HID-Fi dashboard"
 $s.Save()
 
+# The version, from the app itself. A tray app has no console, so its output is
+# only seen through a redirected file (seen: '& $Exe --version' printed nothing).
+$ver = ''
+$vf = Join-Path ([IO.Path]::GetTempPath()) ("hidfi-ver-" + [guid]::NewGuid() + ".txt")
+try {
+    # A build from before --version starts the whole app instead of answering:
+    # give it 5 s, then stop it (seen: an older -From build hung the installer).
+    $vp = Start-Process -FilePath $Exe -ArgumentList '--version' -NoNewWindow -PassThru -RedirectStandardOutput $vf
+    if (-not $vp.WaitForExit(5000)) { $vp.Kill(); $vp.WaitForExit(5000) | Out-Null }
+    else { $ver = (Get-Content -Raw $vf).Trim() }
+} catch {} finally { Remove-Item -Force -ErrorAction SilentlyContinue $vf }
+if (-not $ver) { $ver = 'HID-Fi Companion' }
 Write-Host ''
-Write-Host "Installed: $Exe"
+Write-Host "Installed $ver at $Exe"
 Write-Host 'Windows will ask for administrator approval once, to let viewers on your home network connect.'
 if (-not (Set-FirewallRule $true)) {
     Write-Host 'Skipped. Windows will ask again the first time a viewer connects.' -ForegroundColor Yellow

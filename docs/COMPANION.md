@@ -148,9 +148,25 @@ inside your user session. For those, an HDMI capture device is the route today.
 
 ## Update
 
-macOS: drag the new version over the old one in Applications; the running app
-notices and restarts itself into it. Windows and Linux: run the install line
-again; it stops the running app first.
+**Which version you have:** the app's menu (tray or menu bar) shows *Version
+4.0.4* above Quit, and its window shows it next to the name. From a terminal:
+`hidfi-companion --version` (on Windows its output must be redirected, since
+it has no console).
+
+You never need to quit the app first:
+
+- **macOS:** drag the new version over the old one in Applications; the running
+  app notices and restarts itself into it.
+- **Windows and Linux:** run the install line again. It closes the running app,
+  waits until the old program file is free, puts the new one in place, starts
+  it, and says which version it installed.
+- **Any OS, a downloaded copy:** starting a newer HID-Fi Companion (or the
+  same version from another folder) while one runs asks the running one to
+  quit, and the new one takes its place. Starting the same app again changes
+  nothing.
+
+Updates from v4.0.4 on hand over like this; a v4.0.3 or older app is closed by
+the installer instead.
 
 ## Remove
 

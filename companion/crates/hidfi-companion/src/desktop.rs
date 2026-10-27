@@ -47,6 +47,12 @@ fn build(m: &menu::Model, start_at_login: bool) -> Built {
     let _ = menu.append(&PredefinedMenuItem::separator());
     let login = CheckMenuItem::new("Start at login", true, start_at_login, None);
     let _ = menu.append(&login);
+    // Which version this is, where people look for it.
+    let _ = menu.append(&MenuItem::new(
+        format!("Version {}", hidfi_companion::handover::VERSION),
+        false,
+        None,
+    ));
     let quit = MenuItem::new("Quit HID-Fi Companion", true, None);
     let _ = menu.append(&quit);
     Built {
@@ -86,6 +92,13 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     {
         let wake = std::sync::Mutex::new(proxy.clone());
         handle.on_change(move || {
+            let _ = wake.lock().map(|p| p.send_event(()));
+        });
+    }
+    {
+        // A newer copy asking to take over: quit like the menu's Quit.
+        let wake = std::sync::Mutex::new(proxy.clone());
+        hidfi_companion::handover::watch(store_for_settings.dir().to_path_buf(), move || {
             let _ = wake.lock().map(|p| p.send_event(()));
         });
     }
@@ -135,6 +148,13 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             _ => {}
         }
 
+        if hidfi_companion::handover::quit_requested() {
+            let _ = handle.tx.send(Cmd::Quit);
+            panel = None;
+            tray = None;
+            *flow = ControlFlow::Exit;
+            return;
+        }
         let mut act: Vec<Action> = Vec::new();
         while let Ok(ev) = menu_rx.try_recv() {
             let Some(b) = built.as_ref() else { continue };

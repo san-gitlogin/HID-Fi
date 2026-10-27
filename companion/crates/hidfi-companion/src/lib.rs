@@ -2,6 +2,7 @@
 //! the system tests.
 
 pub mod browser;
+pub mod handover;
 pub mod menu;
 pub mod opener;
 #[cfg(any(target_os = "macos", windows))]

@@ -62,6 +62,7 @@ button{font:inherit;font-weight:560;color:var(--fg);background:var(--surface);bo
 button:hover{border-color:var(--line2)}
 button.primary{background:linear-gradient(140deg,var(--acc),var(--acc2));border:none;color:#04121a}
 button:active{transform:scale(.98)}
+.ver{font-weight:500;color:var(--fg2);font-size:.85em;margin-left:4px}
 </style></head><body>
 <div class="brand">
   <svg class="tile" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1">
@@ -69,7 +70,7 @@ button:active{transform:scale(.98)}
   <rect width="512" height="512" rx="114" fill="url(#t)"/><g transform="translate(102.4 102.4) scale(12.8)" fill="none"
   stroke="#04121a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.67 21.45A8.9 8.9 0 1 1 21.45 11.67"/>
   <path d="M8.64 8.64 14.96 20.66 15.7 15.7 20.66 14.96Z" fill="#04121a" stroke-width="1.5"/></g></svg>
-  <div><b>HID-Fi Companion</b><span id="sub">Shows this computer's screen on the dashboard</span></div>
+  <div><b>HID-Fi Companion <span class="ver">@VERSION@</span></b><span id="sub">Shows this computer's screen on the dashboard</span></div>
 </div>
 <div class="card"><div class="head"><svg class="ic" id="hicon"><use href="#i-info"/></svg>
   <div><div id="headline"></div><div id="details"></div></div></div></div>
@@ -142,7 +143,7 @@ impl Panel {
             .build(target)
             .map_err(|e| e.to_string())?;
         let view = WebViewBuilder::new()
-            .with_html(PAGE)
+            .with_html(PAGE.replace("@VERSION@", crate::handover::VERSION))
             .with_background_color((7, 9, 15, 255))
             .with_ipc_handler(move |req| {
                 let b = req.body();

@@ -23,6 +23,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn main() {
+    // Which version is installed - for a person, a script or a support request.
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("HID-Fi Companion {}", hidfi_companion::handover::VERSION);
+        return;
+    }
     // HIDFI_HOME and HIDFI_NO_AUTOSTART exist for development and tests: a
     // test run must not install a login item or touch the real app folder.
     let dir = std::env::var_os("HIDFI_HOME")
@@ -47,11 +52,32 @@ fn main() {
         .open(store.dir().join("instance.lock"));
     let _lock = match lock {
         Ok(f) if f.try_lock().is_ok() => f,
-        _ => {
+        Ok(f) => {
+            // Another copy is running. A newer one (or the same version from a
+            // fresh download) asks it to quit and takes its place; the same app
+            // launched again leaves it be. See handover.rs.
+            if !hidfi_companion::handover::ask_to_quit(store.dir()) {
+                log::info!("already running");
+                return;
+            }
+            let end = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                if f.try_lock().is_ok() {
+                    break f;
+                }
+                if std::time::Instant::now() > end {
+                    log::warn!("the running copy did not quit within 10 s - leaving it running");
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        Err(_) => {
             log::info!("already running");
             return;
         }
     };
+    hidfi_companion::handover::announce(store.dir());
     log::info!("starting, version {}", env!("CARGO_PKG_VERSION"));
     std::panic::set_hook(Box::new(|p| log::error!("panic: {p}")));
 

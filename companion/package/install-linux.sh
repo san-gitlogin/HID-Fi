@@ -67,6 +67,7 @@ else
 fi
 
 pkill -x hidfi-companion 2>/dev/null || true   # an update replaces a running copy
+for _ in $(seq 1 30); do pgrep -x hidfi-companion >/dev/null || break; sleep 0.5; done   # wait until it is gone
 install -m 0755 "$tmp/hidfi-companion" "$BIN"
 cat > "$MENU" <<DESKTOP
 [Desktop Entry]
@@ -79,7 +80,7 @@ Categories=Utility;Network;
 DESKTOP
 
 say ""
-say "Installed: $BIN"
+say "Installed $("$BIN" --version 2>/dev/null || echo HID-Fi Companion): $BIN"
 if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
   say "NOTE: this is a Wayland session. Screen sharing works on X11 (Xorg) sessions for now:"
   say "      at the login screen choose \"... on Xorg\", or use an X11 desktop."

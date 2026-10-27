@@ -770,6 +770,15 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   sideways - and anywhere on the Screen tab while a screen is shown. A new
   surface gets `touch-action: none` and is covered; `tab_swipe.feature` sweeps
   every such surface on every tab by itself.
+- **Updates never need the person to quit the app.** `handover.rs`: the
+  running app writes `instance.json` (version, pid, program path) and watches
+  for `quit.request`; a newer launch, or the same version from another program
+  file, asks it to quit (the menu's Quit path) and takes over. The installers
+  stop the app and wait for the file to be free before copying, retrying while
+  Windows still holds it. The version is in the menu, the window and
+  `--version`. Proven in the Windows VM: install over a running app, the same
+  app again, a copy elsewhere, and an installer given a pre---version build
+  (it hung once: the version check is bounded to 5 s).
 - **Nothing sits over the picture** in the Screen tab: the picture is a frame -
   a slim title bar (who, which monitor, fps) above, a slim toolbar below (on a
   phone on its side, both share one row), the stage taking the computer's own

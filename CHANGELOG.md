@@ -7,6 +7,31 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.0.4 - 2026-10-27
+
+HID-Fi Companion: see which version you have, and update without quitting it
+first. The board's firmware is unchanged except for its version number (no
+need to reflash for this).
+
+### Added
+
+- **The version, where people look:** the app's menu shows *Version 4.0.4*
+  above Quit, its window shows it beside the name, and
+  `hidfi-companion --version` prints it. The Windows and Linux installers say
+  which version they installed.
+
+### Fixed
+
+- **Windows: updating meant quitting the app from the tray first.** The
+  installer stopped the app but copied at once, while Windows still held the
+  old program file ("in use"); and starting a newer .exe by hand did nothing,
+  since only one copy may run. The installer now waits for the file and
+  retries; a newer copy asks the running one to quit and takes its place (the
+  same app started again still leaves it be). Proven on Windows: install over a
+  running app, start the same app again, start a copy from another folder.
+
+---
+
 ## v4.0.3 - 2026-10-24
 
 Text shortcuts, macros that work as people write them, and editing anyone can

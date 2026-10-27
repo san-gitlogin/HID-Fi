@@ -111,6 +111,14 @@ impl ksni::Tray for Tray {
         );
         v.push(
             StandardItem {
+                label: format!("Version {}", hidfi_companion::handover::VERSION),
+                enabled: false,
+                ..Default::default()
+            }
+            .into(),
+        );
+        v.push(
+            StandardItem {
                 label: "Quit HID-Fi Companion".into(),
                 activate: Box::new(|t: &mut Self| {
                     let _ = t.tx.send(Ask::Quit);
@@ -170,8 +178,14 @@ pub fn run(handle: Handle, mut state: State, store: Store, first_run: bool) {
         );
     }
     let mut told_code: Option<String> = None;
+    hidfi_companion::handover::watch(store.dir().to_path_buf(), || {});
     loop {
-        match rx.recv_timeout(Duration::from_millis(500)) {
+        let asked = if hidfi_companion::handover::quit_requested() {
+            Ok(Ask::Quit)
+        } else {
+            rx.recv_timeout(Duration::from_millis(500))
+        };
+        match asked {
             Ok(Ask::Quit) => {
                 let _ = handle.tx.send(Cmd::Quit);
                 if let Some(t) = &tray {
