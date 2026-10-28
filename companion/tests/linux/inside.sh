@@ -48,6 +48,42 @@ fi
 grep -E "starting|board|tray|notif" "$H/companion.log" | sed 's/^[0-9]* /     /' | head -6
 kill $APP
 
+step "sound: a real PulseAudio server, a tone to its output, the app's own capture"
+pulseaudio --start --exit-idle-time=-1 >/tmp/pulse.log 2>&1 || true
+for i in 1 2 3 4 5 6 7 8 9 10; do pactl info >/dev/null 2>&1 && break; sleep 0.5; done
+pactl load-module module-null-sink sink_name=speakers >/dev/null
+pactl load-module module-null-sink sink_name=headphones >/dev/null
+pactl set-default-sink speakers
+tone() { python3 -c "import sys,math,struct;f=float(sys.argv[1]);n=int(48000*float(sys.argv[2]));sys.stdout.buffer.write(b''.join(struct.pack('<ff',0.3*math.sin(2*math.pi*f*i/48000),0.3*math.sin(2*math.pi*f*i/48000)) for i in range(n)))" "$1" "$2"; }
+( sleep 1; tone 1000 3 | pacat --device=speakers --format=float32le --rate=48000 --channels=2;
+  pactl set-default-sink headphones; sleep 0.5;
+  tone 600 3 | pacat --device=headphones --format=float32le --rate=48000 --channels=2 ) &
+./target/release/hidfi-companion --check-sound system 8 /tmp/snd.jsonl
+python3 - <<'PY'
+import json
+rows=[json.loads(l) for l in open('/tmp/snd.jsonl')]
+if 'error' in rows[0]: print('FAIL capture:', rows[0]['error']); raise SystemExit(1)
+r=[x for x in rows if 'rms' in x]
+loud=[x for x in r if x['rms']>0.1]
+k=[x for x in loud if abs(x['freq']-1000)<30]
+print(('ok  ' if len(k)>=2 else 'FAIL'), 'the computer\'s sound: a 1 kHz tone captured', [(x['freq'], round(x['rms'],2), x['rate'], x['channels']) for x in r])
+follow=[x for x in loud if abs(x['freq']-600)<30]
+print(('ok  ' if follow else 'NOTE'), 'the default output changed mid-watch: the capture', 'follows it' if follow else 'stays on the first one until reopened')
+print(('ok  ' if all(x['age_ms_max']<60 for x in r if x['chunks']) else 'FAIL'), 'chunks arrive fresh: oldest', max(x['age_ms_max'] for x in r), 'ms')
+raise SystemExit(0 if len(k)>=2 else 1)
+PY
+pactl load-module module-sine-source source_name=mic frequency=440 >/dev/null
+pactl set-default-source mic
+./target/release/hidfi-companion --check-sound mic 3 /tmp/mic.jsonl
+python3 - <<'PY'
+import json
+r=[json.loads(l) for l in open('/tmp/mic.jsonl')]
+r=[x for x in r if 'rms' in x]
+k=[x for x in r if abs(x['freq']-440)<20 and x['rms']>0.05]
+print(('ok  ' if k else 'FAIL'), 'the microphone: the default input captured', [(x['freq'], round(x['rms'],2)) for x in r])
+raise SystemExit(0 if k else 1)
+PY
+
 step "stream it: real X11 capture, real OpenH264, WebRTC"
 HIDFI_REAL_SCREEN=1 ./target/release/examples/serve 1920 1080 30 > /tmp/serve.json 2>/tmp/serve.log &
 for i in $(seq 1 40); do [ -s /tmp/serve.json ] && break; sleep 0.25; done

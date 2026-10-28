@@ -102,13 +102,41 @@ captured), so the browser keeps them in step.
   Chrome watching with sound.
 - **Performance:** CPU with sound on and off, video frame rate unchanged.
 
+## Verified on real hardware (2026-10-29)
+
+- **macOS, this Mac (Apple Silicon, macOS 15):** ScreenCaptureKit delivers 20 ms
+  buffers of 48 kHz float stereo, continuously (silence included), bit-accurate.
+  Sound played on a *non-default* output (the virtual "Microsoft Teams Audio"
+  device) and on the speakers are both captured; the capture is taken **before
+  the Mac's volume and mute** (identical level at 100 %, 25 % and muted) - a
+  muted Mac still shares its sound, as someone watching on a phone wants. A
+  buffer is about 60-70 ms old when it arrives (ScreenCaptureKit's own delay).
+  macOS refuses a buffer list larger than it asked for (-12737): read with the
+  exact size it reports.
+- **The whole chain:** the real Companion app, this Mac's sound, DA1A2C serving
+  its dashboard and tickets, real Chrome: both tones arrive at their own
+  frequency on the dashboard, sound on by default after the PIN was typed;
+  the Companion at 7.9 % CPU streaming picture and sound
+  (`companion/tests/sound_live.py`).
+- **Companion to page** (`companion/tests/sound_e2e.py`): every click for 30 s,
+  52 ms from the Companion to the page (network, Chrome's jitter buffer at its
+  21 ms floor, decode), 0.1 ms spread, no loss; 37 ms more is the Mac's own audio
+  output, the same for any app; the picture keeps 28 fps; picture and sound in
+  one stream (lip sync). With the test microphone mixed in: the same.
+- **Linux** (Ubuntu 24.04 ARM64 in the VM, a real PulseAudio server): a tone
+  played to the default output captured at 48 kHz stereo; when the default output
+  changes mid-capture, the capture follows it; chunks 10 ms old; the default
+  input (microphone) captured.
+- **Windows:** built (x64), WASAPI loopback and microphone code compiled and
+  clippy-clean; not yet run on Windows with a sound device.
+
 ## Build order
 
-1. [ ] Rust core: conform, mixer, encoder, hub, test sound; unit tests.
-2. [ ] WebRTC: Opus (+RED) in the session, own path, shared clock; video written
+1. [x] Rust core: conform, mixer, encoder, hub, test sound; unit tests.
+2. [x] WebRTC: Opus (+RED) in the session, own path, shared clock; video written
        with its capture time.
-3. [ ] macOS capture: system sound and microphone via ScreenCaptureKit.
-4. [ ] Companion settings and tray, signalling states.
-5. [ ] Dashboard: controls in every mode; BDD.
-6. [ ] System, real-capture, real-board and performance tests.
-7. [ ] Windows (WASAPI) and Linux (Pulse) capture; their checks.
+3. [x] macOS capture: system sound and microphone via ScreenCaptureKit.
+4. [x] Companion settings and tray, signalling states.
+5. [x] Dashboard: controls in every mode; BDD.
+6. [~] System, real-capture, real-board and performance tests.
+7. [~] Windows (WASAPI) and Linux (Pulse) capture; their checks.
