@@ -80,7 +80,8 @@ pub struct BoardHere {
 /// For a board's MAC: its link, and whether this computer is paired with it.
 pub type LinkFor = dyn Fn(&str) -> (Arc<dyn BoardLink>, bool) + Send + Sync;
 
-pub type CableFn = dyn Fn(CablePlan, &str, Option<(&dyn BoardLink, &str)>, &[u8], &[u8], &Path, &Shared) + Send + Sync;
+/// (plan, MAC, the board over the network, image, table, journal, the release's version, job)
+pub type CableFn = dyn Fn(CablePlan, &str, Option<(&dyn BoardLink, &str)>, &[u8], &[u8], &Path, &str, &Shared) + Send + Sync;
 
 pub struct CenterEnv {
     pub fetch: Arc<dyn Fetch>,
@@ -264,7 +265,7 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
                         let _ = std::fs::create_dir_all(d);
                     }
                     let l = b.url.as_deref().map(|u| (link.as_ref(), u));
-                    (e.cable)(plan, &mac, l, &img, &table, &jp, &sh);
+                    (e.cable)(plan, &mac, l, &img, &table, &jp, &r.0.version, &sh);
                 });
             }
             Ok(UpdCmd::GetCompanion) => {
@@ -311,7 +312,9 @@ impl UpdatesSetup {
         UpdatesSetup {
             fetch: Arc::new(real::UreqFetch::new()),
             relay: Arc::new(real::Relay),
-            cable: Arc::new(|plan, mac, link, img, table, journal, sh| real::cable_job(plan, mac, link, img, table, journal, sh)),
+            cable: Arc::new(|plan, mac, link, img, table, journal, to, sh| {
+                real::cable_job(plan, mac, link, img, table, journal, to, sh)
+            }),
             com_ports: Arc::new(real::com_ports),
             open: Arc::new(open_path),
             source: std::env::var("HIDFI_RELEASES").ok().filter(|s| s.ends_with('/')).unwrap_or_else(|| RELEASES.into()),

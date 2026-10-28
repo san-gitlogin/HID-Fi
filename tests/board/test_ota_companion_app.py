@@ -167,11 +167,15 @@ def test_a_board_that_cannot_reach_the_release_gets_it_from_the_companion(env, a
     board.cmd({"cmd": "ota_source", "url": srv_url + "nothing-here/"}, "ota_source")
     try:
         offered(app)
-        n_before = len(env["srv"].log)
+        n_before = len(env["srv"].clients)
+        board_ip = board.status()["wifi_ip"]
         app.say(f"update {app.mac} air")
         app.wait(lambda v: app.upd(v).get("job") == "Ready", 600, "the relayed update downloaded and ready")
-        assert not any(name == "hid_fi-4.0.99.bin" and code in (200, 206) for name, _, code, _ in env["srv"].log[n_before:]), \
-            "the board took the image from the Companion's relay, not from the server"
+        asked = env["srv"].clients[n_before:]
+        assert not any(ip == board_ip and code in (200, 206) for ip, _, code in asked), \
+            f"the board got files from the server, not from the Companion's relay: {asked}"
+        assert any(ip != board_ip and name == "hid_fi-4.0.99.bin" for ip, name, _ in asked), \
+            "the Companion fetched the image itself, to relay it"
         app.say(f"cancel {app.mac}")
         app.wait(lambda v: app.upd(v).get("job") == "Stopped", 120, "the ready update withdrawn")
     finally:

@@ -17,3 +17,11 @@ serialport = { version = "4.10.1", default-features = false, optional = true }
 [features]
 # The real serial port (the Companion). Tests run against the simulated chip.
 serial = ["dep:serialport"]
+
+[[example]]
+name = "preflight"
+required-features = ["serial"]
+
+[[example]]
+name = "cable_update"
+required-features = ["serial"]

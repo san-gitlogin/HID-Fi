@@ -14,6 +14,9 @@ use crate::stub::Stub;
 pub const SECTOR: u32 = 0x1000;
 const STUB_BLOCK: usize = 0x4000;
 const RAM_BLOCK: usize = 0x1800;
+/// The ROM's USB-OTG loader takes smaller RAM blocks (esptool `USB_OTG_BLOCK_SIZE`,
+/// read 2026-10-28); every ROM accepts them, so the native path always uses them.
+const USB_RAM_BLOCK: usize = 0x800;
 const MAC_EFUSE_REG: u32 = 0x6000_7044;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -43,11 +46,13 @@ pub struct Flasher<P: Port> {
     dec: Decoder,
     frames: VecDeque<Vec<u8>>,
     stub: bool,
+    /// Over the chip's own USB (the ROM loader): smaller RAM blocks, a longer reset.
+    usb: bool,
 }
 
 impl<P: Port> Flasher<P> {
     pub fn new(port: P) -> Self {
-        Flasher { port, dec: Decoder::default(), frames: VecDeque::new(), stub: false }
+        Flasher { port, dec: Decoder::default(), frames: VecDeque::new(), stub: false, usb: false }
     }
 
     pub fn has_stub(&self) -> bool {
@@ -134,10 +139,16 @@ impl<P: Port> Flasher<P> {
     /// EN pulse with GPIO0 high: the board starts its firmware. The port stays
     /// open - on macOS a new open would reset it again (AGENTS.md).
     pub fn hard_reset(&mut self) -> Result<(), FlashError> {
+        // esptool's HardReset: EN held 0.1 s on a UART bridge; 0.2 s and a 0.2 s
+        // settle on the chip's own USB, which drops off the bus while in reset.
+        let (hold, settle) = if self.usb { (200, 200) } else { (100, 0) };
         self.port.set_dtr(false)?;
         self.port.set_rts(true)?;
-        self.port.sleep_ms(100);
+        self.port.sleep_ms(hold);
         self.port.set_rts(false)?;
+        if settle > 0 {
+            self.port.sleep_ms(settle);
+        }
         self.stub = false;
         Ok(())
     }
@@ -146,6 +157,7 @@ impl<P: Port> Flasher<P> {
     /// native USB): talk to it without a reset - a reset would leave the loader.
     pub fn attach_to_loader(&mut self) -> Result<(), FlashError> {
         self.stub = false;
+        self.usb = true;
         self.frames.clear();
         self.dec = Decoder::default();
         Ok(())
@@ -195,10 +207,11 @@ impl<P: Port> Flasher<P> {
 
     pub fn load_stub(&mut self, stub: &Stub) -> Result<(), FlashError> {
         for (addr, bytes) in [(stub.text_start, &stub.text), (stub.data_start, &stub.data)] {
-            let blocks = bytes.len().div_ceil(RAM_BLOCK);
-            let begin = [bytes.len() as u32, blocks as u32, RAM_BLOCK as u32, addr];
+            let block = if self.usb { USB_RAM_BLOCK } else { RAM_BLOCK };
+            let blocks = bytes.len().div_ceil(block);
+            let begin = [bytes.len() as u32, blocks as u32, block as u32, addr];
             self.command(Op::MemBegin, &le(&begin), 0, 0, "load the stub", 1000)?;
-            for (seq, chunk) in bytes.chunks(RAM_BLOCK).enumerate() {
+            for (seq, chunk) in bytes.chunks(block).enumerate() {
                 let mut d = le(&[chunk.len() as u32, seq as u32, 0, 0]);
                 d.extend(chunk);
                 self.command(Op::MemData, &d, proto::checksum(chunk), 0, "load the stub", 1000)?;

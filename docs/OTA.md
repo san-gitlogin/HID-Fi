@@ -307,7 +307,7 @@ the chip's ROM - never guessed (see *identity* below). For each board:
 | Plugged in | How the Companion reaches the ROM bootloader | Notes |
 |---|---|---|
 | COM (CH343) | DTR/RTS reset, as `flash_esp.sh` does | Preferred when present: independent of the HID port. |
-| native USB only, firmware running | asks the board (paired, signed request `ota` / `download_mode`) to restart into the ROM loader; it comes back as USB-Serial-JTAG `303A:1001` with the MAC as its serial number - the port is found by MAC, never guessed | Needs a network path to the board. Out again: the one register write the flasher can make (`SafeWrite::ClearForceDownload`: `RTC_CNTL_OPTION1_REG` bit 0), then the RTS reset. |
+| native USB only, firmware running | asks the board (paired, signed request `ota` / `download_mode`) to restart into the ROM loader; it comes back as the ROM's **USB-OTG** loader `303A:0009` (HID-Fi runs the port as OTG), the MAC as its serial number - the port is found by MAC, never guessed. Proven on DA1A2C 2026-10-28: preflight in 1.5 s (7.5 s over COM) | Needs a network path to the board. RAM blocks of 0x800 for the stub (esptool `USB_OTG_BLOCK_SIZE`). Out again: the one register write the flasher can make (`SafeWrite::ClearForceDownload`: `RTC_CNTL_OPTION1_REG` bit 0), then RTS held 0.2 s. `303A:1001` is never taken for a loader: a running HID-Fi reports it too, and the ROM's USB-Serial-JTAG mode would need watchdog register writes the flasher does not make. |
 | native USB only, no network or firmware broken | guides the person: hold BOOT, tap RESET, release BOOT | BOOT here only enters the ROM bootloader; it never erases anything (AGENTS: no button erases data). |
 | both | COM | The keyboard and mouse on the native port disappear while flashing; the Companion says so before starting - on DA1A2C that is the Mac's keyboard. |
 
@@ -685,7 +685,21 @@ The procedure, as it will run on DA1A2C:
      now (`COMP_CHALS`), modelled and unit-tested; the Companion retries a stale
      challenge once.
    - ureq 3.4.2 -> **3.5.0** (3.4.3 and 3.5.0 carry TLS and advisory fixes; checked
-     2026-10-28), rustls with the bundled roots for GitHub, in the Companion only.
+     2026-10-28). HTTPS to GitHub with **each system's own crypto**, as the screen
+     stream already does: Security.framework and SChannel (and their trust stores)
+     on macOS and Windows, rustls on aws-lc-rs on Linux. The first try (rustls with
+     ring everywhere) broke the Windows build - neither ring nor aws-lc-sys
+     cross-compiles in `companion/tests/windows/build.sh` - so now no C crypto is
+     built for macOS or Windows at all. Proven: the Windows x64 build (every .exe a
+     PE with no C runtime DLL) and a live download from GitHub's release redirect on
+     macOS (`https_to_github_releases_works`, opt-in: it uses the internet).
+   - **native USB, end to end on DA1A2C**: the board, asked over the signed channel,
+     restarts into the ROM loader - which comes back as **USB-OTG `303A:0009`**, not
+     USB-Serial-JTAG as first assumed (HID-Fi runs the port as OTG; a first run timed
+     out looking for `1001`, which a running HID-Fi also reports). esptool's source
+     (2026-10-28) gives the rest: RAM blocks of 0x800 over OTG, then clear the flag
+     and hold RTS 0.2 s. Preflight over it: 1.5 s (7.5 s over COM). The Companion then
+     wrote, left the loader and watched the self-test: kept.
 9. [~] Release tooling: signing, manifest, SBOM, support-period date;
    CHANGELOG, SECURITY.md, README.
    Built 2026-10-28: `tools/ota_release.py release` (manifest with the table and the

@@ -8,10 +8,15 @@ use crate::port::Port;
 /// The COM port's chip on the boards HID-Fi supports (WCH CH343) - the same rule
 /// as tools/flash_ports.py: never guess at another kind of device.
 pub const CH343: (u16, u16) = (0x1A86, 0x55D3);
-/// The ESP32-S3's own USB-Serial-JTAG - present only while the chip is in its ROM
-/// loader (HID-Fi's firmware runs the native port as HID). Its USB serial number
-/// is the MAC, "B8:1F:3F:DA:1A:2C".
-pub const USB_JTAG: (u16, u16) = (0x303A, 0x1001);
+/// The ESP32-S3's ROM loader on its own USB, in USB-OTG mode: VID 0x303A, PID =
+/// the chip id (9). HID-Fi's firmware runs the native port as USB-OTG (TinyUSB),
+/// so a restart into "force download" comes back this way - seen on DA1A2C,
+/// serial number "b8:1f:3f:da:1a:2c" (the MAC). esptool: `uses_usb_otg`.
+///
+/// Not 0x303A:0x1001: that PID is also what a *running* HID-Fi reports (09F7C8
+/// does), and the ROM's USB-Serial-JTAG mode needs its watchdogs disabled by
+/// register writes this crate does not make - so it is refused, never guessed.
+pub const ROM_OTG: (u16, u16) = (0x303A, 0x0009);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
@@ -36,7 +41,7 @@ pub fn candidates() -> Vec<Candidate> {
         if let serialport::SerialPortType::UsbPort(u) = &p.port_type {
             if (u.vid, u.pid) == CH343 {
                 out.push(Candidate { path: p.port_name.clone(), kind: Kind::Com });
-            } else if (u.vid, u.pid) == USB_JTAG {
+            } else if (u.vid, u.pid) == ROM_OTG {
                 let mac = u.serial_number.clone().unwrap_or_default().to_uppercase();
                 out.push(Candidate { path: p.port_name.clone(), kind: Kind::Loader { mac } });
             }

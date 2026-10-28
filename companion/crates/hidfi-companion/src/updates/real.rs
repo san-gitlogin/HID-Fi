@@ -24,6 +24,7 @@ pub struct UreqFetch {
 impl UreqFetch {
     pub fn new() -> UreqFetch {
         let agent = ureq::Agent::config_builder()
+            .tls_config(tls())
             .timeout_connect(Some(Duration::from_secs(15)))
             .timeout_per_read(Some(Duration::from_secs(60)))
             .user_agent(concat!("HID-Fi-Companion/", env!("CARGO_PKG_VERSION")))
@@ -31,6 +32,25 @@ impl UreqFetch {
             .into();
         UreqFetch { agent }
     }
+}
+
+/// The system's TLS and trust store on macOS and Windows; rustls on aws-lc-rs with
+/// the Mozilla roots on Linux (Cargo.toml says why).
+#[cfg(any(target_os = "macos", windows))]
+fn tls() -> ureq::tls::TlsConfig {
+    ureq::tls::TlsConfig::builder()
+        .provider(ureq::tls::TlsProvider::NativeTls)
+        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+        .build()
+}
+
+#[cfg(target_os = "linux")]
+fn tls() -> ureq::tls::TlsConfig {
+    ureq::tls::TlsConfig::builder()
+        .provider(ureq::tls::TlsProvider::Rustls)
+        .unversioned_rustls_crypto_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+        .root_certs(ureq::tls::RootCerts::WebPki)
+        .build()
 }
 
 impl Default for UreqFetch {
@@ -222,7 +242,7 @@ pub fn com_ports() -> Vec<String> {
 /// board and release). `link`/`base`: the board over the network, when it answers.
 #[allow(clippy::too_many_arguments)]
 pub fn cable_job(plan: CablePlan, mac: &str, link: Option<(&dyn BoardLink, &str)>, image: &[u8], table: &[u8],
-                 journal: &Path, sh: &Shared) {
+                 journal: &Path, version: &str, sh: &Shared) {
     let fail = |why: String| sh.set(Job::Failed { why });
     let Some(m) = mac_bytes(mac) else { return fail("not a board MAC".into()) };
     let (path, connect) = match &plan {
@@ -273,7 +293,7 @@ pub fn cable_job(plan: CablePlan, mac: &str, link: Option<(&dyn BoardLink, &str)
                 }
             };
             match verdict {
-                Some(true) => sh.set(Job::Done { to: to.trim_start_matches("hid_fi_v").into() }),
+                Some(true) => sh.set(Job::Done { to: version.into() }),
                 Some(false) => sh.set(Job::RolledBack),
                 None => fail("written; the board did not report back - check its dashboard".into()),
             }
@@ -367,6 +387,20 @@ mod tests {
         assert_eq!(get("../etc/passwd", None).0, 404);
         assert_eq!(get("nothing", None).0, 404);
         drop(guard);
+    }
+
+    /// Reaches GitHub over this system's TLS (cargo test -- --ignored): the
+    /// published v4.0.4 zip downloads through the release redirect, and a file
+    /// the release does not have is an error, not an empty success.
+    #[test]
+    #[ignore = "uses the internet"]
+    fn https_to_github_releases_works() {
+        let f = UreqFetch::new();
+        let base = "https://github.com/san-gitlogin/HID-Fi/releases/download/v4.0.4/";
+        let zip = f.get(&format!("{base}HID-Fi-v4.0.4-firmware.zip"), 8 << 20).expect("the v4.0.4 zip");
+        assert!(zip.starts_with(b"PK"), "a zip");
+        assert!(f.get(&format!("{base}no-such-file.json"), 1024).is_err());
+        assert!(f.get(&format!("{base}HID-Fi-v4.0.4-firmware.zip"), 1024).is_err(), "over the cap is refused");
     }
 
     #[test]

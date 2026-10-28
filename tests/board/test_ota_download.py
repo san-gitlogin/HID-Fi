@@ -84,6 +84,7 @@ def env(_board_holder):
         pytest.skip("the board is on the single-slot layout - flash it once over the cable")
     if not st.get("wifi_connected"):
         wait_status(board, lambda s: s.get("wifi_connected"), 40, "the board joining its home network")
+    forget_test_pairings(board)          # a run that died mid-way leaves its Companion paired
     before = data_hashes(board)
     _settle(board)                           # a ready update from an interrupted run would block the install
     board, *_ = install(_board_holder, base)
@@ -107,6 +108,16 @@ def env(_board_holder):
     board, *_ = install(_board_holder, normal)
     wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the normal firmware proving itself")
     assert data_hashes(board) == before, "the person's data changed during the update tests"
+
+
+TEST_PCS = ("OTA E2E PC", "OTA test")
+
+
+def forget_test_pairings(board):
+    """Only computers these tests paired, by the names they use - never anyone else's."""
+    for p in board.cmd({"cmd": "companion_list"}, "companion_list").get("paired", []):
+        if p.get("name") in TEST_PCS:
+            board.cmd({"cmd": "companion_unpair", "id": p["id"]}, "companion_unpair")
 
 
 def check(board):

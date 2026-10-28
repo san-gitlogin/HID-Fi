@@ -18,6 +18,7 @@ class ReleaseServer:
         self.files = dict(files)
         self.faults = {"cut_at": None, "ignore_range": False, "chunk_delay": 0.0, "swap": None}
         self.log = []                       # (path, range header, status, bytes sent)
+        self.clients = []                   # (client address, path, status) - who asked
         srv = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -32,6 +33,7 @@ class ReleaseServer:
                 if body is None:
                     self.send_response(404); self.end_headers()
                     srv.log.append((name, None, 404, 0))
+                    srv.clients.append((self.client_address[0], name, 404))
                     return
                 if srv.faults["swap"] and name.endswith(".bin"):
                     body = srv.faults["swap"]
@@ -64,6 +66,7 @@ class ReleaseServer:
                 except OSError:
                     pass
                 srv.log.append((name, rng, 206 if (m and not srv.faults["ignore_range"]) else 200, sent))
+                srv.clients.append((self.client_address[0], name, srv.log[-1][2]))
 
         self.httpd = ThreadingHTTPServer(("0.0.0.0", 0), Handler)
         self.port = self.httpd.server_address[1]

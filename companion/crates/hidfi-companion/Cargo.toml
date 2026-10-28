@@ -27,8 +27,16 @@ getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 png = "0.18.1"
 hidfi-flash = { path = "../hidfi-flash", features = ["serial"] }
-# Releases come from GitHub over HTTPS: rustls with the bundled Mozilla roots.
-ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
+
+# Releases come from GitHub over HTTPS, with each system's own crypto - as the
+# screen stream already does (str0m: apple-crypto, wincrypto, aws-lc-rs):
+# macOS and Windows use their TLS and trust store (Security.framework, SChannel),
+# nothing compiled in; Linux uses rustls on aws-lc-rs, already in its build.
+# (ureq's default, ring, does not cross-build in companion/tests/windows/build.sh.)
+[target.'cfg(any(target_os = "macos", windows))'.dependencies.ureq]
+version = "3.5.0"
+default-features = false
+features = ["native-tls-no-default"]
 
 # macOS and Windows: tray, event loop and the window on the OS's own toolkits.
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
@@ -39,5 +47,7 @@ wry = "0.57"
 # Linux: pure Rust over D-Bus - the freedesktop tray (StatusNotifierItem) and
 # notifications - so it builds without GTK and runs on any desktop that has them.
 [target.'cfg(target_os = "linux")'.dependencies]
+ureq = { version = "3.5.0", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
 notify-rust = { version = "4", default-features = false, features = ["z"] }
