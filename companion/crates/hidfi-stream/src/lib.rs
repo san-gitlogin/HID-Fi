@@ -18,12 +18,10 @@ pub mod frame;
 pub mod mf;
 #[cfg(target_os = "linux")]
 pub mod oh264;
-#[cfg(target_os = "linux")]
-pub mod pulse;
-#[cfg(windows)]
-pub mod wasapi;
 pub mod pattern;
 pub mod pipeline;
+#[cfg(target_os = "linux")]
+pub mod pulse;
 pub mod rtc;
 #[cfg(target_os = "macos")]
 pub mod sck;
@@ -32,6 +30,8 @@ pub mod sck_audio;
 pub mod server;
 #[cfg(target_os = "macos")]
 pub mod vt;
+#[cfg(windows)]
+pub mod wasapi;
 #[cfg(target_os = "linux")]
 pub mod x11;
 

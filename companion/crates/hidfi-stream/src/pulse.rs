@@ -69,18 +69,32 @@ fn load() -> Result<Lib, String> {
         .ok_or("no sound server on this desktop (PulseAudio or PipeWire's pulse service)")?;
     // SAFETY: the documented libpulse-simple symbols, with their C signatures.
     unsafe {
-        let new = *lib.get::<New>(b"pa_simple_new\0").map_err(|e| e.to_string())?;
-        let read = *lib.get::<Read>(b"pa_simple_read\0").map_err(|e| e.to_string())?;
-        let free = *lib.get::<Free>(b"pa_simple_free\0").map_err(|e| e.to_string())?;
+        let new = *lib
+            .get::<New>(b"pa_simple_new\0")
+            .map_err(|e| e.to_string())?;
+        let read = *lib
+            .get::<Read>(b"pa_simple_read\0")
+            .map_err(|e| e.to_string())?;
+        let free = *lib
+            .get::<Free>(b"pa_simple_free\0")
+            .map_err(|e| e.to_string())?;
         let strerror = match libloading::Library::new("libpulse.so.0") {
             Ok(p) => {
-                let f = *p.get::<StrError>(b"pa_strerror\0").map_err(|e| e.to_string())?;
+                let f = *p
+                    .get::<StrError>(b"pa_strerror\0")
+                    .map_err(|e| e.to_string())?;
                 std::mem::forget(p); // kept for the life of the process, as libpulse-simple holds it anyway
                 f
             }
             Err(e) => return Err(e.to_string()),
         };
-        Ok(Lib { _lib: lib, new, read, free, strerror })
+        Ok(Lib {
+            _lib: lib,
+            new,
+            read,
+            free,
+            strerror,
+        })
     }
 }
 
@@ -93,9 +107,19 @@ impl Drop for Capture {
 
 pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, String> {
     let lib = load()?;
-    let spec = SampleSpec { format: PA_SAMPLE_FLOAT32LE, rate: RATE, channels: CHANNELS };
+    let spec = SampleSpec {
+        format: PA_SAMPLE_FLOAT32LE,
+        rate: RATE,
+        channels: CHANNELS,
+    };
     // Small fragments: the server hands over 10 ms at a time, not its default ~2 s.
-    let attr = BufferAttr { maxlength: u32::MAX, tlength: u32::MAX, prebuf: u32::MAX, minreq: u32::MAX, fragsize: READ_BYTES as u32 };
+    let attr = BufferAttr {
+        maxlength: u32::MAX,
+        tlength: u32::MAX,
+        prebuf: u32::MAX,
+        minreq: u32::MAX,
+        fragsize: READ_BYTES as u32,
+    };
     let name = CString::new("HID-Fi Companion").expect("no NUL");
     let stream = CString::new(match which {
         Input::System => "the computer's sound, for the HID-Fi dashboard",
@@ -110,7 +134,11 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
             std::ptr::null(),
             name.as_ptr(),
             PA_STREAM_RECORD,
-            if which == Input::System { dev.as_ptr() } else { std::ptr::null() },
+            if which == Input::System {
+                dev.as_ptr()
+            } else {
+                std::ptr::null()
+            },
             stream.as_ptr(),
             &spec,
             std::ptr::null(),
@@ -120,7 +148,9 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
     };
     if s.is_null() {
         // SAFETY: pa_strerror returns a static string.
-        let why = unsafe { CStr::from_ptr((lib.strerror)(err)) }.to_string_lossy().into_owned();
+        let why = unsafe { CStr::from_ptr((lib.strerror)(err)) }
+            .to_string_lossy()
+            .into_owned();
         return Err(format!("the sound server refused: {why}"));
     }
     let stop = Arc::new(AtomicBool::new(false));
@@ -134,16 +164,24 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
             while !st.load(Ordering::Relaxed) {
                 let mut err: c_int = 0;
                 // SAFETY: `buf` holds READ_BYTES; the stream is ours until freed below.
-                let r = unsafe { (lib.read)(s, buf.as_mut_ptr() as *mut c_void, READ_BYTES, &mut err) };
+                let r =
+                    unsafe { (lib.read)(s, buf.as_mut_ptr() as *mut c_void, READ_BYTES, &mut err) };
                 if r < 0 {
                     // SAFETY: as above.
-                    let why = unsafe { CStr::from_ptr((lib.strerror)(err)) }.to_string_lossy().into_owned();
+                    let why = unsafe { CStr::from_ptr((lib.strerror)(err)) }
+                        .to_string_lossy()
+                        .into_owned();
                     ended(format!("the sound server stopped: {why}"));
                     break;
                 }
                 // The read returns once the 10 ms are complete: they began 10 ms ago.
                 let at = Instant::now() - Duration::from_millis(10);
-                sink(Chunk { samples: buf.clone(), rate: RATE, channels: CHANNELS as usize, at });
+                sink(Chunk {
+                    samples: buf.clone(),
+                    rate: RATE,
+                    channels: CHANNELS as usize,
+                    at,
+                });
             }
             // SAFETY: freed once, on the thread that used it.
             unsafe { (lib.free)(s) };
