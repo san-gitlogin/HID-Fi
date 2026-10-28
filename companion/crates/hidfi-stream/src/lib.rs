@@ -18,6 +18,10 @@ pub mod frame;
 pub mod mf;
 #[cfg(target_os = "linux")]
 pub mod oh264;
+#[cfg(target_os = "linux")]
+pub mod pulse;
+#[cfg(windows)]
+pub mod wasapi;
 pub mod pattern;
 pub mod pipeline;
 pub mod rtc;
@@ -42,7 +46,15 @@ pub fn audio_capture(
     {
         sck_audio::open(i, sink, ended)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        wasapi::open(i, sink, ended)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        pulse::open(i, sink, ended)
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = (i, sink, ended);
         Err("sound capture is not available on this system yet".into())

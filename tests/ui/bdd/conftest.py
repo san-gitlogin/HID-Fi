@@ -84,6 +84,17 @@ BROWSERS = {
     # iOS Safari 17.4+: no vibration API, but <input type=checkbox switch> plays the system tick.
     "is iOS Safari with switch controls": "delete Navigator.prototype.vibrate;"
         "Object.defineProperty(HTMLInputElement.prototype, 'switch', {configurable: true, value: false, writable: true});",
+    # Sound (docs/AUDIO.md): no touch yet - the browser will not start sound by itself.
+    "has not been touched yet": "Object.defineProperty(Navigator.prototype, 'userActivation', "
+        "{configurable: true, get(){ return {hasBeenActive: false, isActive: false}; }});",
+    # A slow device: play() settles two seconds late - forces the order in which
+    # another window's claim arrives first (the race seen in testing).
+    "plays at once": "",
+    "starts playing slowly": "(()=>{const p=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){"
+        "const r=p.call(this);return new Promise((ok,no)=>setTimeout(()=>r.then(ok,no),2000));};})();",
+    # iPhone and iPad Safari: the page may mute, the volume is the phone's buttons.
+    "cannot set a media element's volume": "Object.defineProperty(HTMLMediaElement.prototype, 'volume', "
+        "{configurable: true, get(){ return 1; }, set(v){} });",
 }
 
 

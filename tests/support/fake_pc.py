@@ -8,6 +8,9 @@ app's protocol (companion/crates/hidfi-stream/src/server.rs):
 
   hello -> ready | error ;  offer -> answer ;  stats every second ;  end
   display -> display (a computer with several displays; `displays=n`)
+  audio    (docs/AUDIO.md) with ready and on `set_sound`; a test tone in the
+           picture's stream when the viewer asks for sound (`sound=None`: an app
+           from before sound - no audio state, the audio section declined)
 
 `behaviour` decides what it does with a viewer:
   "live"          accept: ready, answer, stats
@@ -27,14 +30,27 @@ setInterval(()=>{g.fillStyle='#0d1119';g.fillRect(0,0,640,360);g.fillStyle='#00d
   g.fillRect((t*9)%640,0,40,360);g.fillStyle='#fff';g.font='40px sans-serif';g.fillText('HID-Fi '+t,30,80);t++;},66);
 window.CERT=null;
 RTCPeerConnection.generateCertificate({name:'ECDSA',namedCurve:'P-256'}).then(x=>{window.CERT=x;});
-window.answerOffer=async(offer,ip)=>{
+window.answerOffer=async(offer,ip,sound)=>{
   const pc=new RTCPeerConnection({certificates:[window.CERT]});
   window.PC=pc;
   const track=c.captureStream(15).getVideoTracks()[0];
   await pc.setRemoteDescription({type:'offer',sdp:offer});
-  const tr=pc.getTransceivers()[0];
+  const trs=pc.getTransceivers();
+  const tr=trs.find(x=>x.receiver.track.kind==='video')||trs[0];
+  const stream=new MediaStream([track]);
   await tr.sender.replaceTrack(track);
+  tr.sender.setStreams(stream);
   tr.direction='sendonly';
+  // Sound, in the picture's stream as the app sends it: a quiet tone.
+  const at=trs.find(x=>x.receiver.track.kind==='audio');
+  if(at){
+    if(sound){
+      const ac=new AudioContext(),o=ac.createOscillator(),g=ac.createGain(),d=ac.createMediaStreamDestination();
+      g.gain.value=0.05;o.connect(g).connect(d);o.start();window.TONE=ac;
+      const a=d.stream.getAudioTracks()[0];stream.addTrack(a);
+      await at.sender.replaceTrack(a);at.sender.setStreams(stream);at.direction='sendonly';
+    }else at.direction='inactive';
+  }
   await pc.setLocalDescription(await pc.createAnswer());
   await new Promise(r=>{if(pc.iceGatheringState==='complete')return r();
     pc.onicegatheringstatechange=()=>{if(pc.iceGatheringState==='complete')r();};setTimeout(r,3000);});
@@ -57,7 +73,7 @@ def lan_ip():
 
 
 class FakePc:
-    def __init__(self, browser, app, behaviour="live", displays=1, size=(640, 360)):
+    def __init__(self, browser, app, behaviour="live", displays=1, size=(640, 360), sound="on", mic="off"):
         """`app` is the companion_sim.FakeApp whose ip/port/fp the board hands out.
         `displays`: how many monitors it has (main first, as the app lists them).
         `size`: the picture it sends (a portrait monitor is taller than wide)."""
@@ -77,6 +93,9 @@ class FakePc:
         self.displays = [{"id": i + 1, "name": "Built-in display" if i == 0 else f"Display {i + 1}",
                           "width": sizes[i][0], "height": sizes[i][1], "main": i == 0} for i in range(displays)]
         self.asked = []          # display ids viewers asked for, in order
+        # The app's sound switches (None: an app from before sound).
+        self.sound = None if sound is None else {"system": sound, "mic": mic, "why": {"system": None, "mic": None}}
+        self.offers = []         # each viewer's offer SDP
         self.showing = {}        # socket -> display id it is shown
 
     def serve(self, viewer_page):
@@ -102,9 +121,13 @@ class FakePc:
                     ws.send(json.dumps({"t": "end", "reason": self.behaviour.split(":", 1)[1]}))
                 elif self.behaviour == "live":
                     self.showing[id(ws)] = self.displays[0]["id"]
-                    ws.send(json.dumps({"t": "ready", "displays": self.displays, "display": self.displays[0]["id"]}))
+                    ready = {"t": "ready", "displays": self.displays, "display": self.displays[0]["id"]}
+                    if self.sound is not None:
+                        ready["audio"] = self.sound
+                    ws.send(json.dumps(ready))
             elif m.get("t") == "offer" and self.behaviour == "live":
-                sdp = self.page.evaluate("([o, ip]) => answerOffer(o, ip)", [m["sdp"], self.ip])
+                self.offers.append(m["sdp"])
+                sdp = self.page.evaluate("([o, ip, s]) => answerOffer(o, ip, s)", [m["sdp"], self.ip, self.sound is not None])
                 ws.send(json.dumps({"t": "answer", "sdp": sdp}))
                 ws.send(json.dumps({"t": "stats", "fps": 15}))
             elif m.get("t") == "display":
@@ -116,6 +139,23 @@ class FakePc:
                 ws.close()
 
         ws.on_message(on_message)
+
+    def set_sound(self, system=None, mic=None, why=None):
+        """The person changes the app's sound switches (or a device goes): every
+        viewer is told at once, as server.rs does."""
+        if self.sound is None:
+            return
+        if system is not None:
+            self.sound["system"] = system
+        if mic is not None:
+            self.sound["mic"] = mic
+        if why is not None:
+            self.sound["why"] = why
+        for ws in self.sockets:
+            try:
+                ws.send(json.dumps({"t": "audio", **self.sound}))
+            except Exception:
+                pass
 
     def unplug_display(self, display_id):
         """A monitor is pulled out: its viewers move to the main display, told why."""

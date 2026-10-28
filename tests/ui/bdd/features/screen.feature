@@ -709,3 +709,121 @@ Feature: Screen - seeing the computer's own picture
     When I watch what the browser is allowed to do with touches
     And I tap with one finger on "#scrIn"
     Then the picture is zoomed in
+
+  # ---- sound (docs/AUDIO.md) -------------------------------------------------------------
+  Scenario: The computer's sound plays with its screen, and muting it is remembered
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the computer's sound is playing
+    When I tap the "#scrSnd [data-snd=btn]" control
+    Then the computer's sound is muted
+    When I reload the dashboard
+    And I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the computer's sound is muted
+
+  Scenario: The volume is set on the picture and remembered
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I set the volume to 30%
+    Then the volume is 30%
+    When I reload the dashboard
+    And I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the volume is 30%
+
+  Scenario: Before the page has been touched, the browser waits for a tap to play sound
+    Given this phone's browser has not been touched yet
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the sound control says "Tap for sound"
+    When I tap the "#scrSnd [data-snd=tap]" control
+    Then the computer's sound is playing
+
+  Scenario: An iPhone mutes the sound and leaves the volume to its buttons
+    Given this phone's browser cannot set a media element's volume
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And there is no volume slider
+    When I tap the "#scrSnd [data-snd=btn]" control
+    Then the computer's sound is muted
+
+  Scenario Outline: When the computer does not share its sound, the dashboard says why
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" whose sound is "<system>" because "<why>" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the sound control is dimmed
+    When I tap the "#scrSnd [data-snd=btn]" control
+    Then I see the message "<says>"
+
+    Examples:
+      | system      | why                                     | says                                                     |
+      | off         | -                                       | Sound is switched off in HID-Fi Companion on this computer |
+      | unavailable | sharing sound needs macOS 13 or later   | No sound: sharing sound needs macOS 13 or later          |
+
+  Scenario: The Companion's sound switch changes while the screen is watched
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the computer's sound is playing
+    When "Studio PC" switches its sound off
+    Then the sound control is dimmed
+    When "Studio PC" switches its sound on
+    Then the sound control is not dimmed
+
+  Scenario: A shared microphone is shown, with one warning about echo
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" that also shares its microphone is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the microphone indicator is shown
+    And I see the message "microphone is shared"
+
+  Scenario: A Companion from before sound: no sound control, the picture as before
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" from before sound is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And there is no sound control
+
+  Scenario: The floating window and the watch view carry the same sound control
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the computer's sound is playing
+    When I tap the "#scrPop" control
+    Then the floating window is shown, still live
+    And the sound control is in the floating window
+    And the computer's sound is playing
+
+  Scenario: The wall plays the computer's sound once, on its first tile
+    Given a computer "Studio PC" with 3 displays is paired and running, and this screen opens "#wall"
+    Then the wall shows 3 monitors, all live
+    And exactly one tile has a sound control, and only one viewer asked for sound
+
+  Scenario Outline: Another window playing the same computer: this one steps aside
+    Given this phone's browser <speed>
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the computer's sound is playing
+    When another window starts playing "Studio PC"'s sound
+    And a moment passes
+    Then the computer's sound is muted
+    And the sound control says "Play here"
+    When I tap the "#scrSnd [data-snd=tap]" control
+    Then the computer's sound is playing
+
+    Examples:
+      | speed                 |
+      | starts playing slowly |
+      | plays at once         |

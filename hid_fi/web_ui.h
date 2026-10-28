@@ -996,6 +996,18 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .scrmsg .ic{width:30px;height:30px;color:var(--acc)}
 .scrmsg .btn{margin-top:4px}
 .scrmsg:empty{display:none}
+/* ---- sound (docs/AUDIO.md): mute, volume, the first tap, what the computer shares ---- */
+.snd{display:flex;align-items:center;gap:3px;margin-right:auto;min-width:0}
+.snd[hidden]{display:none}
+.snd .sndbtn.dim{opacity:.42}
+.snd .sndvol{width:88px;accent-color:var(--acc);min-width:0}
+.snd .sndvol[hidden],.snd .sndmic[hidden],.snd .sndtap[hidden]{display:none}
+.snd .sndmic{display:inline-flex;align-items:center;color:var(--warn);padding:0 2px}
+.snd .sndtap{font:600 11.5px/1 inherit;color:var(--bg);background:var(--acc);border:none;border-radius:999px;
+  padding:7px 10px;white-space:nowrap;cursor:pointer;min-height:30px}
+.scrfloat .snd .sndvol{width:60px}
+.wtbar .snd{margin-right:0}
+.wtbar .snd .sndvol{width:64px}
 .scrtools{display:flex;justify-content:flex-end;align-items:center;gap:4px;flex:0 0 auto;min-height:40px;
   padding:3px 6px;background:rgba(13,17,25,.97);border-top:1px solid var(--line)}
 .scrtools .iconbtn{width:34px;height:34px;border-radius:9px;background:none;border:1px solid transparent}
@@ -1454,6 +1466,12 @@ main::after{height:var(--flpad,0px)}
             <div class="scrmsg" id="scrMsg"></div>
           </div>
             <div class="scrtools" id="scrTools">
+              <div class="snd" id="scrSnd" hidden>
+                <button class="iconbtn sndbtn" data-snd="btn" aria-label="Sound" aria-pressed="false"><svg class="ic ic-sm"><use href="#i-volx"/></svg></button>
+                <input class="sndvol" data-snd="vol" type="range" min="0" max="100" step="1" value="100" aria-label="Volume">
+                <span class="sndmic" data-snd="mic" title="This computer's microphone is shared" hidden><svg class="ic ic-sm"><use href="#i-mic"/></svg></span>
+                <button class="sndtap" data-snd="tap" hidden>Tap for sound</button>
+              </div>
               <button class="iconbtn zm" id="scrOut" aria-label="Zoom out"><svg class="ic ic-sm"><use href="#i-zoomout"/></svg></button>
               <button class="iconbtn zm" id="scrIn" aria-label="Zoom in"><svg class="ic ic-sm"><use href="#i-zoomin"/></svg></button>
               <button class="iconbtn zm" id="scrFit" aria-label="Fit the whole screen"><svg class="ic ic-sm"><use href="#i-fit"/></svg></button>
@@ -5814,10 +5832,12 @@ function scrStart(){
       scrPaint();return;
     }
     SCR.ip=r.ip;SCR.state='connecting';
-    SCR.h=watchScreen(r,scrVideo,scrOn);
+    sndReset(SND.main);
+    SCR.h=watchScreen(r,scrVideo,scrOn,{audio:true});
   });
 }
 function scrOn(s){
+  if(s.indexOf('audio')===0)return sndOn(SND.main,s);
   if(s==='connecting')SCR.state='connecting';
   else if(s==='live'){SCR.state='live';SCR.tries=0;SCR.why='';scrEmpty(false);scrRenderList();}
   else if(s==='reconnect')SCR.state='reconnecting';
@@ -5843,6 +5863,7 @@ function scrOn(s){
   }
   else{
     SCR.h=null;
+    sndOn(SND.main,s);
     const why=s.slice(s.indexOf(':')+1);
     SCR.state=s.indexOf('refused')===0?'refused':'ended';SCR.why=why;
     if(why!=='stopped'){scrEmpty(true);scrRenderList();}
@@ -5897,6 +5918,7 @@ function scrStop(state){
   const h=SCR.h;SCR.h=null;
   if(h)h.stop();
   try{scrVideo.srcObject=null;}catch(e){}
+  if(typeof SND!=='undefined'&&SND.main)sndReset(SND.main);
   scrEmpty(true);
   SCR.state=state||'idle';SCR.fps=0;SCR.tries=0;SCR.displays=[];SCR.disp=null;
   scrPaint();
@@ -6043,6 +6065,133 @@ function scrFit(){SCR.z={s:1,x:0,y:0};scrApplyZoom();}
   if(window.ResizeObserver)new ResizeObserver(()=>{scrApplyZoom();if(SCR.float)flPlace();}).observe(scrStage);
 })();
 $('scrIn').onclick=()=>scrZoomAt(1.5,scrStage.clientWidth/2,scrStage.clientHeight/2);
+// ---- sound (docs/AUDIO.md) ----
+// The computer's sound plays through the picture's own <video> (one stream: the
+// browser keeps them in step). One widget per viewer that carries sound: the
+// main picture (tab, floating window, watch view, browser full screen - the
+// toolbar travels with the frame) and the wall's first tile (the wall shows one
+// computer: its sound once, never once per tile).
+// Remembered per computer: muted or not, and the volume.
+const SND={me:Math.random().toString(36).slice(2),bc:null,fixed:null,all:[]};
+function sndHtml(){
+  return '<div class="snd" hidden><button class="iconbtn sndbtn" data-snd="btn" aria-label="Sound" aria-pressed="false">'+ico('volx','ic-sm')+'</button>'+
+    '<input class="sndvol" data-snd="vol" type="range" min="0" max="100" step="1" value="100" aria-label="Volume">'+
+    '<span class="sndmic" data-snd="mic" title="This computer\'s microphone is shared" hidden>'+ico('mic','ic-sm')+'</span>'+
+    '<button class="sndtap" data-snd="tap" hidden>Tap for sound</button></div>';
+}
+function sndPrefs(id){try{return JSON.parse(localStorage.getItem('snd:'+id)||'{}')||{};}catch(e){return {};}}
+function sndSave(id,p){try{localStorage.setItem('snd:'+id,JSON.stringify(p));}catch(e){}}
+// iPhone and iPad Safari: a page may mute, but the volume is the phone's buttons.
+function sndVolFixed(){
+  if(SND.fixed===null){try{const a=document.createElement('audio');a.volume=0.5;SND.fixed=Math.abs(a.volume-0.5)>0.01;}catch(e){SND.fixed=true;}}
+  return SND.fixed;
+}
+function sndMake(el,video,pcId){
+  // seq: each attempt to play, and each claim from another window, moves it on -
+  // a play that finishes after it has been overtaken changes nothing (seen: the
+  // play finished after another window's claim and undid "playing elsewhere").
+  const w={el,video,pcId,comp:null,track:false,blocked:false,elsewhere:false,warned:false,seq:0};
+  const q=k=>el.querySelector('[data-snd='+k+']');
+  q('btn').onclick=()=>sndToggle(w);
+  q('tap').onclick=()=>sndUnmute(w,true);
+  q('vol').oninput=()=>{
+    const v=(+q('vol').value)/100;
+    try{video.volume=v;}catch(e){}
+    const id=pcId(),p=sndPrefs(id);p.vol=v;sndSave(id,p);
+    if(v>0&&video.muted&&w.track)return sndUnmute(w,true);
+    sndPaint(w);
+  };
+  video.addEventListener('volumechange',()=>sndPaint(w));
+  SND.all.push(w);
+  return w;
+}
+// From the viewer: what the computer shares, its sound arriving, the end.
+function sndOn(w,s){
+  if(!w)return;
+  if(s==='audiotrack'){w.track=true;sndStart(w);}
+  else if(s.indexOf('audio:')===0){try{w.comp=JSON.parse(s.slice(6));}catch(e){}}
+  else if(s.indexOf('ended')===0||s.indexOf('refused')===0){w.track=false;w.blocked=false;w.elsewhere=false;}
+  sndPaint(w);
+}
+function sndReset(w){if(!w)return;w.track=false;w.blocked=false;w.elsewhere=false;w.comp=null;sndPaint(w);}
+function sndStart(w){
+  const p=sndPrefs(w.pcId()),v=w.video;
+  try{v.volume=typeof p.vol==='number'?Math.min(1,Math.max(0,p.vol)):1;}catch(e){}
+  if(p.mute===true){v.muted=true;return;}
+  // Browsers refuse to start sound before the person has touched the page:
+  // say "Tap for sound" rather than fail quietly.
+  const ua=navigator.userActivation;
+  if(ua&&!ua.hasBeenActive){w.blocked=true;return;}
+  sndUnmute(w,false);
+}
+function sndUnmute(w,byTap){
+  const v=w.video,seq=++w.seq;
+  v.muted=false;
+  const done=()=>{
+    if(w.seq!==seq)return;
+    w.blocked=false;w.elsewhere=false;
+    if(byTap){const id=w.pcId(),p=sndPrefs(id);p.mute=false;sndSave(id,p);}
+    sndClaim(w);sndEcho(w);sndPaint(w);
+  };
+  let pr=null;try{pr=v.play();}catch(e){}
+  if(pr&&pr.then)pr.then(done,()=>{if(w.seq!==seq)return;v.muted=true;w.blocked=true;try{v.play().catch(()=>{});}catch(e){}sndPaint(w);});
+  else done();
+}
+function sndToggle(w){
+  if(!w.track||sndWhy(w)){toast(sndWhy(w)||'No sound from this computer','warn');return;}
+  if(w.blocked||w.elsewhere||w.video.muted)return sndUnmute(w,true);
+  w.video.muted=true;
+  const id=w.pcId(),p=sndPrefs(id);p.mute=true;sndSave(id,p);
+  sndPaint(w);
+}
+function sndWhy(w){
+  const c=w.comp;if(!c)return '';
+  if(c.system==='unavailable')return 'No sound: '+((c.why&&c.why.system)||'this computer cannot share it');
+  if(c.system==='off'&&c.mic!=='on')return 'Sound is switched off in HID-Fi Companion on this computer';
+  return '';
+}
+// The microphone carries the room: a phone playing it near the computer echoes.
+function sndEcho(w){
+  if(w.warned||!w.comp||w.comp.mic!=='on'||w.video.muted)return;
+  w.warned=true;
+  toast('This computer\'s microphone is shared: keep this device away from it, or the sound echoes','warn');
+}
+// One computer, one place playing it: a window that starts the sound tells the
+// others, and they step aside (two copies a moment apart sound like an echo).
+function sndClaim(w){
+  try{SND.bc&&SND.bc.postMessage({pc:w.pcId(),from:SND.me});}catch(e){}
+  SND.all.forEach(x=>{if(x!==w&&x.pcId()===w.pcId()&&x.track&&!x.video.muted){x.seq++;x.video.muted=true;x.elsewhere=true;sndPaint(x);}});
+}
+function sndYield(m){
+  if(!m||m.from===SND.me)return;
+  SND.all.forEach(x=>{if(x.pcId()===m.pc&&x.track&&!x.video.muted){x.seq++;x.video.muted=true;x.elsewhere=true;sndPaint(x);}});
+}
+function sndPaint(w){
+  if(!w)return;
+  const el=w.el,v=w.video,c=w.comp,q=k=>el.querySelector('[data-snd='+k+']');
+  // An app from before sound says nothing about it: no control at all.
+  el.hidden=!c;
+  if(!c)return;
+  // Nothing to hear: no track yet, or the computer shares neither its sound nor its microphone now.
+  const off=!w.track||!!sndWhy(w),muted=off||v.muted;
+  q('btn').querySelector('use').setAttribute('href',muted?'#i-volx':'#i-vol');
+  q('btn').setAttribute('aria-label',off?(sndWhy(w)||'No sound from this computer'):muted?'Unmute':'Mute');
+  q('btn').setAttribute('aria-pressed',String(!muted));
+  q('btn').classList.toggle('dim',off);
+  q('vol').hidden=off||sndVolFixed();
+  q('vol').value=String(Math.round(v.volume*100));
+  q('tap').hidden=!(w.track&&(w.blocked||w.elsewhere));
+  // Short enough for a phone's toolbar; the whole reason in its label.
+  q('tap').textContent=w.elsewhere?'Play here':'Tap for sound';
+  q('tap').title=w.elsewhere?'This computer\'s sound is playing in another window':'';
+  q('tap').setAttribute('aria-label',w.elsewhere?'Playing in another window: play the sound here':'Tap for sound');
+  q('mic').hidden=!(c.mic==='on');
+}
+SND.main=sndMake($('scrSnd'),scrVideo,()=>SCR.sel||'');
+// Listening from the start: a claim sent while this page's own sound was still
+// starting must not be missed (two windows opened together - seen in testing).
+try{SND.bc=new BroadcastChannel('hidfi-sound');SND.bc.onmessage=e=>sndYield(e.data);}catch(e){SND.bc=null;}
+
 $('scrOut').onclick=()=>scrZoomAt(1/1.5,scrStage.clientWidth/2,scrStage.clientHeight/2);
 $('scrFit').onclick=scrFit;
 // ---- the floating window ----
@@ -6180,6 +6329,7 @@ function wallEnter(){
 }
 function wallLeave(){
   WALL.on=false;document.documentElement.classList.remove('wall');
+  SND.all=SND.all.filter(w=>w===SND.main);
   WALL.tiles.splice(0).forEach(wallStop);
   $('wallGrid').innerHTML='';
   if(document.fullscreenElement||document.webkitFullscreenElement){
@@ -6212,11 +6362,13 @@ function wallFit(){
       tl.el.innerHTML='<div class="wtbar"><span class="dot"></span><b></b><i></i>'+
         '<button class="iconbtn" data-wnext aria-label="Show the next monitor here">'+ico('displays','ic-sm')+'</button>'+
         '<button class="iconbtn" data-wpop aria-label="Open this monitor in its own window">'+ico('newwin','ic-sm')+'</button>'+
-        '<button class="iconbtn" data-wfs aria-label="This monitor full screen">'+ico('max','ic-sm')+'</button></div>'+
+        '<button class="iconbtn" data-wfs aria-label="This monitor full screen">'+ico('max','ic-sm')+'</button>'+
+        (i===0?sndHtml():'')+'</div>'+
         '<div class="wtpic"><video autoplay muted playsinline></video><div class="wtmsg"></div></div>';
       tl.el.querySelector('[data-wnext]').onclick=()=>wallNext(tl);
       tl.el.querySelector('[data-wpop]').onclick=()=>wallPop([tl]);
       tl.el.querySelector('[data-wfs]').onclick=()=>wallFull(tl.el,tl.el.querySelector('video'));
+      if(i===0)tl.snd=sndMake(tl.el.querySelector('.snd'),tl.el.querySelector('video'),()=>SCR.sel||'');
     }
     if(g.children[i]!==tl.el)g.insertBefore(tl.el,g.children[i]||null);
     if(!tl.h&&!tl.retryT)wallStart(tl);
@@ -6241,10 +6393,13 @@ function wallStart(tl){
     if(!WALL.on||WALL.tiles.indexOf(tl)<0)return;
     if(!r||r.status!=='ok'){tl.msg=r&&r.reply==='pc_offline'?pc.name+' is not running HID-Fi Companion':'Trying again...';return wallRetry(tl);}
     tl.state='connecting';
-    tl.h=watchScreen(r,tl.el.querySelector('video'),s=>wallOn(tl,s));
+    if(tl.snd)sndReset(tl.snd);
+    tl.h=watchScreen(r,tl.el.querySelector('video'),s=>wallOn(tl,s),{audio:!!tl.snd});
   });
 }
 function wallOn(tl,s){
+  if(s.indexOf('audio')===0)return sndOn(tl.snd,s);
+  if(s.indexOf('ended')===0||s.indexOf('refused')===0)sndOn(tl.snd,s);
   if(s==='live'){tl.state='live';tl.msg='';}
   else if(s==='reconnect')tl.state='reconnecting';
   else if(s.indexOf('stats:')===0)tl.fps=parseInt(s.slice(6),10)||0;
@@ -6407,9 +6562,12 @@ document.addEventListener('keydown',e=>{
 // ({ip, port, fp, tn, vn, ticket}) and `on` gets state changes:
 //   'connecting' | 'live' | 'reconnect' | 'ended:<why>' | 'refused:<why>'
 //   'stats:<fps>' | 'displays:<json {displays, display}>' | 'display:<json {id, fallback}>'
+//   'audio:<json {system, mic, why}>' (what the computer shares) | 'audiotrack' (its sound arrived)
+// opts.audio: ask for the computer's sound too (docs/AUDIO.md) - one viewer per
+// computer on a page, or it is heard twice. It plays through `video`.
 // Returns {stop(), display(id)}: display() switches to another of the
 // computer's displays. Keyframes are asked for by WebRTC itself when a picture breaks.
-function watchScreen(t, video, on){
+function watchScreen(t, video, on, opts){
   let pc=null, ws=null, done=false, live=false;
   const say=s=>{ if(!done||s.indexOf('ended')===0||s.indexOf('refused')===0) on(s); };
   const finish=s=>{ if(done)return; done=true; say(s);
@@ -6433,10 +6591,15 @@ function watchScreen(t, video, on){
     if(m.t==='stats'){ on('stats:'+(m.fps|0)); return; }
     if(m.t==='displays'){ on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display})); return; }
     if(m.t==='display'){ on('display:'+JSON.stringify({id:m.id,fallback:!!m.fallback})); return; }
+    if(m.t==='audio'){ on('audio:'+JSON.stringify({system:m.system,mic:m.mic,why:m.why||{}})); return; }
     if(m.t==='ready'){
       on('displays:'+JSON.stringify({displays:m.displays||[],display:m.display}));
+      if(m.audio) on('audio:'+JSON.stringify({system:m.audio.system,mic:m.audio.mic,why:m.audio.why||{}}));
       pc=new RTCPeerConnection({iceServers:[]});
       const tr=pc.addTransceiver('video',{direction:'recvonly'});
+      // The sound, when asked for and the computer can share it (an app from
+      // before sound declines the audio section; the picture is unaffected).
+      if(opts&&opts.audio&&m.audio) pc.addTransceiver('audio',{direction:'recvonly'});
       try{ // H.264 first: the PC encodes it in hardware
         const caps=RTCRtpReceiver.getCapabilities&&RTCRtpReceiver.getCapabilities('video');
         if(caps&&tr.setCodecPreferences){
@@ -6444,7 +6607,19 @@ function watchScreen(t, video, on){
           if(h.length) tr.setCodecPreferences(h.concat(caps.codecs.filter(c=>!/h264/i.test(c.mimeType))));
         }
       }catch(e){}
-      pc.ontrack=e=>{ video.srcObject=e.streams[0]||new MediaStream([e.track]); };
+      // Picture and sound in one stream on the one element: the browser keeps
+      // them in step. The sound's jitter buffer is asked to stay as small as the
+      // network allows (Chrome: jitterBufferTarget; older: playoutDelayHint).
+      const ms=new MediaStream();
+      pc.ontrack=e=>{
+        ms.addTrack(e.track);
+        if(e.track.kind==='audio'){
+          try{ if('jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget=0;
+               else e.receiver.playoutDelayHint=0; }catch(x){}
+          on('audiotrack');
+        }
+        if(video.srcObject!==ms) video.srcObject=ms;
+      };
       pc.onconnectionstatechange=()=>{
         const s=pc.connectionState;
         if(s==='connected'){ live=true; clearTimeout(opened); say('live'); }

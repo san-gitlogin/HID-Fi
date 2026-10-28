@@ -867,3 +867,145 @@ def two_clicks(ctx, button):
             return
         ui.idle(100)
     raise AssertionError(f"a double tap on the pad is two clicks; button frames: {sim.frames('button')}")
+
+
+# ---- sound (docs/AUDIO.md) ---------------------------------------------------------------
+def _paired_with(ctx, browser, name, **kw):
+    app = _new_app(ctx, name)
+    pc = FakePc(browser, app, "live", **kw)
+    _pcs(ctx)[name] = pc
+    _pair(ctx, app)
+    with ctx["sim"].lock:
+        app.beat()
+    pc.serve(ctx["ui"].page)
+    return pc
+
+
+@given(parsers.parse('a computer "{name}" whose sound is "{system}" because "{why}" is paired and running'))
+def paired_sound_state(ctx, browser, name, system, why):
+    pc = _paired_with(ctx, browser, name, sound=system)
+    pc.sound["why"] = {"system": None if why == "-" else why, "mic": None}
+
+
+@given(parsers.parse('a computer "{name}" that also shares its microphone is paired and running'))
+def paired_with_mic(ctx, browser, name):
+    _paired_with(ctx, browser, name, mic="on")
+
+
+@given(parsers.parse('a computer "{name}" from before sound is paired and running'))
+def paired_before_sound(ctx, browser, name):
+    _paired_with(ctx, browser, name, sound=None)
+
+
+@when(parsers.parse('"{name}" switches its sound {state}'))
+def switch_sound(ctx, name, state):
+    _pcs(ctx)[name].set_sound(system=state)
+    ctx["ui"].idle(300)
+
+
+@when(parsers.parse("I set the volume to {n:d}%"))
+def set_volume(ctx, n):
+    ctx["ui"].page.evaluate("v => { const r = document.querySelector('#scrSnd [data-snd=vol]'); r.value = String(v);"
+                            " r.dispatchEvent(new Event('input', {bubbles: true})); }", n)
+    ctx["ui"].idle(200)
+
+
+@when(parsers.parse("another window starts playing \"{name}\"'s sound"))
+def other_window_plays(ctx, name):
+    # What a second window's sndClaim() sends; a channel of the same name in this page receives it.
+    # A channel kept alive, as another window's would be.
+    ctx["ui"].page.evaluate("() => { window.__other = new BroadcastChannel('hidfi-sound');"
+                            " window.__other.postMessage({pc: SCR.sel, from: 'another-window'}); }")
+    ctx["ui"].idle(300)
+
+
+def _sound(ctx):
+    return ctx["ui"].page.evaluate("""() => { const w = SND.main, b = document.querySelector('#scrSnd [data-snd=btn]');
+        return {muted: w.video.muted, pressed: b.getAttribute('aria-pressed'), dim: b.classList.contains('dim'),
+                hidden: document.getElementById('scrSnd').hidden, track: w.track, volume: w.video.volume,
+                slider: document.querySelector('#scrSnd [data-snd=vol]').value,
+                sliderHidden: document.querySelector('#scrSnd [data-snd=vol]').hidden,
+                tap: document.querySelector('#scrSnd [data-snd=tap]').hidden ? '' : document.querySelector('#scrSnd [data-snd=tap]').textContent,
+                mic: !document.querySelector('#scrSnd [data-snd=mic]').hidden}; }""")
+
+
+def _until(ctx, pred, what, ms=6000):
+    ui = ctx["ui"]
+    for _ in range(ms // 100):
+        s = _sound(ctx)
+        if pred(s):
+            return s
+        ui.idle(100)
+    raise AssertionError(f"{what}: {_sound(ctx)}")
+
+
+@then("the computer's sound is playing")
+def sound_playing(ctx):
+    _until(ctx, lambda s: s["track"] and not s["muted"] and s["pressed"] == "true" and not s["hidden"], "not playing")
+
+
+@then("the computer's sound is muted")
+def sound_muted(ctx):
+    _until(ctx, lambda s: s["track"] and s["muted"] and s["pressed"] == "false", "not muted")
+
+
+@then(parsers.parse("the volume is {n:d}%"))
+def volume_is(ctx, n):
+    _until(ctx, lambda s: s["track"] and abs(s["volume"] - n / 100) < 0.011 and s["slider"] == str(n), f"volume not {n}%")
+
+
+@then(parsers.parse('the sound control says "{text}"'))
+def sound_says(ctx, text):
+    _until(ctx, lambda s: s["tap"] == text, f"no {text!r}")
+
+
+@then("there is no volume slider")
+def no_slider(ctx):
+    _until(ctx, lambda s: s["track"] and s["sliderHidden"], "a slider is shown")
+
+
+@then("the sound control is dimmed")
+def sound_dimmed(ctx):
+    _until(ctx, lambda s: not s["hidden"] and s["dim"], "not dimmed")
+
+
+@then("the sound control is not dimmed")
+def sound_not_dimmed(ctx):
+    _until(ctx, lambda s: not s["hidden"] and not s["dim"], "still dimmed")
+
+
+@then("the microphone indicator is shown")
+def mic_shown(ctx):
+    _until(ctx, lambda s: s["mic"], "no microphone indicator")
+
+
+@then("there is no sound control")
+def no_sound_control(ctx):
+    ctx["ui"].idle(1500)
+    s = _sound(ctx)
+    assert s["hidden"] and not s["track"], s
+    assert "m=audio" not in _pcs(ctx)["Studio PC"].offers[-1], "an app that says nothing about sound is not asked for it"
+
+
+@then("the sound control is in the floating window")
+def sound_in_float(ctx):
+    assert ctx["ui"].page.evaluate("!!document.querySelector('#scrFloat #scrSnd') && !document.getElementById('scrSnd').hidden")
+
+
+@then("exactly one tile has a sound control, and only one viewer asked for sound")
+def wall_one_sound(ctx):
+    page = ctx["ui"].page
+    assert page.evaluate("document.querySelectorAll('#wallGrid .wtile .snd').length") == 1
+    assert page.evaluate("WALL.tiles[0].el.querySelector('.snd') !== null"), "on the first tile"
+    # Heard once: only one tile's picture carries a sound track, now and while it plays.
+    for _ in range(10):
+        n = page.evaluate("WALL.tiles.filter(t => { const s = t.el.querySelector('video').srcObject;"
+                          " return s && s.getAudioTracks().length > 0; }).length")
+        assert n <= 1, f"{n} tiles carry sound"
+        ctx["ui"].idle(200)
+    assert n == 1, "the first tile carries the sound"
+
+
+@when("a moment passes")
+def a_moment(ctx):
+    ctx["ui"].idle(2500)        # longer than a slow device's play() takes to settle
