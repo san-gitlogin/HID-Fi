@@ -137,6 +137,20 @@ def fresh(env):
     return board
 
 
+def on_base(env):
+    """The board on the base test build, whatever an earlier scenario left (the end
+    to end one keeps 4.0.99 - after it, nothing is newer). Order-independent."""
+    board = fresh(env)
+    if board.status()["firmware"] != "hid_fi_v4.0.4-test":
+        install(env["holder"], env["base"])
+        board = env["holder"].get()
+        wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the base build proving itself")
+        board.cmd({"cmd": "ota_settings", "auto": False}, "ota_settings")
+        wait_status(board, lambda s: s.get("wifi_connected") and s.get("ota_step") == "idle", 90,
+                    "the base build on its network, idle")
+    return board
+
+
 def _settle(board):
     """Whatever an earlier scenario left running or ready is cancelled first - one
     failure must not hold every scenario after it (it did)."""
@@ -353,7 +367,7 @@ def app(env):
 
 
 def test_the_paired_companion_checks_installs_and_cancels(env, app):
-    board = fresh(env)
+    board = on_base(env)
     r = app.ota("check")
     assert r["status"] == "ok" and r["act"] == "check", r
     st = wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the Companion's check finishing")
@@ -368,7 +382,7 @@ def test_the_paired_companion_checks_installs_and_cancels(env, app):
 
 def test_a_companion_request_cannot_be_replayed_or_reused_for_another_act(env, app):
     from support import companion_sim as cs
-    board = fresh(env)
+    board = on_base(env)
     _, r = app._call(op="chal", id=app.id)
     m = cs.mac(app.key, f"ota|{app.id}|check||{r['chal']}")
     req = dict(op="ota", id=app.id, act="check", url="", chal=r["chal"], mac=m)
@@ -383,7 +397,7 @@ def test_a_companion_request_cannot_be_replayed_or_reused_for_another_act(env, a
 def test_the_companion_relays_a_release_for_one_check_only(env, app):
     """The board is pointed somewhere with no release; the Companion serves one from
     this computer. The relay is used once: the next check reads the setting again."""
-    board = fresh(env)
+    board = on_base(env)
     srv_url = env["srv"].url_for(board.status()["wifi_ip"])
     try:
         board.cmd({"cmd": "ota_source", "url": srv_url + "nothing-here/"}, "ota_source")
@@ -400,7 +414,7 @@ def test_the_companion_relays_a_release_for_one_check_only(env, app):
 
 
 def test_download_mode_is_refused_while_an_update_is_running(env, app):
-    board = fresh(env)
+    board = on_base(env)
     check(board)
     env["srv"].faults["chunk_delay"] = 0.05
     board.cmd({"cmd": "ota_install"}, "ota_install")

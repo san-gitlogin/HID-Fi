@@ -203,15 +203,19 @@ def test_find_lists_this_board_where_it_is_now(board, home):
     from support import paths
     sys.path.insert(0, str(paths.TESTS.parent / "tools"))
     import hidfi
-    found = {}
-    for _ in range(4):                       # mDNS needs a moment after the rejoins above
+    found, name = {}, home["mdns"] + ".local"
+    seen_any = False
+    for _ in range(6):                       # mDNS needs a moment after the rejoins above
         found = hidfi.find()
-        if found:
+        seen_any = seen_any or bool(found)
+        # Wait for THIS board: another HID-Fi on the network can answer first (it
+        # did - 09F7C8 - and the test stopped at the wrong board's answer).
+        if name in found:
             break
         time.sleep(2)
-    if not found:
+    if not seen_any:
         pytest.skip("no mDNS answer reached this machine (multicast blocked on this network?)")
-    assert found.get(home["mdns"] + ".local") == home["wifi_ip"], found
+    assert found.get(name) == home["wifi_ip"], found
 
 
 def test_sharing_the_internet_turns_on_off_and_leaves_the_board_reachable(board, home, request):

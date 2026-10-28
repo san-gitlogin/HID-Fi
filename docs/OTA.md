@@ -588,7 +588,7 @@ The procedure, as it will run on DA1A2C:
    resume always finishes, no forbidden opcode ever sent. Six planted bugs (otadata in
    the winning sector, no read-back, cancel forgetting otadata, no NEW re-check, the
    running slot written, foreign firmware accepted) - each caught.
-5. [~] Manifest + signature + version rules: shared vectors; firmware, Python,
+5. [x] Manifest + signature + version rules: shared vectors; firmware, Python,
    Rust.
    Done 2026-10-28: `tools/ota_release.py` (keygen outside the repo only, canonical
    manifest with every CHANGELOG section since `min_from`, the rolling support date,
@@ -600,7 +600,7 @@ The procedure, as it will run on DA1A2C:
    (update board / Companion / which first / cable once) is in `ota.rs` with tests.
    `cryptography` raised to 50.0.2 (46.0.3 had 13 advisories). Left: the release keys
    (owner's Mac, step 9) and wiring the check into the download (step 6).
-6. [~] Board OTA: download task, checkpoints, cancel, resume; local HTTPS server
+6. [x] Board OTA: download task, checkpoints, cancel, resume; local HTTPS server
    tests; pointer latency during download.
    Built 2026-10-28: a task on core 0 checks (signature first, then everything else),
    downloads into the inactive slot with SHA-256 while streaming, after
@@ -631,10 +631,10 @@ The procedure, as it will run on DA1A2C:
      forgets the last one first;
    - a dashboard polling status counted as "in use", so a ready update would never
      apply - status polls and update commands no longer count (`otaQueryOnly`).
-7. [~] Dashboard: the Updates card and the update sheet (every state, consent, cancel,
+7. [x] Dashboard: the Updates card and the update sheet (every state, consent, cancel,
    restart, outcome after restart, single-slot boards, both switches) - 19 BDD
    scenarios, the sheet in the responsive matrix.
-8. [~] Companion: inventory and compatibility view; LAN relay; cable path with
+8. [x] Companion: inventory and compatibility view; LAN relay; cable path with
    the journal (COM first, then native USB); self-update notice.
    Done 2026-10-28: `hidfi-flash` - the cable path's engine. A closed protocol (`Op`
    has no WRITE_REG, ERASE_FLASH or ERASE_REGION - a test proves none can be sent),
@@ -716,5 +716,22 @@ The procedure, as it will run on DA1A2C:
    `tools/make_release.sh` writes the OTA files when `HIDFI_RELEASE_KEY` is set.
    Left: the release keys (the owner decides where the offline backup lives), the
    keys embedded in firmware and Companion, CHANGELOG, SECURITY.md, README.
-10. [ ] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
+10. [~] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
    owner's word.
+   DA1A2C, 2026-10-28 (the owner's go-ahead for DA1A2C while away): put back to the
+   *published* v4.0.4 release zip with its single-slot table, then switched and
+   updated by the Companion's own flasher over COM - every checkpoint journaled,
+   data identical by hash. 09F7C8: not touched (the owner asked for DA1A2C only
+   while away).
+
+**Verified 2026-10-28, all on DA1A2C (COM + native USB, home WiFi):** board tier 122
+passed / 0 failed (19 skipped: tests that refuse a board in real use, opt-in
+perf), including OTA download 13, rollback 5 and the real Companion end to end 5;
+no-board suite static 33, unit 394, ui 644 (coverage contract 216/216 controls),
+build 4; every Rust crate's tests and clippy; the Companion's Windows x64 build;
+its Linux build and e2e in the VM; `tools/dep_watch.py` "nothing open". Two test
+bugs found by the full run and fixed: the new Companion scenarios assumed the base
+build (the module's end-to-end scenario leaves 4.0.99), and the mDNS "find" test
+stopped at the first board to answer - another HID-Fi on the network.
+Not tested: the Companion's update flows on real Windows or Linux hardware with a
+board (built and unit-tested there; the e2e ran on macOS).
