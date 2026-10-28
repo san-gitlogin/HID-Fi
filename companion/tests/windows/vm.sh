@@ -61,6 +61,7 @@ qemu() { # qemu [extra args...]
     -device nvme,drive=sys,serial=hidfi-sys \
     -netdev user,id=n0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 -device virtio-net-pci,netdev=n0 \
     -monitor unix:"$S/monitor.sock",server,nowait \
+    ${HIDFI_WIN_AUDIO:+-audiodev none,id=snd0 -device intel-hda -device hda-duplex,audiodev=snd0} \
     -vnc 127.0.0.1:5 -display none -daemonize -pidfile "$S/qemu.pid" \
     "$@"
 }

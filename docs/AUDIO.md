@@ -127,8 +127,12 @@ captured), so the browser keeps them in step.
   played to the default output captured at 48 kHz stereo; when the default output
   changes mid-capture, the capture follows it; chunks 10 ms old; the default
   input (microphone) captured.
-- **Windows:** built (x64), WASAPI loopback and microphone code compiled and
-  clippy-clean; not yet run on Windows with a sound device.
+- **Windows** (Windows 11 ARM64 in the VM, given an HD Audio device -
+  `HIDFI_WIN_AUDIO=1 companion/tests/windows/vm.sh up`): a 1 kHz tone played by
+  Windows' own player captured through loopback at 48 kHz stereo, level exact
+  (0.212 for 0.3 amplitude), 10 ms packets at most 5 ms old - far fresher than
+  macOS's ScreenCaptureKit; nothing delivered in silence, as designed. The
+  microphone opens (44.1 kHz stereo, resampled); the VM's input is silent.
 
 ## Build order
 
@@ -139,4 +143,4 @@ captured), so the browser keeps them in step.
 4. [x] Companion settings and tray, signalling states.
 5. [x] Dashboard: controls in every mode; BDD.
 6. [~] System, real-capture, real-board and performance tests.
-7. [~] Windows (WASAPI) and Linux (Pulse) capture; their checks.
+7. [x] Windows (WASAPI) and Linux (Pulse) capture; their checks.
