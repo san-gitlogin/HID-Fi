@@ -151,6 +151,8 @@ class BoardSim:
         self.refusing = False              # new sockets are turned away
         self.swallow = set()               # commands to receive once and never answer (a lost reply)
         self.ws_max = 8                    # WS_MAX_CLIENTS: dashboard pages at once
+        self.ota = {"layout": "two_slot", "slot": "app0", "state": "valid", "result": "none",
+                    "to": "", "from": "", "why": "", "restart_deferred": False}
         self.refused = 0                   # ...and how many have been
         self.fail_next = {}                # cmd -> error message, used once
         self.actions_done = []             # (action, keys) the agent commands pressed, in order
@@ -251,7 +253,16 @@ class BoardSim:
             "wiggle_active": self.wiggle is not None, "wiggle_mode": self.wiggle["mode"] if self.wiggle else "idle",
             "led_on": False, "boot_button": "released",
             **self.comp.counts(),
+            **self.ota_fields(),
         }
+
+    # ---- updates (hid_fi/ota.h) -------------------------------------------------------------
+    # A board on the two-slot layout running app0, nothing in progress. Scenarios
+    # change self.ota to stage the other states.
+    def ota_fields(self):
+        o = self.ota
+        return {"ota_layout": o["layout"], "ota_slot": o["slot"], "ota_state": o["state"],
+                "ota_result": o["result"], "comp_api": 1}
 
     # ---- Playwright wiring --------------------------------------------------------------
     # ---- timed side effects, on Playwright's thread --------------------------------------
@@ -1187,6 +1198,14 @@ class BoardSim:
                       dashboards=dash,
                       note="Device names are not shown. A WiFi client is never required to tell the access point "
                            "its name, and most phones now send a random MAC as well.")
+        if c == "ota_status":
+            o = self.ota
+            extra = {}
+            if o["state"] == "pending_verify":
+                extra["selftest"] = {"waiting_for": o.get("waiting_for", "running"),
+                                     "remaining_s": o.get("remaining_s", 60), "needs_network": o.get("needs_network", False)}
+            return OK("ota_status", **self.ota_fields(), firmware=self.firmware, to=o["to"], **{"from": o["from"]},
+                      why=o["why"], restart_deferred=o["restart_deferred"], **extra)
         if c in ("led_set", "led_blink", "led_status"):
             return OK({"led_set": "led_set", "led_blink": "led_blink_started", "led_status": "led_status"}[c],
                       on=False, r=0, g=0, b=0)

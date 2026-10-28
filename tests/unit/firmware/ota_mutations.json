@@ -1,0 +1,80 @@
+{
+  "_about": "Deliberate bugs in hid_fi/ota_logic.h. tests/unit/test_ota_logic.py::test_every_planted_bug_is_caught applies each and requires the answers to change. A bug that survives is a blind spot in the tests. Each 'find' must match the header exactly once.",
+  "mutations": [
+    {
+      "name": "self-test passes before a minute",
+      "find": "if (in.uptime_ms < OTA_SELFTEST_MIN_MS) return {OTA_WAIT, \"running\"};",
+      "replace": ""
+    },
+    {
+      "name": "network failure waits forever",
+      "find": "if (in.uptime_ms >= OTA_NET_DEADLINE_MS) return {OTA_FAIL, \"network\"};",
+      "replace": ""
+    },
+    {
+      "name": "USB HID not checked",
+      "find": "if (!in.hid_ready) {",
+      "replace": "if (false) {"
+    },
+    {
+      "name": "network only checked during the first minute",
+      "find": "if (in.need_network && !in.network_up) {",
+      "replace": "if (in.need_network && !in.network_up && in.uptime_ms < OTA_SELFTEST_MIN_MS) {"
+    },
+    {
+      "name": "forced test failure ignored",
+      "find": "if (in.forced_fail) return {OTA_FAIL, \"test_build\"};",
+      "replace": ""
+    },
+    {
+      "name": "versions compared without the patch",
+      "find": "if (a.patch != b.patch) return a.patch < b.patch ? -1 : 1;",
+      "replace": ""
+    },
+    {
+      "name": "trailing junk accepted",
+      "find": "if (*p != '\\0' && *p != '-' && *p != '+') return v;",
+      "replace": ""
+    },
+    {
+      "name": "one number accepted as a version",
+      "find": "if (n < 2) return v;",
+      "replace": "if (n < 1) return v;"
+    },
+    {
+      "name": "absurd parts not refused",
+      "find": "if (++digits > 6) return v;",
+      "replace": "++digits;"
+    },
+    {
+      "name": "rollback reported as updated",
+      "find": "        return OTA_OUT_ROLLED_BACK;   // the record says an update was on its way, and it is not running",
+      "replace": "        return OTA_OUT_UPDATED;"
+    },
+    {
+      "name": "pending not reported",
+      "find": "if (pending) return OTA_OUT_VERIFYING;",
+      "replace": ""
+    },
+    {
+      "name": "aborted other slot ignored",
+      "find": "if (aborted_other) return OTA_OUT_ROLLED_BACK;",
+      "replace": ""
+    },
+    {
+      "name": "restart allowed while verifying",
+      "find": "inline bool otaRestartAllowed(bool pending_verify) { return !pending_verify; }",
+      "replace": "inline bool otaRestartAllowed(bool pending_verify) { return true; }"
+    },
+    {
+      "name": "a missing network passes",
+      "find": "        return {OTA_WAIT, \"network\"};",
+      "replace": "        return {OTA_PASS, \"\"};"
+    },
+    {
+      "name": "rollback judged by version, not slot",
+      "find": "            return strcmp(rec.slot, running_slot) == 0 ? OTA_OUT_UPDATED : OTA_OUT_ROLLED_BACK;",
+      "replace": "            {}"
+    }
+  ]
+}

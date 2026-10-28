@@ -682,6 +682,32 @@ The two MACs are different hardware addresses on the same radio. `mac` is the
 station side — the one your router's DHCP table and any MAC filter will show.
 `ap_mac` is the access point side, the one a phone sees when it joins the board.
 
+### Updates
+
+`status` carries where the board stands on updates (docs/OTA.md):
+
+| Field | Values |
+|---|---|
+| `ota_layout` | `two_slot` (can update over the air), `single` (a release before the switch - needs one cable flash) |
+| `ota_slot` | `app0` or `app1`: which slot is running |
+| `ota_state` | `valid`; `pending_verify` (a new firmware proving itself - a restart now would roll it back); `single_slot` |
+| `ota_result` | `none`, `verifying`, `updated`, `rolled_back` - the last update, kept until the next one |
+| `comp_api` | the Companion protocol this firmware speaks; boards that report none speak 1 |
+
+`{"cmd":"ota_status"}` adds the details: `firmware`, `to` and `from` (the versions
+of the last update, empty when none is recorded), `why` (for `rolled_back`:
+`did_not_start` - a reset before the self-test ended -, `network`, `usb_hid` or
+`test_build`), `restart_deferred` (a restart is waiting for the self-test), and
+while `pending_verify` a `selftest` object: `waiting_for` (`running`, `network`,
+`usb_hid`), `remaining_s`, `needs_network`. Read-only, every transport.
+
+The self-test keeps a new firmware when it has run a minute without a reset,
+its USB HID started, and - if the board was on its home network when the update
+began - that network is back (within three minutes). Whether a computer has the
+board mounted is deliberately not asked: a sleeping computer must not cost an
+update. Any reset before the verdict, and any failed check, puts the previous
+version back.
+
 ---
 
 ## Storage

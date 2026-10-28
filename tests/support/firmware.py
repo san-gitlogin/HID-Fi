@@ -70,6 +70,41 @@ def app_slot_size():
     return min(r["size"] for r in partitions() if r["type"] == "app")
 
 
+def esptool_path():
+    """The esptool the pinned core ships (what flash_esp.sh uses), or one on PATH."""
+    data = arduino_data_dir()
+    if data:
+        found = sorted((Path(data) / "packages" / "esp32" / "tools" / "esptool_py").glob("*/esptool"))
+        if found:
+            return str(found[-1])
+    return shutil.which("esptool") or shutil.which("esptool.py")
+
+
+def build_variant(name, defines=()):
+    """Compile the firmware with extra -D flags (test builds such as
+    HIDFI_TEST_SELFTEST_FAIL) into tests/.cache, reusing a build whose sources,
+    flags and core have not changed. Returns the app image path."""
+    srcs = sorted(p for p in INO.parent.iterdir() if p.suffix in (".ino", ".h", ".csv"))
+    h = hashlib.sha256()
+    for p in srcs:
+        h.update(p.name.encode()); h.update(p.read_bytes())
+    h.update(" ".join(defines).encode()); h.update(fqbn().encode()); h.update((installed_core_version() or "").encode())
+    out = CACHE / f"variant-{name}-{h.hexdigest()[:12]}"
+    app = out / "hid_fi.ino.bin"
+    if app.exists():
+        return app
+    for old in CACHE.glob(f"variant-{name}-*"):
+        shutil.rmtree(old, ignore_errors=True)
+    cmd = ["arduino-cli", "compile", "--fqbn", fqbn(), "--build-path", str(CACHE / f"variant-{name}-buildpath"),
+           "--output-dir", str(out), str(INO.parent)]
+    if defines:
+        cmd[2:2] = ["--build-property", "compiler.cpp.extra_flags=" + " ".join(f"-D{d}" for d in defines)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    if r.returncode != 0 or not app.exists():
+        raise RuntimeError(f"build of {name} failed:\n{(r.stdout + r.stderr)[-3000:]}")
+    return app
+
+
 def fqbn():
     """The build settings, read from flash_esp.sh so they cannot drift from the flasher."""
     m = re.search(r"^FQBN='([^']+)'", FLASH_SH.read_text(), re.M)

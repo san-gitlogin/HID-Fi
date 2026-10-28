@@ -153,9 +153,21 @@ def _board_holder(board_port):
         final = b.snapshot()
         h.release()
         paths.REPORTS.mkdir(parents=True, exist_ok=True)
-        (paths.REPORTS / "board_restore.json").write_text(json.dumps({"restored": drift, "final": final}, indent=1))
+        # Hashes, never contents: a macro can hold a person's data (it did - an
+        # identity number), and this file and the failure message are read by people.
+        (paths.REPORTS / "board_restore.json").write_text(
+            json.dumps({"restored": drift, "final": _redacted(final)}, indent=1))
         if final != h.snap:
-            pytest.fail(f"board not left as found: before {h.snap} after {final}", pytrace=False)
+            pytest.fail(f"board not left as found: before {_redacted(h.snap)} after {_redacted(final)}", pytrace=False)
+
+
+def _redacted(snap):
+    """A board snapshot fit to print: each macro's name and steps become a short hash."""
+    import hashlib
+    out = dict(snap)
+    out["macros"] = {slot: hashlib.sha256(json.dumps(v, sort_keys=True).encode()).hexdigest()[:12]
+                     for slot, v in (snap.get("macros") or {}).items()}
+    return out
 
 
 @pytest.fixture

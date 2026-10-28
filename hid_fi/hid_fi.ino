@@ -359,7 +359,14 @@ bool heapWarned = false;
 #define  SERIAL_LINE_MAX 4096   // a whole dashboard layout (UI_CONFIG_MAX 3000) fits in one line, escaped
 // One definition. The boot event and the status reply both send it, and two
 // literals would eventually disagree about what is running.
-#define  FW_VERSION "hid_fi_v4.0.4"
+// Test builds (tests/board/test_ota_rollback.py) carry a suffix, so one can
+// never pass for a release: tools/make_release.sh refuses it.
+#if defined(HIDFI_TEST_SELFTEST_FAIL) || defined(HIDFI_TEST_CRASH_AT_BOOT)
+#define  FW_TEST_SUFFIX "-test"
+#else
+#define  FW_TEST_SUFFIX ""
+#endif
+#define  FW_VERSION "hid_fi_v4.0.4" FW_TEST_SUFFIX
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -848,6 +855,10 @@ uint8_t hidKeyFor(const char* name);
 // Uses the globals above, so it is included here, after them.
 #include "companion.h"
 
+// Updates: which slot runs, the self-test after an update, rollback (docs/OTA.md).
+static void broadcastJson(const JsonDocument& doc);
+#include "ota.h"
+
 // ==================== SETUP ====================
 void setup() {
     COM_SERIAL.begin(115200);
@@ -864,6 +875,8 @@ void setup() {
     COM_SERIAL.println("========================================");
     COM_SERIAL.printf("HID-Fi %s — ESP32-S3 USB HID + WiFi\n", FW_VERSION + 7);   // "v3.9", not "hid_fi_v3.9"
     COM_SERIAL.println("========================================");
+
+    otaBoot();      // which slot runs; whether a new firmware must still prove itself
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOpenedAt[i] = 0; }
 
@@ -985,6 +998,7 @@ void loop() {
         updatePower();
         compTick();                // companion expiry, never blocks
     }
+    otaTick();                     // a new firmware's self-test, once a second, never blocks
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds
     // brings the access point back if power saving switched it off. That hold is
@@ -1056,6 +1070,12 @@ void loop() {
         restartAP();
     }
 
+    if (pendingRestartAt && (long)(millis() - pendingRestartAt) >= 0 && !otaRestartAllowed(otaPendingVerify())) {
+        // A restart now would roll a new firmware back before its self-test: wait.
+        if (!ota.restartDeferred) COM_SERIAL.println("[SYS] Restart waits for the update's self-test");
+        ota.restartDeferred = true;
+        pendingRestartAt = millis() + 1000;
+    }
     if (pendingRestartAt && (long)(millis() - pendingRestartAt) >= 0) {
         COM_SERIAL.println("[SYS] Restarting to apply USB device change...");
         delay(50);
@@ -2362,6 +2382,9 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "vault_pin") == 0) {
         handleVaultPin(inDoc);
     }
+    else if (strcmp(cmd, "ota_status") == 0) {
+        handleOtaStatus();
+    }
     else if (strcmp(cmd, "companion_list") == 0) {
         handleCompanionList();
     }
@@ -3090,6 +3113,7 @@ static uint8_t wsDevices() {
 
 void buildStatusDoc(JsonDocument& doc) {
     doc["status"] = "ok";
+    otaStatusFields(doc);
     doc["reply"] = "status";
     doc["chip"] = "ESP32-S3";
     doc["firmware"] = FW_VERSION;

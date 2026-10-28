@@ -544,10 +544,21 @@ The procedure, as it will run on DA1A2C:
    arduino-cli's whole-flash maximum, `tests/static/test_partitions.py` pins every row
    (moving NVS fails it - checked); DA1A2C switched (NVS keys 265 = 265, data identical by
    hash), no-board suite and board tier (93/0) green on the new layout.
-3. [ ] Rollback core in firmware: `verifyRollbackLater`, self-test, the `ota`
+3. [x] Rollback core in firmware: `verifyRollbackLater`, self-test, the `ota`
    record, status fields (`ota_state`, `layout`, `running_slot`, `comp_api`),
    reboot deferral; model + contract + docs; proven on 09F7C8 by writing a test
    image into the other slot over the cable.
+   Done 2026-10-28 (proven on DA1A2C instead - the owner's call while away):
+   `hid_fi/ota_logic.h` (pure decisions, host-tested, 15 planted bugs all caught) and
+   `hid_fi/ota.h` (glue: `verifyRollbackLater()` override, the `ota` NVS record with the
+   slot, self-test 1 Hz from `loop()`, restart deferral, status fields, `ota_status`).
+   Found while writing the board test: a rollback must be judged by the SLOT, not the
+   version - a reinstall or a `-test` image compares equal to what runs after rolling back.
+   `tests/board/test_ota_rollback.py` on the board: good update kept; failed self-test,
+   crash before the verdict and a port open during the check all go back; a restart
+   asked for during the check waits. Data identical by hash throughout.
+   Also found: `tests/.reports/board_restore.json` printed macro contents (the owner's ID
+   number) - now hashes only, guarded by `tests/unit/test_board_report.py`.
 4. [ ] `tests/support/esp_model.py`: the simulated ESP32-S3 and the fault sweep.
 5. [ ] Manifest + signature + version rules: shared vectors; firmware, Python,
    Rust.

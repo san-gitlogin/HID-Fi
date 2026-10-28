@@ -47,6 +47,8 @@ READ_ONLY = [
     {"cmd": "companion_list"}, {"cmd": "companion_unpair", "id": "0f" * 16},
     {"cmd": "companion_pair", "id": "0f" * 16}, {"cmd": "companion_pair", "id": "NOT-HEX"},
     {"cmd": "screen_ticket", "id": "0f" * 16},               # serial: always wifi_only
+    # Updates: where the board stands (hid_fi/ota.h).
+    {"cmd": "ota_status"},
 ]
 
 
