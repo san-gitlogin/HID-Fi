@@ -10,6 +10,8 @@ pub mod flasher;
 pub mod image;
 pub mod port;
 pub mod proto;
+#[cfg(feature = "serial")]
+pub mod serial;
 pub mod sim;
 pub mod slip;
 pub mod stub;

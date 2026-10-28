@@ -1033,6 +1033,7 @@ void loop() {
     }
     otaTick();                     // a new firmware's self-test, once a second, never blocks
     otaService();                  // update checks, a ready update applied when idle - never blocks
+    otaDownloadModeTick();         // a cable update over native USB asked for by the Companion
     SEC_END(4)
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds

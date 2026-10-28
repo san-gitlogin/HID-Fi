@@ -57,6 +57,13 @@ pub struct Sim {
     /// Firmware versions that mark themselves valid the moment they start - every
     /// release before the update work (the core does it unless verifyRollbackLater()).
     pub valid_at_boot: Vec<String>,
+    /// Every register write that reached the chip: (address, value, mask).
+    pub reg_writes: Vec<(u32, u32, u32)>,
+    /// RTC_CNTL_OPTION1 FORCE_DOWNLOAD_BOOT: set, every reset lands in the ROM loader.
+    pub force_download: bool,
+    /// Test-only fault: something outside the flasher changes one settings byte
+    /// during the update (it happens at the first image MD5 check).
+    pub corrupt_nvs_on_next_md5: bool,
     dec: Decoder,
     out: Vec<u8>,
     stub: bool,
@@ -79,6 +86,7 @@ impl Sim {
         assert_eq!(flash.len(), FLASH);
         Sim {
             flash, faults: Faults::default(), mac, seen: Vec::new(), boots: Vec::new(), valid_at_boot: Vec::new(),
+            reg_writes: Vec::new(), force_download: false, corrupt_nvs_on_next_md5: false,
             dec: Decoder::default(),
             out: Vec::new(), stub: false, in_download: false, dead: false, written_total: 0, frames: 0,
             flash_blocks: 0, write_at: 0, write_end: 0, mem: Vec::new(), dtr: false, rts: false, pending_read: None,
@@ -93,6 +101,14 @@ impl Sim {
 
     pub fn is_dead(&self) -> bool {
         self.dead
+    }
+
+    /// The firmware restarted itself into the ROM loader (compOta "download_mode").
+    pub fn enter_forced_download(&mut self) {
+        self.force_download = true;
+        self.in_download = true;
+        self.stub = false;
+        self.out.clear();
     }
 
     /// Power back / cable back: the chip starts its firmware (as after a replug).
@@ -316,6 +332,14 @@ impl Sim {
                 self.out.extend(slip::encode(b"OHAI"));
             }
             Op::SpiAttach | Op::SpiSetParams | Op::ChangeBaudrate | Op::FlashEnd => self.reply(op as u8, 0, &[], true),
+            Op::WriteReg => {
+                let (addr, value, mask) = (w(0), w(1), w(2));
+                self.reg_writes.push((addr, value, mask));
+                if addr == proto::RTC_CNTL_OPTION1_REG && mask & 1 != 0 {
+                    self.force_download = value & 1 != 0;
+                }
+                self.reply(op as u8, 0, &[], true);
+            }
             Op::FlashBegin => {
                 let (size, at) = (w(0), w(3));
                 self.erase(at, size);
@@ -339,6 +363,10 @@ impl Sim {
                 }
             }
             Op::SpiFlashMd5 => {
+                if self.corrupt_nvs_on_next_md5 {
+                    self.corrupt_nvs_on_next_md5 = false;
+                    self.flash[0x9100] ^= 0x01;
+                }
                 let (at, len) = (w(0) as usize, w(1) as usize);
                 let d = Md5::digest(&self.flash[at..at + len]);
                 if self.stub {
@@ -422,8 +450,8 @@ impl Port for Sim {
             self.stub = false;
             self.out.clear();
             self.pending_read = None;
-            if self.dtr {
-                self.in_download = true;
+            if self.dtr || self.force_download {
+                self.in_download = true;      // GPIO0 low, or forced: the ROM loader again
             } else {
                 self.in_download = false;
                 let b = self.boot();

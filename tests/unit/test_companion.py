@@ -285,3 +285,81 @@ def test_a_long_name_is_refused(board):
 def test_commands_check_the_id(board):
     for c in ("companion_pair", "companion_unpair", "screen_ticket"):
         assert ws(board, cmd=c, id="nothex")["reply"] == "bad_request"
+
+
+# ---- updates through the paired Companion (hid_fi/ota.h compOta) ------------------------------
+def test_the_update_proof_matches_the_shared_vector():
+    v = VECTORS
+    o = v["ota"]
+    assert f'ota|{o["id"]}|{o["act"]}|{o["url"]}|{o["chal"]}' == o["msg"]
+    assert cs.mac(bytes.fromhex(v["key"]), o["msg"]) == o["mac"]
+
+
+def stage_release(board, version="4.1.0"):
+    board.firmware = "hid_fi_v4.0.4"
+    board.ota["release"] = {"version": version, "size": 1500000, "changelog": []}
+
+
+def test_the_companion_checks_installs_cancels_and_applies(board):
+    app = pair(board)
+    stage_release(board)
+    r = app.ota("check")
+    assert r == {"status": "ok", "act": "check", "step": "checking"}
+    board._ota_checked()
+    assert board.status()["ota_available"] == "4.1.0"
+    assert app.ota("apply")["reply"] == "not_ready"
+    assert app.ota("install")["step"] == "downloading"
+    assert app.ota("cancel")["done"] == "stopping"
+    assert board.status()["ota_error"] == "cancelled"
+
+
+def test_nothing_to_install_until_a_check_found_it(board):
+    app = pair(board)
+    assert app.ota("install")["reply"] == "nothing_to_install"
+
+
+def test_a_relay_must_be_the_requesting_computer(board):
+    app = pair(board)
+    stage_release(board)
+    assert app.ota("from", "http://192.168.1.250:8000/rel/")["reply"] == "bad_request"
+    assert not board.ota.get("relay")
+    r = app.ota("from", f"http://{app.ip}:47801/rel")
+    assert r["step"] == "checking" and board.ota["relay"] == f"http://{app.ip}:47801/rel/"
+
+
+def test_download_mode_only_when_nothing_is_in_progress(board):
+    app = pair(board)
+    board.ota["state"] = "pending_verify"
+    assert app.ota("download_mode")["reply"] == "verifying", "a reset now would roll the update back"
+    board.ota["state"], board.ota["step"] = "valid", "downloading"
+    assert app.ota("download_mode")["reply"] == "busy"
+    board.ota["step"] = "idle"
+    assert app.ota("download_mode") == {"status": "ok", "act": "download_mode", "step": "idle"}
+    assert board.ota["download_mode"]
+
+
+def test_an_update_request_cannot_be_replayed_or_forged(board):
+    app = pair(board)
+    _, r = app._call(op="chal", id=app.id)
+    m = cs.mac(app.key, f"ota|{app.id}|check||{r['chal']}")
+    req = dict(op="ota", id=app.id, act="check", url="", chal=r["chal"], mac=m)
+    assert app._call(**req)[1]["status"] == "ok"
+    assert app._call(**req)[1]["reply"] == "stale_chal"
+    _, r = app._call(op="chal", id=app.id)
+    forged = dict(req, chal=r["chal"], act="install")        # a proof for "check" used for "install"
+    forged["mac"] = cs.mac(app.key, f"ota|{app.id}|check||{r['chal']}")
+    assert app._call(**forged)[1]["reply"] == "bad_mac"
+
+
+def test_update_requests_from_strangers_or_without_a_pin_are_refused(board):
+    stranger = cs.FakeApp(board.comp)
+    assert stranger.ota("check")["reply"] == "unknown_pc"
+    no_pin = BoardSim(pin="")
+    assert cs.FakeApp(no_pin.comp).ota("check")["reply"] == "pin_required"
+
+
+@pytest.mark.parametrize("act, url", [("reboot", ""), ("check", "x" * 161)])
+def test_unknown_acts_and_long_urls_are_refused(board, act, url):
+    app = pair(board)
+    r = app.ota(act, url)
+    assert r["status"] == "error" and r["reply"] == "bad_request"

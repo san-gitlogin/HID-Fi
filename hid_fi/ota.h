@@ -238,7 +238,14 @@ static size_t otaTrustedKeys(OtaKey* out, size_t max) {
     return n;
 }
 
+static String otaRelaySource;
 static String otaSource() {
+    // The Companion's relay, for one check (RAM only, set by compOta "from").
+    if (otaRelaySource.length()) {
+        String s = otaRelaySource;
+        otaRelaySource = "";
+        return s;
+    }
     preferences.begin("ota", true);
     String s = preferences.getString("src", "");
     preferences.end();
@@ -603,23 +610,27 @@ static void otaReply(const char* reply, const char* refused = nullptr) {
     sendJson(d);
 }
 
-void handleOtaCheck() {
-    if (!ota.twoSlot) return otaReply("ota_check", "single_slot");
-    if (ota.pending) return otaReply("ota_check", "verifying");
-    if (otaBusy()) return otaReply("ota_check", "busy");
+// ---- the actions: shared by the dashboard's commands and the paired Companion ----
+// Each returns nullptr when done, otherwise why it was refused.
+
+static const char* otaActCheck() {
+    if (!ota.twoSlot) return "single_slot";
+    if (ota.pending) return "verifying";
+    if (otaBusy()) return "busy";
     xSemaphoreTake(otaMux, portMAX_DELAY); job.error = ""; xSemaphoreGive(otaMux);
     // Seen at once, not when the task picks it up: status never shows a stale step.
     job.step = OTA_STEP_CHECKING;
     job.reqCheck = true;
-    otaReply("ota_check");
+    return nullptr;
 }
 
 // Installs only what a check this boot found and verified - the person's
-// consent is this command (or the automatic security setting they switched on).
-void handleOtaInstall() {
-    if (ota.pending) return otaReply("ota_install", "verifying");
-    if (otaBusy() || job.step == OTA_STEP_READY) return otaReply("ota_install", "busy");
-    if (!job.available) return otaReply("ota_install", "nothing_to_install");
+// consent is this command (from the dashboard or the Companion), or the
+// automatic security setting they switched on.
+static const char* otaActInstall() {
+    if (ota.pending) return "verifying";
+    if (otaBusy() || job.step == OTA_STEP_READY) return "busy";
+    if (!job.available) return "nothing_to_install";
     xSemaphoreTake(otaMux, portMAX_DELAY); job.error = ""; xSemaphoreGive(otaMux);
     // Progress from an earlier attempt must not show as this one's (a test cancelled
     // "too late" because of it), and the step changes the moment it is accepted.
@@ -627,16 +638,15 @@ void handleOtaInstall() {
     job.total = job.size;
     job.step = OTA_STEP_DOWNLOADING;
     job.reqInstall = true;
-    otaReply("ota_install");
+    return nullptr;
 }
 
-void handleOtaCancel() {
+// done: what cancel did - "stopping", "switched_back" or "nothing".
+static const char* otaActCancel(const char** done) {
     OtaCancel a = otaCancelAction(job.step);
-    StaticJsonDocument<192> d;
-    d["status"] = "ok"; d["reply"] = "ota_cancel";
-    if (a == OTA_CANCEL_REFUSED) {
-        d["status"] = "error"; d["message"] = "switching";     // the 0.1 s otadata write: ask again
-    } else if (a == OTA_CANCEL_STOP) {
+    *done = "nothing";
+    if (a == OTA_CANCEL_REFUSED) return "switching";           // the 0.1 s otadata write: ask again
+    if (a == OTA_CANCEL_STOP) {
         if (job.reqInstall || job.reqCheck) {
             // Accepted but not started yet: withdraw it, nothing ran.
             job.reqInstall = job.reqCheck = false;
@@ -645,8 +655,10 @@ void handleOtaCancel() {
         } else {
             job.cancel = true;
         }
-        d["done"] = "stopping";
-    } else if (a == OTA_CANCEL_SWITCH_BACK) {
+        *done = "stopping";
+        return nullptr;
+    }
+    if (a == OTA_CANCEL_SWITCH_BACK) {
         // Cancelling a ready update must leave no way for it to start. Choosing the
         // running slot again is not enough: IDF writes that choice as NEW, so after
         // the next restart the running version would be on probation, and a reset
@@ -657,24 +669,38 @@ void handleOtaCancel() {
         const esp_partition_t* run = esp_ota_get_running_partition();
         const esp_partition_t* other = esp_ota_get_next_update_partition(NULL);
         bool erased = other && esp_partition_erase_range(other, 0, 4096) == ESP_OK;
-        if (run && erased && esp_ota_set_boot_partition(run) == ESP_OK
-            && esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
-            otaRecord("", "", "", "");
-            job.step = OTA_STEP_IDLE;
-            job.applyAsked = false;
-            d["done"] = "switched_back";
-        } else {
-            d["status"] = "error"; d["message"] = "switch_back_failed";
-        }
-    } else {
-        d["done"] = "nothing";
+        if (!(run && erased && esp_ota_set_boot_partition(run) == ESP_OK
+              && esp_ota_mark_app_valid_cancel_rollback() == ESP_OK)) return "switch_back_failed";
+        otaRecord("", "", "", "");
+        job.step = OTA_STEP_IDLE;
+        job.applyAsked = false;
+        *done = "switched_back";
     }
+    return nullptr;
+}
+
+static const char* otaActApply() {
+    if (job.step != OTA_STEP_READY) return "not_ready";
+    job.applyAsked = true;
+    return nullptr;
+}
+
+void handleOtaCheck() { otaReply("ota_check", otaActCheck()); }
+void handleOtaInstall() { otaReply("ota_install", otaActInstall()); }
+
+void handleOtaCancel() {
+    const char* done;
+    const char* why = otaActCancel(&done);
+    StaticJsonDocument<192> d;
+    d["reply"] = "ota_cancel";
+    if (why) { d["status"] = "error"; d["message"] = why; }
+    else { d["status"] = "ok"; d["done"] = done; }
     sendJson(d);
 }
 
 void handleOtaApply() {
-    if (job.step != OTA_STEP_READY) return otaReply("ota_apply", "not_ready");
-    job.applyAsked = true;
+    const char* why = otaActApply();
+    if (why) return otaReply("ota_apply", why);
     StaticJsonDocument<192> d;
     d["status"] = "ok"; d["reply"] = "ota_apply";
     d["waiting_for_idle"] = millis() - lastHidAt < OTA_IDLE_BEFORE_RESTART_MS;
@@ -758,4 +784,89 @@ void handleOtaStatus() {
         xSemaphoreGive(otaMux);
     }
     sendJson(doc);
+}
+
+// ==================== OTA: THE PAIRED COMPANION ====================
+// POST /api/companion {op:"ota", id, act, url, chal, mac}: the Companion on the
+// computer the board is plugged into checks, installs, cancels or applies an
+// update for the person sitting at it, relays a release when the board has no
+// internet ("from"), or restarts it into the ROM loader for a cable update over
+// the native USB port ("download_mode"). Proven like a heartbeat: a one-use
+// challenge and HMAC-SHA256 with this computer's pairing key over
+//     "ota|" id "|" act "|" url "|" chal
+// The signature rules for releases do not change: a relayed manifest must still
+// be signed by a key the firmware trusts.
+#include "soc/rtc_cntl_reg.h"
+
+// otaRelaySource (declared above otaSource): RAM only, one check - where the Companion serves a release
+static uint32_t otaDownloadModeAt = 0;  // a restart into the ROM loader, after the reply has left
+
+static void compOtaReply(const char* act, const char* done) {
+    JsonDocument d;
+    d["status"] = "ok"; d["act"] = act; d["step"] = otaStepStr();
+    if (done) d["done"] = done;
+    compReply(200, d);
+}
+
+static void compOta(const JsonDocument& in, uint32_t ip) {
+    uint8_t id[16], chal[16], mac[32], want[32];
+    const char* ch = in["chal"] | "";
+    const char* act = in["act"] | "";
+    const char* url = in["url"] | "";
+    if (!comp_hex_parse(in["id"] | "", id, 16) || !comp_hex_parse(ch, chal, 16) ||
+        !comp_hex_parse(in["mac"] | "", mac, 32) || strlen(url) > 160) {
+        compRefuse(400, "bad_request", "Malformed update request"); return;
+    }
+    int i = compFindPaired(id);
+    if (i < 0) { compRefuse(404, "unknown_pc", "This computer is not paired"); return; }
+    CompPaired& c = compPaired[i];
+    bool fresh = c.chalLive && millis() - c.chalAt <= COMP_CHAL_MS && comp_ct_equal(c.chal, chal, 16);
+    c.chalLive = false; comp_wipe(c.chal, 16);
+    if (!fresh) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
+    char msg[260];
+    char idh[33]; comp_hex(id, 16, idh);
+    snprintf(msg, sizeof(msg), "ota|%s|%s|%s|%s", idh, act, url, ch);
+    if (comp_hmac(c.key, msg, want) != 0 || !comp_ct_equal(want, mac, 32)) {
+        compRefuse(401, "bad_mac", "The update request's proof is wrong"); return;
+    }
+    const char* why = nullptr;
+    const char* done = nullptr;
+    if (!strcmp(act, "check")) {
+        why = otaActCheck();
+    } else if (!strcmp(act, "from")) {
+        // Only the requesting computer itself may serve the release - never a third host.
+        String prefix = "http://" + IPAddress(ip).toString() + ":";
+        if (!String(url).startsWith(prefix)) { compRefuse(400, "bad_request", "A relay must be this computer"); return; }
+        otaRelaySource = url;
+        if (!otaRelaySource.endsWith("/")) otaRelaySource += "/";
+        why = otaActCheck();
+        if (why) otaRelaySource = "";
+    } else if (!strcmp(act, "install")) {
+        why = otaActInstall();
+    } else if (!strcmp(act, "cancel")) {
+        why = otaActCancel(&done);
+    } else if (!strcmp(act, "apply")) {
+        why = otaActApply();
+    } else if (!strcmp(act, "download_mode")) {
+        if (ota.pending) why = "verifying";        // a reset now would roll the update back
+        else if (otaBusy() || job.step == OTA_STEP_READY) why = "busy";
+        else otaDownloadModeAt = millis() + 300;
+    } else {
+        compRefuse(400, "bad_request", "Unknown act"); return;
+    }
+    if (why) { compRefuse(409, why, "Not now"); return; }
+    compOtaReply(act, done);
+}
+
+// From loop(): the restart into the ROM loader, once the reply is out. Everything
+// held is released first; the loader then appears as USB-Serial-JTAG and the
+// Companion writes, and clears the flag, over that port.
+void otaDownloadModeTick() {
+    if (!otaDownloadModeAt || (long)(millis() - otaDownloadModeAt) < 0) return;
+    COM_SERIAL.println("[OTA] restarting into the ROM loader for a cable update");
+    Keyboard.releaseAll();
+    hidMouseButtons(0x07, 0, 1);
+    delay(100);
+    REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
+    esp_restart();
 }

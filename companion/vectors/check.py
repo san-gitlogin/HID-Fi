@@ -31,6 +31,10 @@ bt = v["beat"]
 msg = f'beat|{bt["id"]}|{bt["port"]}|{bt["fp"]}|{bt["tn"]}|{bt["chal"]}'
 checks["beat.msg"] = msg == bt["msg"]
 checks["beat.mac"] = hmac.new(key, msg.encode(), "sha256").hexdigest() == bt["mac"]
+ot = v["ota"]   # the Companion's update request (hid_fi/ota.h compOta)
+omsg = f'ota|{ot["id"]}|{ot["act"]}|{ot["url"]}|{ot["chal"]}'
+checks["ota.msg"] = omsg == ot["msg"]
+checks["ota.mac"] = hmac.new(key, omsg.encode(), "sha256").hexdigest() == ot["mac"]
 t = v["ticket"]
 checks["ticket"] = hmac.new(key, f'tkt|{t["tn"]}|{t["vn"]}'.encode(), "sha256").hexdigest() == t["mac"]
 for k, ok in checks.items():

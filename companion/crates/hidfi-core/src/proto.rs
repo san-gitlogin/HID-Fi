@@ -42,6 +42,16 @@ pub enum Request {
         chal: String,
         mac: String,
     },
+    /// An update action for the board this computer is paired with
+    /// (hid_fi/ota.h, compOta): check, from (relay), install, cancel, apply,
+    /// download_mode. `url` is empty except for `from`.
+    Ota {
+        id: String,
+        act: String,
+        url: String,
+        chal: String,
+        mac: String,
+    },
 }
 
 impl Request {

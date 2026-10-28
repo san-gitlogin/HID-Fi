@@ -175,6 +175,8 @@ class CompanionBoard:
             return self._chal(b)
         if op == "beat":
             return self._beat(b, ip)
+        if op == "ota":
+            return self._ota(b, ip)
         return self._refuse(400, "bad_request", "Unknown op")
 
     def _hello(self, b, ip):
@@ -249,6 +251,50 @@ class CompanionBoard:
         if not was:
             self.sim._push({"event": "companion_online", "name": c["name"]})
         return 200, {"status": "ok"}
+
+    def _ota(self, b, ip):
+        """compOta (hid_fi/ota.h): the paired Companion's update request."""
+        url, act = b.get("url", ""), b.get("act", "")
+        if not (hex_ok(b.get("id"), 16) and hex_ok(b.get("chal"), 16) and hex_ok(b.get("mac"), 32)
+                and isinstance(url, str) and len(url) <= 160 and isinstance(act, str)):
+            return self._refuse(400, "bad_request", "Malformed update request")
+        c = self._find_paired(b["id"])
+        if not c:
+            return self._refuse(404, "unknown_pc", "This computer is not paired")
+        fresh = bool(c.get("chal")) and self._now() - c["chal_at"] <= CHAL_S and \
+            hmac.compare_digest(c["chal"], b["chal"])
+        c["chal"] = None
+        if not fresh:
+            return self._refuse(401, "stale_chal", "Ask for a new challenge")
+        want = mac(c["key"], f'ota|{b["id"]}|{act}|{url}|{b["chal"]}')
+        if not hmac.compare_digest(want, b["mac"]):
+            return self._refuse(401, "bad_mac", "The update request's proof is wrong")
+        o, done = self.sim.ota, None
+        cmd = {"check": "ota_check", "from": "ota_check", "install": "ota_install", "cancel": "ota_cancel",
+               "apply": "ota_apply"}.get(act)
+        if act == "from":
+            if not url.startswith(f"http://{ip}:"):
+                return self._refuse(400, "bad_request", "A relay must be this computer")
+            o["relay"] = url if url.endswith("/") else url + "/"
+        if act == "download_mode":
+            if o["state"] == "pending_verify":
+                return self._refuse(409, "verifying", "Not now")
+            if o["step"] != "idle":
+                return self._refuse(409, "busy", "Not now")
+            o["download_mode"] = True
+        elif cmd:
+            r = self.sim.ota_command(cmd, {}, "companion")
+            if r.get("status") != "ok":
+                if act == "from":
+                    o["relay"] = ""
+                return self._refuse(409, r.get("message", "refused"), "Not now")
+            done = r.get("done")
+        else:
+            return self._refuse(400, "bad_request", "Unknown act")
+        out = {"status": "ok", "act": act, "step": o["step"]}
+        if done:
+            out["done"] = done
+        return 200, out
 
     # ---- dashboard commands -------------------------------------------------------------
     def command(self, c, b, transport):
@@ -356,6 +402,14 @@ class FakeApp:
             self.key = derive_key(x25519(self.secret, b_pub), self.a_pub, b_pub, self.n_a, n_b)
             return self._call(op="reveal", id=self.id, n_a=self.n_a.hex())
         return code, r
+
+    def ota(self, act, url=""):
+        """An update request, proven like a heartbeat (hid_fi/ota.h compOta)."""
+        _, r = self._call(op="chal", id=self.id)
+        if r.get("status") != "ok":
+            return r
+        m = mac(self.key, f"ota|{self.id}|{act}|{url}|{r['chal']}")
+        return self._call(op="ota", id=self.id, act=act, url=url, chal=r["chal"], mac=m)[1]
 
     def beat(self):
         _, r = self._call(op="chal", id=self.id)

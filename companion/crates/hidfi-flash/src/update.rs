@@ -46,6 +46,19 @@ pub enum UpdateError {
     BadRelease,
     #[error("cancelled")]
     Cancelled,
+    #[error("the settings area read back different - the backup was written back; nothing else was changed after it")]
+    SettingsRestored,
+}
+
+/// How the flasher reaches the ROM loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Connect {
+    /// The COM port (CH343): the auto-reset lines enter the loader, and the EN pulse leaves it.
+    Reset,
+    /// The native USB port, after the firmware restarted into the loader on the
+    /// Companion's request (compOta "download_mode"): no reset to enter; leaving
+    /// clears "force download" first.
+    InLoader,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,8 +154,11 @@ fn layout_of(table: &[Partition]) -> Option<Path2> {
 
 /// Step C1: is this the chosen board, an ESP32-S3, running HID-Fi, on a layout
 /// HID-Fi made? Reads a backup of 0x0-0xFFFF. Writes nothing.
-pub fn preflight<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6]) -> Result<Found, UpdateError> {
-    f.enter_bootloader()?;
+pub fn preflight<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect) -> Result<Found, UpdateError> {
+    match connect {
+        Connect::Reset => f.enter_bootloader()?,
+        Connect::InLoader => f.attach_to_loader()?,
+    }
     f.sync()?;
     let chip = f.chip_id()?;
     if chip != image::ESP32S3_CHIP_ID as u32 {
@@ -177,8 +193,8 @@ pub struct Progress<'a> {
 /// Runs (or resumes, when `journal_path` holds an unfinished journal for this
 /// board) a cable update. Returns once the board has been restarted into the new
 /// firmware; whether it proves itself is the firmware's self-test.
-pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], rel: &Release, journal_path: &Path, p: Progress)
-    -> Result<Journal, UpdateError> {
+pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &Release, journal_path: &Path,
+                    p: Progress) -> Result<Journal, UpdateError> {
     let id = image::identify(rel.image).ok_or(UpdateError::BadRelease)?;
     let to = id.hidfi_version.clone().ok_or(UpdateError::BadRelease)?;
     if id.chip_id != image::ESP32S3_CHIP_ID || !image::image_is_valid(rel.image) {
@@ -188,7 +204,13 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], rel: &Release, journal_pa
     if layout_of(&new_table) != Some(Path2::TwoSlot) {
         return Err(UpdateError::BadRelease);
     }
-    let found = preflight(f, mac)?;
+    let found = preflight(f, mac, connect)?;
+    let leave = |f: &mut Flasher<P>| -> Result<(), FlashError> {
+        match connect {
+            Connect::Reset => f.hard_reset(),
+            Connect::InLoader => f.leave_forced_download(),
+        }
+    };
     let resume = Journal::load(journal_path).filter(|j| j.mac == mac_str(mac) && j.to == to && j.step < Step::Restarted);
 
     let mut j = match resume {
@@ -243,7 +265,7 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], rel: &Release, journal_pa
         if j.step >= Step::Switched {
             let _ = f.write(OTADATA_AT, &unhex(&j.original_otadata), &mut |_| true);
         }
-        let _ = f.hard_reset();
+        let _ = leave(f);
         let _ = save(j, Step::Cancelled, "everything put back as found");
         UpdateError::Cancelled
     };
@@ -308,8 +330,32 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], rel: &Release, journal_pa
     if (p.cancel)() {
         return Err(cancel(f, &mut j));
     }
+    // The new slot must still be chosen, untried (NEW). If the board restarted since
+    // the switch - an unplug, a power cut - the new firmware has had its probation
+    // start, and the reset this resume made to reach the loader cut it short: the
+    // bootloader would now count it as failed. Choose it again, freshly (found by
+    // the unplug sweep).
+    let od = f.read_flash(OTADATA_AT, 0x2000)?;
+    let ch = image::otadata_choice(&od, 2);
+    if ch.map(|c| (c.slot, c.state)) != Some((j.target_slot, image::NEW)) {
+        let again = image::otadata_switch(&od, j.target_slot, image::NEW, 2);
+        if let Some(s) = (0..2).find(|s| od[s * 0x1000..(s + 1) * 0x1000] != again[s * 0x1000..(s + 1) * 0x1000]) {
+            f.write(OTADATA_AT + s as u32 * SECTOR, &again[s * 0x1000..(s + 1) * 0x1000], &mut |_| true)?;
+        }
+    }
+    // The settings must be exactly as read in preflight. No path writes there (the
+    // sweep proves it); if a byte differs all the same, the backup - held only in
+    // memory, never on disk: it holds the vault - goes straight back, and we stop.
+    let nvs_at = NVS.0 as usize;
+    let nvs_now = f.read_flash(NVS.0, NVS.1)?;
+    let nvs_was = &found.backup[nvs_at..nvs_at + NVS.1 as usize];
+    if nvs_now != nvs_was {
+        f.write(NVS.0, nvs_was, &mut |_| true)?;
+        let _ = leave(f);
+        return Err(UpdateError::SettingsRestored);
+    }
     // C4: start it. The port stays open: the firmware proves itself undisturbed.
-    f.hard_reset()?;
+    leave(f)?;
     save(&mut j, Step::Restarted, "restarted into the new firmware")?;
     Ok(j)
 }

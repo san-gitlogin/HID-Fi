@@ -22,7 +22,7 @@ use crate::flasher::Flasher;
 use crate::image;
 use crate::proto;
 use crate::sim::{Boot, Faults, Sim, FLASH};
-use crate::update::{self, Journal, Path2, Progress, Release, Step, UpdateError};
+use crate::update::{self, Connect, Journal, Path2, Progress, Release, Step, UpdateError};
 
 const MAC: [u8; 6] = [0xB8, 0x1F, 0x3F, 0xDA, 0x1A, 0x2C];
 const OLD: &str = "hid_fi_v4.0.4";
@@ -156,9 +156,14 @@ impl Run {
         // Cancels "between steps" too: the journal records each, so we cancel once it moved past `cancel_at`.
         let jp = self.journal.clone();
         let cancel2 = || cancel() || (cancel_at.is_some() && Journal::load(&jp).is_some_and(|j| Some(j.step) >= cancel_at));
-        let r = update::run(&mut f, &MAC, &rel, &self.journal, Progress { cancel: &cancel2, on: &mut on });
+        let connect = if s_in_loader(&f.port) { Connect::InLoader } else { Connect::Reset };
+        let r = update::run(&mut f, &MAC, connect, &rel, &self.journal, Progress { cancel: &cancel2, on: &mut on });
         (f.port, r)
     }
+}
+
+fn s_in_loader(s: &Sim) -> bool {
+    s.force_download
 }
 
 fn nvs(s: &Sim) -> &[u8] {
@@ -168,6 +173,9 @@ fn nvs(s: &Sim) -> &[u8] {
 fn no_forbidden(s: &Sim) {
     for (code, why) in proto::FORBIDDEN {
         assert!(!s.seen.contains(code), "{why} was sent");
+    }
+    for (addr, value, mask) in &s.reg_writes {
+        assert_eq!((*addr, *value, *mask), (proto::RTC_CNTL_OPTION1_REG, 0, 1), "a register write other than the one named");
     }
 }
 
@@ -458,4 +466,45 @@ fn a_restart_between_the_switch_and_the_table_does_not_skip_the_self_test() {
     let (mut s, res) = r.go(s, None);
     res.unwrap();
     starts_new_on_probation(&mut s);
+}
+
+
+#[test]
+fn over_native_usb_the_board_leaves_forced_download_and_starts_the_new_firmware() {
+    let r = Run::new("native");
+    let mut s = sim(true);
+    s.enter_forced_download();
+    let before = s.flash.clone();
+    let (mut s, res) = r.go(s, None);
+    res.unwrap();
+    assert!(!s.force_download, "the flag must be cleared, or every reset lands in the loader again");
+    assert_eq!(nvs(&s), &before[0x9000..0xE000]);
+    starts_new_on_probation(&mut s);
+    no_forbidden(&s);
+    assert_eq!(s.reg_writes.len(), 1, "exactly one register write: clearing the flag");
+}
+
+#[test]
+fn over_native_usb_a_cancel_also_leaves_the_loader() {
+    let r = Run::new("nativecancel");
+    let mut s = sim(true);
+    s.enter_forced_download();
+    let (mut s, res) = r.go(s, Some(Step::ImageWritten));
+    assert!(matches!(res, Err(UpdateError::Cancelled)));
+    assert!(!s.force_download);
+    assert!(matches!(s.boots.last(), Some(Boot::App { slot: 0, .. })), "{:?}", s.boots.last());
+    let _ = &mut s;
+}
+
+#[test]
+fn settings_that_changed_are_put_back_before_any_restart() {
+    // Not a path the flasher has - so the sim is made to change NVS under it.
+    let r = Run::new("nvs");
+    let mut s = sim(true);
+    s.faults.flip_bit_in_block = None;
+    let before = s.flash.clone();
+    s.corrupt_nvs_on_next_md5 = true;
+    let (s, res) = r.go(s, None);
+    assert!(matches!(res, Err(UpdateError::SettingsRestored)), "{:?}", res.map(|j| j.step));
+    assert_eq!(nvs(&s), &before[0x9000..0xE000], "the backup went back");
 }

@@ -32,6 +32,10 @@ int main(int argc, char** argv) {
     size_t bt = J.find("\"beat\"");
     std::string msg = field("msg", bt);
     check("beat.mac", comp_hmac(k, msg.c_str(), m) == 0 && (comp_hex(m, 32, hx), field("mac", bt) == hx));
+    size_t ot = J.find("\"ota\"");      // the Companion's update request (hid_fi/ota.h compOta)
+    std::string om = "ota|" + field("id", ot) + "|" + field("act", ot) + "|" + field("url", ot) + "|" + field("chal", ot);
+    check("ota.msg", om == field("msg", ot));
+    check("ota.mac", comp_hmac(k, om.c_str(), m) == 0 && (comp_hex(m, 32, hx), field("mac", ot) == hx));
     size_t tk = J.find("\"ticket\"");
     std::string tm = "tkt|" + field("tn", tk) + "|" + field("vn", tk);
     check("ticket", comp_hmac(k, tm.c_str(), m) == 0 && (comp_hex(m, 32, hx), field("mac", tk) == hx));

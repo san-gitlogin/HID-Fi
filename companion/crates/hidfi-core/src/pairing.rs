@@ -115,6 +115,15 @@ pub fn beat_mac(k: &PairKey, id: &str, port: u16, fp: &str, tn: &str, chal: &str
     hmac(k, beat_message(id, port, fp, tn, chal).as_bytes())
 }
 
+/// The exact ASCII an update request's proof covers (hid_fi/ota.h, compOta).
+pub fn ota_message(id: &str, act: &str, url: &str, chal: &str) -> String {
+    format!("ota|{id}|{act}|{url}|{chal}")
+}
+
+pub fn ota_mac(k: &PairKey, id: &str, act: &str, url: &str, chal: &str) -> [u8; 32] {
+    hmac(k, ota_message(id, act, url, chal).as_bytes())
+}
+
 pub fn ticket(k: &PairKey, tn: &str, vn: &str) -> [u8; 32] {
     hmac(k, format!("tkt|{tn}|{vn}").as_bytes())
 }

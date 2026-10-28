@@ -19,6 +19,8 @@ fn compute() -> Value {
     let tn = "1c".repeat(16);
     let chal = "c4".repeat(16);
     let vn = "5e".repeat(16);
+    let ota_url = "http://192.168.0.107:47801/rel/";
+    let ota_chal = "a5".repeat(16);
     json!({
         "v": 1,
         "a_secret": hex::encode([0x01u8; 32]),
@@ -34,6 +36,9 @@ fn compute() -> Value {
                  "msg": beat_message(id, 47800, &fp, &tn, &chal),
                  "mac": hex::encode(beat_mac(&key, id, 47800, &fp, &tn, &chal))},
         "ticket": {"tn": tn, "vn": vn, "mac": hex::encode(ticket(&key, &tn, &vn))},
+        "ota": {"id": id, "act": "from", "url": ota_url, "chal": ota_chal,
+                "msg": ota_message(id, "from", ota_url, &ota_chal),
+                "mac": hex::encode(ota_mac(&key, id, "from", ota_url, &ota_chal))},
     })
 }
 

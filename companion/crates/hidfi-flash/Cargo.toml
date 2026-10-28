@@ -12,3 +12,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"
 thiserror = "2.0.21"
+serialport = { version = "4.10.1", default-features = false, optional = true }
+
+[features]
+# The real serial port (the Companion). Tests run against the simulated chip.
+serial = ["dep:serialport"]

@@ -353,6 +353,8 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     compReply(200, d);
 }
 
+static void compOta(const JsonDocument& in, uint32_t ip);   // updates, in ota.h
+
 // webServer has already buffered the body; this refuses an oversized one before
 // any further copy or parse.
 void handleCompanionHttp() {
@@ -383,6 +385,7 @@ void handleCompanionHttp() {
     else if (!strcmp(op, "reveal")) compReveal(in);
     else if (!strcmp(op, "chal"))   compChal(in);
     else if (!strcmp(op, "beat"))   compBeat(in, ip);
+    else if (!strcmp(op, "ota"))    compOta(in, ip);        // hid_fi/ota.h
     else compRefuse(400, "bad_request", "Unknown op");
 }
 

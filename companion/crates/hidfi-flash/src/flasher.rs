@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use md5::{Digest, Md5};
 
 use crate::port::Port;
-use crate::proto::{self, Op, Response};
+use crate::proto::{self, Op, Response, SafeWrite};
 use crate::slip::{self, Decoder};
 use crate::stub::Stub;
 
@@ -140,6 +140,28 @@ impl<P: Port> Flasher<P> {
         self.port.set_rts(false)?;
         self.stub = false;
         Ok(())
+    }
+
+    /// The board was already restarted into the ROM loader (by the firmware, over
+    /// native USB): talk to it without a reset - a reset would leave the loader.
+    pub fn attach_to_loader(&mut self) -> Result<(), FlashError> {
+        self.stub = false;
+        self.frames.clear();
+        self.dec = Decoder::default();
+        Ok(())
+    }
+
+    /// One of the few named register writes ([`SafeWrite`]).
+    pub fn safe_write(&mut self, w: SafeWrite) -> Result<(), FlashError> {
+        self.command(Op::WriteReg, &w.payload(), 0, 0, "clear a boot flag", 1000)?;
+        Ok(())
+    }
+
+    /// Leave a ROM loader entered through "force download" (native USB): clear the
+    /// flag, then reset - or the board would come straight back to the loader.
+    pub fn leave_forced_download(&mut self) -> Result<(), FlashError> {
+        self.safe_write(SafeWrite::ClearForceDownload)?;
+        self.hard_reset()
     }
 
     pub fn sync(&mut self) -> Result<(), FlashError> {
