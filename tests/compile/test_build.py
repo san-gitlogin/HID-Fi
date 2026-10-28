@@ -33,10 +33,10 @@ def build():
     # objects are stale (and would disagree with the sketch), so start over.
     opt = hashlib.sha256((paths.SKETCH / "build_opt.h").read_bytes()).hexdigest()
     stamp = bp / ".build_opt.sha256"
-    if not stamp.exists() or stamp.read_text().strip() != opt:
+    if not stamp.exists() or stamp.read_text(encoding="utf-8").strip() != opt:
         shutil.rmtree(bp, ignore_errors=True)
         bp.mkdir(parents=True)
-        stamp.write_text(opt)
+        stamp.write_text(opt, encoding="utf-8")
     r = subprocess.run(["arduino-cli", "compile", "--fqbn", firmware.fqbn(), "--warnings", "default",
                         "--build-path", str(bp), "--output-dir", str(out), str(paths.SKETCH)],
                        capture_output=True, text=True, timeout=1800)
@@ -74,7 +74,7 @@ def test_size_budget(build, golden, request):
     if request.config.getoption("--update-golden") or not f.exists():
         golden("build_size", {"flash_bytes": flash, "ram_bytes": ram, "core": firmware.installed_core_version()})
         return
-    base = json.loads(f.read_text())
+    base = json.loads(f.read_text(encoding="utf-8"))
     grew = []
     if flash > base["flash_bytes"] * (1 + FLASH_TOLERANCE):
         grew.append(f"program {base['flash_bytes']} -> {flash} bytes (+{(flash / base['flash_bytes'] - 1):.1%})")

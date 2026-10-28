@@ -14,7 +14,7 @@ def _ver_tuple(v):
 
 
 def manifest():
-    return json.loads(DEPS.read_text())
+    return json.loads(DEPS.read_text(encoding="utf-8"))
 
 
 def _run(*cmd):

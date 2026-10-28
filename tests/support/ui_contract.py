@@ -61,14 +61,14 @@ def save_part(cov):
     name = os.environ.get("PYTEST_XDIST_WORKER", "main")
     data = {k: sorted(v) if isinstance(v, set) else v for k, v in cov.items() if k != "blocks"}
     data["blocks"] = {str(n): _runs(b) for n, b in cov.get("blocks", {}).items()}
-    (PARTS / f"{name}.json").write_text(json.dumps(data))
+    (PARTS / f"{name}.json").write_text(json.dumps(data), encoding="utf-8")
 
 
 def merge():
     out = {k: set() for k in KEYS}
     out["scenarios"], out["blocks"] = 0, {}
     for f in sorted(PARTS.glob("*.json")):
-        d = json.loads(f.read_text())
+        d = json.loads(f.read_text(encoding="utf-8"))
         for k in KEYS:
             out[k] |= set(d.get(k, []))
         out["scenarios"] += d.get("scenarios", 0)
@@ -123,7 +123,7 @@ def _full_run(config, ran_files):
 
 
 def _load(p, default):
-    return json.loads(p.read_text()) if p.exists() else default
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else default
 
 
 def check(config, ran_files):
@@ -135,11 +135,11 @@ def check(config, ran_files):
         return {"failed": False, "lines": [f"\nui coverage contract: not checked - {why}. Run the whole tier: python tests/run.py --tier ui"]}
     cov = merge()
     MERGED.write_text(json.dumps({k: sorted(v) if isinstance(v, set) else v
-                                  for k, v in cov.items() if k != "blocks"}, indent=1))
+                                  for k, v in cov.items() if k != "blocks"}, indent=1), encoding="utf-8")
     pct, dark = block_report(cov["blocks"])
     (paths.REPORTS / "ui_js_uncovered.txt").write_text(
         f"web_ui.h lines whose code no dashboard scenario ran ({len(dark)}):\n\n"
-        + "\n".join(f"  web_ui.h:{n:<5d} {s}" for n, s in dark) + "\n")
+        + "\n".join(f"  web_ui.h:{n:<5d} {s}" for n, s in dark) + "\n", encoding="utf-8")
     allowed = _load(ALLOWED, {})
     unrun_reasons = _load(UNRUN, {})
     unrun_golden = set(unrun_reasons)
@@ -156,7 +156,7 @@ def check(config, ran_files):
     newly_run = unrun_golden - unrun
     if update:
         UNRUN.write_text(json.dumps({f: unrun_reasons.get(f, "TODO: say why no scenario can reach this")
-                                     for f in sorted(unrun)}, indent=1) + "\n")
+                                     for f in sorted(unrun)}, indent=1) + "\n", encoding="utf-8")
     else:
         for f in sorted(new_unrun):
             problems.append(f"  function {f}() never runs in any scenario - cover the behaviour it implements")
@@ -168,7 +168,7 @@ def check(config, ran_files):
         problems.append("  could not match Chromium's coverage to the script in web_ui.h")
     elif update:
         JS_FLOOR.write_text(json.dumps({"percent": pct, "_about": "minimum share of the dashboard script's code "
-                                        "that the BDD scenarios run; may only go up"}, indent=1) + "\n")
+                                        "that the BDD scenarios run; may only go up"}, indent=1) + "\n", encoding="utf-8")
     elif floor is not None and pct < floor - JS_SLACK:
         problems.append(f"  only {pct}% of the dashboard script ran, the floor is {floor}% - new code without "
                         f"scenarios? See tests/.reports/ui_js_uncovered.txt")

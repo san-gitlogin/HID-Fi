@@ -37,10 +37,10 @@ def _doc(name, version, components, kind):
 
 
 def firmware(version):
-    deps = json.loads((ROOT / "tests" / "deps.json").read_text())["firmware"]
+    deps = json.loads((ROOT / "tests" / "deps.json").read_text(encoding="utf-8"))["firmware"]
     core = deps["esp32:esp32"]
-    idf = json.loads((ROOT / "tools" / "release_history.json").read_text())
-    mbed = re.search(r'^ver="?([0-9.]+)', (ROOT / "companion" / "vectors" / "check_board.sh").read_text(), re.M).group(1)
+    idf = json.loads((ROOT / "tools" / "release_history.json").read_text(encoding="utf-8"))
+    mbed = re.search(r'^ver="?([0-9.]+)', (ROOT / "companion" / "vectors" / "check_board.sh").read_text(encoding="utf-8"), re.M).group(1)
     idf_v = idf.get("cores", {}).get(core)
     if idf_v is None:
         raise SystemExit(f"the IDF of core {core} is not on record (tools/release_history.json)")
@@ -57,7 +57,7 @@ def firmware(version):
 
 
 def companion(version):
-    lock = (ROOT / "companion" / "Cargo.lock").read_text()
+    lock = (ROOT / "companion" / "Cargo.lock").read_text(encoding="utf-8")
     comps = []
     for block in lock.split("[[package]]")[1:]:
         f = dict(re.findall(r'^(\w+) = "([^"]*)"', block, re.M))

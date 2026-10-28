@@ -42,9 +42,9 @@ def _tool():
     paths.CACHE.mkdir(parents=True, exist_ok=True)
     src = paths.CACHE / "tis.swift"
     exe = paths.CACHE / "tis"
-    stale = not exe.exists() or not src.exists() or src.read_text() != TIS_SWIFT
+    stale = not exe.exists() or not src.exists() or src.read_text(encoding="utf-8") != TIS_SWIFT
     if stale:
-        src.write_text(TIS_SWIFT)
+        src.write_text(TIS_SWIFT, encoding="utf-8")
         r = subprocess.run(["swiftc", "-O", "-o", str(exe), str(src)], capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError("could not build the input-source helper (needs Xcode command line tools): " + r.stderr[-500:])

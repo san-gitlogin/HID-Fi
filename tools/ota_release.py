@@ -318,17 +318,17 @@ def main(argv=None):
             print(json.dumps(keygen(a.out), indent=2))
         elif a.cmd == "manifest":
             m = build_manifest(a.version, Path(a.image).read_bytes(), a.min_from, a.core, a.idf,
-                               Path(a.changelog).read_text(), security=a.security, risk=a.risk)
+                               Path(a.changelog).read_text(encoding="utf-8"), security=a.security, risk=a.risk)
             Path(a.out).write_bytes(canonical(m))
             print(a.out)
         elif a.cmd == "sign":
             out = Path(a.manifest).with_suffix(".sig")
-            out.write_text(json.dumps(sign(Path(a.manifest).read_bytes(), load_private(a.key))))
+            out.write_text(json.dumps(sign(Path(a.manifest).read_bytes(), load_private(a.key))), encoding="utf-8")
             print(out)
         elif a.cmd == "release":
             return release_cli(a)
         elif a.cmd == "verify":
-            ok = verify(Path(a.manifest).read_bytes(), json.loads(Path(a.sig).read_text()), a.pub)
+            ok = verify(Path(a.manifest).read_bytes(), json.loads(Path(a.sig).read_text(encoding="utf-8")), a.pub)
             print("valid" if ok else "INVALID")
             return 0 if ok else 1
     except ReleaseError as e:
@@ -359,7 +359,7 @@ def release_cli(a):
     # The key first: a release signed with anything else is refused by every board.
     key = load_private(a.key)
     pub = public_bytes(key).hex()
-    published = [k["public_key"] for k in json.loads(Path(RELEASE_KEYS_FILE).read_text())["keys"]]
+    published = [k["public_key"] for k in json.loads(Path(RELEASE_KEYS_FILE).read_text(encoding="utf-8"))["keys"]]
     if pub not in published:
         print("refused: the signing key is not one of tools/release_keys.json - boards would refuse the release",
               file=sys.stderr)
@@ -368,14 +368,14 @@ def release_cli(a):
     comp = None
     if a.companion_dir:
         comp = {"version": a.companion_version or a.version, "assets": companion_assets(a.companion_dir, a.companion_version or a.version)}
-    m = build_manifest(a.version, image, a.min_from, a.core, a.idf, Path(a.changelog).read_text(),
+    m = build_manifest(a.version, image, a.min_from, a.core, a.idf, Path(a.changelog).read_text(encoding="utf-8"),
                        security=a.security, risk=a.risk, companion=comp, table_bytes=table,
                        image_name=f"hid_fi-{a.version}.bin")
 
-    vec = json.loads((ROOT / "tests" / "vectors" / "ota_v1.json").read_text())
+    vec = json.loads((ROOT / "tests" / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
     refusals = release_gate(m, image, [pub], vec["test_public_key"],
-                            json.loads((ROOT / "tools" / "release_history.json").read_text()),
-                            json.loads((ROOT / "tools" / "nvs_format.json").read_text()))
+                            json.loads((ROOT / "tools" / "release_history.json").read_text(encoding="utf-8")),
+                            json.loads((ROOT / "tools" / "nvs_format.json").read_text(encoding="utf-8")))
     if refusals:
         for r in refusals:
             print(f"refused: {r}", file=sys.stderr)
@@ -385,7 +385,7 @@ def release_cli(a):
     sig = sign(mb, key)
     assert verify(mb, sig, [pub]), "a signature that does not verify"
     (out / "hidfi-ota.json").write_bytes(mb)
-    (out / "hidfi-ota.sig").write_text(json.dumps(sig))
+    (out / "hidfi-ota.sig").write_text(json.dumps(sig), encoding="utf-8")
     (out / m["image"]["name"]).write_bytes(image)
     (out / "partitions.bin").write_bytes(table)
     print(json.dumps({"version": a.version, "key_id": sig["key_id"], "image": m["image"], "support_until": m["support_until"]}))

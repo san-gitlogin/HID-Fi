@@ -56,7 +56,7 @@ def partitions(path=None):
             return int(s[:-1], 0) * (1024 if s[-1] == "K" else 1024 * 1024)
         return int(s, 0)
     rows = []
-    for line in (path or PARTITIONS_CSV).read_text().splitlines():
+    for line in (path or PARTITIONS_CSV).read_text(encoding="utf-8").splitlines():
         line = line.split("#", 1)[0].strip()
         if not line:
             continue
@@ -107,7 +107,7 @@ def build_variant(name, defines=()):
 
 def fqbn():
     """The build settings, read from flash_esp.sh so they cannot drift from the flasher."""
-    m = re.search(r"^FQBN='([^']+)'", FLASH_SH.read_text(), re.M)
+    m = re.search(r"^FQBN='([^']+)'", FLASH_SH.read_text(encoding="utf-8"), re.M)
     if not m:
         raise AssertionError("FQBN not found in flash_esp.sh")
     return m.group(1)

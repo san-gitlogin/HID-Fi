@@ -77,7 +77,7 @@ def test_a_normal_build_trusts_each_release_key(normal, name):
 def test_a_normal_build_refuses_the_test_key(normal):
     from cryptography.hazmat.primitives import serialization
     board, srv, img = normal
-    vec = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+    vec = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
     test = serialization.load_pem_private_key(vec["test_private_key_pem"].encode(), password=None)
     st = _check_signed_by(board, srv, img, test)
     assert st["ota_error"] == "bad_signature" and st["ota_available"] == "", st

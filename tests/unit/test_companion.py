@@ -14,7 +14,7 @@ from support import companion_sim as cs
 
 pytestmark = pytest.mark.unit
 
-VECTORS = json.loads((pathlib.Path(__file__).resolve().parents[2] / "companion" / "vectors" / "pairing_v1.json").read_text())
+VECTORS = json.loads((pathlib.Path(__file__).resolve().parents[2] / "companion" / "vectors" / "pairing_v1.json").read_text(encoding="utf-8"))
 
 
 # ---- the crypto agrees with the Rust app and the firmware -------------------------------

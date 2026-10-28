@@ -56,7 +56,7 @@ def main():
         sys.stderr.write("HID-Fi static checks fail - fix before finishing:\n" + out[-4000:])
         return 2
     h = ui_hash()
-    if not (STAMP.exists() and STAMP.read_text().strip() == h):
+    if not (STAMP.exists() and STAMP.read_text(encoding="utf-8").strip() == h):
         code, out = run("ui")
         if code:
             tail = [l for l in out.splitlines() if "contract" in l or l.startswith(("  control", "  function", "FAILED", "  only"))]
@@ -64,7 +64,7 @@ def main():
                              "(see .claude/skills/hidfi-feature):\n" + "\n".join(tail[-40:]) + "\n")
             return 2
         STAMP.parent.mkdir(parents=True, exist_ok=True)
-        STAMP.write_text(h)
+        STAMP.write_text(h, encoding="utf-8")
     return 0
 
 

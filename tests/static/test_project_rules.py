@@ -88,7 +88,7 @@ def test_test_scripts_compile():
 
 def test_deps_manifest_is_complete():
     import json
-    m = json.loads(paths.DEPS.read_text())
+    m = json.loads(paths.DEPS.read_text(encoding="utf-8"))
     for k in ("esp32:esp32", "ArduinoJson", "WebSockets"):
         assert re.fullmatch(r"\d+\.\d+\.\d+", m["firmware"].get(k, "")), f"tests/deps.json: firmware pin for {k} must be an exact x.y.z"
 

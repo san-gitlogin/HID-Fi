@@ -207,7 +207,7 @@ def derived_from_core(core_version, data_dir):
     if not inst.is_file():
         raise CannotCheck(f"core {core_version} is not installed ({plat})")
     tools = {}
-    for pkg in json.loads(inst.read_text()).get("packages", []):
+    for pkg in json.loads(inst.read_text(encoding="utf-8")).get("packages", []):
         for p in pkg.get("platforms") or []:
             if p.get("version") == core_version:
                 tools = {t["name"]: t["version"] for t in p.get("toolsDependencies") or []}
@@ -221,7 +221,7 @@ def derived_from_core(core_version, data_dir):
     sdk = s3 / "sdkconfig"
     if not sdk.is_file():
         raise CannotCheck(f"the ESP32-S3 libraries of core {core_version} were not found ({s3})")
-    m = re.search(r'CONFIG_IDF_INIT_VERSION="([^"]+)"', sdk.read_text())
+    m = re.search(r'CONFIG_IDF_INIT_VERSION="([^"]+)"', sdk.read_text(encoding="utf-8"))
     idf = m.group(1) if m else None
     mbed = None
     for h in (s3 / "include").rglob("build_info.h"):
@@ -241,7 +241,7 @@ def cargo_lock_packages(lock=CARGO_LOCK):
     if not lock.is_file():
         return []
     pkgs, cur = [], {}
-    for line in lock.read_text().splitlines() + ["[[package]]"]:
+    for line in lock.read_text(encoding="utf-8").splitlines() + ["[[package]]"]:
         if line.strip() == "[[package]]":
             if cur.get("source", "").startswith("registry+"):
                 pkgs.append((cur["name"], cur["version"]))
@@ -275,7 +275,7 @@ def direct_crates():
     """The Companion's direct crates.io dependencies (what we chose, not what came along)."""
     names = set()
     for toml in (ROOT / "companion").glob("crates/*/Cargo.toml"):
-        names |= crates_in_toml(toml.read_text())
+        names |= crates_in_toml(toml.read_text(encoding="utf-8"))
     return sorted(names)
 
 
@@ -301,8 +301,8 @@ def latest_of(tags, same_branch_as=None):
 def run(net=None, deps_path=DEPS, ack_path=ACK, data_dir="auto", lock=CARGO_LOCK, today=None):
     net = net or Net()
     today = today or datetime.date.today().isoformat()
-    deps = json.loads(Path(deps_path).read_text())
-    acks = json.loads(Path(ack_path).read_text()) if Path(ack_path).is_file() else {}
+    deps = json.loads(Path(deps_path).read_text(encoding="utf-8"))
+    acks = json.loads(Path(ack_path).read_text(encoding="utf-8")) if Path(ack_path).is_file() else {}
     acks = {k: v for k, v in acks.items() if not k.startswith("_")}
     report = {"date": today, "rows": [], "advisories": [], "cannot_check": []}
 

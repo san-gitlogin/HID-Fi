@@ -133,7 +133,7 @@ def test_bluetooth_and_debug_consoles_are_never_boards():
 def _fake(tmp_path, ports):
     f = tmp_path / "ports.json"
     f.write_text(json.dumps([dict(device=p.device, vid=p.vid, pid=p.pid, serial=p.serial, location=p.location,
-                                  description=p.description) for p in ports]))
+                                  description=p.description) for p in ports]), encoding="utf-8")
     return str(f)
 
 
@@ -185,7 +185,7 @@ def rig(tmp_path, flasher):
 echo "$@" >> "{log}"
 case " $* " in *" $FAIL_PORT "*) [ -n "$FAIL_PORT" ] && exit 2 ;; esac
 exit 0
-""")
+""", encoding="utf-8")
     esptool.chmod(0o755)
     if sys.platform == "win32":                 # the same stand-in, as Windows runs it
         esptool = tmp_path / "esptool.cmd"
@@ -194,7 +194,7 @@ echo %*>>"{log}"\r
 if "%FAIL_PORT%"=="" exit /b 0\r
 echo %* | findstr /C:" %FAIL_PORT% " >nul && exit /b 2\r
 exit /b 0\r
-""")
+""", encoding="utf-8")
 
     def run(ports, *args, stdin=None, env=None, tty_input=None):
         e = dict(os.environ, HIDFI_FAKE_PORTS=_fake(tmp_path, ports), HIDFI_ESPTOOL=str(esptool),
@@ -218,7 +218,7 @@ exit /b 0\r
 def _calls(log):
     if not log.exists():
         return []
-    calls = [l.split() for l in log.read_text().splitlines()]
+    calls = [l.split() for l in log.read_text(encoding="utf-8").splitlines()]
     log.unlink()
     return calls
 

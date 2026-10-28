@@ -141,7 +141,7 @@ def test_macro_verbs_in_any_case_and_a_bare_line_is_typed():
 
 def test_the_firmware_parses_macro_lines_the_same_way():
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text()
+    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
     body = src[src.index("static void runMacroLine(const String& ln) {"):src.index("void handleMacroRun(const JsonDocument& inDoc) {")]
     assert "strncasecmp" in src[src.index("static bool macroVerb"):src.index("static void runMacroLine")]
     assert "else                              typeString(ln.c_str());" in body, \
@@ -154,7 +154,7 @@ def test_the_model_has_the_firmwares_macro_and_storage_limits():
     import pathlib
     import re
     from support import board_sim
-    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text()
+    src = (pathlib.Path(__file__).resolve().parents[2] / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
     define = lambda n: int(re.search(rf"#define\s+{n}\s+(\d+)", src).group(1))
     assert define("MACRO_SLOTS") == board_sim.MACRO_SLOTS == 32
     assert define("NVS_RESERVE") == board_sim.NVS_RESERVE

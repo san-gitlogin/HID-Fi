@@ -147,5 +147,5 @@ def cases_file(path, include_mixes=True):
     for label, raw in items.items():
         off, osk, on, nsk = expect(raw)
         rows.append(f"{label} {raw.hex()} {off.encode().hex() or '-'} {osk} {on.encode().hex() or '-'} {nsk}")
-    path.write_text("\n".join(rows) + "\n")
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
     return len(rows)

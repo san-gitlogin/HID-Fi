@@ -23,7 +23,7 @@ KNOWN = paths.GOLDEN / f"ui_responsive_known.{platform.system().lower()}.json"
 
 
 def _known():
-    return json.loads(KNOWN.read_text()) if KNOWN.exists() else None
+    return json.loads(KNOWN.read_text(encoding="utf-8")) if KNOWN.exists() else None
 
 
 # On Linux, headless Chromium draws nothing at 5K-8K (5900x3200 and up on the

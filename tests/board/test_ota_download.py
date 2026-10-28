@@ -38,7 +38,7 @@ import ota_release as R  # noqa: E402
 
 pytestmark = [pytest.mark.board, pytest.mark.slow]
 
-VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
 CHANGELOG = """## v4.0.99 - 2026-11-01
 
 Test release.
@@ -335,7 +335,7 @@ def test_end_to_end_with_a_dropped_connection(env, request):
         pytest.skip("hot-path latency not measured: the board has a PIN and none was given (--board-pin / HIDFI_PIN)")
     p95 = lambda xs: xs[int(len(xs) * 0.95) - 1]
     print(f"WebSocket ping p95: idle {p95(idle):.0f} ms, during the download {p95(during):.0f} ms")
-    (paths.REPORTS / "ota_download_latency.json").write_text(json.dumps({"idle_ms": idle, "during_ms": during}))
+    (paths.REPORTS / "ota_download_latency.json").write_text(json.dumps({"idle_ms": idle, "during_ms": during}), encoding="utf-8")
     assert p95(during) <= p95(idle) + 15, \
         f"the download slows the input path: p95 {p95(idle):.0f} ms idle -> {p95(during):.0f} ms during"
     # A single spike is the home WiFi, not the board: measured 2026-10-28, idle runs

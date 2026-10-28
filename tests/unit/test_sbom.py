@@ -14,7 +14,7 @@ import sbom  # noqa: E402
 
 def test_firmware_lists_every_compiled_pin():
     d = sbom.firmware("4.1.0")
-    deps = json.loads((paths.TESTS / "deps.json").read_text())["firmware"]
+    deps = json.loads((paths.TESTS / "deps.json").read_text(encoding="utf-8"))["firmware"]
     got = {c["name"]: c["version"] for c in d["components"]}
     assert d["specVersion"] == "1.7" and d["metadata"]["component"]["version"] == "4.1.0"
     assert got["arduino-esp32"] == deps["esp32:esp32"]
@@ -24,7 +24,7 @@ def test_firmware_lists_every_compiled_pin():
 
 
 def test_companion_lists_every_registry_crate_with_its_checksum():
-    lock = (paths.TESTS.parent / "companion" / "Cargo.lock").read_text()
+    lock = (paths.TESTS.parent / "companion" / "Cargo.lock").read_text(encoding="utf-8")
     want = {(n, v) for n, v, s in re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"\nsource = "([^"]+)"', lock)}
     d = sbom.companion("4.1.0")
     got = {(c["name"], c["version"]) for c in d["components"]}

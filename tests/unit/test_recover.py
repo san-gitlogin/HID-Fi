@@ -40,7 +40,7 @@ def board(tmp_path):
         boards.append(fb)
         ports = [{"device": fb.path, "vid": 0x1A86, "pid": 0x55D3, "serial": f"RCV{len(boards)}"}] + list(extra_ports)
         f = tmp_path / "ports.json"
-        f.write_text(json.dumps(ports))
+        f.write_text(json.dumps(ports), encoding="utf-8")
         return fb, str(f)
     yield make
     for fb in boards:

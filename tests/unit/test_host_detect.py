@@ -57,7 +57,7 @@ def judge():
         pytest.skip("no C++ compiler on this machine")
     d = tempfile.mkdtemp()
     src, exe = pathlib.Path(d, "t.cpp"), pathlib.Path(d, "t")
-    src.write_text(HARNESS)
+    src.write_text(HARNESS, encoding="utf-8")
     subprocess.run([CXX, "-std=c++11", "-I", str(HEADER.parent), str(src), "-o", str(exe)], check=True)
     yield lambda seq: subprocess.run([str(exe)] + [x for x in seq.split(",") if x], capture_output=True,
                                      text=True, check=True).stdout.strip()
@@ -84,13 +84,13 @@ MUTATIONS = [
 def test_planted_bugs_are_caught(name, find, replace):
     if not CXX:
         pytest.skip("no C++ compiler on this machine")
-    src = HEADER.read_text()
+    src = HEADER.read_text(encoding="utf-8")
     assert src.count(find) == 1, f"{name}: the text to mutate is not in host_detect.h exactly once"
     d = tempfile.mkdtemp()
     try:
-        pathlib.Path(d, "host_detect.h").write_text(src.replace(find, replace))
+        pathlib.Path(d, "host_detect.h").write_text(src.replace(find, replace), encoding="utf-8")
         c, exe = pathlib.Path(d, "t.cpp"), pathlib.Path(d, "t")
-        c.write_text(HARNESS)
+        c.write_text(HARNESS, encoding="utf-8")
         subprocess.run([CXX, "-std=c++11", "-I", d, str(c), "-o", str(exe)], check=True)
         got = [subprocess.run([str(exe)] + [x for x in seq.split(",") if x], capture_output=True, text=True).stdout.strip()
                for _, seq, _ in CASES]

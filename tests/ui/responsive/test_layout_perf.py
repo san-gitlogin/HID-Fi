@@ -132,7 +132,7 @@ def _report(results):
           "| | " + " | ".join(results) + " |", "|---|" + "---|" * len(results)]
     for k in keys:
         md.append(f"| {k} | " + " | ".join(str(r.get(k, "")) for r in results.values()) + " |")
-    (paths.REPORTS / "responsive_perf.md").write_text("\n".join(md) + "\n")
+    (paths.REPORTS / "responsive_perf.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 @pytest.mark.parametrize("profile", list(PROFILES))
@@ -141,16 +141,16 @@ def test_layout_is_fast_enough(browser, profile, request):
     got = _measure(browser, vp, slow)
     part = paths.REPORTS / "responsive_perf"
     part.mkdir(parents=True, exist_ok=True)
-    (part / f"{profile.split()[0]}.json").write_text(json.dumps({profile: got}))
-    _report({k: v for f in sorted(part.glob("*.json")) for k, v in json.loads(f.read_text()).items()})
+    (part / f"{profile.split()[0]}.json").write_text(json.dumps({profile: got}), encoding="utf-8")
+    _report({k: v for f in sorted(part.glob("*.json")) for k, v in json.loads(f.read_text(encoding="utf-8")).items()})
 
     problems = [f"{k}: {got[k]} ms, budget {b} ms" for k, b in BUDGET_MS.items() if got[k] > b]
     if got["layout shift on load"] > CLS_BUDGET:
         problems.append(f"layout shift on load {got['layout shift on load']}, budget {CLS_BUDGET}")
-    base = json.loads(BASE.read_text()) if BASE.exists() else {}
+    base = json.loads(BASE.read_text(encoding="utf-8")) if BASE.exists() else {}
     if request.config.getoption("--update-golden") or profile not in base:
         base[profile] = got
-        BASE.write_text(json.dumps(base, indent=1, sort_keys=True) + "\n")
+        BASE.write_text(json.dumps(base, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     else:
         for k, b in base[profile].items():
             if k in BUDGET_MS and got[k] > b * REGRESSION and got[k] - b > NOISE_MS:

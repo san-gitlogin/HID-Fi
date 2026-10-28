@@ -35,7 +35,7 @@ class Perf:
         self.update = update
         self.host = {"Darwin": "mac", "Windows": "windows", "Linux": "linux"}.get(platform.system(), platform.system())
         self.base_file = paths.GOLDEN / "perf_baseline.json"
-        self.base = json.loads(self.base_file.read_text()) if self.base_file.exists() else {}
+        self.base = json.loads(self.base_file.read_text(encoding="utf-8")) if self.base_file.exists() else {}
         self.results = []
 
     def check(self, name, value, unit, budget, lower_is_better=True, detail=None, baseline=True):
@@ -67,8 +67,8 @@ class Perf:
     def save(self):
         paths.REPORTS.mkdir(parents=True, exist_ok=True)
         f = paths.REPORTS / "perf.json"
-        old = json.loads(f.read_text()) if f.exists() else []
-        f.write_text(json.dumps(old + self.results, indent=1))
+        old = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+        f.write_text(json.dumps(old + self.results, indent=1), encoding="utf-8")
         if self.results:
             paths.GOLDEN.mkdir(parents=True, exist_ok=True)
-            self.base_file.write_text(json.dumps(dict(sorted(self.base.items())), indent=1) + "\n")
+            self.base_file.write_text(json.dumps(dict(sorted(self.base.items())), indent=1) + "\n", encoding="utf-8")

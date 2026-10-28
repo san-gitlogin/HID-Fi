@@ -64,7 +64,7 @@ def _session(input_method, cases_file, out_file, table_file):
                             str(table_file), str(out_file)], env=env, capture_output=True, text=True, timeout=1800)
         if r.returncode:
             raise RuntimeError(r.stderr[-3000:])
-        return json.loads(out_file.read_text())
+        return json.loads(out_file.read_text(encoding="utf-8"))
     finally:
         subprocess.run(["pkill", "-f", "ibus-daemon"], capture_output=True)
         for p in procs:
@@ -82,15 +82,15 @@ def replayed():
     if recorded:
         # Traces recorded on another machine (one with the ESP32 core installed):
         #   python tests/hostsim/record.py > cases.json
-        cf.write_text(open(recorded).read())
+        cf.write_text(open(recorded).read(), encoding="utf-8")
     else:
         from unit.test_typing import build_bench, _dump
         exe, _ = build_bench()
         rows = [(label, corpus.CORPUS[label].encode(), mode) for mode in MODES for label in LABELS]
         traces = _dump(exe, rows)
         cases = [{"id": f"{d['mode']}/{d['label']}", "ev": d["ev"], "caps": d["mode"] == "linux_caps"} for d in traces]
-        cf.write_text(json.dumps(cases))
-    tf.write_text(json.dumps(linux_keys.kernel_hid_keyboard()))
+        cf.write_text(json.dumps(cases), encoding="utf-8")
+    tf.write_text(json.dumps(linux_keys.kernel_hid_keyboard()), encoding="utf-8")
     return {im: _session(im, cf, paths.CACHE / f"hostsim_{im}.json", tf) for im in ("ibus", "gtk-simple")}
 
 

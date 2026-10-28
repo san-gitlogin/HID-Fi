@@ -223,7 +223,7 @@ def save_part(vp, res):
 def merged():
     out = {}
     for f in PARTS.glob("*.jsonl"):
-        for line in f.read_text().splitlines():
+        for line in f.read_text(encoding="utf-8").splitlines():
             r = _json.loads(line)
             out[r["id"]] = r
     return out
@@ -240,10 +240,10 @@ def finish(config):
              f"{sum(len(r['states']) for r in res.values())} screens measured"]
     failed = False
     if config.getoption("--update-golden") and full:
-        KNOWN.write_text(_json.dumps({v: p for v, p in sorted(found.items()) if p}, indent=1) + "\n")
+        KNOWN.write_text(_json.dumps({v: p for v, p in sorted(found.items()) if p}, indent=1) + "\n", encoding="utf-8")
         lines.append(f"  wrote {KNOWN.name}: {sum(map(len, found.values()))} known problem(s)")
     elif KNOWN.exists():
-        known = _json.loads(KNOWN.read_text())
+        known = _json.loads(KNOWN.read_text(encoding="utf-8"))
         fixed = [f"{v} :: {p}" for v, ps in known.items() if v in res for p in ps if p not in found.get(v, [])]
         if fixed:
             failed = True
@@ -274,4 +274,4 @@ def write_report(res, found):
     md += ["", "## Every viewport", "", "| Viewport | Kind | Problems |", "|---|---|---|"]
     for v, r in sorted(res.items(), key=lambda kv: (kv[1]["kind"], kv[1]["w"], kv[1]["h"])):
         md.append(f"| {v} | {r['kind']} | {len(found[v])} |")
-    (_paths.REPORTS / "responsive.md").write_text("\n".join(md) + "\n")
+    (_paths.REPORTS / "responsive.md").write_text("\n".join(md) + "\n", encoding="utf-8")

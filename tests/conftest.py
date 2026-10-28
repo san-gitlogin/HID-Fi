@@ -156,7 +156,7 @@ def _board_holder(board_port):
         # Hashes, never contents: a macro can hold a person's data (it did - an
         # identity number), and this file and the failure message are read by people.
         (paths.REPORTS / "board_restore.json").write_text(
-            json.dumps({"restored": drift, "final": _redacted(final)}, indent=1))
+            json.dumps({"restored": drift, "final": _redacted(final)}, indent=1), encoding="utf-8")
         if final != h.snap:
             pytest.fail(f"board not left as found: before {_redacted(h.snap)} after {_redacted(final)}", pytrace=False)
 

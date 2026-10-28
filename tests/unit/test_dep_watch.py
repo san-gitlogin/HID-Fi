@@ -73,13 +73,13 @@ def fake_core(tmp_path, core="3.3.1", idf="5.5.1", mbed="3.6.4", esptool="5.1.0"
     (plat / "installed.json").write_text(json.dumps({"packages": [
         {"name": "esp32", "platforms": [{"version": core, "toolsDependencies": [
             lib_tool, {"name": "esptool_py", "version": esptool}]}]},
-        {"name": "arduino", "platforms": None}]}))
+        {"name": "arduino", "platforms": None}]}), encoding="utf-8")
     tools = data / "packages" / "esp32" / "tools"
     libs = tools / "esp32s3-libs" / core if per_chip else tools / "esp32-arduino-libs" / "libs-x" / "esp32s3"
     (libs / "include" / "mbedtls" / "mbedtls").mkdir(parents=True)
-    (libs / "sdkconfig").write_text(f'CONFIG_IDF_INIT_VERSION="{idf}"\n')
+    (libs / "sdkconfig").write_text(f'CONFIG_IDF_INIT_VERSION="{idf}"\n', encoding="utf-8")
     (libs / "include" / "mbedtls" / "mbedtls" / "build_info.h").write_text(
-        f'#define MBEDTLS_VERSION_STRING         "{mbed}"\n')
+        f'#define MBEDTLS_VERSION_STRING         "{mbed}"\n', encoding="utf-8")
     return data
 
 
@@ -123,12 +123,12 @@ def adv(gid, rng, patched="?"):
 @pytest.fixture
 def setup(tmp_path):
     deps = tmp_path / "deps.json"
-    deps.write_text(json.dumps({"firmware": {"esp32:esp32": "3.3.1", "ArduinoJson": "7.4.3", "WebSockets": "2.7.2"}}))
+    deps.write_text(json.dumps({"firmware": {"esp32:esp32": "3.3.1", "ArduinoJson": "7.4.3", "WebSockets": "2.7.2"}}), encoding="utf-8")
     ack = tmp_path / "ack.json"
-    ack.write_text("{}")
+    ack.write_text("{}", encoding="utf-8")
     lock = tmp_path / "Cargo.lock"
     lock.write_text('[[package]]\nname = "tokio"\nversion = "1.54.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n'
-                    '[[package]]\nname = "hidfi-core"\nversion = "4.0.4"\n')
+                    '[[package]]\nname = "hidfi-core"\nversion = "4.0.4"\n', encoding="utf-8")
     return {"deps_path": deps, "ack_path": ack, "data_dir": fake_core(tmp_path), "lock": lock, "today": "2026-10-28"}
 
 
@@ -160,7 +160,7 @@ def test_a_fixed_version_is_not_flagged(setup):
 
 
 def test_an_acknowledged_advisory_is_not_open(setup):
-    setup["ack_path"].write_text(json.dumps({"GHSA-x": {"reason": "not used"}}))
+    setup["ack_path"].write_text(json.dumps({"GHSA-x": {"reason": "not used"}}), encoding="utf-8")
     net = FakeNet(advisories={"espressif/arduino-esp32": [adv("GHSA-x", "<= 3.3.7")]})
     r = dw.run(net, **setup)
     assert r["exit"] == 0 and r["advisories"][0]["ack"]["reason"] == "not used"
@@ -211,7 +211,7 @@ REACHES_HIDFI = {"GHSA-8cmm-3887-r32j", "GHSA-g764-gwc3-75m5"}
 
 
 def test_the_real_acknowledgements_are_explained():
-    acks = json.loads(dw.ACK.read_text())
+    acks = json.loads(dw.ACK.read_text(encoding="utf-8"))
     for gid, a in acks.items():
         if gid.startswith("_"):
             continue
@@ -221,7 +221,7 @@ def test_the_real_acknowledgements_are_explained():
 
 
 def test_an_advisory_that_reaches_hidfi_is_never_acknowledged():
-    acks = json.loads(dw.ACK.read_text())
+    acks = json.loads(dw.ACK.read_text(encoding="utf-8"))
     assert not REACHES_HIDFI & set(acks)
 
 
@@ -231,12 +231,12 @@ def test_the_pairing_crypto_check_uses_the_mbedtls_the_core_ships():
     check proves the bytes on a library the board does not run (it said 3.6.4
     while core 3.3.12 ships 3.6.6)."""
     import re
-    deps = json.loads(dw.DEPS.read_text())
+    deps = json.loads(dw.DEPS.read_text(encoding="utf-8"))
     try:
         shipped = dw.derived_from_core(deps["firmware"]["esp32:esp32"], dw.arduino_data_dir())["mbedTLS"]
     except dw.CannotCheck as e:
         pytest.skip(f"the pinned core is not installed here: {e}")
-    script = (paths.TESTS.parent / "companion" / "vectors" / "check_board.sh").read_text()
+    script = (paths.TESTS.parent / "companion" / "vectors" / "check_board.sh").read_text(encoding="utf-8")
     assert re.search(r"^ver=(\S+)$", script, re.M).group(1) == shipped
 
 

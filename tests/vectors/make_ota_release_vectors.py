@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import ota_release as R
 from cryptography.hazmat.primitives import serialization
 
-V = json.loads((Path(__file__).with_name("ota_v1.json")).read_text())
+V = json.loads((Path(__file__).with_name("ota_v1.json")).read_text(encoding="utf-8"))
 key = serialization.load_pem_private_key(V["test_private_key_pem"].encode(), password=None)
 image = base64.b64decode(V["image_b64"])
 inst = b"companion installer bytes"
@@ -64,5 +64,5 @@ for name, m, why in cases:
     assert R.check_manifest(json.loads(mb)) == why, (name, R.check_manifest(json.loads(mb)))
     out["cases"].append({"name": name, "manifest_b64": base64.b64encode(mb).decode(),
                          "sig": R.sign(mb, key), "refused": why})
-Path(__file__).with_name("ota_release_v1.json").write_text(json.dumps(out, indent=1) + "\n")
+Path(__file__).with_name("ota_release_v1.json").write_text(json.dumps(out, indent=1) + "\n", encoding="utf-8")
 print("wrote", len(out["cases"]), "cases")

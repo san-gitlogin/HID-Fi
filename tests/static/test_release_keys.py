@@ -14,7 +14,7 @@ ROOT = paths.TESTS.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import ota_release as R  # noqa: E402
 
-KEYS = json.loads((ROOT / "tools" / "release_keys.json").read_text())["keys"]
+KEYS = json.loads((ROOT / "tools" / "release_keys.json").read_text(encoding="utf-8"))["keys"]
 
 
 def _arrays(text, start):
@@ -25,17 +25,17 @@ def _arrays(text, start):
 
 
 def test_firmware_embeds_exactly_the_published_keys():
-    got = _arrays((ROOT / "hid_fi" / "ota.h").read_text(), "OTA_RELEASE_KEYS[] = {")
+    got = _arrays((ROOT / "hid_fi" / "ota.h").read_text(encoding="utf-8"), "OTA_RELEASE_KEYS[] = {")
     assert got == [k["public_key"] for k in KEYS]
 
 
 def test_companion_embeds_exactly_the_published_keys():
-    got = _arrays((ROOT / "companion" / "crates" / "hidfi-core" / "src" / "ota.rs").read_text(), "RELEASE_KEYS: &[[u8; 65]] = &[")
+    got = _arrays((ROOT / "companion" / "crates" / "hidfi-core" / "src" / "ota.rs").read_text(encoding="utf-8"), "RELEASE_KEYS: &[[u8; 65]] = &[")
     assert got == [k["public_key"] for k in KEYS]
 
 
 def test_each_key_is_a_real_point_with_its_id_and_never_the_test_key():
-    test = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())["test_public_key"]
+    test = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))["test_public_key"]
     assert len(KEYS) >= 2, "a primary and an offline backup"
     for k in KEYS:
         R.load_public(k["public_key"])

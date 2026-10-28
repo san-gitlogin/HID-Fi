@@ -20,7 +20,7 @@ import ota_release as R  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
-VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
 CHANGELOG = """# Changelog
 
 ## Unreleased
@@ -144,7 +144,7 @@ def test_the_command_line_end_to_end(tmp_path):
     key = tmp_path / "keys" / "k.pem"
     info = json.loads(subprocess.run(tool + ["keygen", "--out", str(key)], capture_output=True, text=True, check=True).stdout)
     img = tmp_path / "hid_fi.bin"; img.write_bytes(IMAGE)
-    cl = tmp_path / "CHANGELOG.md"; cl.write_text(CHANGELOG)
+    cl = tmp_path / "CHANGELOG.md"; cl.write_text(CHANGELOG, encoding="utf-8")
     man = tmp_path / "hidfi-ota.json"
     subprocess.run(tool + ["manifest", "--version", "4.1.0", "--image", str(img), "--min-from", "4.0.4",
                            "--core", "3.3.12", "--idf", "5.5.5", "--changelog", str(cl), "--out", str(man)], check=True,
@@ -167,8 +167,8 @@ def test_release_checks_agree_with_the_companion_vectors():
     """tests/vectors/ota_release_v1.json: the Companion (hidfi-core read_release)
     is held to the same file - a release the tool accepts, the Companion accepts."""
     import base64
-    rv = json.loads((paths.TESTS / "vectors" / "ota_release_v1.json").read_text())
-    v1 = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+    rv = json.loads((paths.TESTS / "vectors" / "ota_release_v1.json").read_text(encoding="utf-8"))
+    v1 = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
     for c in rv["cases"]:
         mb = base64.b64decode(c["manifest_b64"])
         assert R.verify(mb, c["sig"], [v1["test_public_key"]]), c["name"]
@@ -177,7 +177,7 @@ def test_release_checks_agree_with_the_companion_vectors():
 
 def test_build_manifest_refuses_what_a_companion_would_refuse():
     import base64
-    v1 = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+    v1 = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
     image = base64.b64decode(v1["image_b64"])
     bad = {"version": "4.1.0", "assets": {"macos": {"name": "../x.dmg", "size": 1, "sha256": "0" * 64}}}
     with pytest.raises(R.ReleaseError, match="unusable companion entry"):
@@ -237,12 +237,12 @@ def test_the_gate_refuses_min_from_that_was_never_published(tmp_path):
 
 
 def test_the_committed_gate_tables_are_sound():
-    hist = json.loads((paths.TESTS.parent / "tools" / "release_history.json").read_text())
-    fmts = json.loads((paths.TESTS.parent / "tools" / "nvs_format.json").read_text())
+    hist = json.loads((paths.TESTS.parent / "tools" / "release_history.json").read_text(encoding="utf-8"))
+    fmts = json.loads((paths.TESTS.parent / "tools" / "nvs_format.json").read_text(encoding="utf-8"))
     for v, r in hist["releases"].items():
         assert R.VERSION.match(v) and r["idf"] in fmts["idf"], f"{v}: IDF {r['idf']} has no NVS format on record"
         assert hist["cores"][r["core"]] == r["idf"], f"{v}: its core and IDF disagree with the cores table"
-    pinned = json.loads((paths.TESTS / "deps.json").read_text())["firmware"]["esp32:esp32"]
+    pinned = json.loads((paths.TESTS / "deps.json").read_text(encoding="utf-8"))["firmware"]["esp32:esp32"]
     assert pinned in hist["cores"], f"the pinned core {pinned} has no IDF on record - the release script needs it"
     assert hist["cores"][pinned] in fmts["idf"], "the pinned core's IDF has no NVS format on record"
     assert all(f.startswith("0x") for f in fmts["idf"].values())
@@ -257,17 +257,17 @@ def test_release_writes_signed_files_that_verify(tmp_path, monkeypatch):
     kp.chmod(0o600)                       # the tool refuses a key others can read
     (tmp_path / "img.bin").write_bytes(image)
     (tmp_path / "p.bin").write_bytes(table)
-    (tmp_path / "CHANGELOG.md").write_text("## v4.1.0 - 2026-11-01\n\nx\n")
+    (tmp_path / "CHANGELOG.md").write_text("## v4.1.0 - 2026-11-01\n\nx\n", encoding="utf-8")
     out = tmp_path / "out"
     keys = tmp_path / "keys.json"
-    keys.write_text(json.dumps({"keys": [{"name": "t", "key_id": R.key_id(pub), "public_key": pub.hex()}]}))
+    keys.write_text(json.dumps({"keys": [{"name": "t", "key_id": R.key_id(pub), "public_key": pub.hex()}]}), encoding="utf-8")
     monkeypatch.setattr(R, "RELEASE_KEYS_FILE", keys)
     rc = R.main(["release", "--version", "4.1.0", "--image", str(tmp_path / "img.bin"), "--table", str(tmp_path / "p.bin"),
                  "--min-from", "4.0.4", "--core", "3.3.12", "--idf", "5.5.5", "--key", str(kp),
                  "--out-dir", str(out), "--changelog", str(tmp_path / "CHANGELOG.md")])
     assert rc == 0
     mb = (out / "hidfi-ota.json").read_bytes()
-    assert R.verify(mb, json.loads((out / "hidfi-ota.sig").read_text()), [pub.hex()])
+    assert R.verify(mb, json.loads((out / "hidfi-ota.sig").read_text(encoding="utf-8")), [pub.hex()])
     m = json.loads(mb)
     assert m["table"]["size"] == 0xC00 and (out / m["image"]["name"]).read_bytes() == image
 

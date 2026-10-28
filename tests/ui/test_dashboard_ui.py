@@ -52,9 +52,9 @@ def test_layout_has_no_new_problems():
     import platform as _pf
     known_file = paths.GOLDEN / f"ui_layout_known_issues.{_pf.system().lower()}.json"
     if not known_file.exists():
-        known_file.write_text(json.dumps(sorted(problems), indent=1) + "\n")
+        known_file.write_text(json.dumps(sorted(problems), indent=1) + "\n", encoding="utf-8")
         pytest.skip(f"recorded {len(problems)} existing layout problems as the baseline - commit {known_file.name}")
-    known = set(json.loads(known_file.read_text()))
+    known = set(json.loads(known_file.read_text(encoding="utf-8")))
     new, fixed = sorted(problems - known), sorted(known - problems)
     assert not new, "NEW layout problems (not in the known-issues baseline):\n  " + "\n  ".join(new)
     if fixed:

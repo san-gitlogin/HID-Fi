@@ -21,7 +21,7 @@ MARK = re.compile(r"<!--support-until-->(\d{4}-\d{2}-\d{2})<!--/support-until-->
 def committed():
     sys.path.insert(0, str(ROOT / "tools"))
     import ota_release as R
-    hist = json.loads((ROOT / "tools" / "release_history.json").read_text())["releases"]
+    hist = json.loads((ROOT / "tools" / "release_history.json").read_text(encoding="utf-8"))["releases"]
     newest = max(hist, key=R.vtuple)
     d = date.fromisoformat(hist[newest]["date"])
     m = d.month - 1 + 12
@@ -29,7 +29,7 @@ def committed():
 
 
 def stated():
-    return {f: MARK.findall((ROOT / f).read_text()) for f in FILES}
+    return {f: MARK.findall((ROOT / f).read_text(encoding="utf-8")) for f in FILES}
 
 
 def main(argv):
@@ -37,7 +37,7 @@ def main(argv):
     if argv == ["--write"]:
         for f in FILES:
             p = ROOT / f
-            p.write_text(MARK.sub(f"<!--support-until-->{want}<!--/support-until-->", p.read_text()))
+            p.write_text(MARK.sub(f"<!--support-until-->{want}<!--/support-until-->", p.read_text(encoding="utf-8")), encoding="utf-8")
     print(want)
     return 0
 

@@ -236,7 +236,7 @@ def test_status_polls_are_not_use_but_typing_is(bench):
 
 def test_the_query_only_list_names_real_commands_and_nothing_that_presses():
     import re
-    src = LOGIC.read_text()
+    src = LOGIC.read_text(encoding="utf-8")
     listed = re.findall(r'"([a-z_]+)"', src[src.index("inline bool otaQueryOnly"):])
     real = set(firmware.dispatch_commands())
     assert set(listed) <= real, f"not commands: {set(listed) - real}"
@@ -251,7 +251,7 @@ def test_the_firmware_includes_this_logic_and_overrides_the_core():
     """The header is only worth testing if the board runs it, and only safe if the
     core cannot mark the new firmware valid before the self-test."""
     ino = firmware.ino_text()
-    ota = (paths.TESTS.parent / "hid_fi" / "ota.h").read_text()
+    ota = (paths.TESTS.parent / "hid_fi" / "ota.h").read_text(encoding="utf-8")
     assert '#include "ota_logic.h"' in ota and '#include "ota.h"' in ino
     assert 'extern "C" bool verifyRollbackLater()' in ota, \
         "without it the core marks every new firmware valid before setup() - rollback would protect nothing"
@@ -261,8 +261,8 @@ def test_the_firmware_includes_this_logic_and_overrides_the_core():
 @pytest.mark.slow
 def test_every_planted_bug_is_caught(tmp_path):
     """Mutation testing over ota_logic.h: each deliberate bug must fail this file."""
-    src = LOGIC.read_text()
-    muts = json.loads((HERE / "ota_mutations.json").read_text())["mutations"]
+    src = LOGIC.read_text(encoding="utf-8")
+    muts = json.loads((HERE / "ota_mutations.json").read_text(encoding="utf-8"))["mutations"]
     tables = [("caninstall", INSTALL), ("cancel", CANCEL), ("resume", RESUME), ("shouldcheck", CHECK),
               ("mayapply", APPLY)]
     lines = ([f"version {t}" for t, _ in VERSIONS] + [f"compare {a} {b}" for a, b, _ in COMPARE]
@@ -280,7 +280,7 @@ def test_every_planted_bug_is_caught(tmp_path):
         assert src.count(m["find"]) == 1, f"mutation {m['name']!r}: 'find' must match ota_logic.h exactly once"
         mutant = tmp_path / f"m{i}" / "ota_logic.h"
         mutant.parent.mkdir()
-        mutant.write_text(src.replace(m["find"], m["replace"]))
+        mutant.write_text(src.replace(m["find"], m["replace"]), encoding="utf-8")
         try:
             out = ask(build(mutant, tag=f"ota_mutant{i}"), lines)
         except (RuntimeError, AssertionError):

@@ -55,5 +55,5 @@ out = {
 for c in out["cases"]:
     got = R.verify(base64.b64decode(c["manifest_b64"]), c["sig"], [out["test_public_key"]])
     assert got == c["valid"], c["name"]
-Path(__file__).with_name("ota_v1.json").write_text(json.dumps(out, indent=1) + "\n")
+Path(__file__).with_name("ota_v1.json").write_text(json.dumps(out, indent=1) + "\n", encoding="utf-8")
 print("wrote", len(out["cases"]), "cases")

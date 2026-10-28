@@ -256,7 +256,7 @@ def report(rows, tiers, secs, code=0):
         lines += ["", "## Failed", ""] + [f"- `{r['id']}` - {r['reason']}" for r in fails]
     if skips:
         lines += ["", "## Skipped", ""] + [f"- {len(v)} x {k}" for k, v in skips.items()]
-    (rep / "summary.md").write_text("\n".join(lines) + "\n")
+    (rep / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

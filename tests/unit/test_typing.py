@@ -44,9 +44,9 @@ def build_bench(type_src=None, tag="typing_bench"):
     core, lay = _slice_core(usb_src)
     gen = paths.CACHE / f"{tag}-src"
     gen.mkdir(parents=True, exist_ok=True)
-    (gen / "gen_core.inc").write_text(core)
-    (gen / "gen_layout.inc").write_text(lay)
-    (gen / "gen_type.inc").write_text(type_src or firmware.section(firmware.TYPE_BEGIN, firmware.TYPE_END))
+    (gen / "gen_core.inc").write_text(core, encoding="utf-8")
+    (gen / "gen_layout.inc").write_text(lay, encoding="utf-8")
+    (gen / "gen_type.inc").write_text(type_src or firmware.section(firmware.TYPE_BEGIN, firmware.TYPE_END), encoding="utf-8")
     exe = firmware.build_host(tag, BENCH_CPP, include_dirs=[gen],
                               extra_inputs=[gen / "gen_core.inc", gen / "gen_layout.inc", gen / "gen_type.inc"])
     return exe, ver
@@ -64,7 +64,7 @@ def _run(exe, *args, timeout=600):
 
 def _dump(exe, rows, held=False):
     f = paths.CACHE / "typing_inputs.txt"
-    f.write_text("\n".join(f"{label} {raw.hex() or '00'[:0]} {mode}" for label, raw, mode in rows) + "\n")
+    f.write_text("\n".join(f"{label} {raw.hex() or '00'[:0]} {mode}" for label, raw, mode in rows) + "\n", encoding="utf-8")
     r = _run(exe, "dump-held" if held else "dump", f)
     assert r.returncode == 0, r.stderr
     return [json.loads(l) for l in r.stdout.splitlines()]
@@ -127,11 +127,11 @@ def test_every_language_traces_match_golden(bench, golden):
 def test_bench_catches_planted_bugs(golden):
     """Mutation testing: each planted bug must make the unit tier fail."""
     src = firmware.section(firmware.TYPE_BEGIN, firmware.TYPE_END)
-    muts = json.loads((HERE / "mutations.json").read_text())["mutations"]
+    muts = json.loads((HERE / "mutations.json").read_text(encoding="utf-8"))["mutations"]
     gfile = paths.GOLDEN / "typing_ascii.json"
     if not gfile.exists():
         pytest.skip("golden typing_ascii.json not created yet - run the unit tier once, then this")
-    ascii_golden = json.loads(gfile.read_text())
+    ascii_golden = json.loads(gfile.read_text(encoding="utf-8"))
     survived = []
     cases = paths.CACHE / "typing_cases_small.txt"
     corpus.cases_file(cases, include_mixes=False)

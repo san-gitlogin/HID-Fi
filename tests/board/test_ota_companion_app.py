@@ -113,12 +113,12 @@ def companion(env, built, seed_com=False, extra_env=None):
         assert sn, "the COM port's serial number"
         upd = pathlib.Path(store) / "updates"
         upd.mkdir()
-        (upd / "com_ports.json").write_text(json.dumps({sn: st["mac"].replace(":", "").upper()}))
+        (upd / "com_ports.json").write_text(json.dumps({sn: st["mac"].replace(":", "").upper()}), encoding="utf-8")
     url = f"http://{st['wifi_ip']}"
     a = App(built, store, url, st["mac"], env["srv"].url_for(st["wifi_ip"]), extra_env)
     try:
         a.wait(lambda v: "WaitingForApproval" in v.get("session", ""), 60, "the Companion asking to pair")
-        app_id = json.loads((pathlib.Path(store) / "state.json").read_text())["id"]
+        app_id = json.loads((pathlib.Path(store) / "state.json").read_text(encoding="utf-8"))["id"]
         assert board.cmd({"cmd": "companion_pair", "id": app_id}, "companion_pair").get("state") == "confirm"
         v = a.wait(lambda v: "ShowCode" in v.get("session", ""), 30, "the Companion showing the code")
         code = v["session"].split('"')[1]
@@ -257,8 +257,8 @@ def test_by_cable_a_known_com_port_comes_first(env, built):  # noqa: F811
     with companion(env, built, seed_com=True) as a:
         seen = _cable(a, env)
         upd = pathlib.Path(a.store) / "updates"
-        learned = json.loads((upd / "com_ports.json").read_text())
-        journal = json.loads(next(p for p in upd.glob("*.json") if p.name != "com_ports.json").read_text())
+        learned = json.loads((upd / "com_ports.json").read_text(encoding="utf-8"))
+        journal = json.loads(next(p for p in upd.glob("*.json") if p.name != "com_ports.json").read_text(encoding="utf-8"))
     assert "restarting into update mode" not in seen, f"COM, not native: {seen}"
     # Every checkpoint is in the journal (the image step may be a check, not a
     # write, when the slot already holds it - the progress line can be skipped).

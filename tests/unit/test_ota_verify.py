@@ -21,14 +21,14 @@ from support import firmware, paths
 pytestmark = pytest.mark.unit
 
 ROOT = paths.TESTS.parent
-VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text())
+VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
 MBED_SRC = ["ecp", "ecp_curves", "ecp_curves_new", "bignum", "bignum_core", "bignum_mod", "bignum_mod_raw",
             "constant_time", "platform_util", "platform", "sha256", "sha1", "sha512", "sha3", "md5",
             "ripemd160", "md", "ecdsa", "asn1parse", "asn1write", "hmac_drbg"]
 
 
 def mbedtls():
-    script = (ROOT / "companion" / "vectors" / "check_board.sh").read_text()
+    script = (ROOT / "companion" / "vectors" / "check_board.sh").read_text(encoding="utf-8")
     ver = re.search(r"^ver=(\S+)$", script, re.M).group(1)
     sha = re.search(r"^sha=([0-9a-f]{64})$", script, re.M).group(1)
     work = paths.CACHE / f"mbedtls-{ver}"
@@ -104,6 +104,6 @@ def test_the_key_id_chooses_among_trusted_keys(bench):
 
 
 def test_the_firmware_uses_this_check():
-    src = (ROOT / "hid_fi" / "ota_verify.h").read_text()
+    src = (ROOT / "hid_fi" / "ota_verify.h").read_text(encoding="utf-8")
     assert "mbedtls_ecdsa_verify" in src and "otaKeyId(keys[i].pub" in src, \
         "the key id must be computed from the trusted key, never taken from a table"
