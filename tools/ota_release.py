@@ -352,7 +352,18 @@ def companion_assets(folder, version):
     return out
 
 
+RELEASE_KEYS_FILE = ROOT / "tools" / "release_keys.json"
+
+
 def release_cli(a):
+    # The key first: a release signed with anything else is refused by every board.
+    key = load_private(a.key)
+    pub = public_bytes(key).hex()
+    published = [k["public_key"] for k in json.loads(Path(RELEASE_KEYS_FILE).read_text())["keys"]]
+    if pub not in published:
+        print("refused: the signing key is not one of tools/release_keys.json - boards would refuse the release",
+              file=sys.stderr)
+        return 2
     image, table = Path(a.image).read_bytes(), Path(a.table).read_bytes()
     comp = None
     if a.companion_dir:
@@ -360,8 +371,7 @@ def release_cli(a):
     m = build_manifest(a.version, image, a.min_from, a.core, a.idf, Path(a.changelog).read_text(),
                        security=a.security, risk=a.risk, companion=comp, table_bytes=table,
                        image_name=f"hid_fi-{a.version}.bin")
-    key = load_private(a.key)
-    pub = public_bytes(key).hex()
+
     vec = json.loads((ROOT / "tests" / "vectors" / "ota_v1.json").read_text())
     refusals = release_gate(m, image, [pub], vec["test_public_key"],
                             json.loads((ROOT / "tools" / "release_history.json").read_text()),

@@ -259,6 +259,9 @@ def test_release_writes_signed_files_that_verify(tmp_path, monkeypatch):
     (tmp_path / "p.bin").write_bytes(table)
     (tmp_path / "CHANGELOG.md").write_text("## v4.1.0 - 2026-11-01\n\nx\n")
     out = tmp_path / "out"
+    keys = tmp_path / "keys.json"
+    keys.write_text(json.dumps({"keys": [{"name": "t", "key_id": R.key_id(pub), "public_key": pub.hex()}]}))
+    monkeypatch.setattr(R, "RELEASE_KEYS_FILE", keys)
     rc = R.main(["release", "--version", "4.1.0", "--image", str(tmp_path / "img.bin"), "--table", str(tmp_path / "p.bin"),
                  "--min-from", "4.0.4", "--core", "3.3.12", "--idf", "5.5.5", "--key", str(kp),
                  "--out-dir", str(out), "--changelog", str(tmp_path / "CHANGELOG.md")])
@@ -267,3 +270,18 @@ def test_release_writes_signed_files_that_verify(tmp_path, monkeypatch):
     assert R.verify(mb, json.loads((out / "hidfi-ota.sig").read_text()), [pub.hex()])
     m = json.loads(mb)
     assert m["table"]["size"] == 0xC00 and (out / m["image"]["name"]).read_bytes() == image
+
+
+def test_release_refuses_a_key_that_is_not_published(tmp_path, capsys):
+    key, pub, image, table, *_ = _gate_inputs(tmp_path)
+    from cryptography.hazmat.primitives import serialization
+    kp = tmp_path / "k.pem"
+    kp.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                     serialization.NoEncryption()))
+    kp.chmod(0o600)
+    (tmp_path / "img.bin").write_bytes(image)
+    (tmp_path / "p.bin").write_bytes(table)
+    rc = R.main(["release", "--version", "4.1.0", "--image", str(tmp_path / "img.bin"), "--table", str(tmp_path / "p.bin"),
+                 "--min-from", "4.0.4", "--core", "3.3.12", "--idf", "5.5.5", "--key", str(kp), "--out-dir", str(tmp_path / "o")])
+    assert rc == 2 and "release_keys.json" in capsys.readouterr().err
+    assert not (tmp_path / "o").exists(), "nothing written"

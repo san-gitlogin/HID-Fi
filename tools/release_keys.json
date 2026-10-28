@@ -1,0 +1,15 @@
+{
+ "_about": "Public keys HID-Fi releases are signed with (ECDSA P-256, uncompressed). The private keys never enter this repository: the primary is on the owner's Mac (~/.hidfi-release), the backup is kept offline. The firmware (hid_fi/ota.h OTA_RELEASE_KEYS) and the Companion (hidfi-core ota.rs RELEASE_KEYS) embed exactly these, in this order - tests/static/test_release_keys.py holds them together. Added 2026-10-28.",
+ "keys": [
+  {
+   "name": "primary",
+   "key_id": "fa48e032c618628f",
+   "public_key": "04494dffb537850ec415070e758b1a62959784dd22eab1756cc635d7edc6e3a0af76bb124b6be9e8ff664e82a21509bce035f76b01241ca547d43ecb8b895d7da3"
+  },
+  {
+   "name": "backup",
+   "key_id": "d06253869d956bec",
+   "public_key": "04ee56a32ed79665f6f4580ec7cdf81b84bb5d28d34b2294d24abd16934db81f2fedeaa77bfa9c890fc50ce4c467ce143dab88c499ec05395697eccc9f5057e29a"
+  }
+ ]
+}
