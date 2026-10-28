@@ -2,6 +2,7 @@
 //! the protocol spoken with the board and the pairing cryptography.
 
 pub mod discovery;
+pub mod ota;
 pub mod pairing;
 pub mod proto;
 

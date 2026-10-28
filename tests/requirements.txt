@@ -6,4 +6,5 @@ pytest-xdist>=3.5,<4         # parallel board-free tiers; optional, run.py falls
 pyserial>=3.5,<4
 playwright>=1.40,<2
 websocket-client>=1.6,<2     # WiFi perf tests only
+cryptography>=50.0.2,<51     # release signing (tools/ota_release.py) and its tests; 46.x had 13 advisories
 evdev>=1.6; sys_platform == "linux"   # Linux end-to-end only

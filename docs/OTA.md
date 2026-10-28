@@ -560,8 +560,18 @@ The procedure, as it will run on DA1A2C:
    Also found: `tests/.reports/board_restore.json` printed macro contents (the owner's ID
    number) - now hashes only, guarded by `tests/unit/test_board_report.py`.
 4. [ ] `tests/support/esp_model.py`: the simulated ESP32-S3 and the fault sweep.
-5. [ ] Manifest + signature + version rules: shared vectors; firmware, Python,
+5. [~] Manifest + signature + version rules: shared vectors; firmware, Python,
    Rust.
+   Done 2026-10-28: `tools/ota_release.py` (keygen outside the repo only, canonical
+   manifest with every CHANGELOG section since `min_from`, the rolling support date,
+   refusals: test builds, a security release without its risk, an image that is not
+   that version), `tests/vectors/ota_v1.json` (12 cases, TEST keys), and three
+   verifiers agreeing on them: Python, Rust (`hidfi-core/src/ota.rs`, p256 0.14 - past
+   RUSTSEC-2026-0387), the firmware (`hid_fi/ota_verify.h`, built on the host against
+   mbedTLS 3.6.6, the version core 3.3.12 ships). The Companion's per-board verdict
+   (update board / Companion / which first / cable once) is in `ota.rs` with tests.
+   `cryptography` raised to 50.0.2 (46.0.3 had 13 advisories). Left: the release keys
+   (owner's Mac, step 9) and wiring the check into the download (step 6).
 6. [ ] Board OTA: download task, checkpoints, cancel, resume; local HTTPS server
    tests; pointer latency during download.
 7. [ ] Dashboard: the update sheet and every state (BDD, responsive matrix).

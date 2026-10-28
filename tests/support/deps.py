@@ -28,7 +28,7 @@ def _run(*cmd):
 def installed():
     got = {}
     got["python"] = ".".join(map(str, sys.version_info[:3]))
-    for pkg in ("pytest", "pytest-bdd", "pytest-xdist", "pyserial", "playwright"):
+    for pkg in ("pytest", "pytest-bdd", "pytest-xdist", "pyserial", "playwright", "cryptography"):
         try:
             got[pkg] = md.version(pkg)
         except md.PackageNotFoundError:

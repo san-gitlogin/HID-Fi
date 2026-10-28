@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEPS = ROOT / "tests" / "deps.json"
 ACK = Path(__file__).resolve().parent / "dep_watch_ack.json"
 CARGO_LOCK = ROOT / "companion" / "Cargo.lock"
-PY_TOOLS = ["pytest", "pytest-bdd", "pytest-xdist", "pyserial", "playwright"]
+PY_TOOLS = ["pytest", "pytest-bdd", "pytest-xdist", "pyserial", "playwright", "cryptography"]
 
 # name in deps.json -> GitHub repository
 FIRMWARE_REPOS = {
@@ -253,20 +253,29 @@ def cargo_lock_packages(lock=CARGO_LOCK):
     return sorted(set(pkgs))
 
 
+def crates_in_toml(text):
+    """crates.io dependency names in one Cargo.toml. A renamed dependency
+    (`sha2_011 = { package = "sha2", ... }`) is the crate it names, and a path
+    dependency is ours, not crates.io's."""
+    names, section = set(), None
+    for line in text.splitlines():
+        s = re.match(r"\[(.+)\]", line.strip())
+        if s:
+            section = s.group(1)
+            continue
+        if section and section.endswith("dependencies"):
+            m = re.match(r"([A-Za-z0-9_\-]+)\s*=", line)
+            if m and "path" not in line:
+                pkg = re.search(r'package\s*=\s*"([^"]+)"', line)
+                names.add(pkg.group(1) if pkg else m.group(1))
+    return names
+
+
 def direct_crates():
     """The Companion's direct crates.io dependencies (what we chose, not what came along)."""
     names = set()
     for toml in (ROOT / "companion").glob("crates/*/Cargo.toml"):
-        section = None
-        for line in toml.read_text().splitlines():
-            s = re.match(r"\[(.+)\]", line.strip())
-            if s:
-                section = s.group(1)
-                continue
-            if section and section.endswith("dependencies"):
-                m = re.match(r"([A-Za-z0-9_\-]+)\s*=", line)
-                if m and "path" not in line:
-                    names.add(m.group(1))
+        names |= crates_in_toml(toml.read_text())
     return sorted(names)
 
 

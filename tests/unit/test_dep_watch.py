@@ -238,3 +238,20 @@ def test_the_pairing_crypto_check_uses_the_mbedtls_the_core_ships():
         pytest.skip(f"the pinned core is not installed here: {e}")
     script = (paths.TESTS.parent / "companion" / "vectors" / "check_board.sh").read_text()
     assert re.search(r"^ver=(\S+)$", script, re.M).group(1) == shipped
+
+
+def test_renamed_and_path_dependencies_are_read_as_cargo_means_them():
+    toml = """
+[dependencies]
+hex = "0.4.3"
+sha2 = "0.10.9"
+sha2_011 = { package = "sha2", version = "0.11.1" }
+hidfi-core = { path = "../hidfi-core" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["x"] }
+
+[package]
+name = "not-a-dependency"
+"""
+    assert dw.crates_in_toml(toml) == {"hex", "sha2", "windows"}
