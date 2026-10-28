@@ -559,7 +559,18 @@ The procedure, as it will run on DA1A2C:
    asked for during the check waits. Data identical by hash throughout.
    Also found: `tests/.reports/board_restore.json` printed macro contents (the owner's ID
    number) - now hashes only, guarded by `tests/unit/test_board_report.py`.
-4. [ ] `tests/support/esp_model.py`: the simulated ESP32-S3 and the fault sweep.
+4. [x] The simulated ESP32-S3 and the fault sweep - in Rust, beside the flasher it
+   tests (`companion/crates/hidfi-flash/src/sim.rs`, `sweep.rs`), not in Python.
+   Done 2026-10-28: NOR flash (writes only clear bits), the ROM loader and the stub
+   protocol, read-only eFuses, the bootloader's choice with NEW -> PENDING_VERIFY ->
+   ABORTED, and old firmware that marks itself valid at start. The sweep runs the real
+   flasher with a power cut after every 64th byte, an unplug after every frame, a bit
+   flipped in every block, a cancel at every step, on both paths and from a board on
+   either slot: the board always starts a working HID-Fi or is in the one known,
+   recoverable state (the one-time switch's table write), settings byte-identical,
+   resume always finishes, no forbidden opcode ever sent. Six planted bugs (otadata in
+   the winning sector, no read-back, cancel forgetting otadata, no NEW re-check, the
+   running slot written, foreign firmware accepted) - each caught.
 5. [~] Manifest + signature + version rules: shared vectors; firmware, Python,
    Rust.
    Done 2026-10-28: `tools/ota_release.py` (keygen outside the repo only, canonical
@@ -572,11 +583,55 @@ The procedure, as it will run on DA1A2C:
    (update board / Companion / which first / cable once) is in `ota.rs` with tests.
    `cryptography` raised to 50.0.2 (46.0.3 had 13 advisories). Left: the release keys
    (owner's Mac, step 9) and wiring the check into the download (step 6).
-6. [ ] Board OTA: download task, checkpoints, cancel, resume; local HTTPS server
+6. [~] Board OTA: download task, checkpoints, cancel, resume; local HTTPS server
    tests; pointer latency during download.
-7. [ ] Dashboard: the update sheet and every state (BDD, responsive matrix).
-8. [ ] Companion: inventory and compatibility view; LAN relay; cable path with
+   Built 2026-10-28: a task on core 0 checks (signature first, then everything else),
+   downloads into the inactive slot with SHA-256 while streaming, after
+   `esp_ota_end()` and by reading the slot back, then switches; resumes with Range,
+   starts over when a server ignores Range, gives up after 8 attempts; commands
+   `ota_check/install/cancel/apply/settings/source`; decisions host-tested (30 planted
+   bugs). Found on the board (`tests/board/test_ota_download.py`, local release server):
+   - **cancel at "ready" could still install the cancelled update**: IDF's
+     `esp_ota_set_boot_partition()` writes the choice as NEW (read in IDF 5.5.5
+     `esp_rewrite_ota_data`), so the running version went on probation and a reset
+     would roll into the cancelled image. Now the cancelled image's first sector is
+     erased and the running choice is confirmed at once;
+   - **typing and the pointer slowed during a download**: WebSocket ping p95 16 ms idle
+     -> 291-343 ms. Found by measurement, not by the first two guesses (pacing writes did
+     not help): a test build timing every `loop()` section (`-DHIDFI_TEST_LOOP_STATS`)
+     and a build without flash writes (`-DHIDFI_TEST_NO_FLASH_WRITE`) showed the stalls
+     came from flash: `esp_ota_write` erases as it goes, an erase stalls both cores (up
+     to ~50 ms a sector here; core 3.3.12 has no flash auto-suspend), and the network
+     traffic adds to it. Now the slot is written directly (`esp_partition_write`), and
+     while someone used the keyboard or pointer in the last 3 s the download neither
+     reads the network nor erases - it waits (`ota_paused`, shown on the dashboard) and
+     goes on when they stop. Measured with a person's pointer frames: p50 12 / p95 18 /
+     max 25 ms during the download, idle p95 21 - no difference. (A dashboard's ping
+     alone is a keep-alive and does not count as use, by design; a first measurement
+     used pings only and was wrong for that reason.) `esp_ota_set_boot_partition()` still
+     validates the image, after the three SHA-256 checks;
+   - a failed check left an earlier check's release "available" - a check now
+     forgets the last one first;
+   - a dashboard polling status counted as "in use", so a ready update would never
+     apply - status polls and update commands no longer count (`otaQueryOnly`).
+7. [~] Dashboard: the Updates card and the update sheet (every state, consent, cancel,
+   restart, outcome after restart, single-slot boards, both switches) - 19 BDD
+   scenarios, the sheet in the responsive matrix.
+8. [~] Companion: inventory and compatibility view; LAN relay; cable path with
    the journal (COM first, then native USB); self-update notice.
+   Done 2026-10-28: `hidfi-flash` - the cable path's engine. A closed protocol (`Op`
+   has no WRITE_REG, ERASE_FLASH or ERASE_REGION - a test proves none can be sent),
+   Espressif's stub pinned by SHA-256 (the S3 ROM cannot read flash; espflash 4.6.0 was
+   not used: it links `write_efuse` and its ROM read advances the offset wrongly),
+   every write read back by MD5, preflight (chip, MAC, a HID-Fi image, a layout HID-Fi
+   made, a 64 KB backup) before any write, the two paths, an atomic journal, cancel
+   that puts the table and otadata back exactly, resume from any checkpoint. Found by
+   the sweep: a restart between the switch and the table lets v4.0.4 mark the new
+   choice valid - the table step now re-chooses it NEW; and a half-written table had
+   no slots, which crashed the otadata parser - it never panics on board data now.
+   Left: the Companion's UI (per-board versions, verdicts from `hidfi-core/ota.rs`,
+   Update buttons), the serial port and its journal/backup storage (backup encrypted,
+   key in the OS keychain), the LAN relay, native-USB download mode, real-board runs.
 9. [ ] Release tooling: signing, manifest, SBOM, support-period date;
    CHANGELOG, SECURITY.md, README.
 10. [ ] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
