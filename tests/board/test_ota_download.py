@@ -63,10 +63,10 @@ def _untrusted_sig(m):
     return R.sign(m, ec.generate_private_key(ec.SECP256R1()))
 
 
-def release(image, min_from="4.0.3"):
+def release(image, min_from="4.0.3", table=None):
     m = R.canonical(R.build_manifest("4.0.99", image, min_from, "3.3.12", "5.5.5", CHANGELOG,
                                      released=datetime.date(2026, 11, 1), image_name="hid_fi-4.0.99.bin",
-                                     _tests_allow_test_build=True))
+                                     table_bytes=table, _tests_allow_test_build=True))
     return m, json.dumps(R.sign(m, _key())).encode()
 
 
@@ -89,8 +89,9 @@ def env(_board_holder):
     board, *_ = install(_board_holder, base)
     wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the test build proving itself")
     img = new.read_bytes()
-    man, sig = release(img)
-    files = {"hidfi-ota.json": man, "hidfi-ota.sig": sig, "hid_fi-4.0.99.bin": img}
+    table = (new.parent / "hid_fi.ino.partitions.bin").read_bytes()
+    man, sig = release(img, table=table)
+    files = {"hidfi-ota.json": man, "hidfi-ota.sig": sig, "hid_fi-4.0.99.bin": img, "partitions.bin": table}
     with ReleaseServer(files) as srv:
         ip = wait_status(board, lambda s: s.get("wifi_connected"), 60, "the board back on its network")["wifi_ip"]
         # The board's own daily check would race the tests' checks (it did: "busy").
@@ -98,7 +99,7 @@ def env(_board_holder):
         wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "any check already running finishing")
         r = board.cmd({"cmd": "ota_source", "url": srv.url_for(ip)}, "ota_source")
         assert r["status"] == "ok", r
-        yield {"board": board, "srv": srv, "files": files, "img": img, "holder": _board_holder}
+        yield {"board": board, "srv": srv, "files": files, "img": img, "holder": _board_holder, "base": base}
     board = _board_holder.get()
     _settle(board)
     board.cmd({"cmd": "ota_source", "url": ""}, "ota_source")
@@ -318,3 +319,81 @@ def test_end_to_end_with_a_dropped_connection(env, request):
     # the first measurement, before the fix, had p50 51 ms - so: at most one.
     slow = [x for x in during if x > 150]
     assert len(slow) <= 1, f"{len(slow)} inputs waited over 150 ms during the download: {[round(x) for x in slow]}"
+
+
+# ---- the paired Companion (hid_fi/ota.h compOta), over the board's real HTTP -----------------
+@pytest.fixture
+def app(env):
+    """A Companion paired for real: hello over HTTP, confirmed over USB with the code
+    it computed, unpaired afterwards (the data check at the end includes pairings)."""
+    from support import companion_sim as cs
+    board = env["holder"].get()
+    ip = board.status()["wifi_ip"]
+    a = cs.FakeApp(cs.RealBoardHttp(ip), name="OTA test")
+    a.ip = env["srv"].url_for(ip).split("//")[1].split(":")[0]     # this computer, as the board sees it
+    assert a.hello()[1].get("state") == "pending"
+    r = board.cmd({"cmd": "companion_pair", "id": a.id}, "companion_pair")
+    assert r.get("state") == "confirm", r
+    assert a.advance()[1].get("state") == "code_shown"
+    r = board.cmd({"cmd": "companion_pair", "id": a.id, "code": a.code}, "companion_pair")
+    assert r.get("state") == "paired", r
+    yield a
+    env["holder"].get().cmd({"cmd": "companion_unpair", "id": a.id}, "companion_unpair")
+
+
+def test_the_paired_companion_checks_installs_and_cancels(env, app):
+    board = fresh(env)
+    r = app.ota("check")
+    assert r["status"] == "ok" and r["act"] == "check", r
+    st = wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the Companion's check finishing")
+    assert st["ota_available"] == "4.0.99", st
+    env["srv"].faults["chunk_delay"] = 0.05
+    assert app.ota("install")["status"] == "ok"
+    wait_status(board, lambda s: s.get("ota_bytes", 0) > 50000, 120, "the Companion's download starting")
+    assert app.ota("cancel").get("done") == "stopping"
+    st = wait_status(board, lambda s: s.get("ota_step") == "idle", 60, "the download stopping")
+    assert st["ota_error"] == "cancelled" and st["ota_state"] == "valid"
+
+
+def test_a_companion_request_cannot_be_replayed_or_reused_for_another_act(env, app):
+    from support import companion_sim as cs
+    board = fresh(env)
+    _, r = app._call(op="chal", id=app.id)
+    m = cs.mac(app.key, f"ota|{app.id}|check||{r['chal']}")
+    req = dict(op="ota", id=app.id, act="check", url="", chal=r["chal"], mac=m)
+    assert app._call(**req)[1]["status"] == "ok"
+    wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the check finishing")
+    assert app._call(**req)[1]["reply"] == "stale_chal"
+    _, r = app._call(op="chal", id=app.id)
+    assert app._call(**dict(req, chal=r["chal"], act="download_mode"))[1]["reply"] == "bad_mac"
+    assert board.status()["ota_state"] == "valid", "a refused request changed nothing"
+
+
+def test_the_companion_relays_a_release_for_one_check_only(env, app):
+    """The board is pointed somewhere with no release; the Companion serves one from
+    this computer. The relay is used once: the next check reads the setting again."""
+    board = fresh(env)
+    srv_url = env["srv"].url_for(board.status()["wifi_ip"])
+    try:
+        board.cmd({"cmd": "ota_source", "url": srv_url + "nothing-here/"}, "ota_source")
+        assert app.ota("from", "http://192.0.2.1:9/").get("reply") == "bad_request", "only this computer may relay"
+        assert app.ota("from", srv_url)["status"] == "ok"
+        st = wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the relayed check finishing")
+        assert st["ota_available"] == "4.0.99" and st["ota_error"] == "", st
+        r = board.cmd({"cmd": "ota_source"}, "ota_source")
+        assert r["url"] == srv_url + "nothing-here/", "reading the setting must not use up or show the relay"
+        st = check(board)
+        assert st["ota_available"] == "", "the relay is for one check; the next one reads the setting"
+    finally:
+        board.cmd({"cmd": "ota_source", "url": srv_url}, "ota_source")
+
+
+def test_download_mode_is_refused_while_an_update_is_running(env, app):
+    board = fresh(env)
+    check(board)
+    env["srv"].faults["chunk_delay"] = 0.05
+    board.cmd({"cmd": "ota_install"}, "ota_install")
+    wait_status(board, lambda s: s.get("ota_bytes", 0) > 20000, 120, "the download starting")
+    assert app.ota("download_mode").get("reply") == "busy"
+    board.cmd({"cmd": "ota_cancel"}, "ota_cancel")
+    wait_status(board, lambda s: s.get("ota_step") == "idle", 60, "the download stopping")

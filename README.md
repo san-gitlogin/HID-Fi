@@ -312,6 +312,19 @@ first time it starts.
 
 ---
 
+## Updates
+
+The dashboard's **Settings → Updates** checks for new firmware, shows what changed
+and how big it is, and installs it when you tap *Update now*. If the new version
+does not start properly, the board goes back to the one it had by itself. The
+Companion shows the same for every board plugged into your computer, and updates
+by cable the boards that cannot update over WiFi (once, for boards from v4.0.4 and
+earlier). Details: [SECURITY.md](SECURITY.md#updates).
+
+Security fixes are released for the latest version. This is committed until at
+least <!--support-until-->2027-10-27<!--/support-until-->; the date moves with
+every release, and an end of support will be announced here first.
+
 ## Your board's password, PIN and recovery
 
 | Thing | What it is for | Where you set it |

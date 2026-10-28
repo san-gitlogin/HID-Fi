@@ -9,3 +9,4 @@ pub mod opener;
 pub mod panel;
 pub mod service;
 pub mod store;
+pub mod updates;

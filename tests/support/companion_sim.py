@@ -18,6 +18,7 @@ import re
 PAIRED_MAX, PENDING_MAX, NAME_MAX, BODY_MAX = 4, 4, 32, 768
 PENDING_S, ONLINE_S, CHAL_S, CODE_TRIES = 120.0, 60.0, 30.0, 3
 RATE_WINDOW_S, RATE_MAX = 5.0, 25
+CHALS = 4                      # live challenges per computer (hid_fi/companion.h COMP_CHALS)
 
 # ---- crypto -----------------------------------------------------------------------------
 _P = 2 ** 255 - 19
@@ -98,8 +99,7 @@ class CompanionBoard:
         now = self._now()
         self.pending = [p for p in self.pending if now - p["at"] <= PENDING_S]
         for c in self.paired:
-            if c.get("chal") and now - c["chal_at"] > CHAL_S:
-                c["chal"] = None
+            c["chals"] = [(ch, at) for ch, at in c.get("chals", []) if now - at <= CHAL_S]
 
     def online(self, c):
         return c.get("seen") is not None and self._now() - c["seen"] < ONLINE_S
@@ -226,8 +226,26 @@ class CompanionBoard:
         c = self._find_paired(b["id"])
         if not c:
             return self._refuse(404, "unknown_pc", "This computer is not paired")
-        c["chal"], c["chal_at"] = self.random(16).hex(), self._now()
-        return 200, {"status": "ok", "chal": c["chal"]}
+        # Up to CHALS live at once (compChalIssue): a free slot, else the oldest goes.
+        now = self._now()
+        live = [(ch, at) for ch, at in c.get("chals", []) if now - at <= CHAL_S]
+        if len(live) >= CHALS:
+            live.remove(min(live, key=lambda x: x[1]))
+        new = self.random(16).hex()
+        c["chals"] = live + [(new, now)]
+        return 200, {"status": "ok", "chal": new}
+
+    def _take_chal(self, c, chal):
+        """compChalTake: one of the live challenges, used up whatever the proof."""
+        now, hit = self._now(), False
+        keep = []
+        for ch, at in c.get("chals", []):
+            if now - at <= CHAL_S and hmac.compare_digest(ch, chal):
+                hit = True
+            else:
+                keep.append((ch, at))
+        c["chals"] = keep
+        return hit
 
     def _beat(self, b, ip):
         port = b.get("port", 0)
@@ -238,9 +256,7 @@ class CompanionBoard:
         c = self._find_paired(b["id"])
         if not c:
             return self._refuse(404, "unknown_pc", "This computer is not paired")
-        fresh = bool(c.get("chal")) and self._now() - c["chal_at"] <= CHAL_S and \
-            hmac.compare_digest(c["chal"], b["chal"])
-        c["chal"] = None
+        fresh = self._take_chal(c, b["chal"])
         if not fresh:
             return self._refuse(401, "stale_chal", "Ask for a new challenge")
         want = mac(c["key"], f'beat|{b["id"]}|{port}|{b["fp"]}|{b["tn"]}|{b["chal"]}')
@@ -261,9 +277,7 @@ class CompanionBoard:
         c = self._find_paired(b["id"])
         if not c:
             return self._refuse(404, "unknown_pc", "This computer is not paired")
-        fresh = bool(c.get("chal")) and self._now() - c["chal_at"] <= CHAL_S and \
-            hmac.compare_digest(c["chal"], b["chal"])
-        c["chal"] = None
+        fresh = self._take_chal(c, b["chal"])
         if not fresh:
             return self._refuse(401, "stale_chal", "Ask for a new challenge")
         want = mac(c["key"], f'ota|{b["id"]}|{act}|{url}|{b["chal"]}')
@@ -369,6 +383,24 @@ class CompanionBoard:
                     "port": x["port"], "fp": x["fp"], "tn": x["tn"], "vn": vn,
                     "ticket": mac(x["key"], f'tkt|{x["tn"]}|{vn}')}
         return None
+
+
+class RealBoardHttp:
+    """A real board's /api/companion, in the shape FakeApp calls: http(body, ip)."""
+
+    def __init__(self, board_ip):
+        self.url = f"http://{board_ip}/api/companion"
+
+    def http(self, body, _ip):
+        import json
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(self.url, body.encode(), {"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or b"{}")
 
 
 # ---- the app's side, for scenarios --------------------------------------------------------

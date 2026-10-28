@@ -433,6 +433,42 @@ Being honest about the boundaries:
 
 ---
 
+## Updates
+
+**Support.** Security fixes are released for the latest version. This is
+committed until at least <!--support-until-->2027-10-27<!--/support-until-->; the
+date moves with every release, and an end of support will be announced here
+first.
+
+How a board updates (docs/OTA.md has every detail and the tests behind each):
+
+- **Nothing installs without you.** The board checks for releases and tells you;
+  every install is a tap on *Update now* - on the dashboard, or in the Companion.
+  Settings has an off-by-default switch to install *security* updates by
+  themselves.
+- **Only HID-Fi's releases are believed.** A release is described by a manifest
+  signed with HID-Fi's release key (ECDSA P-256). The board and the Companion
+  check the signature before reading anything in it, and check the firmware's
+  SHA-256 from that manifest while it downloads, after it is written and by
+  reading it back. A Companion that relays a release to a board without internet
+  is only a courier: the board checks the same signature itself.
+- **An update can always go back.** The board has two firmware slots; a new
+  version starts on probation and must prove itself (USB keyboard and mouse up,
+  the network back) within a few minutes, or the board restarts into the version
+  it had. Your settings, PINs, vault and macros are never part of an update.
+- **By cable, too.** A board on the old one-slot layout (v4.0.4 and earlier), or
+  one with no network, is updated by the Companion over USB. Every step is
+  recorded; a cancel puts everything back as it was, and an interrupted update
+  resumes where it stopped. The Companion's flasher cannot erase the chip, cannot
+  touch eFuses (the chip's one-time settings) and refuses any device that is not
+  this HID-Fi.
+- **Standards.** This follows ETSI EN 303 645 (5.3, software updates). The EU
+  Cyber Resilience Act most likely does not apply to a free, non-commercial
+  project like this one; where it asks for automatic installation by default,
+  HID-Fi deliberately asks first instead, and says so here.
+
+---
+
 ## Recommendations
 
 - Set a PIN, and do not use `1234`.

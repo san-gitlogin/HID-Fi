@@ -7,6 +7,8 @@
 
 #[cfg(test)]
 use crate::service::BoardView;
+use crate::updates::center::{BoardUpd, CompUpd, UpdCmd};
+use crate::updates::{Job, Offer};
 use crate::service::{BoardState, View};
 use hidfi_agent::session::Status;
 
@@ -32,6 +34,8 @@ pub enum Action {
     /// The OS's own page for what can block the network (macOS Local Network
     /// privacy, Windows network profile).
     OpenNetworkSettings,
+    /// An update action; the click is the person's consent.
+    Update(UpdCmd),
 }
 
 /// This OS's likely reason a board on USB cannot be reached, besides the board
@@ -66,6 +70,12 @@ fn code_spaced(c: &str) -> String {
 }
 
 pub fn model(v: &View) -> Model {
+    let mut m = model_boards(v);
+    companion_update(&v.updates.companion, &mut m.lines, &mut m.actions);
+    m
+}
+
+fn model_boards(v: &View) -> Model {
     if v.boards.len() <= 1 {
         return model_one(v, None);
     }
@@ -249,6 +259,12 @@ fn model_one(v: &View, mac: Option<&str>) -> Model {
         icon = Icon::Attention;
         lines.push(p.clone());
     }
+    let board_mac = mac.map(str::to_string).or_else(|| v.boards.first().map(|b| b.mac.clone()));
+    if let Some(u) = board_mac.as_deref().and_then(|m| v.updates.board(m)) {
+        if board_update(u, &mut lines, &mut actions) && icon != Icon::Live {
+            icon = Icon::Attention;
+        }
+    }
     let tooltip = format!(
         "HID-Fi Companion: {}",
         lines.first().cloned().unwrap_or_default()
@@ -259,6 +275,139 @@ fn model_one(v: &View, mac: Option<&str>) -> Model {
         tooltip,
         lines,
         actions,
+    }
+}
+
+fn mb(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+}
+
+fn pct(n: u64, total: u64) -> u64 {
+    (n * 100).checked_div(total).unwrap_or(0).min(100)
+}
+
+/// The update lines and buttons for one board. True: it needs the person's attention.
+pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(String, Action)>) -> bool {
+    let mac = u.mac.clone();
+    let cancel = || ("Cancel the update".to_string(), Action::Update(UpdCmd::Cancel(mac.clone())));
+    match &u.job {
+        Job::Checking => {
+            lines.push("Update: the board is checking the release…".into());
+            actions.push(cancel());
+            return false;
+        }
+        Job::Downloading { bytes, total, paused } => {
+            lines.push(format!(
+                "Update: downloading, {}%{}",
+                pct(*bytes, *total),
+                if *paused { " - paused while you use the board" } else { "" }
+            ));
+            actions.push(cancel());
+            return false;
+        }
+        Job::Ready => {
+            lines.push("Update ready: HID-Fi restarts into it once nobody uses it for 5 seconds".into());
+            actions.push(("Restart HID-Fi now".into(), Action::Update(UpdCmd::RestartNow(mac.clone()))));
+            actions.push((
+                "Cancel the update (keep this version)".into(),
+                Action::Update(UpdCmd::Cancel(mac.clone())),
+            ));
+            return false;
+        }
+        Job::Restarting => {
+            lines.push("Update: HID-Fi is restarting into the new version…".into());
+            return false;
+        }
+        Job::Verifying => {
+            lines.push("Update: HID-Fi is checking its new firmware (about a minute) - keep it plugged in".into());
+            return false;
+        }
+        Job::Cable { step, bytes, total } => {
+            let p = if *total > 0 { format!(", {}%", pct(*bytes, *total)) } else { String::new() };
+            lines.push(format!("Updating by cable: {step}{p} - keep both cables in"));
+            actions.push(cancel());
+            return false;
+        }
+        Job::Done { to } => lines.push(format!("Updated to {to}")),
+        Job::RolledBack => {
+            lines.push(
+                "The new firmware did not start properly, so HID-Fi went back to the version it had. Nothing was lost"
+                    .into(),
+            );
+            return true;
+        }
+        Job::Stopped => lines.push("Update cancelled - nothing changed on the board".into()),
+        Job::Failed { why } => {
+            lines.push(format!("The update did not finish: {why}. The board keeps the version it has"));
+            return true;
+        }
+        Job::Idle => {}
+    }
+    if let Some(step) = &u.resumable {
+        lines.push(format!(
+            "A cable update stopped part way ({step}). The board is safe; resuming carries on from there"
+        ));
+        actions.push((
+            "Resume the cable update".into(),
+            Action::Update(UpdCmd::Update { mac: mac.clone(), cable: true }),
+        ));
+        return true;
+    }
+    match &u.offer {
+        Offer::Board { to, size, changes, security, over_air, cable_once } => {
+            let fw = u.firmware.as_deref().map(|f| f.trim_start_matches("hid_fi_v").to_string()).unwrap_or_default();
+            lines.push(format!(
+                "{}Update available: {fw} to {to} ({})",
+                if *security { "Security " } else { "" },
+                mb(*size)
+            ));
+            if let Some((_, text)) = changes.first() {
+                let first = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+                if !first.is_empty() {
+                    lines.push(format!("What's new: {}", first.trim_start_matches(['-', '*', ' '])));
+                }
+            }
+            if *over_air {
+                actions.push((format!("Update HID-Fi to {to}"), Action::Update(UpdCmd::Update { mac, cable: false })));
+            } else {
+                if *cable_once {
+                    lines.push("This board needs the cable once: after that it updates over WiFi".into());
+                }
+                actions.push((
+                    format!("Update HID-Fi to {to} by cable…"),
+                    Action::Update(UpdCmd::Update { mac, cable: true }),
+                ));
+            }
+        }
+        Offer::UpdateCompanionFirst => {
+            lines.push("This board's firmware is newer than this Companion: update the Companion".into());
+            return true;
+        }
+        Offer::Verifying => lines.push("HID-Fi is checking its new firmware (about a minute)".into()),
+        Offer::UpToDate => {
+            if let Some(fw) = &u.firmware {
+                lines.push(format!("Firmware {} - up to date", fw.trim_start_matches("hid_fi_v")));
+            }
+        }
+        Offer::Unknown => {}
+    }
+    false
+}
+
+/// This app's own update: once, about this computer.
+pub fn companion_update(c: &CompUpd, lines: &mut Vec<String>, actions: &mut Vec<(String, Action)>) {
+    match c {
+        CompUpd::None => {}
+        CompUpd::Available { to, size } => {
+            lines.push(format!("HID-Fi Companion {to} is available ({})", mb(*size)));
+            actions.push((format!("Download Companion {to}"), Action::Update(UpdCmd::GetCompanion)));
+        }
+        CompUpd::Downloading { to } => lines.push(format!("Downloading HID-Fi Companion {to}…")),
+        CompUpd::Ready { to, .. } => {
+            lines.push(format!("HID-Fi Companion {to} is downloaded and checked"));
+            actions.push((format!("Install Companion {to}…"), Action::Update(UpdCmd::OpenInstaller)));
+        }
+        CompUpd::Failed { why } => lines.push(format!("The Companion update did not download: {why}")),
     }
 }
 
@@ -508,6 +657,7 @@ mod tests {
             port: Some(47800),
             name: "Studio PC".into(),
             problem: None,
+            updates: Default::default(),
         }
     }
     fn found() -> BoardState {
@@ -794,5 +944,99 @@ mod tests {
                 assert!(m.tooltip.starts_with("HID-Fi Companion: "));
             }
         }
+    }
+
+    fn with_update(offer: Offer, job: Job) -> View {
+        let mut v = view(found(), Status::Online);
+        v.boards = vec![BoardView { mac: "B81F3FDA1A2C".into(), board: found(), session: Status::Online }];
+        v.updates.boards = vec![BoardUpd { mac: "B81F3FDA1A2C".into(), firmware: Some("hid_fi_v4.0.4".into()),
+                                           offer, job, resumable: None }];
+        v
+    }
+
+    fn offer(over_air: bool, cable_once: bool) -> Offer {
+        Offer::Board { to: "4.1.0".into(), size: 1_534_000, changes: vec![("4.1.0".into(), "- Updates over the air.\n".into())],
+                       security: false, over_air, cable_once }
+    }
+
+    #[test]
+    fn an_update_says_the_versions_the_size_and_what_is_new() {
+        let m = model(&with_update(offer(true, false), Job::Idle));
+        assert!(m.lines.contains(&"Update available: 4.0.4 to 4.1.0 (1.5 MB)".to_string()), "{:?}", m.lines);
+        assert!(m.lines.contains(&"What's new: Updates over the air.".to_string()), "{:?}", m.lines);
+        assert!(m.actions.iter().any(|(l, a)| l == "Update HID-Fi to 4.1.0"
+            && *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: false })));
+    }
+
+    #[test]
+    fn a_board_that_needs_the_cable_says_so_once() {
+        let m = model(&with_update(offer(false, true), Job::Idle));
+        assert!(m.lines.iter().any(|l| l.contains("needs the cable once")));
+        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: true })));
+        assert!(!m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: false })));
+    }
+
+    #[test]
+    fn every_running_step_can_be_cancelled_and_ready_can_restart_now() {
+        for job in [Job::Checking, Job::Downloading { bytes: 1, total: 2, paused: false },
+                    Job::Cable { step: "writing the firmware".into(), bytes: 1, total: 2 }] {
+            let m = model(&with_update(offer(true, false), job.clone()));
+            assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))), "{job:?}");
+            assert!(!m.actions.iter().any(|(l, _)| l.starts_with("Update HID-Fi")), "no second update while one runs: {job:?}");
+        }
+        let m = model(&with_update(offer(true, false), Job::Ready));
+        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::RestartNow("B81F3FDA1A2C".into()))));
+        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))));
+        // While it restarts and proves itself there is nothing to press: a reset now would roll it back.
+        for job in [Job::Restarting, Job::Verifying] {
+            let m = model(&with_update(offer(true, false), job));
+            assert!(!m.actions.iter().any(|(_, a)| matches!(a, Action::Update(_))));
+        }
+    }
+
+    #[test]
+    fn the_paused_download_says_why() {
+        let m = model(&with_update(offer(true, false), Job::Downloading { bytes: 45, total: 100, paused: true }));
+        assert!(m.lines.contains(&"Update: downloading, 45% - paused while you use the board".to_string()), "{:?}", m.lines);
+    }
+
+    #[test]
+    fn failures_and_rollbacks_ask_for_attention_and_say_nothing_was_lost() {
+        let m = model(&with_update(offer(true, false), Job::RolledBack));
+        assert_eq!(m.icon, Icon::Attention);
+        assert!(m.lines.iter().any(|l| l.contains("Nothing was lost")));
+        let m = model(&with_update(offer(true, false), Job::Failed { why: "the board could not reach the release".into() }));
+        assert_eq!(m.icon, Icon::Attention);
+        assert!(m.lines.iter().any(|l| l.contains("keeps the version it has")));
+    }
+
+    #[test]
+    fn a_stopped_cable_update_offers_resume() {
+        let mut v = with_update(offer(false, true), Job::Idle);
+        v.updates.boards[0].resumable = Some("ImageWritten".into());
+        let m = model(&v);
+        assert!(m.actions.iter().any(|(l, _)| l == "Resume the cable update"));
+        assert_eq!(m.icon, Icon::Attention);
+    }
+
+    #[test]
+    fn the_companion_update_is_listed_once_with_several_boards() {
+        let mut v = with_update(Offer::UpToDate, Job::Idle);
+        v.boards.push(BoardView { mac: "DCB4D909F7C8".into(), board: found(), session: Status::Online });
+        v.updates.companion = CompUpd::Available { to: "4.1.0".into(), size: 9_000_000 };
+        let m = model(&v);
+        assert_eq!(m.lines.iter().filter(|l| l.contains("Companion 4.1.0 is available")).count(), 1, "{:?}", m.lines);
+        assert_eq!(m.actions.iter().filter(|(_, a)| *a == Action::Update(UpdCmd::GetCompanion)).count(), 1);
+        v.updates.companion = CompUpd::Ready { to: "4.1.0".into(), path: "/tmp/x.dmg".into() };
+        assert!(model(&v).actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::OpenInstaller)));
+    }
+
+    #[test]
+    fn with_several_boards_each_update_names_its_board() {
+        let mut v = with_update(offer(true, false), Job::Idle);
+        v.boards.push(BoardView { mac: "DCB4D909F7C8".into(), board: found(), session: Status::Online });
+        let m = model(&v);
+        assert!(m.lines.iter().any(|l| l.starts_with("HID-Fi DA1A2C: Update available")), "{:?}", m.lines);
+        assert!(m.actions.iter().any(|(l, _)| l == "Update HID-Fi to 4.1.0 (HID-Fi DA1A2C)"));
     }
 }

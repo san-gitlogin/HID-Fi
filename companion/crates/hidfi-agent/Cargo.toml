@@ -15,7 +15,7 @@ mdns-sd = "0.21.6"
 nusb = "0.2.5"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-ureq = { version = "3.2.1", default-features = false }
+ureq = { version = "3.5.0", default-features = false }
 
 [dev-dependencies]
 getrandom = "0.3.4"

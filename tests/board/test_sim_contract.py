@@ -50,7 +50,7 @@ READ_ONLY = [
     # Updates: where the board stands, and the refusals that change nothing when
     # nothing is in progress (hid_fi/ota.h).
     {"cmd": "ota_status"}, {"cmd": "ota_cancel"}, {"cmd": "ota_install"}, {"cmd": "ota_apply"},
-    {"cmd": "ota_settings"},
+    {"cmd": "ota_settings"}, {"cmd": "ota_source"},          # no url: only reads it
 ]
 
 

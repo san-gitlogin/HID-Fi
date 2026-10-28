@@ -4,13 +4,15 @@
 //! args: STORE_DIR BOARD_URL BOARD_MAC [BOARD_URL BOARD_MAC ...] - one or more
 //! boards plugged into this pretend computer (a computer can have two).
 //! stdin: "unplug" / "plug" (every board), "unplug <MAC>" / "plug <MAC>"
-//! (one), "pair", "quit"
+//! (one), "pair", "quit"; updates (with HIDFI_RELEASES set): "check",
+//! "update <MAC> air|cable", "cancel <MAC>", "restart <MAC>", "get-companion"
 //! stdout: one JSON line per change of what the tray would show.
 
 use hidfi_agent::env::{Browse, UsbList};
 use hidfi_agent::real::UreqHttp;
 use hidfi_companion::service::{self, Cmd, Env};
 use hidfi_companion::store::Store;
+use hidfi_companion::updates::center::UpdCmd;
 use hidfi_core::discovery::UsbDevice;
 use hidfi_stream::pattern::FakeDisplays;
 use std::io::BufRead;
@@ -90,6 +92,8 @@ fn main() {
             Arc::new(move || f.list())
         },
         capture_allowed: Arc::new(|| true),
+        // HIDFI_RELEASES: a release server of the test's own (the update system tests).
+        updates: std::env::var("HIDFI_RELEASES").ok().map(|_| hidfi_companion::updates::center::UpdatesSetup::real()),
     };
     let h = service::start(store, env);
     let view = h.view.clone();
@@ -103,6 +107,14 @@ fn main() {
                     "mac": b.mac, "board": format!("{:?}", b.board), "session": format!("{:?}", b.session),
                 })).collect::<Vec<_>>(),
                 "watching": v.watching, "port": v.port, "problem": v.problem,
+                "updates": {
+                    "latest": v.updates.latest, "problem": v.updates.problem,
+                    "companion": format!("{:?}", v.updates.companion),
+                    "boards": v.updates.boards.iter().map(|b| serde_json::json!({
+                        "mac": b.mac, "firmware": b.firmware, "offer": format!("{:?}", b.offer),
+                        "job": format!("{:?}", b.job), "resumable": b.resumable,
+                    })).collect::<Vec<_>>(),
+                },
             })
             .to_string();
             if line != last {
@@ -136,6 +148,34 @@ fn main() {
         if let Some(m) = line.trim().strip_prefix("plug ") {
             set(Some(m), true);
             continue;
+        }
+        let words: Vec<&str> = line.split_whitespace().collect();
+        let upd = |c: UpdCmd| {
+            let _ = h.tx.send(Cmd::Update(c));
+        };
+        let mac = |w: &str| w.replace(':', "").to_uppercase();
+        match words.as_slice() {
+            ["check"] => {
+                upd(UpdCmd::CheckNow);
+                continue;
+            }
+            ["update", m, how] => {
+                upd(UpdCmd::Update { mac: mac(m), cable: *how == "cable" });
+                continue;
+            }
+            ["cancel", m] => {
+                upd(UpdCmd::Cancel(mac(m)));
+                continue;
+            }
+            ["restart", m] => {
+                upd(UpdCmd::RestartNow(mac(m)));
+                continue;
+            }
+            ["get-companion"] => {
+                upd(UpdCmd::GetCompanion);
+                continue;
+            }
+            _ => {}
         }
         match line.trim() {
             "unplug" => set(None, false),

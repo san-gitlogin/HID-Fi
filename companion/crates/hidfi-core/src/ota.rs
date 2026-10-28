@@ -15,6 +15,11 @@ use sha2_011::{Digest, Sha256};
 pub const COMP_API_MIN: u32 = 1;
 pub const COMP_API_MAX: u32 = 1;
 
+/// The public keys releases are signed with (uncompressed P-256). Filled at the
+/// first signed release (docs/OTA.md step 9); until then nothing is trusted and
+/// every manifest is refused - the safe default, never a placeholder key.
+pub const RELEASE_KEYS: &[[u8; 65]] = &[];
+
 /// `{"key_id": "<16 hex>", "sig": "<128 hex: r || s>"}`
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ManifestSig {
@@ -139,6 +144,167 @@ pub fn verdicts(board: &BoardStatus, this_companion: &str, latest: Option<&Lates
     out
 }
 
+/// One downloadable file named by a signed manifest.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Asset {
+    pub name: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct ChangelogSection {
+    pub version: String,
+    pub text: String,
+}
+
+/// The Companion part of a release: its version and one installer per system
+/// ("macos", "windows", "linux"), each pinned by size and SHA-256.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct CompanionRelease {
+    pub version: String,
+    #[serde(default)]
+    pub assets: std::collections::BTreeMap<String, Asset>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct ApiRange {
+    pub min: u32,
+    pub max: u32,
+}
+
+/// A release, read from a manifest whose signature was checked first.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Release {
+    pub format: u32,
+    pub product: String,
+    pub chip: String,
+    pub version: String,
+    pub firmware: String,
+    pub released: String,
+    pub support_until: String,
+    pub image: Asset,
+    pub min_from: String,
+    #[serde(default)]
+    pub security: bool,
+    #[serde(default)]
+    pub risk: String,
+    pub comp_api: ApiRange,
+    #[serde(default)]
+    pub changelog: Vec<ChangelogSection>,
+    pub companion: Option<CompanionRelease>,
+    /// The two-slot partition table (0xC00 bytes): what a cable switch writes.
+    pub table: Option<Asset>,
+}
+
+/// Why a release was not accepted. None of these is ever shown as "available".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReleaseError {
+    /// Not signed by a key this build trusts, or not the signed bytes.
+    BadSignature,
+    /// Signed, but not a manifest this build understands (format, product, chip, fields).
+    NotForUs(String),
+    /// The image bytes are not the ones the manifest pins.
+    ImageMismatch,
+}
+
+pub const MANIFEST_FORMAT: u32 = 1;
+pub const MANIFEST_CAP: usize = 24 * 1024;
+
+/// The manifest's own bytes and its signature file, as downloaded. The signature
+/// is checked before a single field is believed.
+pub fn read_release(manifest: &[u8], sig_file: &[u8], trusted: &[[u8; 65]]) -> Result<Release, ReleaseError> {
+    if manifest.len() > MANIFEST_CAP {
+        return Err(ReleaseError::NotForUs("manifest too large".into()));
+    }
+    let sig: ManifestSig = serde_json::from_slice(sig_file).map_err(|_| ReleaseError::BadSignature)?;
+    if !verify_manifest(manifest, &sig, trusted) {
+        return Err(ReleaseError::BadSignature);
+    }
+    let r: Release = serde_json::from_slice(manifest).map_err(|_| ReleaseError::NotForUs("missing field".into()))?;
+    let bad = |why: &str| Err(ReleaseError::NotForUs(why.into()));
+    if r.format != MANIFEST_FORMAT {
+        return bad("unknown manifest format");
+    }
+    if r.product != "hid-fi" || r.chip != "esp32s3" {
+        return bad("not a HID-Fi ESP32-S3 release");
+    }
+    let (Some(v), Some(from)) = (plain_version(&r.version), plain_version(&r.min_from)) else {
+        return bad("unreadable version");
+    };
+    if r.firmware != format!("hid_fi_v{}", r.version) || from >= v {
+        return bad("inconsistent versions");
+    }
+    if !is_sha256_hex(&r.image.sha256) || r.image.size == 0 || !safe_name(&r.image.name) {
+        return bad("unusable image entry");
+    }
+    if let Some(tb) = &r.table {
+        if !is_sha256_hex(&tb.sha256) || tb.size != 0xC00 || !safe_name(&tb.name) {
+            return bad("unusable table entry");
+        }
+    }
+    if let Some(c) = &r.companion {
+        if plain_version(&c.version).is_none()
+            || c.assets.values().any(|a| !is_sha256_hex(&a.sha256) || a.size == 0 || !safe_name(&a.name))
+        {
+            return bad("unusable companion entry");
+        }
+    }
+    Ok(r)
+}
+
+/// A manifest's versions are bare: "4.1" or "4.1.0" - no "v", no suffix.
+fn plain_version(s: &str) -> Option<(u32, u32, u32)> {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+        return None;
+    }
+    parse_version(s)
+}
+
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// A file name, never a path: it is joined to the source URL and to a folder.
+fn safe_name(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 96 && s != "." && s != ".."
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// True when `bytes` are exactly the file the manifest pinned.
+pub fn asset_matches(a: &Asset, bytes: &[u8]) -> bool {
+    bytes.len() as u64 == a.size && hex::encode(Sha256::digest(bytes)) == a.sha256
+}
+
+impl Release {
+    pub fn latest(&self) -> Latest {
+        Latest {
+            firmware: self.version.clone(),
+            board_comp_api: (self.comp_api.min, self.comp_api.max),
+            companion: self.companion.as_ref().map(|c| c.version.clone()),
+        }
+    }
+
+    /// The board can take this release over the air only from min_from up.
+    pub fn reachable_from(&self, running: &str) -> bool {
+        match (parse_version(running), parse_version(&self.min_from)) {
+            (Some(r), Some(m)) => r >= m,
+            _ => false,
+        }
+    }
+
+    /// The sections newer than `running`, newest first (what the person is shown).
+    pub fn changes_since(&self, running: &str) -> Vec<&ChangelogSection> {
+        let Some(r) = parse_version(running) else { return Vec::new() };
+        self.changelog.iter().filter(|s| parse_version(&s.version).is_some_and(|v| v > r)).collect()
+    }
+
+    /// This system's Companion installer, when the release has one.
+    pub fn companion_asset(&self, os: &str) -> Option<&Asset> {
+        self.companion.as_ref()?.assets.get(os)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +355,67 @@ mod tests {
         assert!(verify_manifest(&m, &sig, &[key(&v, "untrusted_public_key"), key(&v, "test_public_key")]));
         assert!(!verify_manifest(&m, &sig, &[key(&v, "untrusted_public_key")]));
         assert!(!verify_manifest(&m, &sig, &[]));
+    }
+
+    #[test]
+    fn releases_are_accepted_or_refused_as_the_release_tool_decides() {
+        let v = vectors();
+        let rv: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let trusted = [key(&v, "test_public_key")];
+        for c in rv["cases"].as_array().unwrap() {
+            let m = b64(c["manifest_b64"].as_str().unwrap());
+            let sig = serde_json::to_vec(&c["sig"]).unwrap();
+            let got = read_release(&m, &sig, &trusted);
+            match c["refused"].as_str() {
+                None => assert!(got.is_ok(), "{}: {:?}", c["name"], got.err()),
+                Some(why) => assert_eq!(got.err(), Some(ReleaseError::NotForUs(why.into())), "{}", c["name"]),
+            }
+        }
+    }
+
+    #[test]
+    fn a_release_is_read_only_after_its_signature() {
+        let v = vectors();
+        let rv: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let c = &rv["cases"][0];
+        let m = b64(c["manifest_b64"].as_str().unwrap());
+        let sig = serde_json::to_vec(&c["sig"]).unwrap();
+        assert_eq!(read_release(&m, &sig, &[key(&v, "untrusted_public_key")]), Err(ReleaseError::BadSignature));
+        assert_eq!(read_release(&m, b"not json", &[key(&v, "test_public_key")]), Err(ReleaseError::BadSignature));
+        let mut changed = m.clone();
+        let at = changed.windows(5).position(|w| w == b"4.1.0").unwrap();
+        changed[at] = b'9';
+        assert_eq!(read_release(&changed, &sig, &[key(&v, "test_public_key")]), Err(ReleaseError::BadSignature));
+        let big = vec![b' '; MANIFEST_CAP + 1];
+        assert!(matches!(read_release(&big, &sig, &[key(&v, "test_public_key")]), Err(ReleaseError::NotForUs(_))));
+    }
+
+    #[test]
+    fn what_a_release_tells_the_companion() {
+        let v = vectors();
+        let rv: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let c = &rv["cases"][0];
+        let r = read_release(&b64(c["manifest_b64"].as_str().unwrap()), &serde_json::to_vec(&c["sig"]).unwrap(),
+                             &[key(&v, "test_public_key")]).unwrap();
+        let image = b64(v["image_b64"].as_str().unwrap());
+        assert!(asset_matches(&r.image, &image));
+        let mut flipped = image.clone();
+        flipped[100] ^= 1;
+        assert!(!asset_matches(&r.image, &flipped), "one bit changed");
+        assert!(!asset_matches(&r.image, &image[..image.len() - 1]), "one byte short");
+        let inst = b64(rv["installer_b64"].as_str().unwrap());
+        assert!(asset_matches(r.companion_asset("macos").unwrap(), &inst));
+        assert!(r.companion_asset("windows").is_none(), "no installer: never a guess at another one");
+        assert!(asset_matches(r.table.as_ref().unwrap(), &b64(rv["table_b64"].as_str().unwrap())));
+        assert!(r.reachable_from("hid_fi_v4.0.4") && !r.reachable_from("hid_fi_v4.0.3"));
+        assert!(!r.reachable_from("garbage"));
+        assert_eq!(r.changes_since("hid_fi_v4.0.4").iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), ["4.1.0"]);
+        assert!(r.changes_since("hid_fi_v4.1.0").is_empty());
+        let l = r.latest();
+        assert_eq!((l.firmware.as_str(), l.companion.as_deref(), l.board_comp_api), ("4.1.0", Some("4.1.0"), (1, 1)));
     }
 
     #[test]

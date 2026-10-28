@@ -118,6 +118,9 @@ pub struct RawReply {
     pub chal: Option<String>,
     #[serde(default)]
     pub retry_ms: Option<u64>,
+    /// An update request's answer (op "ota"): what was done, if anything.
+    #[serde(default)]
+    pub done: Option<String>,
 }
 
 /// Why the board said no, in words the tray can show.

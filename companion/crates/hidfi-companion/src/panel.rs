@@ -199,6 +199,7 @@ mod tests {
             port: Some(47800),
             name: "Studio PC".into(),
             problem: None,
+            updates: Default::default(),
         };
         let m = menu::model(&v);
         let j: serde_json::Value = serde_json::from_str(&view_json(&m, &v)).unwrap();

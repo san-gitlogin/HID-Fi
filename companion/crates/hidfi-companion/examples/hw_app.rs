@@ -37,6 +37,7 @@ fn main() {
             Arc::new(move || f.list())
         },
         capture_allowed: Arc::new(|| true),
+        updates: None,
     };
     let h = service::start(store, env);
     let view = h.view.clone();

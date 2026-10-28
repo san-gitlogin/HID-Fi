@@ -238,18 +238,31 @@ static size_t otaTrustedKeys(OtaKey* out, size_t max) {
     return n;
 }
 
+// The Companion's relay, for one check (RAM only, set by compOta "from"). Set on
+// the loop's core, taken on the worker's: always under otaMux.
 static String otaRelaySource;
-static String otaSource() {
-    // The Companion's relay, for one check (RAM only, set by compOta "from").
-    if (otaRelaySource.length()) {
-        String s = otaRelaySource;
-        otaRelaySource = "";
-        return s;
-    }
+
+static String otaStoredSource() {
     preferences.begin("ota", true);
     String s = preferences.getString("src", "");
     preferences.end();
     return s.length() ? s : String(OTA_DEFAULT_SOURCE);
+}
+
+// Where this check reads from - the relay once if one is set, else the setting.
+// Only the check calls it: the install reads job.source, captured here.
+static String otaSource() {
+    xSemaphoreTake(otaMux, portMAX_DELAY);
+    String s = otaRelaySource;
+    otaRelaySource = "";
+    xSemaphoreGive(otaMux);
+    return s.length() ? s : otaStoredSource();
+}
+
+static void otaSetRelay(const String& s) {
+    xSemaphoreTake(otaMux, portMAX_DELAY);
+    otaRelaySource = s;
+    xSemaphoreGive(otaMux);
 }
 
 // One GET into a PSRAM buffer, at most `max` bytes. Follows redirects (GitHub
@@ -722,6 +735,11 @@ void handleOtaSettings(const JsonDocument& in) {
 // The signature rules do not change - only keys the firmware trusts count.
 void handleOtaSource(const JsonDocument& in, bool fromSerial) {
     if (!fromSerial) return otaReply("ota_source", "usb_only");
+    if (in["url"].isNull()) {                 // no url: only read it
+        StaticJsonDocument<256> d;
+        d["status"] = "ok"; d["reply"] = "ota_source"; d["url"] = otaStoredSource();
+        return sendJson(d);
+    }
     String url = String(in["url"] | "");
     if (url.length() && !url.endsWith("/")) url += "/";
     if (url.length() && !url.startsWith("http://") && !url.startsWith("https://")) return otaReply("ota_source", "bad_url");
@@ -729,7 +747,7 @@ void handleOtaSource(const JsonDocument& in, bool fromSerial) {
     if (url.length()) preferences.putString("src", url); else preferences.remove("src");
     preferences.end();
     StaticJsonDocument<256> d;
-    d["status"] = "ok"; d["reply"] = "ota_source"; d["url"] = otaSource();
+    d["status"] = "ok"; d["reply"] = "ota_source"; d["url"] = otaStoredSource();
     sendJson(d);
 }
 
@@ -798,7 +816,6 @@ void handleOtaStatus() {
 // be signed by a key the firmware trusts.
 #include "soc/rtc_cntl_reg.h"
 
-// otaRelaySource (declared above otaSource): RAM only, one check - where the Companion serves a release
 static uint32_t otaDownloadModeAt = 0;  // a restart into the ROM loader, after the reply has left
 
 static void compOtaReply(const char* act, const char* done) {
@@ -820,9 +837,7 @@ static void compOta(const JsonDocument& in, uint32_t ip) {
     int i = compFindPaired(id);
     if (i < 0) { compRefuse(404, "unknown_pc", "This computer is not paired"); return; }
     CompPaired& c = compPaired[i];
-    bool fresh = c.chalLive && millis() - c.chalAt <= COMP_CHAL_MS && comp_ct_equal(c.chal, chal, 16);
-    c.chalLive = false; comp_wipe(c.chal, 16);
-    if (!fresh) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
+    if (!compChalTake(c, chal)) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
     char msg[260];
     char idh[33]; comp_hex(id, 16, idh);
     snprintf(msg, sizeof(msg), "ota|%s|%s|%s|%s", idh, act, url, ch);
@@ -837,10 +852,11 @@ static void compOta(const JsonDocument& in, uint32_t ip) {
         // Only the requesting computer itself may serve the release - never a third host.
         String prefix = "http://" + IPAddress(ip).toString() + ":";
         if (!String(url).startsWith(prefix)) { compRefuse(400, "bad_request", "A relay must be this computer"); return; }
-        otaRelaySource = url;
-        if (!otaRelaySource.endsWith("/")) otaRelaySource += "/";
+        String relay = url;
+        if (!relay.endsWith("/")) relay += "/";
+        otaSetRelay(relay);
         why = otaActCheck();
-        if (why) otaRelaySource = "";
+        if (why) otaSetRelay("");
     } else if (!strcmp(act, "install")) {
         why = otaActInstall();
     } else if (!strcmp(act, "cancel")) {

@@ -711,7 +711,7 @@ gates like every other command; none is LAN-safe.
 | `ota_cancel` | - | `done`: `stopping` (checking/downloading/verifying - nothing changed), `switched_back` (ready - the boot choice is put back), `nothing`. Refused with `switching` only during the 0.1 s otadata write |
 | `ota_apply` | - | Restarts into a ready update as soon as the keyboard and mouse have been idle 5 s (`waiting_for_idle`), releasing everything held first. Refused: `not_ready` |
 | `ota_settings` | `auto`, `auto_security` (both optional booleans) | `auto`: look for updates by itself (default on). `auto_security`: install releases marked security by itself (default off - every other install needs `ota_install`). Replies with both |
-| `ota_source` | `url` | **USB only.** Where to look for releases, for tests; empty restores GitHub. The signature rules do not change |
+| `ota_source` | `url`? | **USB only.** Where to look for releases, for tests; empty restores GitHub, no `url` only reads it. A Companion relay (`/api/companion` op `ota`, act `from`) is never shown here: it lives in RAM for one check. The signature rules do not change |
 
 `status` adds `ota_step` (`idle`, `checking`, `downloading`, `verifying`,
 `switching`, `ready`), `ota_bytes`/`ota_total`, `ota_available` (the version a

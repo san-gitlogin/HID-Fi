@@ -307,7 +307,7 @@ the chip's ROM - never guessed (see *identity* below). For each board:
 | Plugged in | How the Companion reaches the ROM bootloader | Notes |
 |---|---|---|
 | COM (CH343) | DTR/RTS reset, as `flash_esp.sh` does | Preferred when present: independent of the HID port. |
-| native USB only, firmware running | asks the board (paired, signed request) to restart into download mode; it comes back as USB-Serial-JTAG `303A:1001` | Needs a network path to the board; to be proven on hardware (reset back out of download mode: esptool's watchdog reset). |
+| native USB only, firmware running | asks the board (paired, signed request `ota` / `download_mode`) to restart into the ROM loader; it comes back as USB-Serial-JTAG `303A:1001` with the MAC as its serial number - the port is found by MAC, never guessed | Needs a network path to the board. Out again: the one register write the flasher can make (`SafeWrite::ClearForceDownload`: `RTC_CNTL_OPTION1_REG` bit 0), then the RTS reset. |
 | native USB only, no network or firmware broken | guides the person: hold BOOT, tap RESET, release BOOT | BOOT here only enters the ROM bootloader; it never erases anything (AGENTS: no button erases data). |
 | both | COM | The keyboard and mouse on the native port disappear while flashing; the Companion says so before starting - on DA1A2C that is the Mac's keyboard. |
 
@@ -324,8 +324,11 @@ Decided 2026-10-28 after reading espflash 4.6.0 and esptool 5.6.0 at the source:
   protocol with a **closed command list**: SYNC, READ_REG, SPI_ATTACH,
   SPI_SET_PARAMS, FLASH_BEGIN/DATA/END and their compressed forms,
   SPI_FLASH_MD5, READ_FLASH, CHANGE_BAUDRATE, MEM_BEGIN/DATA/END (only to load
-  the stub), GET_SECURITY_INFO. WRITE_REG only to named reset/watchdog
-  registers. ERASE_FLASH is not in the list. A test pushes every other command
+  the stub), GET_SECURITY_INFO. WRITE_REG only as `SafeWrite`, a closed list
+  with one entry - clear `FORCE_DOWNLOAD_BOOT` (0x6000812C, mask 1, value 0);
+  no address or value comes from outside, a test proves the list never reaches
+  the eFuse block and that `Op::WriteReg` is built in exactly one place.
+  ERASE_FLASH is not in the list. A test pushes every other command
   and register write through the client and expects a refusal before a byte
   leaves the computer - so burning an eFuse is impossible by construction, not
   by care.
@@ -345,11 +348,25 @@ written and the board is reset back into its firmware:
 - the chip says ESP32-S3 and 16 MB flash;
 - the MAC read from the ROM equals the board the person chose (a second HID-Fi,
   or any other CH343 / Espressif device, never matches);
+- a COM port is used only when it is the only HID-Fi COM port (CH343) on this
+  computer: reading a port's MAC resets that board, so with two the Companion
+  asks for the other board's COM cable to come out rather than reset a board
+  nobody chose (the native path never has this problem: the loader is named by
+  its MAC);
+- the board is not proving a new firmware (opening its port would reset it and
+  roll that update back) and no update over the air is running;
 - the flash holds a HID-Fi image (the app descriptor at the running slot) - an
   ESP32-S3 running someone else's project is refused, with no override;
 - the image to write is a signed HID-Fi release for this chip;
-- a backup of 0x0-0x10000 (bootloader, table, NVS, `otadata`) has been read and
-  saved, encrypted with a key kept in the OS keychain - it holds the vault.
+- a backup of 0x0-0x10000 (bootloader, table, NVS, `otadata`) has been read.
+  **It stays in memory and never reaches the disk** (decided 2026-10-28, replacing
+  "encrypted on disk"): NVS holds the vault, and no step of either path writes
+  NVS - the sweep proves it byte for byte. What the journal needs to undo a step
+  (the old table and `otadata`) holds no personal data and is in the journal.
+  Before the board restarts, the flasher reads NVS again and compares it with the
+  backup; a single differing byte puts the backup back and stops
+  (`SettingsRestored`). A copy of the vault on the computer would be a new place
+  for it to leak, for no case the sweep leaves open.
 
 ### Over the cable: the journal (checkpoints)
 
@@ -629,10 +646,61 @@ The procedure, as it will run on DA1A2C:
    the sweep: a restart between the switch and the table lets v4.0.4 mark the new
    choice valid - the table step now re-chooses it NEW; and a half-written table had
    no slots, which crashed the otadata parser - it never panics on board data now.
-   Left: the Companion's UI (per-board versions, verdicts from `hidfi-core/ota.rs`,
-   Update buttons), the serial port and its journal/backup storage (backup encrypted,
-   key in the OS keychain), the LAN relay, native-USB download mode, real-board runs.
-9. [ ] Release tooling: signing, manifest, SBOM, support-period date;
+   Then, the same day:
+   - **the Companion's signed update requests** (`/api/companion` op `ota`: check,
+     install, cancel, apply, `from` - a relay on the requesting computer only, RAM,
+     one check - and `download_mode`), proven by challenge and HMAC like a heartbeat;
+     a shared vector checked by Rust, Python and the board's mbedTLS; the dashboard
+     and the Companion share one set of action functions. On the board
+     (`tests/board/test_ota_download.py`): check, install, cancel, a replayed or
+     reused proof refused, a relay that is not the requester refused, the relay used
+     for one check only, `download_mode` refused while an update runs;
+   - **cable updates on the real board, by the Companion's own flasher**
+     (`hidfi-flash` over a real serial port): DA1A2C updated on two slots, then put
+     back to the published v4.0.4 *with its single-slot table* and switched by the
+     flasher - every checkpoint journaled, data identical by hash both times. Found
+     by the unplug sweep on the way: a restart after the switch put the new firmware
+     on probation, and the resume's own reset ended it - the flasher re-chooses the
+     new slot NEW before restarting. Settings are re-read before every restart and
+     put back from the in-memory backup if one byte differs;
+   - **native USB**: the one register write (`SafeWrite::ClearForceDownload`), the
+     loader found by its MAC, simulated end to end;
+   - **the Companion's update centre** (`hidfi-companion/src/updates/`): the release
+     read signature-first (`hidfi-core` `read_release`, held to
+     `tests/vectors/ota_release_v1.json` with the release tool), an offer per board
+     (versions, size, what changed, over the air or by cable, the cable once for a
+     single-slot board, which side to update first), over-the-air jobs with the
+     relay, cable jobs with their journal and resume, the Companion's own installer
+     checked against the manifest and opened only on request. The tray and window
+     show it in plain words with one button per next step (`menu.rs` tests). A job
+     fails only when the board stops moving for 10 minutes with nothing to wait for -
+     a ready update waits for an idle board, a download pauses while someone types,
+     both as long as they need (a fixed 45-minute limit was wrong and was removed);
+   - the manifest now pins the two-slot partition table (`table`), so a cable
+     switch writes exactly the published bytes;
+   - **found end to end** (the real Companion against DA1A2C,
+     `tests/board/test_ota_companion_app.py`): the board kept one challenge per
+     computer, and the Companion's heartbeat and an update asked at the same time -
+     the update was refused as "expired". Four single-use challenges per computer
+     now (`COMP_CHALS`), modelled and unit-tested; the Companion retries a stale
+     challenge once.
+   - ureq 3.4.2 -> **3.5.0** (3.4.3 and 3.5.0 carry TLS and advisory fixes; checked
+     2026-10-28), rustls with the bundled roots for GitHub, in the Companion only.
+9. [~] Release tooling: signing, manifest, SBOM, support-period date;
    CHANGELOG, SECURITY.md, README.
+   Built 2026-10-28: `tools/ota_release.py release` (manifest with the table and the
+   Companion installers, signature, verify) behind a gate that refuses - not warns -
+   an image trusting the TEST key, an image without the release key it is signed
+   with (every board on it would refuse every later update), a test build, and an
+   NVS format change from `min_from` (`tools/nvs_format.json`: 0xfe in IDF 5.5.1,
+   5.5.5, 5.5.6, read at the source; an IDF not on record is refused until read).
+   `tools/release_history.json` records what each release was built on - the
+   published v4.0.4 is core 3.3.1 / IDF 5.5.1 (a first draft said 3.3.12, which
+   would have compared the wrong IDF; a test now ties each release to the cores
+   table). `tools/sbom.py`: CycloneDX 1.7 (current, 1.7.2 of 2026-09-17) for the
+   firmware and the Companion (522 crates, each with its registry checksum).
+   `tools/make_release.sh` writes the OTA files when `HIDFI_RELEASE_KEY` is set.
+   Left: the release keys (the owner decides where the offline backup lives), the
+   keys embedded in firmware and Companion, CHANGELOG, SECURITY.md, README.
 10. [ ] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
    owner's word.

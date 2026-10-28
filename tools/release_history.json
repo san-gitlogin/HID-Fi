@@ -1,0 +1,10 @@
+{
+ "_about": "Every published firmware release and what it was built on, plus the ESP-IDF each pinned core ships (read at the source). The release gate reads the IDF of the oldest version a new release may update from (its min_from) and refuses an over-the-air release whose NVS format differs (docs/OTA.md, 'NVS format and rollback'). Add a line for each release; never edit an old one.",
+ "releases": {
+  "4.0.4": {"core": "3.3.1", "idf": "5.5.1", "date": "2026-10-27"}
+ },
+ "cores": {
+  "3.3.1": "5.5.1",
+  "3.3.12": "5.5.5"
+ }
+}

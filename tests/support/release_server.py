@@ -26,7 +26,9 @@ class ReleaseServer:
 
             def do_GET(self):
                 name = self.path.rsplit("/", 1)[-1]
-                body = srv.files.get(name)
+                # Only at the root - the one place url_for points a board. Anywhere
+                # else is "no release here" (a test's wrong source must look wrong).
+                body = srv.files.get(name) if self.path == "/" + name else None
                 if body is None:
                     self.send_response(404); self.end_headers()
                     srv.log.append((name, None, 404, 0))

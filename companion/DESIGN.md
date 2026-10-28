@@ -97,6 +97,30 @@ Every 20 s (1 s while a viewer is waiting):
 The board records the **source IP of the request** (not a claimed one), port, fp,
 tn and last-seen, in RAM only. It counts as online for 60 s after a beat.
 
+## Update requests (docs/OTA.md)
+
+The Companion acts on updates for the person at this computer with the same
+proof as a heartbeat - a one-use challenge, then
+`{op:"ota", id, act, url, chal, mac}` with
+`mac = HMAC-SHA256(K, "ota|" + id + "|" + act + "|" + url + "|" + chal)`
+(shared vector: `vectors/pairing_v1.json` "ota"). `act` is one of:
+
+- `check`, `install`, `cancel`, `apply` - the same actions as the dashboard's
+  Updates card (one implementation in `hid_fi/ota.h`);
+- `from` - `url` is a release served by **this computer** (the board refuses any
+  other host than the request's source address), held in RAM for one check: the
+  board has no internet, the Companion has. The board still checks the manifest's
+  signature and the image's SHA-256 itself; the Companion is a courier;
+- `download_mode` - restart into the ROM loader for a cable update over the
+  native USB port (refused while the board proves a new firmware or an update
+  runs). The loader then shows up with the MAC as its USB serial number, so the
+  Companion writes to exactly this board; it clears "force download" before the
+  final reset.
+
+Refusals are 409 with the board's own word (`busy`, `verifying`,
+`nothing_to_install`, `not_ready`, ...); a stale or wrong proof is 401 as for a
+heartbeat. `url` is empty except for `from` and at most 160 characters.
+
 ## Viewer tickets
 
 The dashboard sends `screen_ticket {id}`. The board makes `vn` (16 random bytes)

@@ -96,6 +96,7 @@ fn main() {
         source: Arc::new(service::real_source),
         displays: Arc::new(hidfi_stream::display::list),
         capture_allowed: Arc::new(service::capture_allowed),
+        updates: Some(hidfi_companion::updates::center::UpdatesSetup::real()),
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");
     // Not paired yet: the window opens by itself to say what to do.

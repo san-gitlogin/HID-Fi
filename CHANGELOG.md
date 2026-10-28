@@ -30,6 +30,33 @@ the home network it joined. **Reflash every board** once this is released.
   is built from; each one that does not reach HID-Fi is recorded with the
   reason in `tools/dep_watch_ack.json`.
 
+### Added: updates
+
+- **Updates over the air.** The board checks for releases (on by default, never
+  installs by itself), shows what changed since the version it runs and how big
+  it is, and installs on *Update now* in Settings → Updates. The release is
+  signed; the board checks the signature, then the firmware's SHA-256 while
+  downloading, after writing and by reading it back. Typing and the pointer stay
+  as quick as ever during a download: it pauses while you use the board.
+- **It goes back by itself.** A new version starts on probation and must bring
+  up USB and the network within a few minutes, or the board restarts into the
+  version it had. Settings, PINs, the vault and macros are never part of an
+  update. Cancel works at every step, including after the download.
+- **Two firmware slots.** The flash is laid out for updates now. Your settings
+  stay exactly where they were; the flashers and the Companion switch an older
+  board once, by cable, keeping everything (proven on two boards, compared by
+  hash).
+- **The Companion handles updates** for every board on its computer: the version
+  each runs, whether board and Companion still match, what is new - and it
+  updates over WiFi, serves the release to a board that has no internet, or
+  updates by cable when WiFi cannot (always for a board on v4.0.4 or earlier).
+  Cable updates are recorded step by step: a cancel puts everything back, an
+  interrupted one resumes. It downloads its own new version, checked against the
+  signed release, and opens it when you ask.
+- **A published support period**: security fixes for the latest version until at
+  least a date one year after each release (README, SECURITY.md).
+- Releases carry SBOMs (CycloneDX 1.7) for the firmware and the Companion.
+
 ### Changed
 
 - The firmware uses about 16 KB more RAM (USB host buffers the new core links

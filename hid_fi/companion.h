@@ -30,6 +30,7 @@
 #define COMP_PENDING_MS   120000UL   // an unanswered pairing request is forgotten 2 min after its computer stops asking
 #define COMP_ONLINE_MS    60000UL    // a computer counts as online for 60 s after a heartbeat
 #define COMP_CHAL_MS      30000UL
+#define COMP_CHALS        4
 #define COMP_CODE_TRIES   3
 #define COMP_RATE_SLOTS   8
 #define COMP_RATE_WINDOW  5000UL
@@ -64,9 +65,12 @@ struct CompPaired {
     char     fp[65];
     char     tn[33];
     uint32_t seenAt;
-    uint8_t  chal[16];
-    uint32_t chalAt;
-    bool     chalLive;
+    // Live challenges: a few at once, because one Companion asks from more than
+    // one place (its heartbeat and an update can overlap - found end to end, a
+    // single slot made the second one "expired"). Each is single use.
+    uint8_t  chal[COMP_CHALS][16];
+    uint32_t chalAt[COMP_CHALS];
+    bool     chalLive[COMP_CHALS];
 };
 
 struct CompRate { uint32_t ip; uint32_t windowAt; uint16_t count; };
@@ -170,7 +174,8 @@ void compTick() {
     for (auto& p : compPending)
         if (p.phase != CP_FREE && millis() - p.at > COMP_PENDING_MS) compPendingFree(p);
     for (auto& c : compPaired)
-        if (c.chalLive && millis() - c.chalAt > COMP_CHAL_MS) { c.chalLive = false; comp_wipe(c.chal, 16); }
+        for (int s = 0; s < COMP_CHALS; s++)
+            if (c.chalLive[s] && millis() - c.chalAt[s] > COMP_CHAL_MS) { c.chalLive[s] = false; comp_wipe(c.chal[s], 16); }
 }
 
 // ---- the app's endpoint: POST /api/companion ----
@@ -299,15 +304,39 @@ static void compReveal(const JsonDocument& in) {
     compReplyState(id);
 }
 
+// A new challenge in a free slot, else in place of the oldest.
+static void compChalIssue(CompPaired& c, uint8_t out[16]) {
+    int s = 0;
+    for (int k = 0; k < COMP_CHALS; k++) {
+        if (!c.chalLive[k] || millis() - c.chalAt[k] > COMP_CHAL_MS) { s = k; break; }
+        if ((int32_t)(c.chalAt[k] - c.chalAt[s]) < 0) s = k;
+    }
+    esp_fill_random(c.chal[s], 16);
+    c.chalAt[s] = millis(); c.chalLive[s] = true;
+    memcpy(out, c.chal[s], 16);
+}
+
+// True when `chal` is one of this computer's live challenges - which is then used
+// up, whatever the proof turns out to be, so a request can never be replayed.
+static bool compChalTake(CompPaired& c, const uint8_t chal[16]) {
+    bool found = false;
+    for (int s = 0; s < COMP_CHALS; s++) {
+        bool hit = c.chalLive[s] && millis() - c.chalAt[s] <= COMP_CHAL_MS && comp_ct_equal(c.chal[s], chal, 16);
+        if (hit) { c.chalLive[s] = false; comp_wipe(c.chal[s], 16); found = true; }
+    }
+    return found;
+}
+
 static void compChal(const JsonDocument& in) {
     uint8_t id[16];
     if (!comp_hex_parse(in["id"] | "", id, 16)) { compRefuse(400, "bad_request", "Malformed id"); return; }
     int i = compFindPaired(id);
     if (i < 0) { compRefuse(404, "unknown_pc", "This computer is not paired"); return; }
     CompPaired& c = compPaired[i];
-    esp_fill_random(c.chal, 16);
-    c.chalAt = millis(); c.chalLive = true;
-    char hx[33]; comp_hex(c.chal, 16, hx);
+    uint8_t ch[16];
+    compChalIssue(c, ch);
+    char hx[33]; comp_hex(ch, 16, hx);
+    comp_wipe(ch, 16);
     JsonDocument d; d["status"] = "ok"; d["chal"] = hx;
     compReply(200, d);
 }
@@ -328,9 +357,7 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     CompPaired& c = compPaired[i];
     // A challenge is good for one heartbeat, right or wrong, so a recorded
     // heartbeat can never be replayed.
-    bool fresh = c.chalLive && millis() - c.chalAt <= COMP_CHAL_MS && comp_ct_equal(c.chal, chal, 16);
-    c.chalLive = false; comp_wipe(c.chal, 16);
-    if (!fresh) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
+    if (!compChalTake(c, chal)) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
     char msg[200];
     char idh[33]; comp_hex(id, 16, idh);
     snprintf(msg, sizeof(msg), "beat|%s|%ld|%s|%s|%s", idh, port, fp, tn, ch);

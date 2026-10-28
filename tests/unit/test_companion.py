@@ -363,3 +363,35 @@ def test_unknown_acts_and_long_urls_are_refused(board, act, url):
     app = pair(board)
     r = app.ota(act, url)
     assert r["status"] == "error" and r["reply"] == "bad_request"
+
+
+def test_a_heartbeat_and_an_update_can_overlap(board):
+    """Found end to end: one Companion asks for challenges from its heartbeat and
+    from an update at the same time; a single slot made the first one "expired"."""
+    app = pair(board)
+    _, r1 = app._call(op="chal", id=app.id)
+    _, r2 = app._call(op="chal", id=app.id)
+    m2 = cs.mac(app.key, f"ota|{app.id}|check||{r2['chal']}")
+    assert app._call(op="ota", id=app.id, act="check", url="", chal=r2["chal"], mac=m2)[1]["status"] == "ok"
+    m1 = cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{r1['chal']}")
+    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=r1["chal"], mac=m1)[1] == {"status": "ok"}
+
+
+def test_a_fifth_challenge_replaces_the_oldest(board):
+    app = pair(board)
+    chals = [app._call(op="chal", id=app.id)[1]["chal"] for _ in range(cs.CHALS + 1)]
+    beat = lambda ch: app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=ch,
+                                mac=cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{ch}"))[1]
+    assert beat(chals[0])["reply"] == "stale_chal", "the oldest went"
+    for ch in chals[1:]:
+        assert beat(ch) == {"status": "ok"}
+        assert beat(ch)["reply"] == "stale_chal", "each one once"
+
+
+def test_a_wrong_challenge_burns_none_of_the_live_ones(board):
+    app = pair(board)
+    ch = app._call(op="chal", id=app.id)[1]["chal"]
+    bad = dict(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal="ab" * 16, mac="00" * 32)
+    assert app._call(**bad)[1]["reply"] == "stale_chal"
+    m = cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{ch}")
+    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=ch, mac=m)[1] == {"status": "ok"}

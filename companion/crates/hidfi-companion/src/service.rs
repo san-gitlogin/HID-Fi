@@ -64,6 +64,8 @@ pub struct View {
     pub port: Option<u16>,
     pub name: String,
     pub problem: Option<String>,
+    /// Updates: each board's version, what it is offered, what is running.
+    pub updates: crate::updates::center::UpdView,
 }
 
 pub enum Cmd {
@@ -71,6 +73,8 @@ pub enum Cmd {
     PairAgain(Option<String>),
     /// Forget the pairing on this computer (the dashboard can remove it too).
     Forget(Option<String>),
+    /// An update action (the person's consent is the click that sends it).
+    Update(crate::updates::center::UpdCmd),
     Quit,
 }
 
@@ -106,6 +110,8 @@ pub struct Env {
     pub displays: Arc<dyn Fn() -> Vec<hidfi_stream::display::Display> + Send + Sync>,
     /// Whether capture is permitted (macOS Screen Recording); shown in the tray.
     pub capture_allowed: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// Updates for the boards and this app; None leaves them out (tests of other things).
+    pub updates: Option<crate::updates::center::UpdatesSetup>,
 }
 
 const FIND_SOON: Duration = Duration::from_secs(3);
@@ -149,6 +155,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         port: None,
         name: state.name.clone(),
         problem: None,
+        updates: Default::default(),
     }));
     let (tx, rx) = channel();
 
@@ -191,14 +198,40 @@ pub fn start(store: Store, env: Env) -> Handle {
         }
     };
     let watchers = listener.as_ref().map(|(s, _)| s.watchers.clone());
-    let v = view.clone();
     let notify: Notify = Arc::default();
+    // Updates run on their own thread; the service tells it which boards are here.
+    let upd_boards: Arc<Mutex<Vec<crate::updates::center::BoardHere>>> = Arc::default();
+    let mut env = env;
+    let upd_tx = env.updates.take().map(|setup| {
+        let dir = store.dir().to_path_buf();
+        let id = state.id.clone();
+        let keys = Store::open(dir.clone()).expect("the folder the store already opened");
+        let link_for: Arc<crate::updates::center::LinkFor> =
+            Arc::new(move |mac: &str| {
+                let key = Mac::parse(mac).and_then(|m| keys.key_for(&m));
+                let paired = key.is_some();
+                let key = key.unwrap_or_else(|| hidfi_core::pairing::PairKey::from_bytes([0; 32]));
+                (Arc::new(crate::updates::real::HttpBoardLink::new(id.clone(), key)) as Arc<dyn crate::updates::BoardLink>, paired)
+            });
+        let (v2, n2) = (view.clone(), notify.clone());
+        crate::updates::center::start(
+            setup.into_env(dir, link_for),
+            upd_boards.clone(),
+            Box::new(move |u| {
+                v2.lock().unwrap_or_else(|e| e.into_inner()).updates = u;
+                if let Some(f) = n2.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    f();
+                }
+            }),
+        )
+    });
+    let v = view.clone();
     let n = notify.clone();
     std::thread::Builder::new()
         .name("service".into())
         .spawn(move || {
             run(
-                store, state, env, keys, nonces, listener, pipeline, v, n, rx,
+                store, state, env, keys, nonces, listener, pipeline, v, n, rx, upd_boards, upd_tx,
             )
         })
         .expect("spawning the service thread");
@@ -230,6 +263,8 @@ fn run(
     view: Arc<Mutex<View>>,
     notify: Notify,
     rx: Receiver<Cmd>,
+    upd_boards: Arc<Mutex<Vec<crate::updates::center::BoardHere>>>,
+    upd_tx: Option<Sender<crate::updates::center::UpdCmd>>,
 ) {
     let mut id = [0u8; 16];
     let _ = hex::decode_to_slice(&state.id, &mut id);
@@ -459,6 +494,13 @@ fn run(
             v.port = listener.as_ref().map(|(s, _)| s.port);
         });
 
+        // The update thread's list of boards here: every board on USB, with its
+        // address once it answers.
+        *upd_boards.lock().unwrap_or_else(|e| e.into_inner()) = on_usb
+            .iter()
+            .map(|m| crate::updates::center::BoardHere { mac: m.hex(), url: here.get(m).map(|h| h.url.clone()) })
+            .collect();
+
         // While someone watches, keep the tray's count current.
         if watching > 0 {
             wait = wait.min(Duration::from_secs(2));
@@ -472,6 +514,11 @@ fn run(
                     if pick(&mac, m) {
                         h.session.request_pairing();
                     }
+                }
+            }
+            Ok(Cmd::Update(c)) => {
+                if let Some(tx) = &upd_tx {
+                    let _ = tx.send(c);
                 }
             }
             Ok(Cmd::Forget(mac)) => {

@@ -1,0 +1,10 @@
+{
+ "_about": "NVS_CONST_NVS_VERSION per ESP-IDF version, read at the source (components/nvs_flash/private_include/nvs_constants.h). An IDF missing here makes the release gate refuse until someone reads it and adds it - never a guess.",
+ "checked": "2026-10-28",
+ "source": "https://github.com/espressif/esp-idf/blob/<tag>/components/nvs_flash/private_include/nvs_constants.h",
+ "idf": {
+  "5.5.1": "0xfe",
+  "5.5.5": "0xfe",
+  "5.5.6": "0xfe"
+ }
+}

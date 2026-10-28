@@ -77,5 +77,8 @@ pub fn run(handle: &Handle, a: Action) {
         Action::Forget(mac) => {
             let _ = handle.tx.send(Cmd::Forget(mac));
         }
+        Action::Update(c) => {
+            let _ = handle.tx.send(Cmd::Update(c));
+        }
     }
 }

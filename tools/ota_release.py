@@ -147,7 +147,7 @@ def canonical(obj):
 
 def build_manifest(version, image_bytes, min_from, core, idf, changelog_text, *, security=False, risk="",
                    released=None, support_months=12, companion=None, comp_api=(1, 1), image_name=None,
-                   _tests_allow_test_build=False):
+                   table_bytes=None, _tests_allow_test_build=False):
     if not VERSION.match(version) or not VERSION.match(min_from):
         raise ReleaseError("versions are major.minor[.patch]")
     if vtuple(min_from) >= vtuple(version):
@@ -174,9 +174,57 @@ def build_manifest(version, image_bytes, min_from, core, idf, changelog_text, *,
     }
     if companion:
         m["companion"] = companion
+    if table_bytes is not None:
+        # The two-slot partition table, pinned: a Companion moving a board to the
+        # two-slot layout by cable writes exactly these bytes, never its own.
+        m["table"] = {"name": "partitions.bin", "size": len(table_bytes),
+                      "sha256": hashlib.sha256(table_bytes).hexdigest()}
+    why = check_manifest(m)
+    if why:
+        raise ReleaseError(f"the manifest would be refused: {why}")
     if len(canonical(m)) > MANIFEST_CAP:
         raise ReleaseError(f"manifest is {len(canonical(m))} bytes - over {MANIFEST_CAP}; shorten the CHANGELOG sections")
     return m
+
+
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,96}$")
+_SHA = re.compile(r"^[0-9a-f]{64}$")
+
+
+def check_manifest(m):
+    """None when a (signature-checked) manifest is one a Companion and a board will
+    act on; else why not. companion/crates/hidfi-core/src/ota.rs read_release gives
+    the same answers on tests/vectors/ota_release_v1.json."""
+    try:
+        if m.get("format") != FORMAT:
+            return "unknown manifest format"
+        if m.get("product") != "hid-fi" or m.get("chip") != "esp32s3":
+            return "not a HID-Fi ESP32-S3 release"
+        v, f = m["version"], m["min_from"]
+        if not VERSION.match(v) or not VERSION.match(f):
+            return "unreadable version"
+        if m["firmware"] != f"hid_fi_v{v}" or vtuple(f) >= vtuple(v):
+            return "inconsistent versions"
+        img = m["image"]
+        if not _SHA.match(img["sha256"]) or not isinstance(img["size"], int) or img["size"] <= 0 \
+                or not _SAFE_NAME.match(img["name"]) or img["name"] in (".", ".."):
+            return "unusable image entry"
+        tb = m.get("table")
+        if tb is not None and (not _SHA.match(tb["sha256"]) or not isinstance(tb["size"], int)
+                               or tb["size"] != 0xC00 or not _SAFE_NAME.match(tb["name"])):
+            return "unusable table entry"
+        c = m.get("companion")
+        if c is not None:
+            if not VERSION.match(c["version"]):
+                return "unusable companion entry"
+            for a in c.get("assets", {}).values():
+                if not _SHA.match(a["sha256"]) or not isinstance(a["size"], int) or a["size"] <= 0 \
+                        or not _SAFE_NAME.match(a["name"]) or a["name"] in (".", ".."):
+                    return "unusable companion entry"
+        m["comp_api"]["min"], m["comp_api"]["max"], m["released"], m["support_until"]
+    except (KeyError, TypeError, AttributeError):
+        return "missing field"
+    return None
 
 
 # ---- signing ----------------------------------------------------------------------
@@ -212,6 +260,39 @@ def verify(manifest_bytes, sig, trusted_pub_hexes):
     return False
 
 
+# ---- the release gate ------------------------------------------------------------
+
+def release_gate(manifest, image, release_pub_hexes, test_pub_hex, history, nvs_formats):
+    """Everything that must hold before a release is published - each a reason to
+    refuse, never a warning. Returns the list of refusals (empty: publish)."""
+    out = []
+    why = check_manifest(manifest)
+    if why:
+        out.append(f"manifest: {why}")
+    low = image.lower()
+    if test_pub_hex.lower().encode() in low or bytes.fromhex(test_pub_hex) in image:
+        out.append("the image trusts the public TEST key - it was built with HIDFI_TEST_OTA_KEY")
+    if b"-test" in image.split(b"hid_fi_v" + manifest["version"].encode(), 1)[-1][:8]:
+        out.append("the image is a test build")
+    trusted = [h for h in release_pub_hexes if h.lower().encode() in low or bytes.fromhex(h) in image]
+    if not trusted:
+        out.append("the image does not contain the release key it is signed with - "
+                   "every board on it would refuse every later update")
+    fmt = nvs_formats.get("idf", {})
+    mine = fmt.get(manifest["idf"])
+    base = history.get("releases", {}).get(manifest["min_from"])
+    if mine is None:
+        out.append(f"the NVS format of IDF {manifest['idf']} has not been read at the source (tools/nvs_format.json)")
+    if base is None:
+        out.append(f"min_from {manifest['min_from']} is not a published release (tools/release_history.json)")
+    elif fmt.get(base["idf"]) is None:
+        out.append(f"the NVS format of IDF {base['idf']} (v{manifest['min_from']}) has not been read at the source")
+    elif mine is not None and fmt[base["idf"]] != mine:
+        out.append(f"IDF {base['idf']} -> {manifest['idf']} changes the NVS format ({fmt[base['idf']]} -> {mine}): "
+                   "a rollback would erase every setting - publish this one for the cable only")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -224,6 +305,13 @@ def main(argv=None):
     s = sub.add_parser("sign"); s.add_argument("--manifest", required=True); s.add_argument("--key", required=True)
     v = sub.add_parser("verify"); v.add_argument("--manifest", required=True); v.add_argument("--sig", required=True)
     v.add_argument("--pub", required=True, action="append")
+    r = sub.add_parser("release", help="manifest + signature + every gate, for tools/make_release.sh")
+    for x in ("--version", "--image", "--table", "--min-from", "--core", "--idf", "--key", "--out-dir"):
+        r.add_argument(x, required=True)
+    r.add_argument("--security", action="store_true"); r.add_argument("--risk", default="")
+    r.add_argument("--companion-dir", help="installers named HID-Fi-Companion-<version>-<os>.*")
+    r.add_argument("--companion-version")
+    r.add_argument("--changelog", default=str(ROOT / "CHANGELOG.md"))
     a = ap.parse_args(argv)
     try:
         if a.cmd == "keygen":
@@ -237,6 +325,8 @@ def main(argv=None):
             out = Path(a.manifest).with_suffix(".sig")
             out.write_text(json.dumps(sign(Path(a.manifest).read_bytes(), load_private(a.key))))
             print(out)
+        elif a.cmd == "release":
+            return release_cli(a)
         elif a.cmd == "verify":
             ok = verify(Path(a.manifest).read_bytes(), json.loads(Path(a.sig).read_text()), a.pub)
             print("valid" if ok else "INVALID")
@@ -244,6 +334,51 @@ def main(argv=None):
     except ReleaseError as e:
         print(f"refused: {e}", file=sys.stderr)
         return 2
+    return 0
+
+
+def companion_assets(folder, version):
+    """{os: {name, size, sha256}} for HID-Fi-Companion-<version>-<os>.<ext> in folder."""
+    out = {}
+    for p in sorted(Path(folder).iterdir()):
+        m = re.match(rf"^HID-Fi-Companion-{re.escape(version)}-(macos|windows|linux)[A-Za-z0-9._-]*$", p.name)
+        if m:
+            if m.group(1) in out:
+                raise ReleaseError(f"two installers for {m.group(1)}: {out[m.group(1)]['name']} and {p.name}")
+            b = p.read_bytes()
+            out[m.group(1)] = {"name": p.name, "size": len(b), "sha256": hashlib.sha256(b).hexdigest()}
+    if not out:
+        raise ReleaseError(f"no Companion installers for {version} in {folder}")
+    return out
+
+
+def release_cli(a):
+    image, table = Path(a.image).read_bytes(), Path(a.table).read_bytes()
+    comp = None
+    if a.companion_dir:
+        comp = {"version": a.companion_version or a.version, "assets": companion_assets(a.companion_dir, a.companion_version or a.version)}
+    m = build_manifest(a.version, image, a.min_from, a.core, a.idf, Path(a.changelog).read_text(),
+                       security=a.security, risk=a.risk, companion=comp, table_bytes=table,
+                       image_name=f"hid_fi-{a.version}.bin")
+    key = load_private(a.key)
+    pub = public_bytes(key).hex()
+    vec = json.loads((ROOT / "tests" / "vectors" / "ota_v1.json").read_text())
+    refusals = release_gate(m, image, [pub], vec["test_public_key"],
+                            json.loads((ROOT / "tools" / "release_history.json").read_text()),
+                            json.loads((ROOT / "tools" / "nvs_format.json").read_text()))
+    if refusals:
+        for r in refusals:
+            print(f"refused: {r}", file=sys.stderr)
+        return 2
+    out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
+    mb = canonical(m)
+    sig = sign(mb, key)
+    assert verify(mb, sig, [pub]), "a signature that does not verify"
+    (out / "hidfi-ota.json").write_bytes(mb)
+    (out / "hidfi-ota.sig").write_text(json.dumps(sig))
+    (out / m["image"]["name"]).write_bytes(image)
+    (out / "partitions.bin").write_bytes(table)
+    print(json.dumps({"version": a.version, "key_id": sig["key_id"], "image": m["image"], "support_until": m["support_until"]}))
     return 0
 
 

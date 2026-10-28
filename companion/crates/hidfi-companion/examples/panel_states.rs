@@ -21,6 +21,7 @@ fn main() {
         port: Some(47800),
         name: "SANTHOSH\u{2019}s MacBook Pro".into(),
         problem: None,
+        updates: Default::default(),
     };
     let states = [
         (

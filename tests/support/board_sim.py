@@ -325,7 +325,11 @@ class BoardSim:
         if c == "ota_source":
             if transport != "serial":
                 return {"status": "error", "reply": c, "message": "usb_only"}
-            return OK(c, url=body.get("url") or "https://github.com/san-gitlogin/HID-Fi/releases/latest/download/")
+            default = "https://github.com/san-gitlogin/HID-Fi/releases/latest/download/"
+            if "url" in body:                  # empty restores GitHub; no url only reads
+                u = body["url"] or ""
+                self.ota["source"] = (u if u.endswith("/") else u + "/") if u else ""
+            return OK(c, url=self.ota.get("source") or default)
         return None
 
     def _ota_event(self):

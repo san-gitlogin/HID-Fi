@@ -33,6 +33,30 @@ cp "$BUILD/hid_fi.ino.bin" "$OUT/hid_fi.bin"
 cp LICENSE.md "$OUT/"
 sed "s/{TAG}/$TAG/g; s/{CORE}/$CORE/g" tools/release_FLASH.md > "$OUT/FLASH.md"
 (cd "$OUT" && shasum -a 256 *.bin > SHA256SUMS)
+python3 tools/sbom.py firmware "${TAG#v}" > "$OUT/sbom-firmware.cdx.json"
 (cd dist && zip -qr "HID-Fi-$TAG-firmware.zip" "HID-Fi-$TAG-firmware")
 echo "dist/HID-Fi-$TAG-firmware.zip"
 (cd "$OUT" && cat SHA256SUMS)
+
+# Over the air (docs/OTA.md step 9): the signed manifest, its signature, the image
+# and the partition table, as release assets at the root of the release - the
+# board and the Companion read them from releases/latest/download/. Signed only
+# with HIDFI_RELEASE_KEY (a file outside the repo, mode 600); every gate in
+# tools/ota_release.py release_gate must pass or nothing is written.
+if [ -n "${HIDFI_RELEASE_KEY:-}" ]; then
+    MIN_FROM="${HIDFI_MIN_FROM:?set HIDFI_MIN_FROM: the oldest version this release may update from}"
+    IDF=$(python3 -c "import json;print(json.load(open('tools/release_history.json'))['cores'].get('$CORE',''))")
+    [ -n "$IDF" ] || { echo "the IDF of core $CORE is not on record (tools/release_history.json)"; exit 1; }
+    OTA=dist/HID-Fi-$TAG-ota
+    rm -rf "$OTA"
+    python3 tools/ota_release.py release --version "${TAG#v}" --image "$BUILD/hid_fi.ino.bin" \
+        --table "$BUILD/hid_fi.ino.partitions.bin" --min-from "$MIN_FROM" --core "$CORE" --idf "$IDF" \
+        --key "$HIDFI_RELEASE_KEY" --out-dir "$OTA" \
+        ${HIDFI_SECURITY_RISK:+--security --risk "$HIDFI_SECURITY_RISK"} \
+        ${HIDFI_COMPANION_DIR:+--companion-dir "$HIDFI_COMPANION_DIR"}
+    python3 tools/sbom.py companion "${TAG#v}" > "$OTA/sbom-companion.cdx.json"
+    cp "$OUT/sbom-firmware.cdx.json" "$OTA/"
+    echo "$OTA: upload every file in it as a release asset"
+else
+    echo "(no HIDFI_RELEASE_KEY: no over-the-air files - this release is for the cable only)"
+fi
