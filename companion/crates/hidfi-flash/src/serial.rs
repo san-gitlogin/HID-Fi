@@ -32,6 +32,9 @@ pub enum Kind {
 pub struct Candidate {
     pub path: String,
     pub kind: Kind,
+    /// The USB serial number of the port's own chip (the CH343's is unique and
+    /// stable): how a COM port is recognised again later, whatever its path.
+    pub usb_serial: Option<String>,
 }
 
 pub fn candidates() -> Vec<Candidate> {
@@ -40,10 +43,10 @@ pub fn candidates() -> Vec<Candidate> {
     for p in ports {
         if let serialport::SerialPortType::UsbPort(u) = &p.port_type {
             if (u.vid, u.pid) == CH343 {
-                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Com });
+                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Com, usb_serial: u.serial_number.clone() });
             } else if (u.vid, u.pid) == ROM_OTG {
                 let mac = u.serial_number.clone().unwrap_or_default().to_uppercase();
-                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Loader { mac } });
+                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Loader { mac }, usb_serial: u.serial_number.clone() });
             }
         }
     }

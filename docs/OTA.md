@@ -309,7 +309,25 @@ the chip's ROM - never guessed (see *identity* below). For each board:
 | COM (CH343) | DTR/RTS reset, as `flash_esp.sh` does | Preferred when present: independent of the HID port. |
 | native USB only, firmware running | asks the board (paired, signed request `ota` / `download_mode`) to restart into the ROM loader; it comes back as the ROM's **USB-OTG** loader `303A:0009` (HID-Fi runs the port as OTG), the MAC as its serial number - the port is found by MAC, never guessed. Proven on DA1A2C 2026-10-28: preflight in 1.5 s (7.5 s over COM) | Needs a network path to the board. RAM blocks of 0x800 for the stub (esptool `USB_OTG_BLOCK_SIZE`). Out again: the one register write the flasher can make (`SafeWrite::ClearForceDownload`: `RTC_CNTL_OPTION1_REG` bit 0), then RTS held 0.2 s. `303A:1001` is never taken for a loader: a running HID-Fi reports it too, and the ROM's USB-Serial-JTAG mode would need watchdog register writes the flasher does not make. |
 | native USB only, no network or firmware broken | guides the person: hold BOOT, tap RESET, release BOOT | BOOT here only enters the ROM bootloader; it never erases anything (AGENTS: no button erases data). |
-| both | COM | The keyboard and mouse on the native port disappear while flashing; the Companion says so before starting - on DA1A2C that is the Mac's keyboard. |
+| both | COM when the Companion knows it is this board's COM port; otherwise native, with that COM port as the way back | The keyboard and mouse on the native port disappear while flashing; the Companion says so before starting - on DA1A2C that is the Mac's keyboard. |
+
+**Found on 09F7C8 (2026-10-28): behind a USB extender the ROM's USB never
+appears.** Asked for update mode, the board restarted into its loader and stayed
+there: the native port did not come back within a minute, and its COM port did
+not answer either - with "force download" set the ROM serves only USB (esptool:
+"is download mode forced over USB?"). An EN reset through the COM port clears
+that flag (a full chip reset), and the board started as before - nothing written.
+So:
+
+- the Companion **remembers each board's COM port** by the CH343's own USB serial
+  number, once a preflight there has read the board's MAC
+  (`<app data>/updates/com_ports.json`), and takes that port first;
+- native update mode is used when the COM port is not known, **with the COM port as
+  the way back** when there is exactly one (or it is known): if the loader does not
+  appear on USB within 20 s, the COM preflight's own reset brings the board out and
+  the update goes on there, the MAC checked first;
+- with no way back, the Companion says what happened and what to do: nothing was
+  written; unplug the board from power for a second and it starts as before.
 
 ### Over the cable: the flasher is ours, small and closed
 

@@ -25,3 +25,7 @@ required-features = ["serial"]
 [[example]]
 name = "cable_update"
 required-features = ["serial"]
+
+[[example]]
+name = "loader_probe"
+required-features = ["serial"]

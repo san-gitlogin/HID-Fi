@@ -136,25 +136,63 @@ fn the_boards_progress_reads_as_the_person_should_see_it() {
 }
 
 // ---- the cable -----------------------------------------------------------------------------
+fn com(path: &str, serial: &str) -> ComPort {
+    ComPort { path: path.into(), serial: Some(serial.into()) }
+}
+
 #[test]
-fn the_cable_goes_native_when_the_board_can_be_asked() {
+fn the_cable_takes_this_boards_known_com_port_first() {
     let s = seen("hid_fi_v4.1.0", Some("two_slot"));
-    assert_eq!(cable_plan(Some(&s), true, &[]), Ok(CablePlan::Native));
-    assert_eq!(cable_plan(Some(&s), false, &["/dev/a".into()]), Ok(CablePlan::Com("/dev/a".into())));
-    assert_eq!(cable_plan(Some(&seen("hid_fi_v4.0.4", None)), true, &["/dev/a".into()]), Ok(CablePlan::Com("/dev/a".into())));
-    assert_eq!(cable_plan(None, false, &["/dev/a".into()]), Ok(CablePlan::Com("/dev/a".into())));
+    let ports = [com("/dev/a", "AAA"), com("/dev/b", "BBB")];
+    assert_eq!(cable_plan(Some(&s), true, &ports, Some("BBB"), false), Ok(CablePlan::Com("/dev/b".into())),
+               "it works through any extender, and a reset there always brings the board back");
+}
+
+#[test]
+fn the_cable_goes_native_with_a_way_back_when_com_is_not_known() {
+    let s = seen("hid_fi_v4.1.0", Some("two_slot"));
+    assert_eq!(cable_plan(Some(&s), true, &[], None, false), Ok(CablePlan::Native { rescue: None }));
+    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], None, false),
+               Ok(CablePlan::Native { rescue: Some("/dev/a".into()) }), "the only COM port is the way back");
+    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA"), com("/dev/b", "BBB")], None, false),
+               Ok(CablePlan::Native { rescue: None }), "two COM ports and none known: never guess");
+    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA"), com("/dev/b", "BBB")], Some("BBB"), true),
+               Ok(CablePlan::Native { rescue: Some("/dev/b".into()) }), "tests can ask for native; the known port rescues");
+}
+
+#[test]
+fn without_the_engine_or_a_pairing_the_cable_is_com() {
+    let ports = [com("/dev/a", "AAA")];
+    assert_eq!(cable_plan(Some(&seen("hid_fi_v4.1.0", Some("two_slot"))), false, &ports, None, false),
+               Ok(CablePlan::Com("/dev/a".into())));
+    assert_eq!(cable_plan(Some(&seen("hid_fi_v4.0.4", None)), true, &ports, None, false), Ok(CablePlan::Com("/dev/a".into())));
+    assert_eq!(cable_plan(None, false, &ports, None, false), Ok(CablePlan::Com("/dev/a".into())));
 }
 
 #[test]
 fn the_cable_never_guesses_and_never_resets_a_board_proving_itself() {
     let mut s = seen("hid_fi_v4.1.0", Some("two_slot"));
     s.state = Some("pending_verify".into());
-    assert!(cable_plan(Some(&s), true, &["/dev/a".into()]).is_err(), "a port open would roll it back");
+    assert!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], Some("AAA"), false).is_err(), "a port open would roll it back");
     s.state = Some("valid".into());
     s.step = "downloading".into();
-    assert!(cable_plan(Some(&s), true, &[]).is_err());
-    assert!(cable_plan(None, false, &[]).is_err());
-    assert!(cable_plan(None, false, &["/dev/a".into(), "/dev/b".into()]).is_err(), "two COM ports: which board?");
+    assert!(cable_plan(Some(&s), true, &[], None, false).is_err());
+    assert!(cable_plan(None, false, &[], None, false).is_err());
+    assert!(cable_plan(None, false, &[com("/dev/a", "A"), com("/dev/b", "B")], None, false).is_err(), "which board?");
+}
+
+#[test]
+fn com_ports_are_remembered_by_their_own_serial_one_per_board() {
+    let dir = std::env::temp_dir().join(format!("hidfi-com-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(com_known(&dir, "B8:1F:3F:DA:1A:2C"), None);
+    com_remember(&dir, "5CBC409942", "B8:1F:3F:DA:1A:2C").unwrap();
+    com_remember(&dir, "5AF6107189", "DCB4D909F7C8").unwrap();
+    assert_eq!(com_known(&dir, "b81f3fda1a2c").as_deref(), Some("5CBC409942"));
+    com_remember(&dir, "NEWPORT", "B81F3FDA1A2C").unwrap();
+    assert_eq!(com_known(&dir, "B81F3FDA1A2C").as_deref(), Some("NEWPORT"), "moved to another COM cable");
+    assert_eq!(com_known(&dir, "DCB4D909F7C8").as_deref(), Some("5AF6107189"));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ---- fetching ------------------------------------------------------------------------------
@@ -513,4 +551,13 @@ fn a_ready_update_waits_longer_than_the_stall_limit_for_an_idle_board() {
     });
     assert!(STALL < Duration::from_secs(25 * 60));
     assert_eq!(sh.get(), Job::Done { to: "4.1.0".into() });
+}
+
+#[test]
+fn a_failed_release_check_is_retried_soon_and_backs_off() {
+    use super::center::retry_delay;
+    let m = |n| retry_delay(n).as_secs() / 60;
+    assert_eq!((m(1), m(2), m(3), m(4)), (1, 2, 4, 8));
+    assert_eq!(retry_delay(40), CHECK_EVERY, "never later than the daily check");
+    assert!(retry_delay(u32::MAX) <= CHECK_EVERY);
 }

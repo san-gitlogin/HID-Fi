@@ -73,6 +73,8 @@ def model(_board_holder):
     sim = BoardSim(pin="9999" if st.get("auth_set") else "", host_os=st.get("host_os", "mac"),
                    detected=st.get("host_os_detected", "mac"))
     sim.host_manual = st["host_os"] if st.get("host_os_source") == "manual" else None
+    # The owner's own switches change replies (09F7C8 has the gamepad on): mirror them.
+    sim.gamepad = bool(st.get("gamepad"))
     if st.get("wifi_connected"):        # replies differ online: wifi_status adds the link details
         sim.sta.update(phase="online", ssid=st.get("wifi_ssid") or "home", ip=st.get("wifi_ip") or "192.168.1.50")
     # The board's network history shows in status (sta_prev_ip once an address

@@ -18,8 +18,11 @@ Afterwards the board gets its normal firmware back and the person's data is
 compared by hash (the shared fixture in test_ota_download.py).
 --board; slow.
 """
+import contextlib
 import json
 import os
+import pathlib
+import shutil
 import queue
 import subprocess
 import tempfile
@@ -50,8 +53,8 @@ def built():
 class App:
     """The Companion's service, read through its JSON lines, driven through stdin."""
 
-    def __init__(self, exe, store, url, mac, releases):
-        envv = dict(os.environ, HIDFI_RELEASES=releases, HIDFI_TEST_NAME="OTA E2E PC")
+    def __init__(self, exe, store, url, mac, releases, extra_env=None):
+        envv = dict(os.environ, HIDFI_RELEASES=releases, HIDFI_TEST_NAME="OTA E2E PC", **(extra_env or {}))
         self.p = subprocess.Popen([str(exe), store, url, mac], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.DEVNULL, text=True, env=envv)
         self.q, self.last, self.mac = queue.Queue(), {}, mac.replace(":", "").upper()
@@ -91,28 +94,50 @@ class App:
             self.p.kill()
 
 
-@pytest.fixture
-def app(env, built):  # noqa: F811
+def com_serial(port):
+    """The CH343's own USB serial number for a COM port path."""
+    from serial.tools import list_ports
+    return next((p.serial_number for p in list_ports.comports() if p.device == port), None)
+
+
+@contextlib.contextmanager
+def companion(env, built, seed_com=False, extra_env=None):
+    """The real Companion, paired with the board as a person would pair it.
+    seed_com: its store already knows this board's COM port - what an earlier
+    cable update over COM leaves behind."""
     board = env["holder"].get()
     st = board.status()
     store = tempfile.mkdtemp(prefix="hidfi-e2e-")
+    if seed_com:
+        sn = com_serial(env["holder"].port)
+        assert sn, "the COM port's serial number"
+        upd = pathlib.Path(store) / "updates"
+        upd.mkdir()
+        (upd / "com_ports.json").write_text(json.dumps({sn: st["mac"].replace(":", "").upper()}))
     url = f"http://{st['wifi_ip']}"
-    a = App(built, store, url, st["mac"], env["srv"].url_for(st["wifi_ip"]))
+    a = App(built, store, url, st["mac"], env["srv"].url_for(st["wifi_ip"]), extra_env)
     try:
         a.wait(lambda v: "WaitingForApproval" in v.get("session", ""), 60, "the Companion asking to pair")
-        app_id = json.loads((__import__("pathlib").Path(store) / "state.json").read_text())["id"]
+        app_id = json.loads((pathlib.Path(store) / "state.json").read_text())["id"]
         assert board.cmd({"cmd": "companion_pair", "id": app_id}, "companion_pair").get("state") == "confirm"
         v = a.wait(lambda v: "ShowCode" in v.get("session", ""), 30, "the Companion showing the code")
         code = v["session"].split('"')[1]
         assert board.cmd({"cmd": "companion_pair", "id": app_id, "code": code}, "companion_pair").get("state") == "paired"
         a.wait(lambda v: v.get("session") == "Online", 30, "the Companion online")
         a.id = app_id
+        a.store = store
         yield a
     finally:
         a.quit()
         if getattr(a, "id", None):
             env["holder"].get().cmd({"cmd": "companion_unpair", "id": a.id}, "companion_unpair")
-        __import__("shutil").rmtree(store, ignore_errors=True)    # it holds a pairing key
+        shutil.rmtree(store, ignore_errors=True)    # it holds a pairing key
+
+
+@pytest.fixture
+def app(env, built):  # noqa: F811
+    with companion(env, built) as a:
+        yield a
 
 
 def offered(a):
@@ -184,19 +209,59 @@ def test_a_board_that_cannot_reach_the_release_gets_it_from_the_companion(env, a
     assert st["ota_state"] == "valid" and st["ota_step"] == "idle"
 
 
-def test_by_cable_over_the_native_usb_port(env, app):  # noqa: F811
+def _cable(a, env):
+    """Update by cable; returns the steps the Companion showed on the way."""
     board = env["holder"].get()
     _settle(board)
-    offered(app)
-    app.say(f"update {app.mac} cable")
+    offered(a)
+    # The COM port is the Companion's now (the COM path, and the rescue). The
+    # harness opens it again only after the new firmware is kept: an open resets
+    # the board, and a reset during the self-test would roll the update back.
+    env["holder"].release()
+    a.say(f"update {a.mac} cable")
     seen = set()
+
     def watch(v):
-        j = app.upd(v).get("job", "")
+        j = a.upd(v).get("job", "")
         if j.startswith("Cable"):
             seen.add(j.split('step: "')[1].split('"')[0])
         return j.startswith(("Done", "RolledBack", "Failed", "Stopped"))
-    v = app.wait(watch, 600, "the cable update finishing")
-    assert app.upd(v)["job"] == 'Done { to: "4.0.99" }', (app.upd(v), seen)
-    assert "restarting into update mode" in seen and "writing the firmware" in seen, seen
-    st = wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 60, "the board settled")
+    v = a.wait(watch, 900, "the cable update finishing")
+    assert a.upd(v)["job"] == 'Done { to: "4.0.99" }', (a.upd(v), seen)
+    st = wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 90, "the board settled")
     assert st["firmware"] == "hid_fi_v4.0.99-test"
+    return seen
+
+
+def _back_to_base(env):
+    if env["holder"].get().status()["firmware"] != "hid_fi_v4.0.4-test":
+        install(env["holder"], env["base"])
+        wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 150, "the base build proving itself")
+
+
+def test_by_cable_over_the_native_usb_port_or_its_rescue(env, built):  # noqa: F811
+    """Native first. Behind some hubs and extenders the ROM's USB never appears
+    (09F7C8's does not); then the board's COM port resets it out of the loader and
+    the update goes on there - never a board left waiting in the loader."""
+    _back_to_base(env)
+    with companion(env, built, seed_com=True, extra_env={"HIDFI_CABLE_PREFER": "native"}) as a:
+        seen = _cable(a, env)
+    assert "restarting into update mode" in seen, seen
+    assert "writing the firmware" in seen, seen
+    if any("over the COM port" in s for s in seen):
+        print("native update mode did not appear on USB here - rescued over COM")
+
+
+def test_by_cable_a_known_com_port_comes_first(env, built):  # noqa: F811
+    _back_to_base(env)
+    with companion(env, built, seed_com=True) as a:
+        seen = _cable(a, env)
+        upd = pathlib.Path(a.store) / "updates"
+        learned = json.loads((upd / "com_ports.json").read_text())
+        journal = json.loads(next(p for p in upd.glob("*.json") if p.name != "com_ports.json").read_text())
+    assert "restarting into update mode" not in seen, f"COM, not native: {seen}"
+    # Every checkpoint is in the journal (the image step may be a check, not a
+    # write, when the slot already holds it - the progress line can be skipped).
+    assert journal["step"] == "Restarted", journal["step"]
+    assert [h.split(":")[0] for h in journal["history"]][:2] == ["Preflighted", "ImageWritten"], journal["history"]
+    assert list(learned.values()) == [env["holder"].get().status()["mac"].replace(":", "").upper()]

@@ -234,8 +234,12 @@ fn same_mac(a: &str, b: &str) -> bool {
     mac_bytes(a).is_some() && mac_bytes(a) == mac_bytes(b)
 }
 
-pub fn com_ports() -> Vec<String> {
-    serial::candidates().into_iter().filter(|c| c.kind == Kind::Com).map(|c| c.path).collect()
+pub fn com_ports() -> Vec<super::ComPort> {
+    serial::candidates()
+        .into_iter()
+        .filter(|c| c.kind == Kind::Com)
+        .map(|c| super::ComPort { path: c.path, serial: c.usb_serial })
+        .collect()
 }
 
 /// A cable update, checkpointed in `journal` (resumed if one is there for this
@@ -247,7 +251,7 @@ pub fn cable_job(plan: CablePlan, mac: &str, link: Option<(&dyn BoardLink, &str)
     let Some(m) = mac_bytes(mac) else { return fail("not a board MAC".into()) };
     let (path, connect) = match &plan {
         CablePlan::Com(p) => (p.clone(), Connect::Reset),
-        CablePlan::Native => {
+        CablePlan::Native { rescue } => {
             let Some((l, base)) = link else { return fail("the board is not reachable to ask".into()) };
             sh.set(Job::Cable { step: "restarting into update mode".into(), bytes: 0, total: 0 });
             if let Err(e) = l.ota(base, "download_mode", "") {
@@ -263,9 +267,22 @@ pub fn cable_job(plan: CablePlan, mac: &str, link: Option<(&dyn BoardLink, &str)
                 }
                 std::thread::sleep(Duration::from_millis(250));
             };
-            match found {
-                Some(p) => (p, Connect::InLoader),
-                None => return fail("the board did not appear in update mode - unplug and replug its USB port".into()),
+            match (found, rescue) {
+                (Some(p), _) => (p, Connect::InLoader),
+                // Behind some hubs and extenders the ROM's USB never shows up, and
+                // the board waits in its loader. Its COM port's reset (EN) ends
+                // that and enters the loader there - so the update goes on over COM,
+                // the MAC checked first as always.
+                (None, Some(com)) => {
+                    sh.set(Job::Cable { step: "update mode did not appear on USB - going on over the COM port".into(),
+                                        bytes: 0, total: 0 });
+                    (com.clone(), Connect::Reset)
+                }
+                (None, None) => return fail(
+                    "update mode did not appear on the board's USB port (a hub or extender can block it). Nothing \
+                     was written. Unplug HID-Fi from power for a second and plug it back in - it starts as before"
+                        .into(),
+                ),
             }
         }
     };
@@ -279,7 +296,18 @@ pub fn cable_job(plan: CablePlan, mac: &str, link: Option<(&dyn BoardLink, &str)
     };
     let cancel = || sh.cancel.load(Ordering::SeqCst);
     let rel = flash::Release { image, table };
-    match flash::run(&mut f, &m, connect, &rel, journal, Progress { cancel: &cancel, on: &mut on }) {
+    let result = flash::run(&mut f, &m, connect, &rel, journal, Progress { cancel: &cancel, on: &mut on });
+    // Past the preflight, the MAC read on this COM port was this board's: remember
+    // the port, so the next cable update takes it first.
+    if connect == Connect::Reset && matches!(result, Ok(_) | Err(flash::UpdateError::Cancelled)) {
+        if let (Some(dir), Some(sn)) = (journal.parent(), serial::candidates().into_iter()
+            .find(|c| c.path == path).and_then(|c| c.usb_serial)) {
+            if let Err(e) = super::com_remember(dir, &sn, mac) {
+                log::warn!("could not remember the COM port: {e}");
+            }
+        }
+    }
+    match result {
         Ok(j) => {
             sh.set(Job::Verifying);
             let to = j.to.clone();

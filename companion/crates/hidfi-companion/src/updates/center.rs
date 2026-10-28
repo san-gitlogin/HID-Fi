@@ -89,7 +89,7 @@ pub struct CenterEnv {
     pub link_for: Arc<LinkFor>,
     pub relay: Arc<dyn RelayStarter>,
     pub cable: Arc<CableFn>,
-    pub com_ports: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
+    pub com_ports: Arc<dyn Fn() -> Vec<ComPort> + Send + Sync>,
     pub open: Arc<dyn Fn(&Path) + Send + Sync>,
     pub source: String,
     pub dir: PathBuf,
@@ -101,6 +101,13 @@ pub struct CenterEnv {
 struct Running {
     sh: Arc<Shared>,
     done_at: Option<Instant>,
+}
+
+/// After `n` failed release checks in a row: 1, 2, 4, 8 ... minutes, never more
+/// than the daily check. A network that drops once must not hide a release for a day.
+pub fn retry_delay(n: u32) -> Duration {
+    let mins = 1u64 << n.saturating_sub(1).min(16);
+    Duration::from_secs(mins * 60).min(CHECK_EVERY)
 }
 
 pub fn journal_path(dir: &Path, mac: &str) -> PathBuf {
@@ -129,6 +136,9 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
     let rel: Arc<Mutex<Rel>> = Arc::default();
     let mut view = UpdView::default();
     let mut next_release = env.clock.now();
+    // Failed checks in a row: the next one comes sooner than a day, backing off.
+    let failures = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let retry_due: Arc<Mutex<Option<Duration>>> = Arc::default();
     let mut seen: HashMap<String, (Seen, Instant)> = HashMap::new();
     let mut jobs: HashMap<String, Running> = HashMap::new();
     let comp: Arc<Mutex<CompUpd>> = Arc::new(Mutex::new(CompUpd::None));
@@ -140,16 +150,25 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
             next_release = now + CHECK_EVERY;
             checking.store(true, Ordering::SeqCst);
             let (e, r, c, p) = (env.clone(), rel.clone(), checking.clone(), problem.clone());
+            let (fails, due) = (failures.clone(), retry_due.clone());
             std::thread::spawn(move || {
                 match fetch_release(e.fetch.as_ref(), &e.source, &e.trusted) {
                     Ok(x) => {
                         *r.lock().unwrap_or_else(|e| e.into_inner()) = Some(x);
                         *p.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                        fails.store(0, Ordering::SeqCst);
                     }
-                    Err(why) => *p.lock().unwrap_or_else(|e| e.into_inner()) = Some(why),
+                    Err(why) => {
+                        *p.lock().unwrap_or_else(|e| e.into_inner()) = Some(why);
+                        let n = fails.fetch_add(1, Ordering::SeqCst) + 1;
+                        *due.lock().unwrap_or_else(|e| e.into_inner()) = Some(retry_delay(n));
+                    }
                 }
                 c.store(false, Ordering::SeqCst);
             });
+        }
+        if let Some(d) = retry_due.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            next_release = now + d;
         }
         let here = boards.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let busy = jobs.values().any(|j| j.done_at.is_none());
@@ -243,7 +262,11 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
                         };
                         return air_job(link.as_ref(), &url, &r.0, &files, e.relay.as_ref(), e.clock.as_ref(), &sh);
                     }
-                    let plan = match cable_plan(s.as_ref(), paired, &(e.com_ports)()) {
+                    // HIDFI_CABLE_PREFER=native: tests only, to exercise the native path
+                    // and its rescue on a board whose COM port is known.
+                    let prefer_native = std::env::var("HIDFI_CABLE_PREFER").as_deref() == Ok("native");
+                    let known = com_known(&e.dir.join("updates"), &mac);
+                    let plan = match cable_plan(s.as_ref(), paired, &(e.com_ports)(), known.as_deref(), prefer_native) {
                         Ok(p) => p,
                         Err(why) => return sh.set(Job::Failed { why }),
                     };
@@ -297,7 +320,7 @@ pub struct UpdatesSetup {
     pub fetch: Arc<dyn Fetch>,
     pub relay: Arc<dyn RelayStarter>,
     pub cable: Arc<CableFn>,
-    pub com_ports: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
+    pub com_ports: Arc<dyn Fn() -> Vec<ComPort> + Send + Sync>,
     pub open: Arc<dyn Fn(&Path) + Send + Sync>,
     pub source: String,
     pub this_version: String,

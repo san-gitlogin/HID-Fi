@@ -265,14 +265,30 @@ pub fn needs_relay(seen: &Seen) -> bool {
 pub enum CablePlan {
     /// Ask the firmware to restart into the ROM loader; the native USB port then
     /// shows up named by the board's MAC - no guessing which port is which.
-    Native,
+    /// `rescue`: this board's COM port, if known - the way back out if the
+    /// loader never appears on USB (seen behind a USB extender: the board then
+    /// waits in the loader, and only an EN reset through COM, or a power cycle,
+    /// ends it).
+    Native { rescue: Option<String> },
     /// The board's COM port.
     Com(String),
 }
 
+/// A COM port (CH343) on this computer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComPort {
+    pub path: String,
+    /// The CH343's own USB serial number - what the Companion remembers a board's
+    /// COM port by, once a preflight there has read the board's MAC.
+    pub serial: Option<String>,
+}
+
 /// `seen`: the board's status if it answers over the network. `paired`: this
-/// Companion can send it signed requests. `com_ports`: COM ports (CH343) here.
-pub fn cable_plan(seen: Option<&Seen>, paired: bool, com_ports: &[String]) -> Result<CablePlan, String> {
+/// Companion can send it signed requests. `com`: COM ports here. `known`: the
+/// serial of the COM port a preflight once found this board on.
+/// `prefer_native`: tests only, to exercise the native path and its rescue.
+pub fn cable_plan(seen: Option<&Seen>, paired: bool, com: &[ComPort], known: Option<&str>, prefer_native: bool)
+    -> Result<CablePlan, String> {
     if let Some(s) = seen {
         if s.state.as_deref() == Some("pending_verify") {
             // Opening the port resets the board - that would roll the update back.
@@ -281,15 +297,49 @@ pub fn cable_plan(seen: Option<&Seen>, paired: bool, com_ports: &[String]) -> Re
         if s.step != "idle" && s.step != "ready" {
             return Err("an update over the air is running - let it finish or cancel it".into());
         }
-        if paired && s.has_engine() {
-            return Ok(CablePlan::Native);
-        }
     }
-    match com_ports {
-        [one] => Ok(CablePlan::Com(one.clone())),
-        [] => Err("connect the board's COM port (the second USB-C) to this computer".into()),
+    let mine = known.and_then(|k| com.iter().find(|c| c.serial.as_deref() == Some(k))).map(|c| c.path.clone());
+    let only = match com {
+        [one] => Some(one.path.clone()),
+        _ => None,
+    };
+    let native_ok = seen.is_some_and(|s| paired && s.has_engine());
+    // COM first when it is surely this board's: it works through any hub or
+    // extender, the MAC is checked before a byte is written, and a reset there
+    // always brings the board back.
+    if let (Some(p), false) = (&mine, prefer_native) {
+        return Ok(CablePlan::Com(p.clone()));
+    }
+    if native_ok {
+        return Ok(CablePlan::Native { rescue: mine.or(only) });
+    }
+    match (mine.or(only), com.len()) {
+        (Some(p), _) => Ok(CablePlan::Com(p)),
+        (None, 0) => Err("connect the board's COM port (the second USB-C) to this computer".into()),
         _ => Err("several boards' COM ports are connected - leave only this board's COM cable in".into()),
     }
+}
+
+/// Which board each COM port belongs to, learned by preflights over COM:
+/// `<updates dir>/com_ports.json`, `{"<CH343 serial>": "<MAC, 12 hex>"}`.
+pub fn com_known(dir: &Path, mac: &str) -> Option<String> {
+    let m: std::collections::BTreeMap<String, String> =
+        serde_json::from_slice(&std::fs::read(dir.join("com_ports.json")).ok()?).ok()?;
+    let want = mac.replace(':', "").to_uppercase();
+    m.into_iter().find(|(_, v)| *v == want).map(|(k, _)| k)
+}
+
+pub fn com_remember(dir: &Path, serial: &str, mac: &str) -> std::io::Result<()> {
+    let p = dir.join("com_ports.json");
+    let mut m: std::collections::BTreeMap<String, String> =
+        std::fs::read(&p).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let mac = mac.replace(':', "").to_uppercase();
+    m.retain(|_, v| *v != mac);              // a board has one COM port at a time
+    m.insert(serial.to_string(), mac);
+    std::fs::create_dir_all(dir)?;
+    let tmp = p.with_extension("json.part");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&m).unwrap_or_default())?;
+    std::fs::rename(tmp, p)
 }
 
 // ---- I/O, behind traits ------------------------------------------------------------

@@ -57,6 +57,17 @@ the home network it joined. **Reflash every board** once this is released.
   least a date one year after each release (README, SECURITY.md).
 - Releases carry SBOMs (CycloneDX 1.7) for the firmware and the Companion.
 
+### Fixed
+
+- **A double tap on the trackpad under a shared screen zoomed the page.** On
+  the Screen tab the trackpad sits below the picture, so the page has scrolled to
+  reach it - and iOS Safari can then forget that the pad handles its own touches.
+  The pad now cancels the browser's own handling of every touch on it, and the
+  picture does the same for a double tap (which zooms the picture, as before,
+  never the page). Tested on the Screen tab and the Trackpad tab: the browser is
+  told to leave every touch alone, the page and the picture stay unzoomed, and the
+  computer still receives both clicks.
+
 ### Changed
 
 - The firmware uses about 16 KB more RAM (USB host buffers the new core links
