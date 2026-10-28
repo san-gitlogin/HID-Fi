@@ -30,6 +30,11 @@ Plug in the board's **COM** port (the CH343 one), then:
 0x0.** Your settings live between them (NVS, 0x9000-0xdfff); writing the four
 files leaves them alone, so an upgrade keeps your PIN, WiFi and stored passwords.
 
+`partitions.bin` gives the board two app slots so later versions can update
+over the air. A board flashed with a release before it (one slot) switches on
+this flash; your settings stay where they were (docs/FLASHING.md, "The flash
+layout").
+
 After flashing, the board makes its own WiFi password on first start. Read it
 over the same cable: `./flash_esp.sh --recover --show-password` (or
 `.\flash_esp.ps1 -Recover -RecoverShow`) from the repository.

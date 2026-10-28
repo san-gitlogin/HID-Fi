@@ -318,7 +318,7 @@ Then:
 The board settings are baked into the script, but for reference the exact FQBN is:
 
 ```
-esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=huge_app
+esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=custom
 ```
 
 Two of those matter more than the rest:
@@ -470,3 +470,21 @@ esptool --chip esp32s3 --port COM13 --baud 921600 write-flash \
 
 NVS sits at `0x9000`–`0xdfff`, between the partition table and `boot_app0`, which is why
 those four writes leave your settings alone.
+
+### The flash layout, and the one-time switch to two app slots
+
+Since the update work (docs/OTA.md), `hid_fi/partitions.csv` gives the board two
+6.4 MB app slots, so a new version can be written next to the running one and the
+board can go back by itself if it fails. Releases up to v4.0.4 had one 3 MB slot
+(`huge_app`). The switch happens once, over the cable, with the same four writes:
+
+- NVS (`0x9000`, `0x5000` bytes) and `otadata` (`0xe000`) are where they always
+  were, so your settings are kept. This was proven on a board: NVS byte-identical
+  before its first start on the new layout, and every setting read back the same.
+- The app still goes to `0x10000`; the new table only makes that slot larger and
+  adds the second one at `0x650000`.
+- Going back to an older release over the cable works the same way and keeps the
+  settings too (also proven).
+- `boot_app0` is rewritten on every cable flash; it selects the slot at `0x10000`,
+  so a board that last updated itself into the second slot starts the freshly
+  flashed firmware.

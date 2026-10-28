@@ -102,7 +102,7 @@ stand-in esptool - change one, change both, and keep that test passing.
 The FQBN, if you ever need it directly:
 
 ```
-esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=huge_app
+esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=custom
 ```
 
 ### Rules that are not negotiable

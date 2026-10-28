@@ -37,7 +37,7 @@
 # ============================================================================
 set -euo pipefail
 
-FQBN='esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=huge_app'
+FQBN='esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=custom'
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SKETCH="$HERE/hid_fi"
 BUILD="${HIDFI_BUILD_DIR:-$SKETCH/build}"   # same as flash_esp.ps1, and covered by .gitignore

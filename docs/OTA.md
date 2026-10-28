@@ -537,8 +537,13 @@ The procedure, as it will run on DA1A2C:
    Done 2026-10-28: 38 unit tests, each planted bug caught; the first real run
    left exactly the two advisories that reach HID-Fi open (GHSA-8cmm, GHSA-g764),
    34 others acknowledged with evidence in `tools/dep_watch_ack.json`.
-2. [ ] Layout in the repo (`hid_fi/partitions.csv`, FQBN `custom`), both flashers,
+2. [x] Layout in the repo (`hid_fi/partitions.csv`, FQBN `custom`), both flashers,
    FLASH.md, the release zip; static tests pin the table and the slot size.
+   Done 2026-10-28: `hid_fi/partitions.csv`, FQBN `PartitionScheme=custom` (flash_esp.sh,
+   flash_esp.ps1, AGENTS.md, FLASHING.md), size budget against the app slot instead of
+   arduino-cli's whole-flash maximum, `tests/static/test_partitions.py` pins every row
+   (moving NVS fails it - checked); DA1A2C switched (NVS keys 265 = 265, data identical by
+   hash), no-board suite and board tier (93/0) green on the new layout.
 3. [ ] Rollback core in firmware: `verifyRollbackLater`, self-test, the `ota`
    record, status fields (`ota_state`, `layout`, `running_slot`, `comp_api`),
    reboot deferral; model + contract + docs; proven on 09F7C8 by writing a test

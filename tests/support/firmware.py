@@ -42,6 +42,34 @@ def dispatch_commands(text=None):
     return sorted(set(re.findall(r'strcmp\(cmd,\s*"([a-z_0-9]+)"\)\s*==\s*0', text or ino_text())))
 
 
+PARTITIONS_CSV = INO.parent / "partitions.csv"
+
+
+def partitions(path=None):
+    """hid_fi/partitions.csv as rows: name, type, subtype, offset, size (ints).
+
+    The arduino build copies this file over the menu's choice, so it IS the
+    flash layout - the one the board's bootloader and over-the-air updates use."""
+    def num(s):
+        s = s.strip()
+        if s[-1:] in "KM":
+            return int(s[:-1], 0) * (1024 if s[-1] == "K" else 1024 * 1024)
+        return int(s, 0)
+    rows = []
+    for line in (path or PARTITIONS_CSV).read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        name, typ, sub, off, size = [c.strip() for c in line.split(",")[:5]]
+        rows.append({"name": name, "type": typ, "subtype": sub, "offset": num(off), "size": num(size)})
+    return rows
+
+
+def app_slot_size():
+    """The size of one app slot (both are equal: an update must fit the other one)."""
+    return min(r["size"] for r in partitions() if r["type"] == "app")
+
+
 def fqbn():
     """The build settings, read from flash_esp.sh so they cannot drift from the flasher."""
     m = re.search(r"^FQBN='([^']+)'", FLASH_SH.read_text(), re.M)

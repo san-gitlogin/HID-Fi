@@ -86,7 +86,7 @@ $ScriptArgs = $PSBoundParameters
 $base   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $sketch = Join-Path $base 'hid_fi'
 $build  = if ($env:HIDFI_BUILD_DIR) { $env:HIDFI_BUILD_DIR } else { Join-Path $sketch 'build' }
-$fqbn   = 'esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=huge_app'
+$fqbn   = 'esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,UploadSpeed=921600,PartitionScheme=custom'
 
 function Say  ($m) { Write-Host $m }
 function Step ($m) { Write-Host "`n== $m" -ForegroundColor Cyan }

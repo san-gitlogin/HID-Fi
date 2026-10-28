@@ -27,7 +27,7 @@
     Board:       ESP32S3 Dev Module
     USB Mode:    USB-OTG (TinyUSB)       ← REQUIRED for HID
     USB CDC On Boot: Disabled            ← firmware uses UART0 via CH343
-    Flash 16MB · PSRAM OPI · Partition huge_app · Upload 921600
+    Flash 16MB · PSRAM OPI · Partition custom (hid_fi/partitions.csv: two 6.4 MB app slots) · Upload 921600
 
   Extra libraries: ArduinoJson, WebSockets (Links2004 arduinoWebSockets).
 

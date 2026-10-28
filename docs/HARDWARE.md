@@ -36,8 +36,9 @@ Any ESP32-S3 board should work if it has:
   This is the part that becomes the keyboard. A board with only a USB-to-serial
   chip **cannot** do this, no matter what firmware you flash.
 - **8 MB PSRAM**, or drop `PSRAM=opi` from the build flags.
-- **16 MB flash**, which is what `FlashSize=16M` and the `huge_app` partition
-  scheme in `flash_esp.ps1` assume. A smaller part needs both changed.
+- **16 MB flash**, which is what `FlashSize=16M` and the layout in
+  `hid_fi/partitions.csv` (two 6.4 MB app slots for updates) assume. A smaller
+  part needs both changed.
 
 If your board has only one USB-C socket, check whether it is native USB or a
 bridge. If it is a bridge, this project will not work on it.

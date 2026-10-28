@@ -16,7 +16,8 @@ pytestmark = pytest.mark.build
 
 FLASH_TOLERANCE = 0.03       # +3% program size before a deliberate update is required
 RAM_TOLERANCE_BYTES = 4096   # static RAM
-APP_PARTITION_LIMIT = 0.80   # never use more than 80% of the app partition
+APP_PARTITION_LIMIT = 0.80   # never use more than 80% of an app slot (hid_fi/partitions.csv) -
+                             # arduino-cli's own "Maximum" is the whole flash with PartitionScheme=custom
 
 
 @pytest.fixture(scope="module")
@@ -65,8 +66,10 @@ def _sizes(stdout):
 
 def test_size_budget(build, golden, request):
     assert build.returncode == 0, "build failed"
-    flash, maximum, ram = _sizes(build.stdout)
-    assert flash <= APP_PARTITION_LIMIT * maximum, f"firmware uses {flash}/{maximum} bytes - over {APP_PARTITION_LIMIT:.0%} of the app partition"
+    flash, _, ram = _sizes(build.stdout)
+    slot = firmware.app_slot_size()
+    assert flash <= APP_PARTITION_LIMIT * slot, \
+        f"firmware uses {flash}/{slot} bytes - over {APP_PARTITION_LIMIT:.0%} of an app slot; an update must fit the other slot"
     f = paths.GOLDEN / "build_size.json"
     if request.config.getoption("--update-golden") or not f.exists():
         golden("build_size", {"flash_bytes": flash, "ram_bytes": ram, "core": firmware.installed_core_version()})

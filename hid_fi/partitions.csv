@@ -1,0 +1,11 @@
+# HID-Fi flash layout (16 MB). Written once over USB; it can never change over
+# the air afterwards, so space for the future is reserved here (docs/OTA.md).
+# nvs and otadata sit exactly where huge_app put them: switching keeps all data.
+# Name,   Type, SubType,   Offset,   Size,     Flags
+nvs,      data, nvs,       0x9000,   0x5000,
+otadata,  data, ota,       0xe000,   0x2000,
+app0,     app,  ota_0,     0x10000,  0x640000,
+app1,     app,  ota_1,     0x650000, 0x640000,
+nvs_ext,  data, nvs,       0xc90000, 0x40000,
+spare,    data, undefined, 0xcd0000, 0x320000,
+coredump, data, coredump,  0xff0000, 0x10000,
