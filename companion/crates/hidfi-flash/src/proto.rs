@@ -39,9 +39,21 @@ pub const FORBIDDEN: &[(u8, &str)] = &[
 ];
 
 pub const ALL: &[Op] = &[
-    Op::FlashBegin, Op::FlashData, Op::FlashEnd, Op::MemBegin, Op::MemEnd, Op::MemData, Op::Sync, Op::WriteReg,
-    Op::ReadReg, Op::SpiSetParams, Op::SpiAttach, Op::ChangeBaudrate, Op::SpiFlashMd5,
-    Op::GetSecurityInfo, Op::ReadFlash,
+    Op::FlashBegin,
+    Op::FlashData,
+    Op::FlashEnd,
+    Op::MemBegin,
+    Op::MemEnd,
+    Op::MemData,
+    Op::Sync,
+    Op::WriteReg,
+    Op::ReadReg,
+    Op::SpiSetParams,
+    Op::SpiAttach,
+    Op::ChangeBaudrate,
+    Op::SpiFlashMd5,
+    Op::GetSecurityInfo,
+    Op::ReadFlash,
 ];
 
 impl Op {
@@ -117,7 +129,11 @@ pub fn parse_response(frame: &[u8]) -> Option<Response> {
     let len = u16::from_le_bytes([frame[2], frame[3]]) as usize;
     let value = u32::from_le_bytes(frame[4..8].try_into().ok()?);
     let data = frame.get(8..8 + len)?.to_vec();
-    Some(Response { op: frame[1], value, data })
+    Some(Response {
+        op: frame[1],
+        value,
+        data,
+    })
 }
 
 /// A request frame as the simulated chip sees it.
@@ -134,7 +150,11 @@ pub fn parse_request(frame: &[u8]) -> Option<Request> {
     }
     let len = u16::from_le_bytes([frame[2], frame[3]]) as usize;
     let chk = u32::from_le_bytes(frame[4..8].try_into().ok()?);
-    Some(Request { op: frame[1], chk, data: frame.get(8..8 + len)?.to_vec() })
+    Some(Request {
+        op: frame[1],
+        chk,
+        data: frame.get(8..8 + len)?.to_vec(),
+    })
 }
 
 #[cfg(test)]
@@ -153,8 +173,15 @@ mod tests {
     fn the_only_register_writes_touch_no_efuse() {
         for w in SafeWrite::ALL {
             let (addr, _, mask) = w.target();
-            assert!(!EFUSE_RANGE.contains(&addr), "{w:?} writes into the eFuse block");
-            assert_eq!((addr, mask), (RTC_CNTL_OPTION1_REG, 1), "{w:?}: only the force-download bit");
+            assert!(
+                !EFUSE_RANGE.contains(&addr),
+                "{w:?} writes into the eFuse block"
+            );
+            assert_eq!(
+                (addr, mask),
+                (RTC_CNTL_OPTION1_REG, 1),
+                "{w:?}: only the force-download bit"
+            );
         }
     }
 
@@ -175,6 +202,9 @@ mod tests {
         assert_eq!(&r[..4], &[0x00, 0x0A, 4, 0]);
         let resp = parse_response(&[0x01, 0x0A, 2, 0, 0x78, 0x56, 0x34, 0x12, 0, 0]).unwrap();
         assert_eq!((resp.value, resp.status(0)), (0x1234_5678, Some((0, 0))));
-        assert!(parse_response(&[0x01, 0x0A, 9, 0, 0, 0, 0, 0, 0]).is_none(), "length past the frame");
+        assert!(
+            parse_response(&[0x01, 0x0A, 9, 0, 0, 0, 0, 0, 0]).is_none(),
+            "length past the frame"
+        );
     }
 }

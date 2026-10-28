@@ -29,11 +29,21 @@ pub struct BoardUpd {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompUpd {
     None,
-    Available { to: String, size: u64 },
-    Downloading { to: String },
+    Available {
+        to: String,
+        size: u64,
+    },
+    Downloading {
+        to: String,
+    },
     /// Checked against the signed manifest; opens when the person asks.
-    Ready { to: String, path: PathBuf },
-    Failed { why: String },
+    Ready {
+        to: String,
+        path: PathBuf,
+    },
+    Failed {
+        why: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,7 +59,13 @@ pub struct UpdView {
 
 impl Default for UpdView {
     fn default() -> Self {
-        UpdView { boards: Vec::new(), companion: CompUpd::None, latest: None, problem: None, checking: false }
+        UpdView {
+            boards: Vec::new(),
+            companion: CompUpd::None,
+            latest: None,
+            problem: None,
+            checking: false,
+        }
     }
 }
 
@@ -63,7 +79,10 @@ impl UpdView {
 pub enum UpdCmd {
     CheckNow,
     /// Consent to update this board: over the air, or by cable (`cable`).
-    Update { mac: String, cable: bool },
+    Update {
+        mac: String,
+        cable: bool,
+    },
     Cancel(String),
     RestartNow(String),
     GetCompanion,
@@ -81,7 +100,9 @@ pub struct BoardHere {
 pub type LinkFor = dyn Fn(&str) -> (Arc<dyn BoardLink>, bool) + Send + Sync;
 
 /// (plan, MAC, the board over the network, image, table, journal, the release's version, job)
-pub type CableFn = dyn Fn(CablePlan, &str, Option<(&dyn BoardLink, &str)>, &[u8], &[u8], &Path, &str, &Shared) + Send + Sync;
+pub type CableFn = dyn Fn(CablePlan, &str, Option<(&dyn BoardLink, &str)>, &[u8], &[u8], &Path, &str, &Shared)
+    + Send
+    + Sync;
 
 pub struct CenterEnv {
     pub fetch: Arc<dyn Fetch>,
@@ -111,7 +132,8 @@ pub fn retry_delay(n: u32) -> Duration {
 }
 
 pub fn journal_path(dir: &Path, mac: &str) -> PathBuf {
-    dir.join("updates").join(format!("{}.json", mac.replace(':', "").to_uppercase()))
+    dir.join("updates")
+        .join(format!("{}.json", mac.replace(':', "").to_uppercase()))
 }
 
 /// A journal left by a cable update that did not reach its end.
@@ -120,7 +142,11 @@ pub fn resumable(dir: &Path, mac: &str) -> Option<String> {
     (j.step < Step::Restarted).then(|| format!("{:?}", j.step))
 }
 
-pub fn start(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(UpdView) + Send>) -> Sender<UpdCmd> {
+pub fn start(
+    env: CenterEnv,
+    boards: Arc<Mutex<Vec<BoardHere>>>,
+    publish: Box<dyn Fn(UpdView) + Send>,
+) -> Sender<UpdCmd> {
     let (tx, rx) = channel();
     std::thread::Builder::new()
         .name("updates".into())
@@ -131,7 +157,12 @@ pub fn start(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dy
 
 type Rel = Option<(Release, Vec<u8>, Vec<u8>)>;
 
-fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(UpdView) + Send>, rx: Receiver<UpdCmd>) {
+fn run(
+    env: CenterEnv,
+    boards: Arc<Mutex<Vec<BoardHere>>>,
+    publish: Box<dyn Fn(UpdView) + Send>,
+    rx: Receiver<UpdCmd>,
+) {
     let env = Arc::new(env);
     let rel: Arc<Mutex<Rel>> = Arc::default();
     let mut view = UpdView::default();
@@ -172,13 +203,19 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
         }
         let here = boards.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let busy = jobs.values().any(|j| j.done_at.is_none());
-        let every = if busy { Duration::from_secs(2) } else { Duration::from_secs(30) };
+        let every = if busy {
+            Duration::from_secs(2)
+        } else {
+            Duration::from_secs(30)
+        };
         let release = rel.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let mut out = Vec::new();
         for b in &here {
             let (link, paired) = (env.link_for)(&b.mac);
             if let Some(url) = &b.url {
-                let stale = seen.get(&b.mac).is_none_or(|(_, at)| now.duration_since(*at) >= every);
+                let stale = seen
+                    .get(&b.mac)
+                    .is_none_or(|(_, at)| now.duration_since(*at) >= every);
                 if stale {
                     if let Ok(v) = link.status(url) {
                         seen.insert(b.mac.clone(), (Seen::from_status(&v), now));
@@ -190,23 +227,38 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
             out.push(BoardUpd {
                 mac: b.mac.clone(),
                 firmware: s.and_then(|s| s.firmware.clone()),
-                offer: offer(s, release.as_ref().map(|r| &r.0), &env.this_version, paired && b.url.is_some()),
+                offer: offer(
+                    s,
+                    release.as_ref().map(|r| &r.0),
+                    &env.this_version,
+                    paired && b.url.is_some(),
+                ),
                 job,
                 resumable: resumable(&env.dir, &b.mac),
             });
         }
         // A finished job's result stays on screen for a while, then clears.
         for j in jobs.values_mut() {
-            let end = matches!(j.sh.get(), Job::Done { .. } | Job::RolledBack | Job::Stopped | Job::Failed { .. });
+            let end = matches!(
+                j.sh.get(),
+                Job::Done { .. } | Job::RolledBack | Job::Stopped | Job::Failed { .. }
+            );
             if end && j.done_at.is_none() {
                 j.done_at = Some(now);
             }
         }
-        jobs.retain(|_, j| j.done_at.is_none_or(|t| now.duration_since(t) < Duration::from_secs(600)));
+        jobs.retain(|_, j| {
+            j.done_at
+                .is_none_or(|t| now.duration_since(t) < Duration::from_secs(600))
+        });
         let mut c = comp.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if c == CompUpd::None {
             if let Some(a) = companion_offer(release.as_ref().map(|r| &r.0), &env.this_version) {
-                let to = release.as_ref().and_then(|r| r.0.companion.as_ref()).map(|c| c.version.clone()).unwrap_or_default();
+                let to = release
+                    .as_ref()
+                    .and_then(|r| r.0.companion.as_ref())
+                    .map(|c| c.version.clone())
+                    .unwrap_or_default();
                 c = CompUpd::Available { to, size: a.size };
             }
         }
@@ -222,7 +274,11 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
             publish(view.clone());
         }
 
-        let wait = if busy { Duration::from_millis(500) } else { Duration::from_secs(2) };
+        let wait = if busy {
+            Duration::from_millis(500)
+        } else {
+            Duration::from_secs(2)
+        };
         match rx.recv_timeout(wait) {
             Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {}
@@ -242,40 +298,82 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
                     continue; // one update per board at a time
                 }
                 let Some(r) = release.clone() else { continue };
-                let Some(b) = here.iter().find(|b| b.mac == mac).cloned() else { continue };
+                let Some(b) = here.iter().find(|b| b.mac == mac).cloned() else {
+                    continue;
+                };
                 let sh = Shared::new();
-                jobs.insert(mac.clone(), Running { sh: sh.clone(), done_at: None });
+                jobs.insert(
+                    mac.clone(),
+                    Running {
+                        sh: sh.clone(),
+                        done_at: None,
+                    },
+                );
                 let s = b.url.as_ref().and(seen.get(&mac)).map(|(s, _)| s.clone());
                 let e = env.clone();
                 std::thread::spawn(move || {
                     let (link, paired) = (e.link_for)(&mac);
                     if !cable {
                         let Some(url) = b.url.clone() else {
-                            return sh.set(Job::Failed { why: "the board is not reachable over the network".into() });
+                            return sh.set(Job::Failed {
+                                why: "the board is not reachable over the network".into(),
+                            });
                         };
                         let (m, sig) = (r.1.clone(), r.2.clone());
                         let e2 = e.clone();
                         let rel2 = r.0.clone();
                         let files = move || -> Result<Vec<(String, Vec<u8>)>, String> {
-                            let img = fetch_asset(e2.fetch.as_ref(), &e2.source, &rel2.image, image_cap())?;
-                            Ok(vec![(MANIFEST.into(), m.clone()), (SIGNATURE.into(), sig.clone()), (rel2.image.name.clone(), img)])
+                            let img = fetch_asset(
+                                e2.fetch.as_ref(),
+                                &e2.source,
+                                &rel2.image,
+                                image_cap(),
+                            )?;
+                            Ok(vec![
+                                (MANIFEST.into(), m.clone()),
+                                (SIGNATURE.into(), sig.clone()),
+                                (rel2.image.name.clone(), img),
+                            ])
                         };
-                        return air_job(link.as_ref(), &url, &r.0, &files, e.relay.as_ref(), e.clock.as_ref(), &sh);
+                        return air_job(
+                            link.as_ref(),
+                            &url,
+                            &r.0,
+                            &files,
+                            e.relay.as_ref(),
+                            e.clock.as_ref(),
+                            &sh,
+                        );
                     }
                     // HIDFI_CABLE_PREFER=native: tests only, to exercise the native path
                     // and its rescue on a board whose COM port is known.
-                    let prefer_native = std::env::var("HIDFI_CABLE_PREFER").as_deref() == Ok("native");
+                    let prefer_native =
+                        std::env::var("HIDFI_CABLE_PREFER").as_deref() == Ok("native");
                     let known = com_known(&e.dir.join("updates"), &mac);
-                    let plan = match cable_plan(s.as_ref(), paired, &(e.com_ports)(), known.as_deref(), prefer_native) {
+                    let plan = match cable_plan(
+                        s.as_ref(),
+                        paired,
+                        &(e.com_ports)(),
+                        known.as_deref(),
+                        prefer_native,
+                    ) {
                         Ok(p) => p,
                         Err(why) => return sh.set(Job::Failed { why }),
                     };
-                    sh.set(Job::Cable { step: "downloading the release".into(), bytes: 0, total: r.0.image.size });
+                    sh.set(Job::Cable {
+                        step: "downloading the release".into(),
+                        bytes: 0,
+                        total: r.0.image.size,
+                    });
                     let Some(ta) = r.0.table.clone() else {
-                        return sh.set(Job::Failed { why: "this release has no partition table for the cable".into() });
+                        return sh.set(Job::Failed {
+                            why: "this release has no partition table for the cable".into(),
+                        });
                     };
                     let got = fetch_asset(e.fetch.as_ref(), &e.source, &r.0.image, image_cap())
-                        .and_then(|img| Ok((img, fetch_asset(e.fetch.as_ref(), &e.source, &ta, 0x1000)?)));
+                        .and_then(|img| {
+                            Ok((img, fetch_asset(e.fetch.as_ref(), &e.source, &ta, 0x1000)?))
+                        });
                     let (img, table) = match got {
                         Ok(x) => x,
                         Err(why) => return sh.set(Job::Failed { why }),
@@ -293,12 +391,20 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
             }
             Ok(UpdCmd::GetCompanion) => {
                 let Some(r) = release.clone() else { continue };
-                let Some(a) = companion_offer(Some(&r.0), &env.this_version).cloned() else { continue };
-                let to = r.0.companion.as_ref().map(|c| c.version.clone()).unwrap_or_default();
-                *comp.lock().unwrap_or_else(|e| e.into_inner()) = CompUpd::Downloading { to: to.clone() };
+                let Some(a) = companion_offer(Some(&r.0), &env.this_version).cloned() else {
+                    continue;
+                };
+                let to =
+                    r.0.companion
+                        .as_ref()
+                        .map(|c| c.version.clone())
+                        .unwrap_or_default();
+                *comp.lock().unwrap_or_else(|e| e.into_inner()) =
+                    CompUpd::Downloading { to: to.clone() };
                 let (e, c) = (env.clone(), comp.clone());
                 std::thread::spawn(move || {
-                    let r = fetch_installer(e.fetch.as_ref(), &e.source, &a, &e.dir.join("downloads"));
+                    let r =
+                        fetch_installer(e.fetch.as_ref(), &e.source, &a, &e.dir.join("downloads"));
                     *c.lock().unwrap_or_else(|e| e.into_inner()) = match r {
                         Ok(path) => CompUpd::Ready { to, path },
                         Err(why) => CompUpd::Failed { why },
@@ -306,7 +412,9 @@ fn run(env: CenterEnv, boards: Arc<Mutex<Vec<BoardHere>>>, publish: Box<dyn Fn(U
                 });
             }
             Ok(UpdCmd::OpenInstaller) => {
-                if let CompUpd::Ready { path, .. } = &*comp.lock().unwrap_or_else(|e| e.into_inner()) {
+                if let CompUpd::Ready { path, .. } =
+                    &*comp.lock().unwrap_or_else(|e| e.into_inner())
+                {
                     (env.open)(path);
                 }
             }
@@ -340,7 +448,10 @@ impl UpdatesSetup {
             }),
             com_ports: Arc::new(real::com_ports),
             open: Arc::new(open_path),
-            source: std::env::var("HIDFI_RELEASES").ok().filter(|s| s.ends_with('/')).unwrap_or_else(|| RELEASES.into()),
+            source: std::env::var("HIDFI_RELEASES")
+                .ok()
+                .filter(|s| s.ends_with('/'))
+                .unwrap_or_else(|| RELEASES.into()),
             this_version: env!("CARGO_PKG_VERSION").into(),
             trusted: trusted_keys(),
             clock: Arc::new(RealClock),
@@ -371,7 +482,16 @@ fn open_path(p: &Path) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(p).spawn();
     #[cfg(windows)]
-    let _ = std::process::Command::new("explorer").arg("/select,").arg(p).spawn();
+    let _ = std::process::Command::new("explorer")
+        .arg("/select,")
+        .arg(p)
+        .spawn();
     #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(std::path::Path::new(p).parent().unwrap_or(std::path::Path::new("."))).spawn();
+    let _ = std::process::Command::new("xdg-open")
+        .arg(
+            std::path::Path::new(p)
+                .parent()
+                .unwrap_or(std::path::Path::new(".")),
+        )
+        .spawn();
 }

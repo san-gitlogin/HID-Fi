@@ -7,9 +7,9 @@
 
 #[cfg(test)]
 use crate::service::BoardView;
+use crate::service::{BoardState, View};
 use crate::updates::center::{BoardUpd, CompUpd, UpdCmd};
 use crate::updates::{Job, Offer};
-use crate::service::{BoardState, View};
 use hidfi_agent::session::Status;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +37,10 @@ pub enum Action {
     /// An update action; the click is the person's consent.
     Update(UpdCmd),
     /// Share this computer's sound / its microphone (None: leave as is).
-    Sound { system: Option<bool>, mic: Option<bool> },
+    Sound {
+        system: Option<bool>,
+        mic: Option<bool>,
+    },
     /// The OS's own page for the Microphone permission.
     AllowMicrophone,
 }
@@ -85,7 +88,9 @@ pub fn model(v: &View) -> Model {
 /// tray can never disagree with the window. None: this build has no sound.
 pub fn sound_switches(m: &Model) -> Option<(bool, bool)> {
     let sys = m.actions.iter().find_map(|(_, a)| match a {
-        Action::Sound { system: Some(to), .. } => Some(!to),
+        Action::Sound {
+            system: Some(to), ..
+        } => Some(!to),
         _ => None,
     })?;
     let mic = m.actions.iter().find_map(|(_, a)| match a {
@@ -97,12 +102,18 @@ pub fn sound_switches(m: &Model) -> Option<(bool, bool)> {
 
 /// The model's actions a tray lists as plain items (the sound switches are check marks there).
 pub fn tray_actions(m: &Model) -> impl Iterator<Item = &(String, Action)> {
-    m.actions.iter().filter(|(_, a)| !matches!(a, Action::Sound { .. }))
+    m.actions
+        .iter()
+        .filter(|(_, a)| !matches!(a, Action::Sound { .. }))
 }
 
 /// The computer's sound and microphone: what is shared, what stops it, the
 /// switches. Once, about this computer (docs/AUDIO.md).
-pub fn sound(s: &crate::service::SoundView, lines: &mut Vec<String>, actions: &mut Vec<(String, Action)>) {
+pub fn sound(
+    s: &crate::service::SoundView,
+    lines: &mut Vec<String>,
+    actions: &mut Vec<(String, Action)>,
+) {
     use hidfi_stream::audio::Share;
     let Some(st) = &s.state else { return };
     match &st.system {
@@ -110,8 +121,15 @@ pub fn sound(s: &crate::service::SoundView, lines: &mut Vec<String>, actions: &m
         Share::Off => lines.push("Sound: not shared".into()),
         Share::Unavailable(why) => {
             lines.push(format!("Sound cannot be shared: {why}"));
-            if why.contains("Screen Recording") && !actions.iter().any(|(_, a)| *a == Action::AllowScreenRecording) {
-                actions.push(("Allow Screen Recording\u{2026}".into(), Action::AllowScreenRecording));
+            if why.contains("Screen Recording")
+                && !actions
+                    .iter()
+                    .any(|(_, a)| *a == Action::AllowScreenRecording)
+            {
+                actions.push((
+                    "Allow Screen Recording\u{2026}".into(),
+                    Action::AllowScreenRecording,
+                ));
             }
         }
     }
@@ -121,17 +139,36 @@ pub fn sound(s: &crate::service::SoundView, lines: &mut Vec<String>, actions: &m
         Share::Unavailable(why) => {
             lines.push(format!("The microphone cannot be shared: {why}"));
             if why.contains("Microphone access") {
-                actions.push(("Allow microphone access\u{2026}".into(), Action::AllowMicrophone));
+                actions.push((
+                    "Allow microphone access\u{2026}".into(),
+                    Action::AllowMicrophone,
+                ));
             }
         }
     }
     actions.push((
-        if s.system { "Stop sharing this computer's sound" } else { "Share this computer's sound" }.into(),
-        Action::Sound { system: Some(!s.system), mic: None },
+        if s.system {
+            "Stop sharing this computer's sound"
+        } else {
+            "Share this computer's sound"
+        }
+        .into(),
+        Action::Sound {
+            system: Some(!s.system),
+            mic: None,
+        },
     ));
     actions.push((
-        if s.mic { "Stop sharing the microphone" } else { "Share the microphone" }.into(),
-        Action::Sound { system: None, mic: Some(!s.mic) },
+        if s.mic {
+            "Stop sharing the microphone"
+        } else {
+            "Share the microphone"
+        }
+        .into(),
+        Action::Sound {
+            system: None,
+            mic: Some(!s.mic),
+        },
     ));
 }
 
@@ -319,7 +356,9 @@ fn model_one(v: &View, mac: Option<&str>) -> Model {
         icon = Icon::Attention;
         lines.push(p.clone());
     }
-    let board_mac = mac.map(str::to_string).or_else(|| v.boards.first().map(|b| b.mac.clone()));
+    let board_mac = mac
+        .map(str::to_string)
+        .or_else(|| v.boards.first().map(|b| b.mac.clone()));
     if let Some(u) = board_mac.as_deref().and_then(|m| v.updates.board(m)) {
         if board_update(u, &mut lines, &mut actions) && icon != Icon::Live {
             icon = Icon::Attention;
@@ -347,27 +386,49 @@ fn pct(n: u64, total: u64) -> u64 {
 }
 
 /// The update lines and buttons for one board. True: it needs the person's attention.
-pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(String, Action)>) -> bool {
+pub fn board_update(
+    u: &BoardUpd,
+    lines: &mut Vec<String>,
+    actions: &mut Vec<(String, Action)>,
+) -> bool {
     let mac = u.mac.clone();
-    let cancel = || ("Cancel the update".to_string(), Action::Update(UpdCmd::Cancel(mac.clone())));
+    let cancel = || {
+        (
+            "Cancel the update".to_string(),
+            Action::Update(UpdCmd::Cancel(mac.clone())),
+        )
+    };
     match &u.job {
         Job::Checking => {
             lines.push("Update: the board is checking the release…".into());
             actions.push(cancel());
             return false;
         }
-        Job::Downloading { bytes, total, paused } => {
+        Job::Downloading {
+            bytes,
+            total,
+            paused,
+        } => {
             lines.push(format!(
                 "Update: downloading, {}%{}",
                 pct(*bytes, *total),
-                if *paused { " - paused while you use the board" } else { "" }
+                if *paused {
+                    " - paused while you use the board"
+                } else {
+                    ""
+                }
             ));
             actions.push(cancel());
             return false;
         }
         Job::Ready => {
-            lines.push("Update ready: HID-Fi restarts into it once nobody uses it for 5 seconds".into());
-            actions.push(("Restart HID-Fi now".into(), Action::Update(UpdCmd::RestartNow(mac.clone()))));
+            lines.push(
+                "Update ready: HID-Fi restarts into it once nobody uses it for 5 seconds".into(),
+            );
+            actions.push((
+                "Restart HID-Fi now".into(),
+                Action::Update(UpdCmd::RestartNow(mac.clone())),
+            ));
             actions.push((
                 "Cancel the update (keep this version)".into(),
                 Action::Update(UpdCmd::Cancel(mac.clone())),
@@ -379,12 +440,21 @@ pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(St
             return false;
         }
         Job::Verifying => {
-            lines.push("Update: HID-Fi is checking its new firmware (about a minute) - keep it plugged in".into());
+            lines.push(
+                "Update: HID-Fi is checking its new firmware (about a minute) - keep it plugged in"
+                    .into(),
+            );
             return false;
         }
         Job::Cable { step, bytes, total } => {
-            let p = if *total > 0 { format!(", {}%", pct(*bytes, *total)) } else { String::new() };
-            lines.push(format!("Updating by cable: {step}{p} - keep both cables in"));
+            let p = if *total > 0 {
+                format!(", {}%", pct(*bytes, *total))
+            } else {
+                String::new()
+            };
+            lines.push(format!(
+                "Updating by cable: {step}{p} - keep both cables in"
+            ));
             actions.push(cancel());
             return false;
         }
@@ -398,7 +468,9 @@ pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(St
         }
         Job::Stopped => lines.push("Update cancelled - nothing changed on the board".into()),
         Job::Failed { why } => {
-            lines.push(format!("The update did not finish: {why}. The board keeps the version it has"));
+            lines.push(format!(
+                "The update did not finish: {why}. The board keeps the version it has"
+            ));
             return true;
         }
         Job::Idle => {}
@@ -409,29 +481,55 @@ pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(St
         ));
         actions.push((
             "Resume the cable update".into(),
-            Action::Update(UpdCmd::Update { mac: mac.clone(), cable: true }),
+            Action::Update(UpdCmd::Update {
+                mac: mac.clone(),
+                cable: true,
+            }),
         ));
         return true;
     }
     match &u.offer {
-        Offer::Board { to, size, changes, security, over_air, cable_once } => {
-            let fw = u.firmware.as_deref().map(|f| f.trim_start_matches("hid_fi_v").to_string()).unwrap_or_default();
+        Offer::Board {
+            to,
+            size,
+            changes,
+            security,
+            over_air,
+            cable_once,
+        } => {
+            let fw = u
+                .firmware
+                .as_deref()
+                .map(|f| f.trim_start_matches("hid_fi_v").to_string())
+                .unwrap_or_default();
             lines.push(format!(
                 "{}Update available: {fw} to {to} ({})",
                 if *security { "Security " } else { "" },
                 mb(*size)
             ));
             if let Some((_, text)) = changes.first() {
-                let first = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+                let first = text
+                    .lines()
+                    .map(str::trim)
+                    .find(|l| !l.is_empty())
+                    .unwrap_or("");
                 if !first.is_empty() {
-                    lines.push(format!("What's new: {}", first.trim_start_matches(['-', '*', ' '])));
+                    lines.push(format!(
+                        "What's new: {}",
+                        first.trim_start_matches(['-', '*', ' '])
+                    ));
                 }
             }
             if *over_air {
-                actions.push((format!("Update HID-Fi to {to}"), Action::Update(UpdCmd::Update { mac, cable: false })));
+                actions.push((
+                    format!("Update HID-Fi to {to}"),
+                    Action::Update(UpdCmd::Update { mac, cable: false }),
+                ));
             } else {
                 if *cable_once {
-                    lines.push("This board needs the cable once: after that it updates over WiFi".into());
+                    lines.push(
+                        "This board needs the cable once: after that it updates over WiFi".into(),
+                    );
                 }
                 actions.push((
                     format!("Update HID-Fi to {to} by cable…"),
@@ -440,13 +538,20 @@ pub fn board_update(u: &BoardUpd, lines: &mut Vec<String>, actions: &mut Vec<(St
             }
         }
         Offer::UpdateCompanionFirst => {
-            lines.push("This board's firmware is newer than this Companion: update the Companion".into());
+            lines.push(
+                "This board's firmware is newer than this Companion: update the Companion".into(),
+            );
             return true;
         }
-        Offer::Verifying => lines.push("HID-Fi is checking its new firmware (about a minute)".into()),
+        Offer::Verifying => {
+            lines.push("HID-Fi is checking its new firmware (about a minute)".into())
+        }
         Offer::UpToDate => {
             if let Some(fw) = &u.firmware {
-                lines.push(format!("Firmware {} - up to date", fw.trim_start_matches("hid_fi_v")));
+                lines.push(format!(
+                    "Firmware {} - up to date",
+                    fw.trim_start_matches("hid_fi_v")
+                ));
             }
         }
         Offer::Unknown => {}
@@ -459,15 +564,26 @@ pub fn companion_update(c: &CompUpd, lines: &mut Vec<String>, actions: &mut Vec<
     match c {
         CompUpd::None => {}
         CompUpd::Available { to, size } => {
-            lines.push(format!("HID-Fi Companion {to} is available ({})", mb(*size)));
-            actions.push((format!("Download Companion {to}"), Action::Update(UpdCmd::GetCompanion)));
+            lines.push(format!(
+                "HID-Fi Companion {to} is available ({})",
+                mb(*size)
+            ));
+            actions.push((
+                format!("Download Companion {to}"),
+                Action::Update(UpdCmd::GetCompanion),
+            ));
         }
         CompUpd::Downloading { to } => lines.push(format!("Downloading HID-Fi Companion {to}…")),
         CompUpd::Ready { to, .. } => {
             lines.push(format!("HID-Fi Companion {to} is downloaded and checked"));
-            actions.push((format!("Install Companion {to}…"), Action::Update(UpdCmd::OpenInstaller)));
+            actions.push((
+                format!("Install Companion {to}…"),
+                Action::Update(UpdCmd::OpenInstaller),
+            ));
         }
-        CompUpd::Failed { why } => lines.push(format!("The Companion update did not download: {why}")),
+        CompUpd::Failed { why } => {
+            lines.push(format!("The Companion update did not download: {why}"))
+        }
     }
 }
 
@@ -1009,56 +1125,135 @@ mod tests {
 
     fn with_update(offer: Offer, job: Job) -> View {
         let mut v = view(found(), Status::Online);
-        v.boards = vec![BoardView { mac: "B81F3FDA1A2C".into(), board: found(), session: Status::Online }];
-        v.updates.boards = vec![BoardUpd { mac: "B81F3FDA1A2C".into(), firmware: Some("hid_fi_v4.0.4".into()),
-                                           offer, job, resumable: None }];
+        v.boards = vec![BoardView {
+            mac: "B81F3FDA1A2C".into(),
+            board: found(),
+            session: Status::Online,
+        }];
+        v.updates.boards = vec![BoardUpd {
+            mac: "B81F3FDA1A2C".into(),
+            firmware: Some("hid_fi_v4.0.4".into()),
+            offer,
+            job,
+            resumable: None,
+        }];
         v
     }
 
     fn offer(over_air: bool, cable_once: bool) -> Offer {
-        Offer::Board { to: "4.1.0".into(), size: 1_534_000, changes: vec![("4.1.0".into(), "- Updates over the air.\n".into())],
-                       security: false, over_air, cable_once }
+        Offer::Board {
+            to: "4.1.0".into(),
+            size: 1_534_000,
+            changes: vec![("4.1.0".into(), "- Updates over the air.\n".into())],
+            security: false,
+            over_air,
+            cable_once,
+        }
     }
 
     #[test]
     fn an_update_says_the_versions_the_size_and_what_is_new() {
         let m = model(&with_update(offer(true, false), Job::Idle));
-        assert!(m.lines.contains(&"Update available: 4.0.4 to 4.1.0 (1.5 MB)".to_string()), "{:?}", m.lines);
-        assert!(m.lines.contains(&"What's new: Updates over the air.".to_string()), "{:?}", m.lines);
+        assert!(
+            m.lines
+                .contains(&"Update available: 4.0.4 to 4.1.0 (1.5 MB)".to_string()),
+            "{:?}",
+            m.lines
+        );
+        assert!(
+            m.lines
+                .contains(&"What's new: Updates over the air.".to_string()),
+            "{:?}",
+            m.lines
+        );
         assert!(m.actions.iter().any(|(l, a)| l == "Update HID-Fi to 4.1.0"
-            && *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: false })));
+            && *a
+                == Action::Update(UpdCmd::Update {
+                    mac: "B81F3FDA1A2C".into(),
+                    cable: false
+                })));
     }
 
     #[test]
     fn a_board_that_needs_the_cable_says_so_once() {
         let m = model(&with_update(offer(false, true), Job::Idle));
         assert!(m.lines.iter().any(|l| l.contains("needs the cable once")));
-        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: true })));
-        assert!(!m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Update { mac: "B81F3FDA1A2C".into(), cable: false })));
+        assert!(m.actions.iter().any(|(_, a)| *a
+            == Action::Update(UpdCmd::Update {
+                mac: "B81F3FDA1A2C".into(),
+                cable: true
+            })));
+        assert!(!m.actions.iter().any(|(_, a)| *a
+            == Action::Update(UpdCmd::Update {
+                mac: "B81F3FDA1A2C".into(),
+                cable: false
+            })));
     }
 
     #[test]
     fn every_running_step_can_be_cancelled_and_ready_can_restart_now() {
-        for job in [Job::Checking, Job::Downloading { bytes: 1, total: 2, paused: false },
-                    Job::Cable { step: "writing the firmware".into(), bytes: 1, total: 2 }] {
+        for job in [
+            Job::Checking,
+            Job::Downloading {
+                bytes: 1,
+                total: 2,
+                paused: false,
+            },
+            Job::Cable {
+                step: "writing the firmware".into(),
+                bytes: 1,
+                total: 2,
+            },
+        ] {
             let m = model(&with_update(offer(true, false), job.clone()));
-            assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))), "{job:?}");
-            assert!(!m.actions.iter().any(|(l, _)| l.starts_with("Update HID-Fi")), "no second update while one runs: {job:?}");
+            assert!(
+                m.actions
+                    .iter()
+                    .any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))),
+                "{job:?}"
+            );
+            assert!(
+                !m.actions
+                    .iter()
+                    .any(|(l, _)| l.starts_with("Update HID-Fi")),
+                "no second update while one runs: {job:?}"
+            );
         }
         let m = model(&with_update(offer(true, false), Job::Ready));
-        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::RestartNow("B81F3FDA1A2C".into()))));
-        assert!(m.actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))));
+        assert!(m
+            .actions
+            .iter()
+            .any(|(_, a)| *a == Action::Update(UpdCmd::RestartNow("B81F3FDA1A2C".into()))));
+        assert!(m
+            .actions
+            .iter()
+            .any(|(_, a)| *a == Action::Update(UpdCmd::Cancel("B81F3FDA1A2C".into()))));
         // While it restarts and proves itself there is nothing to press: a reset now would roll it back.
         for job in [Job::Restarting, Job::Verifying] {
             let m = model(&with_update(offer(true, false), job));
-            assert!(!m.actions.iter().any(|(_, a)| matches!(a, Action::Update(_))));
+            assert!(!m
+                .actions
+                .iter()
+                .any(|(_, a)| matches!(a, Action::Update(_))));
         }
     }
 
     #[test]
     fn the_paused_download_says_why() {
-        let m = model(&with_update(offer(true, false), Job::Downloading { bytes: 45, total: 100, paused: true }));
-        assert!(m.lines.contains(&"Update: downloading, 45% - paused while you use the board".to_string()), "{:?}", m.lines);
+        let m = model(&with_update(
+            offer(true, false),
+            Job::Downloading {
+                bytes: 45,
+                total: 100,
+                paused: true,
+            },
+        ));
+        assert!(
+            m.lines
+                .contains(&"Update: downloading, 45% - paused while you use the board".to_string()),
+            "{:?}",
+            m.lines
+        );
     }
 
     #[test]
@@ -1066,9 +1261,17 @@ mod tests {
         let m = model(&with_update(offer(true, false), Job::RolledBack));
         assert_eq!(m.icon, Icon::Attention);
         assert!(m.lines.iter().any(|l| l.contains("Nothing was lost")));
-        let m = model(&with_update(offer(true, false), Job::Failed { why: "the board could not reach the release".into() }));
+        let m = model(&with_update(
+            offer(true, false),
+            Job::Failed {
+                why: "the board could not reach the release".into(),
+            },
+        ));
         assert_eq!(m.icon, Icon::Attention);
-        assert!(m.lines.iter().any(|l| l.contains("keeps the version it has")));
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.contains("keeps the version it has")));
     }
 
     #[test]
@@ -1076,54 +1279,131 @@ mod tests {
         let mut v = with_update(offer(false, true), Job::Idle);
         v.updates.boards[0].resumable = Some("ImageWritten".into());
         let m = model(&v);
-        assert!(m.actions.iter().any(|(l, _)| l == "Resume the cable update"));
+        assert!(m
+            .actions
+            .iter()
+            .any(|(l, _)| l == "Resume the cable update"));
         assert_eq!(m.icon, Icon::Attention);
     }
 
     #[test]
     fn the_companion_update_is_listed_once_with_several_boards() {
         let mut v = with_update(Offer::UpToDate, Job::Idle);
-        v.boards.push(BoardView { mac: "DCB4D909F7C8".into(), board: found(), session: Status::Online });
-        v.updates.companion = CompUpd::Available { to: "4.1.0".into(), size: 9_000_000 };
+        v.boards.push(BoardView {
+            mac: "DCB4D909F7C8".into(),
+            board: found(),
+            session: Status::Online,
+        });
+        v.updates.companion = CompUpd::Available {
+            to: "4.1.0".into(),
+            size: 9_000_000,
+        };
         let m = model(&v);
-        assert_eq!(m.lines.iter().filter(|l| l.contains("Companion 4.1.0 is available")).count(), 1, "{:?}", m.lines);
-        assert_eq!(m.actions.iter().filter(|(_, a)| *a == Action::Update(UpdCmd::GetCompanion)).count(), 1);
-        v.updates.companion = CompUpd::Ready { to: "4.1.0".into(), path: "/tmp/x.dmg".into() };
-        assert!(model(&v).actions.iter().any(|(_, a)| *a == Action::Update(UpdCmd::OpenInstaller)));
+        assert_eq!(
+            m.lines
+                .iter()
+                .filter(|l| l.contains("Companion 4.1.0 is available"))
+                .count(),
+            1,
+            "{:?}",
+            m.lines
+        );
+        assert_eq!(
+            m.actions
+                .iter()
+                .filter(|(_, a)| *a == Action::Update(UpdCmd::GetCompanion))
+                .count(),
+            1
+        );
+        v.updates.companion = CompUpd::Ready {
+            to: "4.1.0".into(),
+            path: "/tmp/x.dmg".into(),
+        };
+        assert!(model(&v)
+            .actions
+            .iter()
+            .any(|(_, a)| *a == Action::Update(UpdCmd::OpenInstaller)));
     }
 
     #[test]
     fn with_several_boards_each_update_names_its_board() {
         let mut v = with_update(offer(true, false), Job::Idle);
-        v.boards.push(BoardView { mac: "DCB4D909F7C8".into(), board: found(), session: Status::Online });
+        v.boards.push(BoardView {
+            mac: "DCB4D909F7C8".into(),
+            board: found(),
+            session: Status::Online,
+        });
         let m = model(&v);
-        assert!(m.lines.iter().any(|l| l.starts_with("HID-Fi DA1A2C: Update available")), "{:?}", m.lines);
-        assert!(m.actions.iter().any(|(l, _)| l == "Update HID-Fi to 4.1.0 (HID-Fi DA1A2C)"));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.starts_with("HID-Fi DA1A2C: Update available")),
+            "{:?}",
+            m.lines
+        );
+        assert!(m
+            .actions
+            .iter()
+            .any(|(l, _)| l == "Update HID-Fi to 4.1.0 (HID-Fi DA1A2C)"));
     }
 
     fn with_sound(system: bool, mic: bool, st: Option<hidfi_stream::audio::State>) -> View {
         let mut v = view(found(), Status::Online);
-        v.sound = crate::service::SoundView { system, mic, state: st };
+        v.sound = crate::service::SoundView {
+            system,
+            mic,
+            state: st,
+        };
         v
     }
 
     #[test]
     fn sound_shared_by_default_with_both_switches() {
         use hidfi_stream::audio::{Share, State};
-        let m = model(&with_sound(true, false, Some(State { system: Share::On, mic: Share::Off })));
-        assert!(m.lines.iter().any(|l| l.starts_with("Sound: this computer's sound is shared")));
-        assert!(!m.lines.iter().any(|l| l.starts_with("Microphone")), "nothing said about a microphone that is off");
+        let m = model(&with_sound(
+            true,
+            false,
+            Some(State {
+                system: Share::On,
+                mic: Share::Off,
+            }),
+        ));
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.starts_with("Sound: this computer's sound is shared")));
+        assert!(
+            !m.lines.iter().any(|l| l.starts_with("Microphone")),
+            "nothing said about a microphone that is off"
+        );
         assert_eq!(sound_switches(&m), Some((true, false)));
         assert!(m.actions.iter().any(|(l, a)| l == "Share the microphone"
-            && *a == Action::Sound { system: None, mic: Some(true) }));
-        assert!(!tray_actions(&m).any(|(_, a)| matches!(a, Action::Sound { .. })), "check marks in a tray, not items");
+            && *a
+                == Action::Sound {
+                    system: None,
+                    mic: Some(true)
+                }));
+        assert!(
+            !tray_actions(&m).any(|(_, a)| matches!(a, Action::Sound { .. })),
+            "check marks in a tray, not items"
+        );
     }
 
     #[test]
     fn a_shared_microphone_is_said_plainly() {
         use hidfi_stream::audio::{Share, State};
-        let m = model(&with_sound(true, true, Some(State { system: Share::On, mic: Share::On })));
-        assert!(m.lines.iter().any(|l| l.contains("whoever watches hears this room")));
+        let m = model(&with_sound(
+            true,
+            true,
+            Some(State {
+                system: Share::On,
+                mic: Share::On,
+            }),
+        ));
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.contains("whoever watches hears this room")));
         assert_eq!(sound_switches(&m), Some((true, true)));
     }
 
@@ -1131,13 +1411,25 @@ mod tests {
     fn what_stops_sound_is_said_with_the_way_to_fix_it() {
         use hidfi_stream::audio::{Share, State};
         let st = State {
-            system: Share::Unavailable("Screen Recording is not allowed for HID-Fi Companion".into()),
+            system: Share::Unavailable(
+                "Screen Recording is not allowed for HID-Fi Companion".into(),
+            ),
             mic: Share::Unavailable("Microphone access is not allowed for HID-Fi Companion".into()),
         };
         let m = model(&with_sound(true, true, Some(st)));
         assert!(m.actions.iter().any(|(_, a)| *a == Action::AllowMicrophone));
-        assert_eq!(m.actions.iter().filter(|(_, a)| *a == Action::AllowScreenRecording).count(), 1, "once");
-        assert!(m.lines.iter().any(|l| l.starts_with("Sound cannot be shared: Screen Recording")));
+        assert_eq!(
+            m.actions
+                .iter()
+                .filter(|(_, a)| *a == Action::AllowScreenRecording)
+                .count(),
+            1,
+            "once"
+        );
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.starts_with("Sound cannot be shared: Screen Recording")));
     }
 
     #[test]

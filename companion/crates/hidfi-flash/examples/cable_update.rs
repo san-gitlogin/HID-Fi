@@ -14,12 +14,18 @@ use hidfi_flash::update::{self, Connect, Progress, Release, Step};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let mac: Vec<u8> = a[2].split(':').map(|h| u8::from_str_radix(h, 16).unwrap()).collect();
+    let mac: Vec<u8> = a[2]
+        .split(':')
+        .map(|h| u8::from_str_radix(h, 16).unwrap())
+        .collect();
     let mac: [u8; 6] = mac.try_into().unwrap();
     let image = std::fs::read(&a[3]).expect("image");
     let table = std::fs::read(&a[4]).expect("table");
     let mut f = Flasher::new(Serial::open(&a[1], 115_200).expect("open"));
-    let rel = Release { image: &image, table: &table };
+    let rel = Release {
+        image: &image,
+        table: &table,
+    };
     let mut last = 0usize;
     let mut on = |step: Step, n: usize, total: usize| {
         if n * 10 / total.max(1) != last {
@@ -28,9 +34,23 @@ fn main() {
         }
     };
     let t = Instant::now();
-    match update::run(&mut f, &mac, Connect::Reset, &rel, Path::new(&a[5]), Progress { cancel: &|| false, on: &mut on }) {
-        Ok(j) => println!("{{\"written\":true,\"path\":\"{:?}\",\"slot\":{},\"secs\":{:.1}}}", j.path, j.target_slot,
-                          t.elapsed().as_secs_f32()),
+    match update::run(
+        &mut f,
+        &mac,
+        Connect::Reset,
+        &rel,
+        Path::new(&a[5]),
+        Progress {
+            cancel: &|| false,
+            on: &mut on,
+        },
+    ) {
+        Ok(j) => println!(
+            "{{\"written\":true,\"path\":\"{:?}\",\"slot\":{},\"secs\":{:.1}}}",
+            j.path,
+            j.target_slot,
+            t.elapsed().as_secs_f32()
+        ),
         Err(e) => {
             println!("{{\"error\":\"{e}\"}}");
             std::process::exit(2);
@@ -54,7 +74,10 @@ fn main() {
                 line.clear();
                 if s.contains("\"reply\":\"ota_status\"") {
                     let v: serde_json::Value = serde_json::from_str(&s).unwrap_or_default();
-                    println!("{{\"state\":{},\"firmware\":{},\"result\":{}}}", v["ota_state"], v["firmware"], v["ota_result"]);
+                    println!(
+                        "{{\"state\":{},\"firmware\":{},\"result\":{}}}",
+                        v["ota_state"], v["firmware"], v["ota_result"]
+                    );
                     if v["ota_state"] == "valid" {
                         return;
                     }

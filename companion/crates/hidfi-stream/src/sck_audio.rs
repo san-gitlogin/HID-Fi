@@ -23,8 +23,8 @@ use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass};
 use objc2_core_media::{CMSampleBuffer, CMTime, CMTimeFlags};
 use objc2_foundation::{NSArray, NSError};
 use objc2_screen_capture_kit::{
-    SCContentFilter, SCShareableContent, SCStream, SCStreamConfiguration, SCStreamDelegate, SCStreamOutput,
-    SCStreamOutputType, SCWindow,
+    SCContentFilter, SCShareableContent, SCStream, SCStreamConfiguration, SCStreamDelegate,
+    SCStreamOutput, SCStreamOutputType, SCWindow,
 };
 use std::ffi::c_void;
 use std::sync::mpsc;
@@ -85,7 +85,8 @@ extern "C" {
 }
 
 fn seconds(t: CMTime) -> Option<f64> {
-    (t.flags.contains(CMTimeFlags::Valid) && t.timescale > 0).then(|| t.value as f64 / t.timescale as f64)
+    (t.flags.contains(CMTimeFlags::Valid) && t.timescale > 0)
+        .then(|| t.value as f64 / t.timescale as f64)
 }
 
 /// The sample's capture time on our clock: how long ago, by the host clock, it began.
@@ -145,7 +146,9 @@ unsafe fn read_pcm(sb: *mut c_void) -> Option<(Vec<f32>, u32, usize)> {
         return None;
     }
     let count = *(storage.as_ptr() as *const u32);
-    let n = (count as usize).min((needed - 8) / std::mem::size_of::<AudioBuffer>()).min(8);
+    let n = (count as usize)
+        .min((needed - 8) / std::mem::size_of::<AudioBuffer>())
+        .min(8);
     let first = (storage.as_ptr() as *const u8).add(8) as *const AudioBuffer;
     let bufs: Vec<AudioBuffer> = (0..n).map(|i| *first.add(i)).collect();
     let mut out = vec![0f32; frames * channels];
@@ -194,7 +197,12 @@ define_class!(
 
     unsafe impl SCStreamOutput for Output {
         #[unsafe(method(stream:didOutputSampleBuffer:ofType:))]
-        fn did_output(&self, _stream: &SCStream, sample: &CMSampleBuffer, kind: SCStreamOutputType) {
+        fn did_output(
+            &self,
+            _stream: &SCStream,
+            sample: &CMSampleBuffer,
+            kind: SCStreamOutputType,
+        ) {
             if kind != self.ivars().kind {
                 return;
             }
@@ -206,13 +214,26 @@ define_class!(
                 let at = captured_at(sb);
                 match read_pcm(sb) {
                     Some((samples, rate, channels)) if rate > 0 && !samples.is_empty() => {
-                        (self.ivars().sink)(Chunk { samples, rate, channels, at });
+                        (self.ivars().sink)(Chunk {
+                            samples,
+                            rate,
+                            channels,
+                            at,
+                        });
                     }
                     _ => {
                         UNREADABLE.fetch_add(1, Relaxed);
                         let d = CMSampleBufferGetFormatDescription(sb);
-                        if let Some(a) = (!d.is_null()).then(|| CMAudioFormatDescriptionGetStreamBasicDescription(d)).and_then(|p| p.as_ref()) {
-                            LAST_FORMAT.store(((a.format_flags as u64) << 32) | ((a.bits_per_channel as u64) << 16) | a.channels_per_frame as u64, Relaxed);
+                        if let Some(a) = (!d.is_null())
+                            .then(|| CMAudioFormatDescriptionGetStreamBasicDescription(d))
+                            .and_then(|p| p.as_ref())
+                        {
+                            LAST_FORMAT.store(
+                                ((a.format_flags as u64) << 32)
+                                    | ((a.bits_per_channel as u64) << 16)
+                                    | a.channels_per_frame as u64,
+                                Relaxed,
+                            );
                         }
                     }
                 }
@@ -258,8 +279,14 @@ fn shareable() -> Result<Retained<SCShareableContent>, String> {
     let block = RcBlock::new(move |content: *mut SCShareableContent, err: *mut NSError| {
         let r = if !err.is_null() || content.is_null() {
             // SAFETY: a valid NSError when non-null.
-            let msg = unsafe { err.as_ref() }.map(|e| e.localizedDescription().to_string()).unwrap_or_default();
-            Err(if msg.is_empty() { "screen recording is not allowed".to_string() } else { msg })
+            let msg = unsafe { err.as_ref() }
+                .map(|e| e.localizedDescription().to_string())
+                .unwrap_or_default();
+            Err(if msg.is_empty() {
+                "screen recording is not allowed".to_string()
+            } else {
+                msg
+            })
         } else {
             // SAFETY: valid for the block's duration; retained to outlive it.
             unsafe { Retained::retain(content) }.ok_or_else(|| "no content".to_string())
@@ -270,7 +297,8 @@ fn shareable() -> Result<Retained<SCShareableContent>, String> {
     });
     // SAFETY: the block is retained by the call until it runs.
     unsafe { SCShareableContent::getShareableContentWithCompletionHandler(&block) };
-    rx.recv_timeout(Duration::from_secs(10)).map_err(|_| "the system did not answer".to_string())?
+    rx.recv_timeout(Duration::from_secs(10))
+        .map_err(|_| "the system did not answer".to_string())?
 }
 
 /// Whether this macOS's ScreenCaptureKit answers `sel` (sound: macOS 13;
@@ -289,7 +317,9 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
         return Err("sharing the microphone needs macOS 15 or later".into());
     }
     let content = shareable().map_err(|e| {
-        if e.to_lowercase().contains("not") && e.to_lowercase().contains("allow") || e.contains("declined") {
+        if e.to_lowercase().contains("not") && e.to_lowercase().contains("allow")
+            || e.contains("declined")
+        {
             "Screen Recording is not allowed for HID-Fi Companion".to_string()
         } else {
             e
@@ -299,11 +329,20 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
     unsafe {
         let display = content.displays().iter().next().ok_or("no display")?;
         let none: Retained<NSArray<SCWindow>> = NSArray::new();
-        let filter = SCContentFilter::initWithDisplay_excludingWindows(SCContentFilter::alloc(), &display, &none);
+        let filter = SCContentFilter::initWithDisplay_excludingWindows(
+            SCContentFilter::alloc(),
+            &display,
+            &none,
+        );
         let config = SCStreamConfiguration::new();
         config.setWidth(2);
         config.setHeight(2);
-        config.setMinimumFrameInterval(CMTime { value: 1, timescale: 1, flags: CMTimeFlags::Valid, epoch: 0 });
+        config.setMinimumFrameInterval(CMTime {
+            value: 1,
+            timescale: 1,
+            flags: CMTimeFlags::Valid,
+            epoch: 0,
+        });
         let kind = match which {
             Input::System => {
                 config.setCapturesAudio(true);
@@ -327,7 +366,11 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
         );
         let queue = DispatchQueue::new("hidfi.audio", None);
         stream
-            .addStreamOutput_type_sampleHandlerQueue_error(ProtocolObject::from_ref(&*output), kind, Some(&queue))
+            .addStreamOutput_type_sampleHandlerQueue_error(
+                ProtocolObject::from_ref(&*output),
+                kind,
+                Some(&queue),
+            )
             .map_err(|e| e.localizedDescription().to_string())?;
         let (tx, rx) = mpsc::channel::<Result<(), String>>();
         let tx = Mutex::new(Some(tx));
@@ -344,11 +387,18 @@ pub fn open(which: Input, sink: Sink, ended: Ended) -> Result<Box<dyn Running>, 
         rx.recv_timeout(Duration::from_secs(10))
             .map_err(|_| "the sound capture did not start".to_string())?
             .map_err(|e| match which {
-                Input::Microphone if e.to_lowercase().contains("microphone") || e.to_lowercase().contains("not authorized") => {
+                Input::Microphone
+                    if e.to_lowercase().contains("microphone")
+                        || e.to_lowercase().contains("not authorized") =>
+                {
                     "Microphone access is not allowed for HID-Fi Companion".to_string()
                 }
                 _ => e,
             })?;
-        Ok(Box::new(Capture { stream, _output: output, _queue: queue }))
+        Ok(Box::new(Capture {
+            stream,
+            _output: output,
+            _queue: queue,
+        }))
     }
 }

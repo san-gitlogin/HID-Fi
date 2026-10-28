@@ -453,16 +453,14 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let _slot = Slot(&c.viewers);
 
     let mut shown = (c.displays)();
-    send(
-        &mut ws,
-        {
-            let mut r = serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)});
-            if let Some(h) = &c.audio {
-                r["audio"] = audio_json(&h.state());
-            }
-            r
-        },
-    )
+    send(&mut ws, {
+        let mut r =
+            serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)});
+        if let Some(h) = &c.audio {
+            r["audio"] = audio_json(&h.state());
+        }
+        r
+    })
     .map_err(|e| e.to_string())?;
     // The offer, within the deadline. A viewer may ask for its monitor first
     // (it knows the list from "ready"): keep that for when it is set up - seen

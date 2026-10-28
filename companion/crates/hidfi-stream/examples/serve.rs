@@ -103,10 +103,19 @@ fn main() {
                     hidfi_stream::audio::Input::System => (48_000, 2),
                     hidfi_stream::audio::Input::Microphone => (44_100, 1),
                 };
-                Ok(hidfi_stream::audio::test_sound(hidfi_stream::epoch(), rate, ch, 480, sink))
+                Ok(hidfi_stream::audio::test_sound(
+                    hidfi_stream::epoch(),
+                    rate,
+                    ch,
+                    480,
+                    sink,
+                ))
             })
         };
-        Arc::new(hidfi_stream::audio::AudioHub::start(opener, hidfi_stream::audio::Settings::new(true, mic)))
+        Arc::new(hidfi_stream::audio::AudioHub::start(
+            opener,
+            hidfi_stream::audio::Settings::new(true, mic),
+        ))
     });
     let srv = server::start(None, gate, pipeline.clone(), audio, cert, {
         let f = fake.clone();

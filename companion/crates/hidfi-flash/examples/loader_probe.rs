@@ -15,9 +15,17 @@ fn main() {
     println!("sync: {:?} ({} ms)", f.sync(), t.elapsed().as_millis());
     if stub_first {
         let t = Instant::now();
-        println!("stub: {:?} ({} ms)", f.load_stub(&Stub::esp32s3().unwrap()), t.elapsed().as_millis());
+        println!(
+            "stub: {:?} ({} ms)",
+            f.load_stub(&Stub::esp32s3().unwrap()),
+            t.elapsed().as_millis()
+        );
     }
     let t = Instant::now();
-    println!("clear flag: {:?} ({} ms)", f.safe_write(SafeWrite::ClearForceDownload), t.elapsed().as_millis());
+    println!(
+        "clear flag: {:?} ({} ms)",
+        f.safe_write(SafeWrite::ClearForceDownload),
+        t.elapsed().as_millis()
+    );
     println!("reset: {:?}", f.hard_reset());
 }

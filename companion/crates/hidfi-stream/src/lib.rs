@@ -33,7 +33,11 @@ pub mod x11;
 
 /// The computer's own sound or microphone, captured the way this OS allows
 /// (docs/AUDIO.md). An OS without a capture yet says so; the picture carries on.
-pub fn audio_capture(i: audio::Input, sink: audio::Sink, ended: audio::Ended) -> Result<Box<dyn audio::Running>, String> {
+pub fn audio_capture(
+    i: audio::Input,
+    sink: audio::Sink,
+    ended: audio::Ended,
+) -> Result<Box<dyn audio::Running>, String> {
     #[cfg(target_os = "macos")]
     {
         sck_audio::open(i, sink, ended)

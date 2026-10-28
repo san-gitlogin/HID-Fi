@@ -38,15 +38,25 @@ pub struct Candidate {
 }
 
 pub fn candidates() -> Vec<Candidate> {
-    let Ok(ports) = serialport::available_ports() else { return Vec::new() };
+    let Ok(ports) = serialport::available_ports() else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for p in ports {
         if let serialport::SerialPortType::UsbPort(u) = &p.port_type {
             if (u.vid, u.pid) == CH343 {
-                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Com, usb_serial: u.serial_number.clone() });
+                out.push(Candidate {
+                    path: p.port_name.clone(),
+                    kind: Kind::Com,
+                    usb_serial: u.serial_number.clone(),
+                });
             } else if (u.vid, u.pid) == ROM_OTG {
                 let mac = u.serial_number.clone().unwrap_or_default().to_uppercase();
-                out.push(Candidate { path: p.port_name.clone(), kind: Kind::Loader { mac }, usb_serial: u.serial_number.clone() });
+                out.push(Candidate {
+                    path: p.port_name.clone(),
+                    kind: Kind::Loader { mac },
+                    usb_serial: u.serial_number.clone(),
+                });
             }
         }
     }
@@ -80,7 +90,9 @@ impl Port for Serial {
     }
 
     fn read(&mut self, buf: &mut [u8], timeout_ms: u32) -> io::Result<usize> {
-        self.port.set_timeout(Duration::from_millis(timeout_ms.max(1) as u64)).map_err(io::Error::other)?;
+        self.port
+            .set_timeout(Duration::from_millis(timeout_ms.max(1) as u64))
+            .map_err(io::Error::other)?;
         match self.port.read(buf) {
             Ok(n) => Ok(n),
             Err(e) if e.kind() == io::ErrorKind::TimedOut => Ok(0),
@@ -89,11 +101,15 @@ impl Port for Serial {
     }
 
     fn set_dtr(&mut self, on: bool) -> io::Result<()> {
-        self.port.write_data_terminal_ready(on).map_err(io::Error::other)
+        self.port
+            .write_data_terminal_ready(on)
+            .map_err(io::Error::other)
     }
 
     fn set_rts(&mut self, on: bool) -> io::Result<()> {
-        self.port.write_request_to_send(on).map_err(io::Error::other)
+        self.port
+            .write_request_to_send(on)
+            .map_err(io::Error::other)
     }
 
     fn set_baud(&mut self, baud: u32) -> io::Result<()> {

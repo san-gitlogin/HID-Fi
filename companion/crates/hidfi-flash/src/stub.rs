@@ -22,7 +22,11 @@ impl Stub {
             return Err(format!("the vendored stub is not v1.4.1 (sha256 {got})"));
         }
         let v: serde_json::Value = serde_json::from_str(JSON).map_err(|e| e.to_string())?;
-        let num = |k: &str| v[k].as_u64().map(|x| x as u32).ok_or(format!("stub: no {k}"));
+        let num = |k: &str| {
+            v[k].as_u64()
+                .map(|x| x as u32)
+                .ok_or(format!("stub: no {k}"))
+        };
         let b64 = |k: &str| v[k].as_str().map(base64).ok_or(format!("stub: no {k}"))?;
         Ok(Stub {
             text: b64("text")?,
@@ -64,7 +68,10 @@ mod tests {
         // Python's base64 on the same file: 8668 and 264 bytes (the text ends in "==").
         assert_eq!(s.text.len(), 8668);
         assert_eq!(s.data.len(), 264);
-        assert_eq!((s.text_start, s.data_start, s.entry), (1077379072, 1070280132, 1077384616));
+        assert_eq!(
+            (s.text_start, s.data_start, s.entry),
+            (1077379072, 1070280132, 1077384616)
+        );
     }
 
     #[test]

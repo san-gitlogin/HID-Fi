@@ -114,13 +114,24 @@ pub fn prepare(
 pub fn one_stream(sdp: &str) -> String {
     let first = sdp
         .lines()
-        .find_map(|l| l.strip_prefix("a=msid:").and_then(|r| r.split_whitespace().next()))
+        .find_map(|l| {
+            l.strip_prefix("a=msid:")
+                .and_then(|r| r.split_whitespace().next())
+        })
         .map(str::to_string);
-    let Some(first) = first else { return sdp.to_string() };
+    let Some(first) = first else {
+        return sdp.to_string();
+    };
     let mut others: Vec<String> = Vec::new();
     for l in sdp.lines() {
-        let id = l.strip_prefix("a=msid:").and_then(|r| r.split_whitespace().next());
-        let id = id.or_else(|| l.split(" msid:").nth(1).and_then(|r| r.split_whitespace().next()));
+        let id = l
+            .strip_prefix("a=msid:")
+            .and_then(|r| r.split_whitespace().next());
+        let id = id.or_else(|| {
+            l.split(" msid:")
+                .nth(1)
+                .and_then(|r| r.split_whitespace().next())
+        });
         if let Some(id) = id {
             if id != first && !others.iter().any(|o| o == id) {
                 others.push(id.to_string());
@@ -132,7 +143,9 @@ pub fn one_stream(sdp: &str) -> String {
         let mut l = l.to_string();
         if l.starts_with("a=msid:") || l.contains(" msid:") || l.starts_with("a=msid-semantic") {
             for o in &others {
-                l = l.replace(&format!(":{o} "), &format!(":{first} ")).replace(&format!(" {o} "), &format!(" {first} "));
+                l = l
+                    .replace(&format!(":{o} "), &format!(":{first} "))
+                    .replace(&format!(" {o} "), &format!(" {first} "));
                 if l.starts_with("a=msid-semantic") {
                     l = l.replace(&format!(" {o}"), "");
                 }
@@ -396,7 +409,11 @@ pub fn run(
                     Event::MediaAdded(m) if m.kind == MediaKind::Audio => {
                         audio = rtc
                             .writer(m.mid)
-                            .and_then(|w| w.payload_params().find(|p| p.spec().codec == Codec::Opus).cloned())
+                            .and_then(|w| {
+                                w.payload_params()
+                                    .find(|p| p.spec().codec == Codec::Opus)
+                                    .cloned()
+                            })
                             .map(|p| (m.mid, p));
                     }
                     Event::KeyframeRequest(_) => control.browser_wants_keyframe(),
@@ -574,11 +591,21 @@ mod tests {
         let sdp = "v=0\r\na=msid-semantic: WMS S1x S2y\r\nm=video 9 UDP 96\r\na=mid:0\r\na=msid:S1x vtrack\r\n\
                    a=ssrc:11 msid:S1x vtrack\r\nm=audio 9 UDP 111\r\na=mid:1\r\na=msid:S2y atrack\r\na=ssrc:22 msid:S2y atrack\r\n";
         let out = one_stream(sdp);
-        assert!(out.contains("a=msid:S1x vtrack\r\n") && out.contains("a=msid:S1x atrack\r\n"), "{out}");
+        assert!(
+            out.contains("a=msid:S1x vtrack\r\n") && out.contains("a=msid:S1x atrack\r\n"),
+            "{out}"
+        );
         assert!(out.contains("a=ssrc:22 msid:S1x atrack\r\n"), "{out}");
-        assert!(!out.contains("S2y"), "the second id is gone everywhere: {out}");
+        assert!(
+            !out.contains("S2y"),
+            "the second id is gone everywhere: {out}"
+        );
         assert!(out.contains("WMS S1x\r\n"), "{out}");
-        assert_eq!(one_stream("v=0\r\nm=video 9\r\n"), "v=0\r\nm=video 9\r\n", "no msid: unchanged");
+        assert_eq!(
+            one_stream("v=0\r\nm=video 9\r\n"),
+            "v=0\r\nm=video 9\r\n",
+            "no msid: unchanged"
+        );
     }
 
     #[test]

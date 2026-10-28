@@ -20,19 +20,19 @@ pub const COMP_API_MAX: u32 = 1;
 pub const RELEASE_KEYS: &[[u8; 65]] = &[
     // primary, key id fa48e032c618628f
     [
-        0x04, 0x49, 0x4d, 0xff, 0xb5, 0x37, 0x85, 0x0e, 0xc4, 0x15, 0x07, 0x0e, 0x75,
-        0x8b, 0x1a, 0x62, 0x95, 0x97, 0x84, 0xdd, 0x22, 0xea, 0xb1, 0x75, 0x6c, 0xc6,
-        0x35, 0xd7, 0xed, 0xc6, 0xe3, 0xa0, 0xaf, 0x76, 0xbb, 0x12, 0x4b, 0x6b, 0xe9,
-        0xe8, 0xff, 0x66, 0x4e, 0x82, 0xa2, 0x15, 0x09, 0xbc, 0xe0, 0x35, 0xf7, 0x6b,
-        0x01, 0x24, 0x1c, 0xa5, 0x47, 0xd4, 0x3e, 0xcb, 0x8b, 0x89, 0x5d, 0x7d, 0xa3,
+        0x04, 0x49, 0x4d, 0xff, 0xb5, 0x37, 0x85, 0x0e, 0xc4, 0x15, 0x07, 0x0e, 0x75, 0x8b, 0x1a,
+        0x62, 0x95, 0x97, 0x84, 0xdd, 0x22, 0xea, 0xb1, 0x75, 0x6c, 0xc6, 0x35, 0xd7, 0xed, 0xc6,
+        0xe3, 0xa0, 0xaf, 0x76, 0xbb, 0x12, 0x4b, 0x6b, 0xe9, 0xe8, 0xff, 0x66, 0x4e, 0x82, 0xa2,
+        0x15, 0x09, 0xbc, 0xe0, 0x35, 0xf7, 0x6b, 0x01, 0x24, 0x1c, 0xa5, 0x47, 0xd4, 0x3e, 0xcb,
+        0x8b, 0x89, 0x5d, 0x7d, 0xa3,
     ],
     // backup, key id d06253869d956bec
     [
-        0x04, 0xee, 0x56, 0xa3, 0x2e, 0xd7, 0x96, 0x65, 0xf6, 0xf4, 0x58, 0x0e, 0xc7,
-        0xcd, 0xf8, 0x1b, 0x84, 0xbb, 0x5d, 0x28, 0xd3, 0x4b, 0x22, 0x94, 0xd2, 0x4a,
-        0xbd, 0x16, 0x93, 0x4d, 0xb8, 0x1f, 0x2f, 0xed, 0xea, 0xa7, 0x7b, 0xfa, 0x9c,
-        0x89, 0x0f, 0xc5, 0x0c, 0xe4, 0xc4, 0x67, 0xce, 0x14, 0x3d, 0xab, 0x88, 0xc4,
-        0x99, 0xec, 0x05, 0x39, 0x56, 0x97, 0xec, 0xcc, 0x9f, 0x50, 0x57, 0xe2, 0x9a,
+        0x04, 0xee, 0x56, 0xa3, 0x2e, 0xd7, 0x96, 0x65, 0xf6, 0xf4, 0x58, 0x0e, 0xc7, 0xcd, 0xf8,
+        0x1b, 0x84, 0xbb, 0x5d, 0x28, 0xd3, 0x4b, 0x22, 0x94, 0xd2, 0x4a, 0xbd, 0x16, 0x93, 0x4d,
+        0xb8, 0x1f, 0x2f, 0xed, 0xea, 0xa7, 0x7b, 0xfa, 0x9c, 0x89, 0x0f, 0xc5, 0x0c, 0xe4, 0xc4,
+        0x67, 0xce, 0x14, 0x3d, 0xab, 0x88, 0xc4, 0x99, 0xec, 0x05, 0x39, 0x56, 0x97, 0xec, 0xcc,
+        0x9f, 0x50, 0x57, 0xe2, 0x9a,
     ],
 ];
 
@@ -52,16 +52,22 @@ pub fn key_id(public_key: &[u8; 65]) -> String {
 /// True only when `sig` was made over exactly `manifest` by one of `trusted`.
 /// Everything malformed is simply false - never a panic, never "probably".
 pub fn verify_manifest(manifest: &[u8], sig: &ManifestSig, trusted: &[[u8; 65]]) -> bool {
-    let Ok(raw) = hex::decode(&sig.sig) else { return false };
+    let Ok(raw) = hex::decode(&sig.sig) else {
+        return false;
+    };
     if raw.len() != 64 || manifest.is_empty() {
         return false;
     }
-    let Ok(signature) = Signature::from_slice(&raw) else { return false };
+    let Ok(signature) = Signature::from_slice(&raw) else {
+        return false;
+    };
     for k in trusted {
         if key_id(k) != sig.key_id {
             continue;
         }
-        let Ok(vk) = VerifyingKey::from_sec1_bytes(k) else { return false };
+        let Ok(vk) = VerifyingKey::from_sec1_bytes(k) else {
+            return false;
+        };
         return vk.verify(manifest, &signature).is_ok();
     }
     false
@@ -71,7 +77,10 @@ pub fn verify_manifest(manifest: &[u8], sig: &ManifestSig, trusted: &[[u8; 65]])
 /// a version (the firmware's otaParseVersion, same rules).
 pub fn parse_version(s: &str) -> Option<(u32, u32, u32)> {
     let t = s.rsplit_once("_v").map(|(_, r)| r).unwrap_or(s);
-    let t = t.strip_prefix('v').or_else(|| t.strip_prefix('V')).unwrap_or(t);
+    let t = t
+        .strip_prefix('v')
+        .or_else(|| t.strip_prefix('V'))
+        .unwrap_or(t);
     let core = t.split(['-', '+']).next()?;
     let parts: Vec<&str> = core.split('.').collect();
     if parts.len() < 2 || parts.len() > 3 {
@@ -125,7 +134,11 @@ pub enum Verdict {
 
 /// What one board needs, most urgent first. `this_companion` is this build's
 /// version; `latest` is None when no verified manifest is at hand.
-pub fn verdicts(board: &BoardStatus, this_companion: &str, latest: Option<&Latest>) -> Vec<Verdict> {
+pub fn verdicts(
+    board: &BoardStatus,
+    this_companion: &str,
+    latest: Option<&Latest>,
+) -> Vec<Verdict> {
     let Some(fw) = board.firmware.as_deref().and_then(parse_version) else {
         return vec![Verdict::Unknown];
     };
@@ -229,15 +242,21 @@ pub const MANIFEST_CAP: usize = 24 * 1024;
 
 /// The manifest's own bytes and its signature file, as downloaded. The signature
 /// is checked before a single field is believed.
-pub fn read_release(manifest: &[u8], sig_file: &[u8], trusted: &[[u8; 65]]) -> Result<Release, ReleaseError> {
+pub fn read_release(
+    manifest: &[u8],
+    sig_file: &[u8],
+    trusted: &[[u8; 65]],
+) -> Result<Release, ReleaseError> {
     if manifest.len() > MANIFEST_CAP {
         return Err(ReleaseError::NotForUs("manifest too large".into()));
     }
-    let sig: ManifestSig = serde_json::from_slice(sig_file).map_err(|_| ReleaseError::BadSignature)?;
+    let sig: ManifestSig =
+        serde_json::from_slice(sig_file).map_err(|_| ReleaseError::BadSignature)?;
     if !verify_manifest(manifest, &sig, trusted) {
         return Err(ReleaseError::BadSignature);
     }
-    let r: Release = serde_json::from_slice(manifest).map_err(|_| ReleaseError::NotForUs("missing field".into()))?;
+    let r: Release = serde_json::from_slice(manifest)
+        .map_err(|_| ReleaseError::NotForUs("missing field".into()))?;
     let bad = |why: &str| Err(ReleaseError::NotForUs(why.into()));
     if r.format != MANIFEST_FORMAT {
         return bad("unknown manifest format");
@@ -261,7 +280,9 @@ pub fn read_release(manifest: &[u8], sig_file: &[u8], trusted: &[[u8; 65]]) -> R
     }
     if let Some(c) = &r.companion {
         if plain_version(&c.version).is_none()
-            || c.assets.values().any(|a| !is_sha256_hex(&a.sha256) || a.size == 0 || !safe_name(&a.name))
+            || c.assets
+                .values()
+                .any(|a| !is_sha256_hex(&a.sha256) || a.size == 0 || !safe_name(&a.name))
         {
             return bad("unusable companion entry");
         }
@@ -283,8 +304,12 @@ fn is_sha256_hex(s: &str) -> bool {
 
 /// A file name, never a path: it is joined to the source URL and to a folder.
 fn safe_name(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 96 && s != "." && s != ".."
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+    !s.is_empty()
+        && s.len() <= 96
+        && s != "."
+        && s != ".."
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
 }
 
 /// True when `bytes` are exactly the file the manifest pinned.
@@ -311,8 +336,13 @@ impl Release {
 
     /// The sections newer than `running`, newest first (what the person is shown).
     pub fn changes_since(&self, running: &str) -> Vec<&ChangelogSection> {
-        let Some(r) = parse_version(running) else { return Vec::new() };
-        self.changelog.iter().filter(|s| parse_version(&s.version).is_some_and(|v| v > r)).collect()
+        let Some(r) = parse_version(running) else {
+            return Vec::new();
+        };
+        self.changelog
+            .iter()
+            .filter(|s| parse_version(&s.version).is_some_and(|v| v > r))
+            .collect()
     }
 
     /// This system's Companion installer, when the release has one.
@@ -347,7 +377,10 @@ mod tests {
     }
 
     fn key(v: &serde_json::Value, name: &str) -> [u8; 65] {
-        hex::decode(v[name].as_str().unwrap()).unwrap().try_into().unwrap()
+        hex::decode(v[name].as_str().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
     }
 
     #[test]
@@ -358,7 +391,12 @@ mod tests {
         for c in v["cases"].as_array().unwrap() {
             let m = b64(c["manifest_b64"].as_str().unwrap());
             let sig: ManifestSig = serde_json::from_value(c["sig"].clone()).unwrap();
-            assert_eq!(verify_manifest(&m, &sig, &trusted), c["valid"].as_bool().unwrap(), "{}", c["name"]);
+            assert_eq!(
+                verify_manifest(&m, &sig, &trusted),
+                c["valid"].as_bool().unwrap(),
+                "{}",
+                c["name"]
+            );
         }
     }
 
@@ -368,16 +406,26 @@ mod tests {
         let c = &v["cases"][0];
         let m = b64(c["manifest_b64"].as_str().unwrap());
         let sig: ManifestSig = serde_json::from_value(c["sig"].clone()).unwrap();
-        assert!(verify_manifest(&m, &sig, &[key(&v, "untrusted_public_key"), key(&v, "test_public_key")]));
-        assert!(!verify_manifest(&m, &sig, &[key(&v, "untrusted_public_key")]));
+        assert!(verify_manifest(
+            &m,
+            &sig,
+            &[key(&v, "untrusted_public_key"), key(&v, "test_public_key")]
+        ));
+        assert!(!verify_manifest(
+            &m,
+            &sig,
+            &[key(&v, "untrusted_public_key")]
+        ));
         assert!(!verify_manifest(&m, &sig, &[]));
     }
 
     #[test]
     fn releases_are_accepted_or_refused_as_the_release_tool_decides() {
         let v = vectors();
-        let rv: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let rv: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/vectors/ota_release_v1.json"
+        ))
+        .unwrap();
         let trusted = [key(&v, "test_public_key")];
         for c in rv["cases"].as_array().unwrap() {
             let m = b64(c["manifest_b64"].as_str().unwrap());
@@ -385,7 +433,12 @@ mod tests {
             let got = read_release(&m, &sig, &trusted);
             match c["refused"].as_str() {
                 None => assert!(got.is_ok(), "{}: {:?}", c["name"], got.err()),
-                Some(why) => assert_eq!(got.err(), Some(ReleaseError::NotForUs(why.into())), "{}", c["name"]),
+                Some(why) => assert_eq!(
+                    got.err(),
+                    Some(ReleaseError::NotForUs(why.into())),
+                    "{}",
+                    c["name"]
+                ),
             }
         }
     }
@@ -393,45 +446,87 @@ mod tests {
     #[test]
     fn a_release_is_read_only_after_its_signature() {
         let v = vectors();
-        let rv: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let rv: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/vectors/ota_release_v1.json"
+        ))
+        .unwrap();
         let c = &rv["cases"][0];
         let m = b64(c["manifest_b64"].as_str().unwrap());
         let sig = serde_json::to_vec(&c["sig"]).unwrap();
-        assert_eq!(read_release(&m, &sig, &[key(&v, "untrusted_public_key")]), Err(ReleaseError::BadSignature));
-        assert_eq!(read_release(&m, b"not json", &[key(&v, "test_public_key")]), Err(ReleaseError::BadSignature));
+        assert_eq!(
+            read_release(&m, &sig, &[key(&v, "untrusted_public_key")]),
+            Err(ReleaseError::BadSignature)
+        );
+        assert_eq!(
+            read_release(&m, b"not json", &[key(&v, "test_public_key")]),
+            Err(ReleaseError::BadSignature)
+        );
         let mut changed = m.clone();
         let at = changed.windows(5).position(|w| w == b"4.1.0").unwrap();
         changed[at] = b'9';
-        assert_eq!(read_release(&changed, &sig, &[key(&v, "test_public_key")]), Err(ReleaseError::BadSignature));
+        assert_eq!(
+            read_release(&changed, &sig, &[key(&v, "test_public_key")]),
+            Err(ReleaseError::BadSignature)
+        );
         let big = vec![b' '; MANIFEST_CAP + 1];
-        assert!(matches!(read_release(&big, &sig, &[key(&v, "test_public_key")]), Err(ReleaseError::NotForUs(_))));
+        assert!(matches!(
+            read_release(&big, &sig, &[key(&v, "test_public_key")]),
+            Err(ReleaseError::NotForUs(_))
+        ));
     }
 
     #[test]
     fn what_a_release_tells_the_companion() {
         let v = vectors();
-        let rv: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../tests/vectors/ota_release_v1.json")).unwrap();
+        let rv: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/vectors/ota_release_v1.json"
+        ))
+        .unwrap();
         let c = &rv["cases"][0];
-        let r = read_release(&b64(c["manifest_b64"].as_str().unwrap()), &serde_json::to_vec(&c["sig"]).unwrap(),
-                             &[key(&v, "test_public_key")]).unwrap();
+        let r = read_release(
+            &b64(c["manifest_b64"].as_str().unwrap()),
+            &serde_json::to_vec(&c["sig"]).unwrap(),
+            &[key(&v, "test_public_key")],
+        )
+        .unwrap();
         let image = b64(v["image_b64"].as_str().unwrap());
         assert!(asset_matches(&r.image, &image));
         let mut flipped = image.clone();
         flipped[100] ^= 1;
         assert!(!asset_matches(&r.image, &flipped), "one bit changed");
-        assert!(!asset_matches(&r.image, &image[..image.len() - 1]), "one byte short");
+        assert!(
+            !asset_matches(&r.image, &image[..image.len() - 1]),
+            "one byte short"
+        );
         let inst = b64(rv["installer_b64"].as_str().unwrap());
         assert!(asset_matches(r.companion_asset("macos").unwrap(), &inst));
-        assert!(r.companion_asset("windows").is_none(), "no installer: never a guess at another one");
-        assert!(asset_matches(r.table.as_ref().unwrap(), &b64(rv["table_b64"].as_str().unwrap())));
+        assert!(
+            r.companion_asset("windows").is_none(),
+            "no installer: never a guess at another one"
+        );
+        assert!(asset_matches(
+            r.table.as_ref().unwrap(),
+            &b64(rv["table_b64"].as_str().unwrap())
+        ));
         assert!(r.reachable_from("hid_fi_v4.0.4") && !r.reachable_from("hid_fi_v4.0.3"));
         assert!(!r.reachable_from("garbage"));
-        assert_eq!(r.changes_since("hid_fi_v4.0.4").iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), ["4.1.0"]);
+        assert_eq!(
+            r.changes_since("hid_fi_v4.0.4")
+                .iter()
+                .map(|s| s.version.as_str())
+                .collect::<Vec<_>>(),
+            ["4.1.0"]
+        );
         assert!(r.changes_since("hid_fi_v4.1.0").is_empty());
         let l = r.latest();
-        assert_eq!((l.firmware.as_str(), l.companion.as_deref(), l.board_comp_api), ("4.1.0", Some("4.1.0"), (1, 1)));
+        assert_eq!(
+            (
+                l.firmware.as_str(),
+                l.companion.as_deref(),
+                l.board_comp_api
+            ),
+            ("4.1.0", Some("4.1.0"), (1, 1))
+        );
     }
 
     #[test]
@@ -458,44 +553,121 @@ mod tests {
     }
 
     fn latest(fw: &str, companion: Option<&str>) -> Latest {
-        Latest { firmware: fw.into(), board_comp_api: (1, 1), companion: companion.map(String::from) }
+        Latest {
+            firmware: fw.into(),
+            board_comp_api: (1, 1),
+            companion: companion.map(String::from),
+        }
     }
 
     #[test]
     fn what_each_board_needs() {
         let l = latest("hid_fi_v4.1.0", Some("4.1.0"));
         // same version, same protocol
-        assert_eq!(verdicts(&board("hid_fi_v4.1.0", Some(1), "two_slot", "valid"), "4.1.0", Some(&l)),
-                   vec![Verdict::UpToDate]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.1.0", Some(1), "two_slot", "valid"),
+                "4.1.0",
+                Some(&l)
+            ),
+            vec![Verdict::UpToDate]
+        );
         // older board on two slots: over the air
-        assert_eq!(verdicts(&board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"), "4.1.0", Some(&l)),
-                   vec![Verdict::BoardUpdate { to: "hid_fi_v4.1.0".into(), cable_once: false }]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"),
+                "4.1.0",
+                Some(&l)
+            ),
+            vec![Verdict::BoardUpdate {
+                to: "hid_fi_v4.1.0".into(),
+                cable_once: false
+            }]
+        );
         // a v4.0.4 board reports no comp_api and no layout: protocol 1, cable once
-        let old = BoardStatus { firmware: Some("hid_fi_v4.0.4".into()), ..Default::default() };
-        assert_eq!(verdicts(&old, "4.1.0", Some(&l)),
-                   vec![Verdict::BoardUpdate { to: "hid_fi_v4.1.0".into(), cable_once: true }]);
+        let old = BoardStatus {
+            firmware: Some("hid_fi_v4.0.4".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            verdicts(&old, "4.1.0", Some(&l)),
+            vec![Verdict::BoardUpdate {
+                to: "hid_fi_v4.1.0".into(),
+                cable_once: true
+            }]
+        );
         // older Companion
-        assert_eq!(verdicts(&board("hid_fi_v4.1.0", Some(1), "two_slot", "valid"), "4.0.4", Some(&l)),
-                   vec![Verdict::CompanionUpdate { to: "4.1.0".into() }]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.1.0", Some(1), "two_slot", "valid"),
+                "4.0.4",
+                Some(&l)
+            ),
+            vec![Verdict::CompanionUpdate { to: "4.1.0".into() }]
+        );
         // both older: both said
-        assert_eq!(verdicts(&board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"), "4.0.4", Some(&l)).len(), 2);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"),
+                "4.0.4",
+                Some(&l)
+            )
+            .len(),
+            2
+        );
         // a newer board protocol than this Companion speaks
-        assert_eq!(verdicts(&board("hid_fi_v5.0.0", Some(2), "two_slot", "valid"), "4.1.0", None),
-                   vec![Verdict::UpdateCompanionFirst]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v5.0.0", Some(2), "two_slot", "valid"),
+                "4.1.0",
+                None
+            ),
+            vec![Verdict::UpdateCompanionFirst]
+        );
         // an older one
-        assert_eq!(verdicts(&board("hid_fi_v4.1.0", Some(0), "two_slot", "valid"), "4.1.0", None),
-                   vec![Verdict::UpdateBoardFirst]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.1.0", Some(0), "two_slot", "valid"),
+                "4.1.0",
+                None
+            ),
+            vec![Verdict::UpdateBoardFirst]
+        );
         // proving a new firmware: say so, offer nothing
-        assert_eq!(verdicts(&board("hid_fi_v4.1.0", Some(1), "two_slot", "pending_verify"), "4.0.4", Some(&l)),
-                   vec![Verdict::Verifying]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.1.0", Some(1), "two_slot", "pending_verify"),
+                "4.0.4",
+                Some(&l)
+            ),
+            vec![Verdict::Verifying]
+        );
         // never guess a version
-        let unknown = BoardStatus { firmware: Some("other_v1".into()), ..Default::default() };
-        assert_eq!(verdicts(&unknown, "4.1.0", Some(&l)), vec![Verdict::Unknown]);
+        let unknown = BoardStatus {
+            firmware: Some("other_v1".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            verdicts(&unknown, "4.1.0", Some(&l)),
+            vec![Verdict::Unknown]
+        );
         // a newer board than the newest release known: nothing to offer
-        assert_eq!(verdicts(&board("hid_fi_v4.2.0", Some(1), "two_slot", "valid"), "4.1.0", Some(&l)),
-                   vec![Verdict::UpToDate]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.2.0", Some(1), "two_slot", "valid"),
+                "4.1.0",
+                Some(&l)
+            ),
+            vec![Verdict::UpToDate]
+        );
         // no manifest at hand: only the protocol check
-        assert_eq!(verdicts(&board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"), "4.1.0", None),
-                   vec![Verdict::UpToDate]);
+        assert_eq!(
+            verdicts(
+                &board("hid_fi_v4.0.5", Some(1), "two_slot", "valid"),
+                "4.1.0",
+                None
+            ),
+            vec![Verdict::UpToDate]
+        );
     }
 }

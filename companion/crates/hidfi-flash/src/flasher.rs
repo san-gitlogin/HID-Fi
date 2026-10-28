@@ -52,7 +52,13 @@ pub struct Flasher<P: Port> {
 
 impl<P: Port> Flasher<P> {
     pub fn new(port: P) -> Self {
-        Flasher { port, dec: Decoder::default(), frames: VecDeque::new(), stub: false, usb: false }
+        Flasher {
+            port,
+            dec: Decoder::default(),
+            frames: VecDeque::new(),
+            stub: false,
+            usb: false,
+        }
     }
 
     pub fn has_stub(&self) -> bool {
@@ -95,8 +101,15 @@ impl<P: Port> Flasher<P> {
 
     /// Sends one command and returns its response; `expect` is the response data
     /// length before the two status bytes.
-    fn command(&mut self, op: Op, data: &[u8], chk: u32, expect: usize, what: &'static str, timeout_ms: u32)
-        -> Result<Response, FlashError> {
+    fn command(
+        &mut self,
+        op: Op,
+        data: &[u8],
+        chk: u32,
+        expect: usize,
+        what: &'static str,
+        timeout_ms: u32,
+    ) -> Result<Response, FlashError> {
         self.send(op, data, chk)?;
         let mut waited = 0;
         loop {
@@ -195,14 +208,30 @@ impl<P: Port> Flasher<P> {
     }
 
     pub fn read_reg(&mut self, addr: u32) -> Result<u32, FlashError> {
-        Ok(self.command(Op::ReadReg, &addr.to_le_bytes(), 0, 0, "read a register", 1000)?.value)
+        Ok(self
+            .command(
+                Op::ReadReg,
+                &addr.to_le_bytes(),
+                0,
+                0,
+                "read a register",
+                1000,
+            )?
+            .value)
     }
 
     /// The factory MAC from eFuse BLOCK1 - read, never written.
     pub fn mac(&mut self) -> Result<[u8; 6], FlashError> {
         let m0 = self.read_reg(MAC_EFUSE_REG)?;
         let m1 = self.read_reg(MAC_EFUSE_REG + 4)?;
-        Ok([(m1 >> 8) as u8, m1 as u8, (m0 >> 24) as u8, (m0 >> 16) as u8, (m0 >> 8) as u8, m0 as u8])
+        Ok([
+            (m1 >> 8) as u8,
+            m1 as u8,
+            (m0 >> 24) as u8,
+            (m0 >> 16) as u8,
+            (m0 >> 8) as u8,
+            m0 as u8,
+        ])
     }
 
     pub fn load_stub(&mut self, stub: &Stub) -> Result<(), FlashError> {
@@ -214,7 +243,14 @@ impl<P: Port> Flasher<P> {
             for (seq, chunk) in bytes.chunks(block).enumerate() {
                 let mut d = le(&[chunk.len() as u32, seq as u32, 0, 0]);
                 d.extend(chunk);
-                self.command(Op::MemData, &d, proto::checksum(chunk), 0, "load the stub", 1000)?;
+                self.command(
+                    Op::MemData,
+                    &d,
+                    proto::checksum(chunk),
+                    0,
+                    "load the stub",
+                    1000,
+                )?;
             }
         }
         self.send(Op::MemEnd, &le(&[0, stub.entry]), 0)?;
@@ -240,14 +276,23 @@ impl<P: Port> Flasher<P> {
 
     pub fn md5(&mut self, offset: u32, len: u32) -> Result<[u8; 16], FlashError> {
         let expect = if self.stub { 16 } else { 32 };
-        let r = self.command(Op::SpiFlashMd5, &le(&[offset, len, 0, 0]), 0, expect, "hash flash", 30_000)?;
+        let r = self.command(
+            Op::SpiFlashMd5,
+            &le(&[offset, len, 0, 0]),
+            0,
+            expect,
+            "hash flash",
+            30_000,
+        )?;
         let mut out = [0u8; 16];
         if self.stub {
             out.copy_from_slice(&r.data[..16]);
         } else {
-            let hex = std::str::from_utf8(&r.data[..32]).map_err(|_| FlashError::Check("md5 not hex".into()))?;
+            let hex = std::str::from_utf8(&r.data[..32])
+                .map_err(|_| FlashError::Check("md5 not hex".into()))?;
             for i in 0..16 {
-                out[i] = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).map_err(|_| FlashError::Check("md5".into()))?;
+                out[i] = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16)
+                    .map_err(|_| FlashError::Check("md5".into()))?;
             }
         }
         Ok(out)
@@ -258,7 +303,14 @@ impl<P: Port> Flasher<P> {
         if !self.stub {
             return Err(FlashError::Check("reading flash needs the stub".into()));
         }
-        self.command(Op::ReadFlash, &le(&[offset, len, SECTOR, 64]), 0, 0, "read flash", 2000)?;
+        self.command(
+            Op::ReadFlash,
+            &le(&[offset, len, SECTOR, 64]),
+            0,
+            0,
+            "read flash",
+            2000,
+        )?;
         let mut data = Vec::with_capacity(len as usize);
         while data.len() < len as usize {
             let f = self.next_frame(3000)?;
@@ -270,7 +322,9 @@ impl<P: Port> Flasher<P> {
         }
         let digest = self.next_frame(3000)?;
         if digest.len() != 16 || digest.as_slice() != Md5::digest(&data).as_slice() {
-            return Err(FlashError::Check("the data read back does not match its MD5".into()));
+            return Err(FlashError::Check(
+                "the data read back does not match its MD5".into(),
+            ));
         }
         data.truncate(len as usize);
         Ok(data)
@@ -281,14 +335,23 @@ impl<P: Port> Flasher<P> {
     /// Writes `data` at a sector-aligned `offset` (padded with 0xFF to whole
     /// sectors, which is what erased flash holds), then reads the MD5 back.
     /// `progress` gets the bytes written so far and answers whether to go on.
-    pub fn write(&mut self, offset: u32, data: &[u8], progress: &mut dyn FnMut(usize) -> bool) -> Result<(), FlashError> {
+    pub fn write(
+        &mut self,
+        offset: u32,
+        data: &[u8],
+        progress: &mut dyn FnMut(usize) -> bool,
+    ) -> Result<(), FlashError> {
         if !offset.is_multiple_of(SECTOR) {
             return Err(FlashError::Check(format!("unaligned write at {offset:#x}")));
         }
         // Whole sectors, then whole blocks: every block written lies inside the
         // region erased, so no write touches flash outside it.
         let sectors = data.len().div_ceil(SECTOR as usize) * SECTOR as usize;
-        let block = if self.stub { STUB_BLOCK.min(sectors) } else { 0x400 };
+        let block = if self.stub {
+            STUB_BLOCK.min(sectors)
+        } else {
+            0x400
+        };
         let mut padded = data.to_vec();
         padded.resize(sectors.div_ceil(block) * block, 0xFF);
         let blocks = padded.len() / block;
@@ -300,14 +363,23 @@ impl<P: Port> Flasher<P> {
         for (seq, chunk) in padded.chunks(block).enumerate() {
             let mut d = le(&[chunk.len() as u32, seq as u32, 0, 0]);
             d.extend(chunk);
-            self.command(Op::FlashData, &d, proto::checksum(chunk), 0, "write", 10_000)?;
+            self.command(
+                Op::FlashData,
+                &d,
+                proto::checksum(chunk),
+                0,
+                "write",
+                10_000,
+            )?;
             if !progress(((seq + 1) * block).min(padded.len())) {
                 return Err(FlashError::Cancelled);
             }
         }
         let got = self.md5(offset, padded.len() as u32)?;
         if got.as_slice() != Md5::digest(&padded).as_slice() {
-            return Err(FlashError::Check(format!("what was written at {offset:#x} does not read back")));
+            return Err(FlashError::Check(format!(
+                "what was written at {offset:#x} does not read back"
+            )));
         }
         Ok(())
     }

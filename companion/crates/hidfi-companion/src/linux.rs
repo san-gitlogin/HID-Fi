@@ -103,7 +103,10 @@ impl ksni::Tray for Tray {
                     label: "Share this computer's sound".into(),
                     checked: sys,
                     activate: Box::new(move |t: &mut Self| {
-                        let _ = t.tx.send(Ask::Do(Action::Sound { system: Some(!sys), mic: None }));
+                        let _ = t.tx.send(Ask::Do(Action::Sound {
+                            system: Some(!sys),
+                            mic: None,
+                        }));
                     }),
                     ..Default::default()
                 }
@@ -114,7 +117,10 @@ impl ksni::Tray for Tray {
                     label: "Share the microphone".into(),
                     checked: mic,
                     activate: Box::new(move |t: &mut Self| {
-                        let _ = t.tx.send(Ask::Do(Action::Sound { system: None, mic: Some(!mic) }));
+                        let _ = t.tx.send(Ask::Do(Action::Sound {
+                            system: None,
+                            mic: Some(!mic),
+                        }));
                     }),
                     ..Default::default()
                 }

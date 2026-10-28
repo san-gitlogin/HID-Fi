@@ -29,7 +29,9 @@ pub fn parse_table(data: &[u8]) -> Option<Vec<Partition>> {
         let e = &data[i * 32..i * 32 + 32];
         match (e[0], e[1]) {
             (0xAA, 0x50) => {
-                let name = String::from_utf8_lossy(&e[12..28]).trim_end_matches('\0').to_string();
+                let name = String::from_utf8_lossy(&e[12..28])
+                    .trim_end_matches('\0')
+                    .to_string();
                 out.push(Partition {
                     name,
                     ptype: e[2],
@@ -51,7 +53,10 @@ pub fn parse_table(data: &[u8]) -> Option<Vec<Partition>> {
 }
 
 pub fn app_slots(table: &[Partition]) -> Vec<&Partition> {
-    table.iter().filter(|p| p.ptype == 0 && (0x10..0x20).contains(&p.subtype)).collect()
+    table
+        .iter()
+        .filter(|p| p.ptype == 0 && (0x10..0x20).contains(&p.subtype))
+        .collect()
 }
 
 // ---- otadata ---------------------------------------------------------------------
@@ -71,7 +76,11 @@ pub fn otadata_crc(seq: u32) -> u32 {
     for b in seq.to_le_bytes() {
         crc ^= b as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -109,7 +118,12 @@ pub fn otadata_choice(data: &[u8], slots: usize) -> Option<Choice> {
             continue;
         }
         if best.is_none_or(|b| seq > b.seq) {
-            best = Some(Choice { sector, seq, slot: (seq.wrapping_sub(1) as usize) % slots, state });
+            best = Some(Choice {
+                sector,
+                seq,
+                slot: (seq.wrapping_sub(1) as usize) % slots,
+                state,
+            });
         }
     }
     best
@@ -128,7 +142,8 @@ pub fn otadata_switch(data: &[u8], slot: usize, state: u32, slots: usize) -> Vec
     let other = cur.map_or(0, |c| 1 - c.sector);
     let mut out = data.to_vec();
     out[other * OTADATA_SECTOR..(other + 1) * OTADATA_SECTOR].fill(0xFF);
-    out[other * OTADATA_SECTOR..other * OTADATA_SECTOR + 32].copy_from_slice(&otadata_entry(seq, state));
+    out[other * OTADATA_SECTOR..other * OTADATA_SECTOR + 32]
+        .copy_from_slice(&otadata_entry(seq, state));
     out
 }
 
@@ -151,10 +166,16 @@ pub fn identify(head: &[u8]) -> Option<ImageId> {
     let window = &head[..head.len().min(ID_WINDOW)];
     let hidfi_version = window.windows(8).position(|w| w == b"hid_fi_v").map(|i| {
         let rest = &window[i..];
-        let end = rest.iter().position(|&b| b == 0 || !b.is_ascii_graphic()).unwrap_or(rest.len());
+        let end = rest
+            .iter()
+            .position(|&b| b == 0 || !b.is_ascii_graphic())
+            .unwrap_or(rest.len());
         String::from_utf8_lossy(&rest[..end]).to_string()
     });
-    Some(ImageId { chip_id, hidfi_version })
+    Some(ImageId {
+        chip_id,
+        hidfi_version,
+    })
 }
 
 /// Light validity check of a whole image, as the bootloader does it: magic,
@@ -215,12 +236,18 @@ mod tests {
         assert_eq!(otadata_choice(&d, 2).map(|c| (c.slot, c.seq)), Some((0, 1)));
         let n = otadata_switch(&d, 1, NEW, 2);
         assert_eq!(&n[..OTADATA_SECTOR], &d[..OTADATA_SECTOR]);
-        assert_eq!(otadata_choice(&n, 2).map(|c| (c.slot, c.state)), Some((1, NEW)));
+        assert_eq!(
+            otadata_choice(&n, 2).map(|c| (c.slot, c.state)),
+            Some((1, NEW))
+        );
         let mut torn = n.clone();
         torn[OTADATA_SECTOR + 28] = 0xFF; // power cut before the CRC landed
         assert_eq!(otadata_choice(&torn, 2).map(|c| c.slot), Some(0));
         for (state, want) in [(ABORTED, 0), (INVALID, 0), (PENDING_VERIFY, 1), (VALID, 1)] {
-            assert_eq!(otadata_choice(&otadata_switch(&d, 1, state, 2), 2).map(|c| c.slot), Some(want));
+            assert_eq!(
+                otadata_choice(&otadata_switch(&d, 1, state, 2), 2).map(|c| c.slot),
+                Some(want)
+            );
         }
     }
 
@@ -230,9 +257,19 @@ mod tests {
         img[0] = 0xE9;
         img[12] = 9;
         img[0x2ED..0x2ED + 14].copy_from_slice(b"hid_fi_v4.0.4\0");
-        assert_eq!(identify(&img), Some(ImageId { chip_id: 9, hidfi_version: Some("hid_fi_v4.0.4".into()) }));
+        assert_eq!(
+            identify(&img),
+            Some(ImageId {
+                chip_id: 9,
+                hidfi_version: Some("hid_fi_v4.0.4".into())
+            })
+        );
         img[0x2ED] = b'X';
-        assert_eq!(identify(&img).unwrap().hidfi_version, None, "someone else's firmware");
+        assert_eq!(
+            identify(&img).unwrap().hidfi_version,
+            None,
+            "someone else's firmware"
+        );
         assert_eq!(identify(&[0xFF; 64]), None, "erased");
     }
 

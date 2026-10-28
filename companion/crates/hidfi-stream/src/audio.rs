@@ -13,7 +13,10 @@
 //! silence frames sent late would instead have taught its jitter buffer to wait.
 
 use rubato::audioadapter_buffers::direct::InterleavedSlice;
-use rubato::{Adjustable, Async, FixedAsync, Resampler, SincInterpolationParameters, SincInterpolationType, WindowFunction};
+use rubato::{
+    Adjustable, Async, FixedAsync, Resampler, SincInterpolationParameters, SincInterpolationType,
+    WindowFunction,
+};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError, SyncSender, TrySendError};
@@ -150,11 +153,20 @@ impl Conform {
                 window: WindowFunction::BlackmanHarris2,
             };
             // Small chunks: the resampler's own delay stays a few ms.
-            Some(Async::<f32>::new_sinc(ratio, 1.1, &params, 128, CHANNELS, FixedAsync::Input).map_err(|e| e.to_string())?)
+            Some(
+                Async::<f32>::new_sinc(ratio, 1.1, &params, 128, CHANNELS, FixedAsync::Input)
+                    .map_err(|e| e.to_string())?,
+            )
         } else {
             None
         };
-        Ok(Conform { rate, rs, pending: Vec::new(), chunk: 128, ratio: 1.0 })
+        Ok(Conform {
+            rate,
+            rs,
+            pending: Vec::new(),
+            chunk: 128,
+            ratio: 1.0,
+        })
     }
 
     pub fn rate(&self) -> u32 {
@@ -273,8 +285,15 @@ impl Mixer {
         };
         // A lane per device rate; a device that changed rate gets a new one.
         if slot.as_ref().is_none_or(|l| l.conform.rate() != c.rate) {
-            let Ok(conform) = Conform::new(c.rate, i == Input::Microphone) else { return };
-            *slot = Some(Lane { conform, fifo: VecDeque::new(), head_at: None, last_input: None });
+            let Ok(conform) = Conform::new(c.rate, i == Input::Microphone) else {
+                return;
+            };
+            *slot = Some(Lane {
+                conform,
+                fifo: VecDeque::new(),
+                head_at: None,
+                last_input: None,
+            });
         }
         let lane = slot.as_mut().expect("just made");
         if lane.fifo.is_empty() {
@@ -289,12 +308,18 @@ impl Mixer {
         let mut out = Vec::new();
         loop {
             // The clock: the system sound while it plays; the microphone alone otherwise.
-            let sys_has = self.system.as_ref().is_some_and(|l| l.fifo.len() >= FRAME * CHANNELS);
-            let sys_idle = self
+            let sys_has = self
                 .system
                 .as_ref()
-                .is_none_or(|l| l.last_input.is_none_or(|t| now.saturating_duration_since(t) >= IDLE));
-            let mic_has = self.mic.as_ref().is_some_and(|l| l.fifo.len() >= FRAME * CHANNELS);
+                .is_some_and(|l| l.fifo.len() >= FRAME * CHANNELS);
+            let sys_idle = self.system.as_ref().is_none_or(|l| {
+                l.last_input
+                    .is_none_or(|t| now.saturating_duration_since(t) >= IDLE)
+            });
+            let mic_has = self
+                .mic
+                .as_ref()
+                .is_some_and(|l| l.fifo.len() >= FRAME * CHANNELS);
             let by_system = sys_has;
             let by_mic = !sys_has && sys_idle && mic_has;
             if !(by_system || by_mic) {
@@ -332,7 +357,10 @@ impl Mixer {
             for s in pcm.iter_mut() {
                 *s = s.clamp(-1.0, 1.0);
             }
-            out.push(Mixed { pcm, at: at.unwrap_or(now) });
+            out.push(Mixed {
+                pcm,
+                at: at.unwrap_or(now),
+            });
             if out.len() > 64 {
                 break; // never more than this in one go (a stall); the rest next turn
             }
@@ -353,10 +381,19 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn new() -> Result<Encoder, String> {
-        let mut enc = opus_pure::OpusEncoder::new(RATE as i32, CHANNELS, opus_pure::Application::RestrictedLowDelay)
-            .map_err(|e| format!("{e:?}"))?;
+        let mut enc = opus_pure::OpusEncoder::new(
+            RATE as i32,
+            CHANNELS,
+            opus_pure::Application::RestrictedLowDelay,
+        )
+        .map_err(|e| format!("{e:?}"))?;
         enc.bitrate_bps = BITRATE;
-        Ok(Encoder { enc, buf: vec![0; 1500], rtp: 0, last: None })
+        Ok(Encoder {
+            enc,
+            buf: vec![0; 1500],
+            rtp: 0,
+            last: None,
+        })
     }
 
     pub fn encode(&mut self, m: &Mixed) -> Option<Packet> {
@@ -371,7 +408,11 @@ impl Encoder {
         }
         self.last = Some(m.at);
         let n = self.enc.encode(&m.pcm, FRAME, &mut self.buf).ok()?;
-        let p = Packet { data: self.buf[..n].to_vec(), rtp: self.rtp, at: m.at };
+        let p = Packet {
+            data: self.buf[..n].to_vec(),
+            rtp: self.rtp,
+            at: m.at,
+        };
         self.rtp += FRAME as u64;
         Some(p)
     }
@@ -387,7 +428,10 @@ pub struct Settings {
 
 impl Settings {
     pub fn new(system: bool, mic: bool) -> Arc<Settings> {
-        Arc::new(Settings { system: AtomicBool::new(system), mic: AtomicBool::new(mic) })
+        Arc::new(Settings {
+            system: AtomicBool::new(system),
+            mic: AtomicBool::new(mic),
+        })
     }
     pub fn wants(&self, i: Input) -> bool {
         match i {
@@ -433,11 +477,24 @@ pub struct AudioHub {
 impl AudioHub {
     pub fn start(opener: Opener, settings: Arc<Settings>) -> AudioHub {
         let state = State {
-            system: if settings.wants(Input::System) { Share::On } else { Share::Off },
-            mic: if settings.wants(Input::Microphone) { Share::On } else { Share::Off },
+            system: if settings.wants(Input::System) {
+                Share::On
+            } else {
+                Share::Off
+            },
+            mic: if settings.wants(Input::Microphone) {
+                Share::On
+            } else {
+                Share::Off
+            },
         };
         let shared = Arc::new((
-            Mutex::new(HubShared { viewers: Vec::new(), next_id: 1, stop: false, state }),
+            Mutex::new(HubShared {
+                viewers: Vec::new(),
+                next_id: 1,
+                stop: false,
+                state,
+            }),
             Condvar::new(),
         ));
         let s2 = shared.clone();
@@ -461,16 +518,29 @@ impl AudioHub {
 
     pub fn unsubscribe(&self, id: u64) {
         let (m, cv) = &*self.shared;
-        m.lock().unwrap_or_else(|e| e.into_inner()).viewers.retain(|v| v.0 != id);
+        m.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .viewers
+            .retain(|v| v.0 != id);
         cv.notify_all();
     }
 
     pub fn state(&self) -> State {
-        self.shared.0.lock().unwrap_or_else(|e| e.into_inner()).state.clone()
+        self.shared
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .state
+            .clone()
     }
 
     pub fn listeners(&self) -> usize {
-        self.shared.0.lock().unwrap_or_else(|e| e.into_inner()).viewers.len()
+        self.shared
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .viewers
+            .len()
     }
 }
 
@@ -495,8 +565,20 @@ fn run(shared: Arc<(Mutex<HubShared>, Condvar)>, opener: Opener, settings: Arc<S
     let (tx, rx) = channel::<(Input, Chunk)>();
     let (etx, erx) = channel::<(Input, String)>();
     let mut opens: [(Input, Open); 2] = [
-        (Input::System, Open { running: None, retry_at: None }),
-        (Input::Microphone, Open { running: None, retry_at: None }),
+        (
+            Input::System,
+            Open {
+                running: None,
+                retry_at: None,
+            },
+        ),
+        (
+            Input::Microphone,
+            Open {
+                running: None,
+                retry_at: None,
+            },
+        ),
     ];
     let mut mixer = Mixer::new();
     let mut encoder: Option<Encoder> = None;
@@ -515,7 +597,10 @@ fn run(shared: Arc<(Mutex<HubShared>, Condvar)>, opener: Opener, settings: Arc<S
                     // Settings may change while parked: keep the state true.
                     s.state.system = parked_share(&settings, Input::System, &s.state.system);
                     s.state.mic = parked_share(&settings, Input::Microphone, &s.state.mic);
-                    s = cv.wait_timeout(s, Duration::from_millis(500)).unwrap_or_else(|e| e.into_inner()).0;
+                    s = cv
+                        .wait_timeout(s, Duration::from_millis(500))
+                        .unwrap_or_else(|e| e.into_inner())
+                        .0;
                 }
                 while rx.try_recv().is_ok() {}
             }
@@ -582,7 +667,9 @@ fn run(shared: Arc<(Mutex<HubShared>, Condvar)>, opener: Opener, settings: Arc<S
             }
         }
         if encoder.is_none() {
-            encoder = Encoder::new().map_err(|e| log::warn!("sound: no encoder: {e}")).ok();
+            encoder = Encoder::new()
+                .map_err(|e| log::warn!("sound: no encoder: {e}"))
+                .ok();
         }
         // Wait for sound (or the silence deadline), then send what is ready.
         match rx.recv_timeout(FRAME_TIME) {
@@ -600,11 +687,17 @@ fn run(shared: Arc<(Mutex<HubShared>, Condvar)>, opener: Opener, settings: Arc<S
             Err(RecvTimeoutError::Disconnected) => return,
         }
         let frames = mixer.pull(Instant::now());
-        let Some(enc) = encoder.as_mut() else { continue };
+        let Some(enc) = encoder.as_mut() else {
+            continue;
+        };
         if frames.is_empty() {
             continue;
         }
-        let packets: Vec<Arc<Packet>> = frames.iter().filter_map(|f| enc.encode(f)).map(Arc::new).collect();
+        let packets: Vec<Arc<Packet>> = frames
+            .iter()
+            .filter_map(|f| enc.encode(f))
+            .map(Arc::new)
+            .collect();
         let s = m.lock().unwrap_or_else(|e| e.into_inner());
         for (_, v) in &s.viewers {
             for p in &packets {
@@ -638,7 +731,13 @@ fn current_share(m: &Mutex<HubShared>, i: Input) -> Share {
 /// A 440 Hz tone at -20 dBFS with a 10 ms 2 kHz click starting at every whole
 /// second since `origin` - the moments a test checks the picture's flashes
 /// against. Delivered in chunks of `chunk` samples at `rate`, paced in real time.
-pub fn test_sound(origin: Instant, rate: u32, channels: usize, chunk: usize, sink: Sink) -> Box<dyn Running> {
+pub fn test_sound(
+    origin: Instant,
+    rate: u32,
+    channels: usize,
+    chunk: usize,
+    sink: Sink,
+) -> Box<dyn Running> {
     struct Stop(Arc<AtomicBool>);
     impl Drop for Stop {
         fn drop(&mut self) {
@@ -669,7 +768,12 @@ pub fn test_sound(origin: Instant, rate: u32, channels: usize, chunk: usize, sin
                         v.push(s);
                     }
                 }
-                sink(Chunk { samples: v, rate, channels, at });
+                sink(Chunk {
+                    samples: v,
+                    rate,
+                    channels,
+                    at,
+                });
                 n += chunk as u64;
                 sent += chunk as u64;
                 let next = start + Duration::from_secs_f64(sent as f64 / rate as f64);

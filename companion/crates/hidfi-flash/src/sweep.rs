@@ -52,14 +52,25 @@ fn table(rows: &[(&str, u8, u8, u32, u32)]) -> Vec<u8> {
 }
 
 fn single_slot() -> Vec<u8> {
-    table(&[("nvs", 1, 2, 0x9000, 0x5000), ("otadata", 1, 0, 0xE000, 0x2000), ("app0", 0, 0x10, 0x10000, 0x30_0000),
-            ("spiffs", 1, 0x82, 0x31_0000, 0xE_0000), ("coredump", 1, 3, 0x3F_0000, 0x1_0000)])
+    table(&[
+        ("nvs", 1, 2, 0x9000, 0x5000),
+        ("otadata", 1, 0, 0xE000, 0x2000),
+        ("app0", 0, 0x10, 0x10000, 0x30_0000),
+        ("spiffs", 1, 0x82, 0x31_0000, 0xE_0000),
+        ("coredump", 1, 3, 0x3F_0000, 0x1_0000),
+    ])
 }
 
 fn two_slot() -> Vec<u8> {
-    table(&[("nvs", 1, 2, 0x9000, 0x5000), ("otadata", 1, 0, 0xE000, 0x2000), ("app0", 0, 0x10, 0x10000, 0x64_0000),
-            ("app1", 0, 0x11, 0x65_0000, 0x64_0000), ("nvs_ext", 1, 2, 0xC9_0000, 0x4_0000),
-            ("spare", 1, 6, 0xCD_0000, 0x32_0000), ("coredump", 1, 3, 0xFF_0000, 0x1_0000)])
+    table(&[
+        ("nvs", 1, 2, 0x9000, 0x5000),
+        ("otadata", 1, 0, 0xE000, 0x2000),
+        ("app0", 0, 0x10, 0x10000, 0x64_0000),
+        ("app1", 0, 0x11, 0x65_0000, 0x64_0000),
+        ("nvs_ext", 1, 2, 0xC9_0000, 0x4_0000),
+        ("spare", 1, 6, 0xCD_0000, 0x32_0000),
+        ("coredump", 1, 3, 0xFF_0000, 0x1_0000),
+    ])
 }
 
 /// A valid app image carrying "hid_fi_v<x>", `size` bytes or so.
@@ -136,11 +147,16 @@ impl Run {
         // unique per run: the tests run in parallel threads
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("hidfi-sweep-{}-{tag}-{n}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("hidfi-sweep-{}-{tag}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let journal = dir.join("journal.json");
         let _ = std::fs::remove_file(&journal);
-        Run { rel_img: app(NEW, 40_000), rel_table: two_slot(), journal }
+        Run {
+            rel_img: app(NEW, 40_000),
+            rel_table: two_slot(),
+            journal,
+        }
     }
 
     fn go(&self, s: Sim, cancel_at: Option<Step>) -> (Sim, Result<Journal, UpdateError>) {
@@ -152,12 +168,33 @@ impl Run {
                 hit.set(true);
             }
         };
-        let rel = Release { image: &self.rel_img, table: &self.rel_table };
+        let rel = Release {
+            image: &self.rel_img,
+            table: &self.rel_table,
+        };
         // Cancels "between steps" too: the journal records each, so we cancel once it moved past `cancel_at`.
         let jp = self.journal.clone();
-        let cancel2 = || cancel() || (cancel_at.is_some() && Journal::load(&jp).is_some_and(|j| Some(j.step) >= cancel_at));
-        let connect = if s_in_loader(&f.port) { Connect::InLoader } else { Connect::Reset };
-        let r = update::run(&mut f, &MAC, connect, &rel, &self.journal, Progress { cancel: &cancel2, on: &mut on });
+        let cancel2 = || {
+            cancel()
+                || (cancel_at.is_some()
+                    && Journal::load(&jp).is_some_and(|j| Some(j.step) >= cancel_at))
+        };
+        let connect = if s_in_loader(&f.port) {
+            Connect::InLoader
+        } else {
+            Connect::Reset
+        };
+        let r = update::run(
+            &mut f,
+            &MAC,
+            connect,
+            &rel,
+            &self.journal,
+            Progress {
+                cancel: &cancel2,
+                on: &mut on,
+            },
+        );
         (f.port, r)
     }
 }
@@ -175,16 +212,30 @@ fn no_forbidden(s: &Sim) {
         assert!(!s.seen.contains(code), "{why} was sent");
     }
     for (addr, value, mask) in &s.reg_writes {
-        assert_eq!((*addr, *value, *mask), (proto::RTC_CNTL_OPTION1_REG, 0, 1), "a register write other than the one named");
+        assert_eq!(
+            (*addr, *value, *mask),
+            (proto::RTC_CNTL_OPTION1_REG, 0, 1),
+            "a register write other than the one named"
+        );
     }
 }
 
 /// The start the update's own restart caused (the sim boots on the reset).
 fn starts_new_on_probation(s: &mut Sim) {
-    match s.boots.last().cloned().expect("the update restarts the board") {
-        Boot::App { version, pending, .. } => {
+    match s
+        .boots
+        .last()
+        .cloned()
+        .expect("the update restarts the board")
+    {
+        Boot::App {
+            version, pending, ..
+        } => {
             assert_eq!(version.as_deref(), Some(NEW));
-            assert!(pending, "the new firmware must start on probation - its self-test decides");
+            assert!(
+                pending,
+                "the new firmware must start on probation - its self-test decides"
+            );
         }
         b => panic!("did not start: {b:?}"),
     }
@@ -197,10 +248,21 @@ fn two_slots_end_to_end() {
     let before = s.flash.clone();
     let (mut s, res) = r.go(s, None);
     let j = res.unwrap();
-    assert_eq!((j.path, j.step, j.target_slot), (Path2::TwoSlot, Step::Restarted, 1));
+    assert_eq!(
+        (j.path, j.step, j.target_slot),
+        (Path2::TwoSlot, Step::Restarted, 1)
+    );
     assert_eq!(nvs(&s), &before[0x9000..0xE000]);
-    assert_eq!(&s.flash[0x10000..0x10000 + 0x4000], &before[0x10000..0x10000 + 0x4000], "the running slot is never written");
-    assert_eq!(&s.flash[0x8000..0x9000], &before[0x8000..0x9000], "the table is not touched on two slots");
+    assert_eq!(
+        &s.flash[0x10000..0x10000 + 0x4000],
+        &before[0x10000..0x10000 + 0x4000],
+        "the running slot is never written"
+    );
+    assert_eq!(
+        &s.flash[0x8000..0x9000],
+        &before[0x8000..0x9000],
+        "the table is not touched on two slots"
+    );
     starts_new_on_probation(&mut s);
     no_forbidden(&s);
 }
@@ -214,19 +276,42 @@ fn the_one_time_switch_end_to_end() {
     let j = res.unwrap();
     assert_eq!((j.path, j.target_offset), (Path2::SwitchLayout, 0x65_0000));
     assert_eq!(nvs(&s), &before[0x9000..0xE000]);
-    assert_eq!(&s.flash[0x8000..0x8000 + image::TABLE_LEN], &r.rel_table[..]);
-    assert_eq!(&s.flash[0x10000..0x10000 + 0x4000], &before[0x10000..0x10000 + 0x4000], "the old firmware stays in app0");
+    assert_eq!(
+        &s.flash[0x8000..0x8000 + image::TABLE_LEN],
+        &r.rel_table[..]
+    );
+    assert_eq!(
+        &s.flash[0x10000..0x10000 + 0x4000],
+        &before[0x10000..0x10000 + 0x4000],
+        "the old firmware stays in app0"
+    );
     starts_new_on_probation(&mut s);
     // and if it is reset before it proved itself, the old one is there to go back to
-    assert!(matches!(s.boot(), Boot::App { slot: 0, ref version, .. } if version.as_deref() == Some(OLD)));
+    assert!(
+        matches!(s.boot(), Boot::App { slot: 0, ref version, .. } if version.as_deref() == Some(OLD))
+    );
     no_forbidden(&s);
 }
 
 #[test]
 fn nothing_is_written_to_a_board_that_is_not_the_one_chosen() {
     for (tag, faults, expect) in [
-        ("chip", Faults { chip_id: Some(5), ..Default::default() }, "chip"),
-        ("mac", Faults { mac: Some([1, 2, 3, 4, 5, 6]), ..Default::default() }, "board"),
+        (
+            "chip",
+            Faults {
+                chip_id: Some(5),
+                ..Default::default()
+            },
+            "chip",
+        ),
+        (
+            "mac",
+            Faults {
+                mac: Some([1, 2, 3, 4, 5, 6]),
+                ..Default::default()
+            },
+            "board",
+        ),
     ] {
         let r = Run::new(tag);
         let mut s = sim(true);
@@ -253,12 +338,20 @@ fn someone_elses_firmware_or_layout_is_refused() {
 
     let r = Run::new("layout");
     let mut s = sim(true);
-    let t = table(&[("nvs", 1, 2, 0xA000, 0x4000), ("otadata", 1, 0, 0xE000, 0x2000), ("app0", 0, 0x10, 0x10000, 0x30_0000)]);
+    let t = table(&[
+        ("nvs", 1, 2, 0xA000, 0x4000),
+        ("otadata", 1, 0, 0xE000, 0x2000),
+        ("app0", 0, 0x10, 0x10000, 0x30_0000),
+    ]);
     s.flash[0x8000..0x9000].fill(0xFF);
     s.flash[0x8000..0x8000 + t.len()].copy_from_slice(&t);
     let before = s.flash.clone();
     let (s, res) = r.go(s, None);
-    assert_eq!(res.unwrap_err(), UpdateError::UnknownLayout, "settings elsewhere: not a layout HID-Fi made");
+    assert_eq!(
+        res.unwrap_err(),
+        UpdateError::UnknownLayout,
+        "settings elsewhere: not a layout HID-Fi made"
+    );
     assert!(s.flash == before);
 }
 
@@ -274,9 +367,15 @@ fn bytes_written(two: bool) -> usize {
 /// one table, at one place - this window cannot be designed away). The ROM loader
 /// is in mask ROM and still answers; the journal knows, and resuming finishes it.
 fn in_the_table_window(two: bool, j: &Option<Journal>, what: &str) {
-    assert!(!two, "{what}: a two-slot update must never leave a board that does not start");
+    assert!(
+        !two,
+        "{what}: a two-slot update must never leave a board that does not start"
+    );
     let step = j.as_ref().map(|j| j.step);
-    assert!(step == Some(Step::Switched), "{what}: outside the table write (journal at {step:?})");
+    assert!(
+        step == Some(Step::Switched),
+        "{what}: outside the table write (journal at {step:?})"
+    );
 }
 
 fn sweep_power(two: bool) {
@@ -290,13 +389,23 @@ fn sweep_power(two: bool) {
         let before = s.flash.clone();
         s.faults.power_cut_after_bytes = Some(cut);
         let (mut s, res) = r.go(s, None);
-        assert!(res.is_err(), "cut at {cut}: the update cannot have finished");
+        assert!(
+            res.is_err(),
+            "cut at {cut}: the update cannot have finished"
+        );
         s.reconnect();
-        assert_eq!(nvs(&s), &before[0x9000..0xE000], "cut at {cut}: settings changed");
+        assert_eq!(
+            nvs(&s),
+            &before[0x9000..0xE000],
+            "cut at {cut}: settings changed"
+        );
         let j = Journal::load(&r.journal);
         match s.boots.last().unwrap() {
             Boot::App { version, .. } => {
-                assert!(version.as_deref() == Some(OLD) || version.as_deref() == Some(NEW), "cut at {cut}: {version:?}")
+                assert!(
+                    version.as_deref() == Some(OLD) || version.as_deref() == Some(NEW),
+                    "cut at {cut}: {version:?}"
+                )
             }
             Boot::Brick(why) => in_the_table_window(two, &j, &format!("cut at {cut}: {why}")),
         }
@@ -309,7 +418,10 @@ fn sweep_power(two: bool) {
         cases += 1;
         cut += 64;
     }
-    assert!(cases > 20, "the sweep must cover the whole update ({cases} cases)");
+    assert!(
+        cases > 20,
+        "the sweep must cover the whole update ({cases} cases)"
+    );
 }
 
 #[test]
@@ -332,8 +444,13 @@ fn a_board_running_its_second_slot_updates_into_the_first_and_survives_every_cut
         s.reconnect();
         assert_eq!(nvs(&s), &before[0x9000..0xE000]);
         match s.boots.last().unwrap() {
-            Boot::App { version, .. } => assert!(matches!(version.as_deref(), Some(OLD) | Some(NEW)), "cut {cut}"),
-            b => panic!("cut at {cut}: {b:?} - the running choice must survive a torn otadata write"),
+            Boot::App { version, .. } => assert!(
+                matches!(version.as_deref(), Some(OLD) | Some(NEW)),
+                "cut {cut}"
+            ),
+            b => {
+                panic!("cut at {cut}: {b:?} - the running choice must survive a torn otadata write")
+            }
         }
         let (mut s, res) = r.go(s, None);
         res.unwrap();
@@ -371,7 +488,11 @@ fn sweep_unplug(two: bool) {
         s.reconnect();
         assert_eq!(nvs(&s), &before[0x9000..0xE000], "unplug after frame {k}");
         if let Some(Boot::Brick(why)) = s.boots.last() {
-            in_the_table_window(two, &Journal::load(&r.journal), &format!("unplug after frame {k}: {why}"));
+            in_the_table_window(
+                two,
+                &Journal::load(&r.journal),
+                &format!("unplug after frame {k}: {why}"),
+            );
         }
         let (mut s, res) = r.go(s, None);
         res.unwrap_or_else(|e| panic!("unplug after frame {k}: resume failed: {e}"));
@@ -396,7 +517,10 @@ fn a_flipped_bit_is_caught_by_the_read_back_and_nothing_switches() {
         let r = Run::new("flipcount");
         let (s, res) = r.go(sim(true), None);
         res.unwrap();
-        s.seen.iter().filter(|o| **o == proto::Op::FlashData as u8).count()
+        s.seen
+            .iter()
+            .filter(|o| **o == proto::Op::FlashData as u8)
+            .count()
     };
     assert!(blocks >= 3);
     for k in 0..blocks {
@@ -405,7 +529,10 @@ fn a_flipped_bit_is_caught_by_the_read_back_and_nothing_switches() {
         s.faults.flip_bit_in_block = Some(k);
         let before = s.flash.clone();
         let (mut s, res) = r.go(s, None);
-        assert!(res.is_err(), "flip in block {k} went unnoticed - every write must be read back");
+        assert!(
+            res.is_err(),
+            "flip in block {k} went unnoticed - every write must be read back"
+        );
         assert_eq!(nvs(&s), &before[0x9000..0xE000]);
         // What starts is the old firmware, or the new one exactly as released -
         // never a corrupted image (a flip in otadata's padding can leave a valid
@@ -413,7 +540,11 @@ fn a_flipped_bit_is_caught_by_the_read_back_and_nothing_switches() {
         match s.boot() {
             Boot::App { version, slot, .. } if version.as_deref() == Some(NEW) => {
                 let at = if slot == 1 { 0x65_0000 } else { 0x10000 };
-                assert_eq!(&s.flash[at..at + r.rel_img.len()], &r.rel_img[..], "flip {k}: a damaged image started");
+                assert_eq!(
+                    &s.flash[at..at + r.rel_img.len()],
+                    &r.rel_img[..],
+                    "flip {k}: a damaged image started"
+                );
             }
             Boot::App { version, .. } => assert_eq!(version.as_deref(), Some(OLD), "flip {k}"),
             b => panic!("flip {k}: {b:?}"),
@@ -427,7 +558,12 @@ fn a_flipped_bit_is_caught_by_the_read_back_and_nothing_switches() {
 #[test]
 fn cancel_at_every_step_puts_everything_back() {
     for two in [true, false] {
-        for step in [Step::Preflighted, Step::ImageWritten, Step::Switched, Step::TableWritten] {
+        for step in [
+            Step::Preflighted,
+            Step::ImageWritten,
+            Step::Switched,
+            Step::TableWritten,
+        ] {
             if two && step == Step::TableWritten {
                 continue;
             }
@@ -435,11 +571,20 @@ fn cancel_at_every_step_puts_everything_back() {
             let s = sim(two);
             let before = s.flash.clone();
             let (mut s, res) = r.go(s, Some(step));
-            assert!(matches!(res, Err(UpdateError::Cancelled)), "{two} {step:?}: {:?}", res.map(|j| j.step));
-            assert_eq!(&s.flash[0x8000..0x10000], &before[0x8000..0x10000],
-                       "{two} {step:?}: table, settings and otadata exactly as found");
-            assert!(matches!(s.boot(), Boot::App { slot: 0, ref version, pending: false } if version.as_deref() == Some(OLD)),
-                    "{two} {step:?}: the old firmware starts, trusted");
+            assert!(
+                matches!(res, Err(UpdateError::Cancelled)),
+                "{two} {step:?}: {:?}",
+                res.map(|j| j.step)
+            );
+            assert_eq!(
+                &s.flash[0x8000..0x10000],
+                &before[0x8000..0x10000],
+                "{two} {step:?}: table, settings and otadata exactly as found"
+            );
+            assert!(
+                matches!(s.boot(), Boot::App { slot: 0, ref version, pending: false } if version.as_deref() == Some(OLD)),
+                "{two} {step:?}: the old firmware starts, trusted"
+            );
             assert_eq!(Journal::load(&r.journal).unwrap().step, Step::Cancelled);
         }
     }
@@ -462,12 +607,22 @@ fn a_restart_between_the_switch_and_the_table_does_not_skip_the_self_test() {
     });
     let (r, mut s) = found.expect("an unplug lands between the switch and the table");
     s.reconnect();
-    assert!(matches!(s.boots.last(), Some(Boot::App { slot: 0, pending: false, .. })), "{:?}", s.boots.last());
+    assert!(
+        matches!(
+            s.boots.last(),
+            Some(Boot::App {
+                slot: 0,
+                pending: false,
+                ..
+            })
+        ),
+        "{:?}",
+        s.boots.last()
+    );
     let (mut s, res) = r.go(s, None);
     res.unwrap();
     starts_new_on_probation(&mut s);
 }
-
 
 #[test]
 fn over_native_usb_the_board_leaves_forced_download_and_starts_the_new_firmware() {
@@ -477,11 +632,18 @@ fn over_native_usb_the_board_leaves_forced_download_and_starts_the_new_firmware(
     let before = s.flash.clone();
     let (mut s, res) = r.go(s, None);
     res.unwrap();
-    assert!(!s.force_download, "the flag must be cleared, or every reset lands in the loader again");
+    assert!(
+        !s.force_download,
+        "the flag must be cleared, or every reset lands in the loader again"
+    );
     assert_eq!(nvs(&s), &before[0x9000..0xE000]);
     starts_new_on_probation(&mut s);
     no_forbidden(&s);
-    assert_eq!(s.reg_writes.len(), 1, "exactly one register write: clearing the flag");
+    assert_eq!(
+        s.reg_writes.len(),
+        1,
+        "exactly one register write: clearing the flag"
+    );
 }
 
 #[test]
@@ -492,7 +654,11 @@ fn over_native_usb_a_cancel_also_leaves_the_loader() {
     let (mut s, res) = r.go(s, Some(Step::ImageWritten));
     assert!(matches!(res, Err(UpdateError::Cancelled)));
     assert!(!s.force_download);
-    assert!(matches!(s.boots.last(), Some(Boot::App { slot: 0, .. })), "{:?}", s.boots.last());
+    assert!(
+        matches!(s.boots.last(), Some(Boot::App { slot: 0, .. })),
+        "{:?}",
+        s.boots.last()
+    );
     let _ = &mut s;
 }
 
@@ -505,6 +671,10 @@ fn settings_that_changed_are_put_back_before_any_restart() {
     let before = s.flash.clone();
     s.corrupt_nvs_on_next_md5 = true;
     let (s, res) = r.go(s, None);
-    assert!(matches!(res, Err(UpdateError::SettingsRestored)), "{:?}", res.map(|j| j.step));
+    assert!(
+        matches!(res, Err(UpdateError::SettingsRestored)),
+        "{:?}",
+        res.map(|j| j.step)
+    );
     assert_eq!(nvs(&s), &before[0x9000..0xE000], "the backup went back");
 }

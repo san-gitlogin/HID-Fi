@@ -181,11 +181,17 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             }
             if let Some((s, k)) = b.sound.as_ref() {
                 if ev.id == *s.id() {
-                    let _ = handle.tx.send(Cmd::Sound { system: Some(s.is_checked()), mic: None });
+                    let _ = handle.tx.send(Cmd::Sound {
+                        system: Some(s.is_checked()),
+                        mic: None,
+                    });
                     continue;
                 }
                 if ev.id == *k.id() {
-                    let _ = handle.tx.send(Cmd::Sound { system: None, mic: Some(k.is_checked()) });
+                    let _ = handle.tx.send(Cmd::Sound {
+                        system: None,
+                        mic: Some(k.is_checked()),
+                    });
                     continue;
                 }
             }

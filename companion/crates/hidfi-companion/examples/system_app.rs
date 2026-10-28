@@ -93,7 +93,9 @@ fn main() {
         },
         capture_allowed: Arc::new(|| true),
         // HIDFI_RELEASES: a release server of the test's own (the update system tests).
-        updates: std::env::var("HIDFI_RELEASES").ok().map(|_| hidfi_companion::updates::center::UpdatesSetup::real()),
+        updates: std::env::var("HIDFI_RELEASES")
+            .ok()
+            .map(|_| hidfi_companion::updates::center::UpdatesSetup::real()),
         // HIDFI_SOUND=test: a test sound (a tone, a click at every whole second of
         // the shared clock) as this computer's sound and a 44.1 kHz mono
         // microphone; =real: the real capture; unset: no sound offered.
@@ -104,7 +106,13 @@ fn main() {
                     hidfi_stream::audio::Input::System => (48_000, 2),
                     hidfi_stream::audio::Input::Microphone => (44_100, 1),
                 };
-                Ok(hidfi_stream::audio::test_sound(hidfi_stream::epoch(), rate, ch, 480, sink))
+                Ok(hidfi_stream::audio::test_sound(
+                    hidfi_stream::epoch(),
+                    rate,
+                    ch,
+                    480,
+                    sink,
+                ))
             })),
             _ => None,
         },
@@ -174,7 +182,10 @@ fn main() {
                 continue;
             }
             ["update", m, how] => {
-                upd(UpdCmd::Update { mac: mac(m), cable: *how == "cable" });
+                upd(UpdCmd::Update {
+                    mac: mac(m),
+                    cable: *how == "cable",
+                });
                 continue;
             }
             ["cancel", m] => {

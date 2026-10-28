@@ -124,7 +124,10 @@ impl Seen {
             step: s("ota_step").unwrap_or_else(|| "idle".into()),
             bytes: n("ota_bytes"),
             total: n("ota_total"),
-            paused: v.get("ota_paused").and_then(Value::as_bool).unwrap_or(false),
+            paused: v
+                .get("ota_paused")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             available: s("ota_available").unwrap_or_default(),
             error: s("ota_error").unwrap_or_default(),
             comp_api: v.get("comp_api").and_then(Value::as_u64).map(|x| x as u32),
@@ -150,8 +153,15 @@ impl Seen {
 
 /// The offer for a board. `paired_and_reachable`: this Companion can send it
 /// signed update requests right now.
-pub fn offer(seen: Option<&Seen>, rel: Option<&Release>, this_companion: &str, paired_and_reachable: bool) -> Offer {
-    let Some(seen) = seen else { return Offer::Unknown };
+pub fn offer(
+    seen: Option<&Seen>,
+    rel: Option<&Release>,
+    this_companion: &str,
+    paired_and_reachable: bool,
+) -> Offer {
+    let Some(seen) = seen else {
+        return Offer::Unknown;
+    };
     let latest = rel.map(Release::latest);
     let verdicts = ota::verdicts(&seen.core(), this_companion, latest.as_ref());
     if verdicts.contains(&Verdict::Verifying) {
@@ -163,7 +173,9 @@ pub fn offer(seen: Option<&Seen>, rel: Option<&Release>, this_companion: &str, p
     if verdicts.contains(&Verdict::Unknown) {
         return Offer::Unknown;
     }
-    let (Some(rel), Some(fw)) = (rel, seen.firmware.as_deref()) else { return Offer::Unknown };
+    let (Some(rel), Some(fw)) = (rel, seen.firmware.as_deref()) else {
+        return Offer::Unknown;
+    };
     match verdicts.iter().find_map(|v| match v {
         Verdict::BoardUpdate { cable_once, .. } => Some(*cable_once),
         _ => None,
@@ -171,11 +183,18 @@ pub fn offer(seen: Option<&Seen>, rel: Option<&Release>, this_companion: &str, p
         Some(cable_once) => Offer::Board {
             to: rel.version.clone(),
             size: rel.image.size,
-            changes: rel.changes_since(fw).into_iter().map(|s| (s.version.clone(), s.text.trim().to_string())).collect(),
+            changes: rel
+                .changes_since(fw)
+                .into_iter()
+                .map(|s| (s.version.clone(), s.text.trim().to_string()))
+                .collect(),
             security: rel.security,
             // The board's own engine takes it only from min_from up, and only with
             // two slots; the cable has no such limit.
-            over_air: !cable_once && paired_and_reachable && seen.has_engine() && rel.reachable_from(fw),
+            over_air: !cable_once
+                && paired_and_reachable
+                && seen.has_engine()
+                && rel.reachable_from(fw),
             cable_once,
         },
         None => Offer::UpToDate,
@@ -183,11 +202,18 @@ pub fn offer(seen: Option<&Seen>, rel: Option<&Release>, this_companion: &str, p
 }
 
 /// Whether a newer Companion is published for this system.
-pub fn companion_offer<'a>(rel: Option<&'a Release>, this_companion: &str) -> Option<&'a ota::Asset> {
+pub fn companion_offer<'a>(
+    rel: Option<&'a Release>,
+    this_companion: &str,
+) -> Option<&'a ota::Asset> {
     let rel = rel?;
     let c = rel.companion.as_ref()?;
     let newer = matches!((ota::parse_version(&c.version), ota::parse_version(this_companion)), (Some(a), Some(b)) if a > b);
-    if newer { rel.companion_asset(os_name()) } else { None }
+    if newer {
+        rel.companion_asset(os_name())
+    } else {
+        None
+    }
 }
 
 // ---- what is happening -------------------------------------------------------------
@@ -197,18 +223,30 @@ pub enum Job {
     Idle,
     Checking,
     /// `paused`: the board holds the download while someone is using it.
-    Downloading { bytes: u64, total: u64, paused: bool },
+    Downloading {
+        bytes: u64,
+        total: u64,
+        paused: bool,
+    },
     /// Downloaded and checked; the board restarts into it when idle, or now on request.
     Ready,
     Restarting,
     /// The new firmware is proving itself (about a minute).
     Verifying,
-    Cable { step: String, bytes: u64, total: u64 },
-    Done { to: String },
+    Cable {
+        step: String,
+        bytes: u64,
+        total: u64,
+    },
+    Done {
+        to: String,
+    },
     /// The new firmware failed its self-test; the board went back by itself.
     RolledBack,
     Stopped,
-    Failed { why: String },
+    Failed {
+        why: String,
+    },
 }
 
 /// The board's own engine, read from its status, while an over-the-air update runs.
@@ -218,7 +256,10 @@ pub fn air_phase(seen: &Seen, started_uptime: u64, to: &str) -> Job {
         return match (seen.state.as_deref(), seen.result.as_deref()) {
             (Some("pending_verify"), _) => Job::Verifying,
             (_, Some("rolled_back")) => Job::RolledBack,
-            (Some("valid"), _) if seen.firmware.as_deref().and_then(ota::parse_version) == ota::parse_version(to) => {
+            (Some("valid"), _)
+                if seen.firmware.as_deref().and_then(ota::parse_version)
+                    == ota::parse_version(to) =>
+            {
                 Job::Done { to: to.to_string() }
             }
             (Some("valid"), _) => Job::RolledBack,
@@ -227,12 +268,16 @@ pub fn air_phase(seen: &Seen, started_uptime: u64, to: &str) -> Job {
     }
     match seen.step.as_str() {
         "checking" => Job::Checking,
-        "downloading" | "verifying" | "switching" => {
-            Job::Downloading { bytes: seen.bytes, total: seen.total, paused: seen.paused }
-        }
+        "downloading" | "verifying" | "switching" => Job::Downloading {
+            bytes: seen.bytes,
+            total: seen.total,
+            paused: seen.paused,
+        },
         "ready" => Job::Ready,
         _ if seen.error == "cancelled" => Job::Stopped,
-        _ if !seen.error.is_empty() => Job::Failed { why: board_error(&seen.error).into() },
+        _ if !seen.error.is_empty() => Job::Failed {
+            why: board_error(&seen.error).into(),
+        },
         _ => Job::Idle,
     }
 }
@@ -244,7 +289,9 @@ pub fn board_error(code: &str) -> &'static str {
         "bad_signature" => "the release is not signed by HID-Fi - nothing was installed",
         "bad_manifest" => "the release description could not be read",
         "hash" | "flash_verify" => "the downloaded firmware did not match - nothing was installed",
-        "flash_write" | "flash_read" => "the board could not write its flash - nothing was switched",
+        "flash_write" | "flash_read" => {
+            "the board could not write its flash - nothing was switched"
+        }
         "too_big" => "the release does not fit this board",
         "memory" => "the board ran short of memory - try again",
         "single_slot" => "the board needs the cable once",
@@ -287,8 +334,13 @@ pub struct ComPort {
 /// Companion can send it signed requests. `com`: COM ports here. `known`: the
 /// serial of the COM port a preflight once found this board on.
 /// `prefer_native`: tests only, to exercise the native path and its rescue.
-pub fn cable_plan(seen: Option<&Seen>, paired: bool, com: &[ComPort], known: Option<&str>, prefer_native: bool)
-    -> Result<CablePlan, String> {
+pub fn cable_plan(
+    seen: Option<&Seen>,
+    paired: bool,
+    com: &[ComPort],
+    known: Option<&str>,
+    prefer_native: bool,
+) -> Result<CablePlan, String> {
     if let Some(s) = seen {
         if s.state.as_deref() == Some("pending_verify") {
             // Opening the port resets the board - that would roll the update back.
@@ -298,7 +350,9 @@ pub fn cable_plan(seen: Option<&Seen>, paired: bool, com: &[ComPort], known: Opt
             return Err("an update over the air is running - let it finish or cancel it".into());
         }
     }
-    let mine = known.and_then(|k| com.iter().find(|c| c.serial.as_deref() == Some(k))).map(|c| c.path.clone());
+    let mine = known
+        .and_then(|k| com.iter().find(|c| c.serial.as_deref() == Some(k)))
+        .map(|c| c.path.clone());
     let only = match com {
         [one] => Some(one.path.clone()),
         _ => None,
@@ -311,12 +365,16 @@ pub fn cable_plan(seen: Option<&Seen>, paired: bool, com: &[ComPort], known: Opt
         return Ok(CablePlan::Com(p.clone()));
     }
     if native_ok {
-        return Ok(CablePlan::Native { rescue: mine.or(only) });
+        return Ok(CablePlan::Native {
+            rescue: mine.or(only),
+        });
     }
     match (mine.or(only), com.len()) {
         (Some(p), _) => Ok(CablePlan::Com(p)),
         (None, 0) => Err("connect the board's COM port (the second USB-C) to this computer".into()),
-        _ => Err("several boards' COM ports are connected - leave only this board's COM cable in".into()),
+        _ => Err(
+            "several boards' COM ports are connected - leave only this board's COM cable in".into(),
+        ),
     }
 }
 
@@ -331,10 +389,12 @@ pub fn com_known(dir: &Path, mac: &str) -> Option<String> {
 
 pub fn com_remember(dir: &Path, serial: &str, mac: &str) -> std::io::Result<()> {
     let p = dir.join("com_ports.json");
-    let mut m: std::collections::BTreeMap<String, String> =
-        std::fs::read(&p).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let mut m: std::collections::BTreeMap<String, String> = std::fs::read(&p)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
     let mac = mac.replace(':', "").to_uppercase();
-    m.retain(|_, v| *v != mac);              // a board has one COM port at a time
+    m.retain(|_, v| *v != mac); // a board has one COM port at a time
     m.insert(serial.to_string(), mac);
     std::fs::create_dir_all(dir)?;
     let tmp = p.with_extension("json.part");
@@ -356,7 +416,11 @@ pub trait BoardLink: Send + Sync {
 }
 
 /// The newest release: manifest and signature from `source`, signature first.
-pub fn fetch_release(f: &dyn Fetch, source: &str, trusted: &[[u8; 65]]) -> Result<(Release, Vec<u8>, Vec<u8>), String> {
+pub fn fetch_release(
+    f: &dyn Fetch,
+    source: &str,
+    trusted: &[[u8; 65]],
+) -> Result<(Release, Vec<u8>, Vec<u8>), String> {
     let m = f.get(&format!("{source}{MANIFEST}"), ota::MANIFEST_CAP)?;
     let s = f.get(&format!("{source}{SIGNATURE}"), 4096)?;
     match ota::read_release(&m, &s, trusted) {
@@ -368,9 +432,18 @@ pub fn fetch_release(f: &dyn Fetch, source: &str, trusted: &[[u8; 65]]) -> Resul
 }
 
 /// A file the manifest pins, downloaded and checked.
-pub fn fetch_asset(f: &dyn Fetch, source: &str, a: &ota::Asset, cap: usize) -> Result<Vec<u8>, String> {
+pub fn fetch_asset(
+    f: &dyn Fetch,
+    source: &str,
+    a: &ota::Asset,
+    cap: usize,
+) -> Result<Vec<u8>, String> {
     let b = f.get(&format!("{source}{}", a.name), cap)?;
-    if ota::asset_matches(a, &b) { Ok(b) } else { Err(format!("{} is not the file the release names", a.name)) }
+    if ota::asset_matches(a, &b) {
+        Ok(b)
+    } else {
+        Err(format!("{} is not the file the release names", a.name))
+    }
 }
 
 // ---- the over-the-air job ------------------------------------------------------------
@@ -383,7 +456,11 @@ pub struct Shared {
 
 impl Shared {
     pub fn new() -> Arc<Shared> {
-        Arc::new(Shared { job: Mutex::new(Job::Idle), cancel: AtomicBool::new(false), restart_now: AtomicBool::new(false) })
+        Arc::new(Shared {
+            job: Mutex::new(Job::Idle),
+            cancel: AtomicBool::new(false),
+            restart_now: AtomicBool::new(false),
+        })
     }
     pub fn set(&self, j: Job) {
         *self.job.lock().unwrap_or_else(|e| e.into_inner()) = j;
@@ -411,14 +488,25 @@ impl Clock for RealClock {
 /// Starts a relay for a release and returns its base URL as the board must
 /// reach it (this computer's address on the board's network). Dropped: closed.
 pub trait RelayStarter: Send + Sync {
-    fn start(&self, files: Vec<(String, Vec<u8>)>, board_base: &str) -> Result<(String, Box<dyn Send>), String>;
+    fn start(
+        &self,
+        files: Vec<(String, Vec<u8>)>,
+        board_base: &str,
+    ) -> Result<(String, Box<dyn Send>), String>;
 }
 
 /// Over the air, start to finish: check (relaying when the board cannot reach
 /// the release), install, wait for the restart, follow the self-test.
 #[allow(clippy::too_many_arguments)]
-pub fn air_job(link: &dyn BoardLink, base: &str, rel: &Release, release_files: &dyn Fn() -> Result<Vec<(String, Vec<u8>)>, String>,
-               relay: &dyn RelayStarter, clock: &dyn Clock, sh: &Shared) {
+pub fn air_job(
+    link: &dyn BoardLink,
+    base: &str,
+    rel: &Release,
+    release_files: &dyn Fn() -> Result<Vec<(String, Vec<u8>)>, String>,
+    relay: &dyn RelayStarter,
+    clock: &dyn Clock,
+    sh: &Shared,
+) {
     let to = rel.version.clone();
     let poll = |what: &dyn Fn(&Seen) -> bool, secs: u64| -> Result<Seen, String> {
         let end = clock.now() + Duration::from_secs(secs);
@@ -497,11 +585,15 @@ pub fn air_job(link: &dyn BoardLink, base: &str, rel: &Release, release_files: &
         let job = match link.status(base) {
             Ok(v) => air_phase(&Seen::from_status(&v), started, &to),
             // While it restarts the board does not answer: say so, keep waiting.
-            Err(_) if matches!(last, Job::Ready | Job::Restarting | Job::Verifying) => Job::Restarting,
+            Err(_) if matches!(last, Job::Ready | Job::Restarting | Job::Verifying) => {
+                Job::Restarting
+            }
             Err(_) => last.clone(),
         };
         match &job {
-            Job::Done { .. } | Job::RolledBack | Job::Stopped | Job::Failed { .. } => return sh.set(job),
+            Job::Done { .. } | Job::RolledBack | Job::Stopped | Job::Failed { .. } => {
+                return sh.set(job)
+            }
             Job::Idle if cancel_sent => return sh.set(Job::Stopped),
             _ => {}
         }
@@ -524,7 +616,12 @@ pub fn air_job(link: &dyn BoardLink, base: &str, rel: &Release, release_files: &
 
 /// Downloads this system's installer into `dir`, checked against the signed
 /// manifest. The person opens it; nothing installs itself.
-pub fn fetch_installer(f: &dyn Fetch, source: &str, a: &ota::Asset, dir: &Path) -> Result<PathBuf, String> {
+pub fn fetch_installer(
+    f: &dyn Fetch,
+    source: &str,
+    a: &ota::Asset,
+    dir: &Path,
+) -> Result<PathBuf, String> {
     let bytes = fetch_asset(f, source, a, INSTALLER_CAP)?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let path = dir.join(&a.name);

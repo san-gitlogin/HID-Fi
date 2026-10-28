@@ -133,11 +133,16 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap_or(0)).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap_or(0))
+        .collect()
 }
 
 fn mac_str(m: &[u8; 6]) -> String {
-    m.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":")
+    m.iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 fn layout_of(table: &[Partition]) -> Option<Path2> {
@@ -154,7 +159,11 @@ fn layout_of(table: &[Partition]) -> Option<Path2> {
 
 /// Step C1: is this the chosen board, an ESP32-S3, running HID-Fi, on a layout
 /// HID-Fi made? Reads a backup of 0x0-0xFFFF. Writes nothing.
-pub fn preflight<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect) -> Result<Found, UpdateError> {
+pub fn preflight<P: Port>(
+    f: &mut Flasher<P>,
+    mac: &[u8; 6],
+    connect: Connect,
+) -> Result<Found, UpdateError> {
     match connect {
         Connect::Reset => f.enter_bootloader()?,
         Connect::InLoader => f.attach_to_loader()?,
@@ -176,13 +185,20 @@ pub fn preflight<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect) -
     let (mut running_slot, mut running_version) = (0, None);
     if let Some(t) = &table {
         let slots = image::app_slots(t);
-        running_slot = image::otadata_choice(&backup[OTADATA_AT as usize..], slots.len()).map_or(0, |c| c.slot);
+        running_slot = image::otadata_choice(&backup[OTADATA_AT as usize..], slots.len())
+            .map_or(0, |c| c.slot);
         if let Some(s) = slots.get(running_slot) {
             let head = f.read_flash(s.offset, image::ID_WINDOW as u32)?;
             running_version = image::identify(&head).and_then(|i| i.hidfi_version);
         }
     }
-    Ok(Found { backup, table, running_slot, running_version, layout })
+    Ok(Found {
+        backup,
+        table,
+        running_slot,
+        running_version,
+        layout,
+    })
 }
 
 pub struct Progress<'a> {
@@ -193,8 +209,14 @@ pub struct Progress<'a> {
 /// Runs (or resumes, when `journal_path` holds an unfinished journal for this
 /// board) a cable update. Returns once the board has been restarted into the new
 /// firmware; whether it proves itself is the firmware's self-test.
-pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &Release, journal_path: &Path,
-                    p: Progress) -> Result<Journal, UpdateError> {
+pub fn run<P: Port>(
+    f: &mut Flasher<P>,
+    mac: &[u8; 6],
+    connect: Connect,
+    rel: &Release,
+    journal_path: &Path,
+    p: Progress,
+) -> Result<Journal, UpdateError> {
     let id = image::identify(rel.image).ok_or(UpdateError::BadRelease)?;
     let to = id.hidfi_version.clone().ok_or(UpdateError::BadRelease)?;
     if id.chip_id != image::ESP32S3_CHIP_ID || !image::image_is_valid(rel.image) {
@@ -211,7 +233,8 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &R
             Connect::InLoader => f.leave_forced_download(),
         }
     };
-    let resume = Journal::load(journal_path).filter(|j| j.mac == mac_str(mac) && j.to == to && j.step < Step::Restarted);
+    let resume = Journal::load(journal_path)
+        .filter(|j| j.mac == mac_str(mac) && j.to == to && j.step < Step::Restarted);
 
     let mut j = match resume {
         Some(j) => j,
@@ -252,10 +275,15 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &R
     let save = |j: &mut Journal, step: Step, note: &str| -> Result<(), UpdateError> {
         j.step = step;
         j.history.push(format!("{step:?}: {note}"));
-        j.save(journal_path).map_err(|e| UpdateError::Flash(FlashError::Port(e.to_string())))
+        j.save(journal_path)
+            .map_err(|e| UpdateError::Flash(FlashError::Port(e.to_string())))
     };
     if j.step == Step::Planned {
-        save(&mut j, Step::Preflighted, "the chosen board, an ESP32-S3 running HID-Fi; backup read")?;
+        save(
+            &mut j,
+            Step::Preflighted,
+            "the chosen board, an ESP32-S3 running HID-Fi; backup read",
+        )?;
     }
     let cancel = |f: &mut Flasher<P>, j: &mut Journal| -> UpdateError {
         // Put back exactly what was there, newest change first.
@@ -298,9 +326,14 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &R
         let now = f.read_flash(OTADATA_AT, 0x2000)?;
         let want = image::otadata_switch(&unhex(&j.original_otadata), j.target_slot, image::NEW, 2);
         if image::otadata_choice(&now, 2).map(|c| c.slot) != Some(j.target_slot) || now != want {
-            let sector = (0..2).find(|s| now[s * 0x1000..(s + 1) * 0x1000] != want[s * 0x1000..(s + 1) * 0x1000]);
+            let sector = (0..2)
+                .find(|s| now[s * 0x1000..(s + 1) * 0x1000] != want[s * 0x1000..(s + 1) * 0x1000]);
             if let Some(s) = sector {
-                f.write(OTADATA_AT + s as u32 * SECTOR, &want[s * 0x1000..(s + 1) * 0x1000], &mut |_| true)?;
+                f.write(
+                    OTADATA_AT + s as u32 * SECTOR,
+                    &want[s * 0x1000..(s + 1) * 0x1000],
+                    &mut |_| true,
+                )?;
             }
         }
         save(&mut j, Step::Switched, "otadata chooses the new slot")?;
@@ -317,8 +350,14 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &R
         let od = f.read_flash(OTADATA_AT, 0x2000)?;
         if image::otadata_choice(&od, 2).map(|c| c.state) != Some(image::NEW) {
             let again = image::otadata_switch(&od, j.target_slot, image::NEW, 2);
-            if let Some(s) = (0..2).find(|s| od[s * 0x1000..(s + 1) * 0x1000] != again[s * 0x1000..(s + 1) * 0x1000]) {
-                f.write(OTADATA_AT + s as u32 * SECTOR, &again[s * 0x1000..(s + 1) * 0x1000], &mut |_| true)?;
+            if let Some(s) = (0..2)
+                .find(|s| od[s * 0x1000..(s + 1) * 0x1000] != again[s * 0x1000..(s + 1) * 0x1000])
+            {
+                f.write(
+                    OTADATA_AT + s as u32 * SECTOR,
+                    &again[s * 0x1000..(s + 1) * 0x1000],
+                    &mut |_| true,
+                )?;
             }
         }
         let now = f.read_flash(0x8000, image::TABLE_LEN as u32)?;
@@ -339,8 +378,14 @@ pub fn run<P: Port>(f: &mut Flasher<P>, mac: &[u8; 6], connect: Connect, rel: &R
     let ch = image::otadata_choice(&od, 2);
     if ch.map(|c| (c.slot, c.state)) != Some((j.target_slot, image::NEW)) {
         let again = image::otadata_switch(&od, j.target_slot, image::NEW, 2);
-        if let Some(s) = (0..2).find(|s| od[s * 0x1000..(s + 1) * 0x1000] != again[s * 0x1000..(s + 1) * 0x1000]) {
-            f.write(OTADATA_AT + s as u32 * SECTOR, &again[s * 0x1000..(s + 1) * 0x1000], &mut |_| true)?;
+        if let Some(s) =
+            (0..2).find(|s| od[s * 0x1000..(s + 1) * 0x1000] != again[s * 0x1000..(s + 1) * 0x1000])
+        {
+            f.write(
+                OTADATA_AT + s as u32 * SECTOR,
+                &again[s * 0x1000..(s + 1) * 0x1000],
+                &mut |_| true,
+            )?;
         }
     }
     // The settings must be exactly as read in preflight. No path writes there (the

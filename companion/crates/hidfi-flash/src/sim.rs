@@ -40,7 +40,11 @@ pub struct Faults {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Boot {
     /// The firmware in this slot runs; `pending` while it must still prove itself.
-    App { slot: usize, version: Option<String>, pending: bool },
+    App {
+        slot: usize,
+        version: Option<String>,
+        pending: bool,
+    },
     /// No valid bootloader, table or app - but the ROM loader is in mask ROM and
     /// still answers over the cable: recoverable.
     Brick(&'static str),
@@ -85,11 +89,29 @@ impl Sim {
     pub fn new(flash: Vec<u8>, mac: [u8; 6]) -> Sim {
         assert_eq!(flash.len(), FLASH);
         Sim {
-            flash, faults: Faults::default(), mac, seen: Vec::new(), boots: Vec::new(), valid_at_boot: Vec::new(),
-            reg_writes: Vec::new(), force_download: false, corrupt_nvs_on_next_md5: false,
+            flash,
+            faults: Faults::default(),
+            mac,
+            seen: Vec::new(),
+            boots: Vec::new(),
+            valid_at_boot: Vec::new(),
+            reg_writes: Vec::new(),
+            force_download: false,
+            corrupt_nvs_on_next_md5: false,
             dec: Decoder::default(),
-            out: Vec::new(), stub: false, in_download: false, dead: false, written_total: 0, frames: 0,
-            flash_blocks: 0, write_at: 0, write_end: 0, mem: Vec::new(), dtr: false, rts: false, pending_read: None,
+            out: Vec::new(),
+            stub: false,
+            in_download: false,
+            dead: false,
+            written_total: 0,
+            frames: 0,
+            flash_blocks: 0,
+            write_at: 0,
+            write_end: 0,
+            mem: Vec::new(),
+            dtr: false,
+            rts: false,
+            pending_read: None,
             read_origin: 0,
         }
     }
@@ -123,7 +145,10 @@ impl Sim {
     }
 
     fn table(&self) -> Option<Vec<Partition>> {
-        image::parse_table(&self.flash[image::TABLE_OFFSET as usize..image::TABLE_OFFSET as usize + image::TABLE_LEN])
+        image::parse_table(
+            &self.flash
+                [image::TABLE_OFFSET as usize..image::TABLE_OFFSET as usize + image::TABLE_LEN],
+        )
     }
 
     fn image_len(&self, off: usize, max: usize) -> Option<usize> {
@@ -151,12 +176,17 @@ impl Sim {
         if self.flash[0] != 0xE9 {
             return Boot::Brick("no bootloader");
         }
-        let Some(table) = self.table() else { return Boot::Brick("no partition table") };
+        let Some(table) = self.table() else {
+            return Boot::Brick("no partition table");
+        };
         let slots: Vec<Partition> = image::app_slots(&table).into_iter().cloned().collect();
         if slots.is_empty() {
             return Boot::Brick("no app partition");
         }
-        let ota = table.iter().find(|p| p.ptype == 1 && p.subtype == 0).cloned();
+        let ota = table
+            .iter()
+            .find(|p| p.ptype == 1 && p.subtype == 0)
+            .cloned();
         let mut choice = None;
         if let Some(o) = &ota {
             let at = o.offset as usize;
@@ -184,20 +214,31 @@ impl Sim {
             }
         }
         let (want, state) = choice.unwrap_or((0, image::UNDEFINED));
-        let order: Vec<usize> = std::iter::once(want).chain((0..slots.len()).filter(|s| *s != want)).collect();
+        let order: Vec<usize> = std::iter::once(want)
+            .chain((0..slots.len()).filter(|s| *s != want))
+            .collect();
         for s in order {
             let p = &slots[s];
             let (off, max) = (p.offset as usize, p.size as usize);
             if let Some(len) = self.image_len(off, max) {
                 if image::image_is_valid(&self.flash[off..off + len]) {
-                    let version = image::identify(&self.flash[off..off + image::ID_WINDOW.min(len)])
-                        .and_then(|i| i.hidfi_version);
+                    let version =
+                        image::identify(&self.flash[off..off + image::ID_WINDOW.min(len)])
+                            .and_then(|i| i.hidfi_version);
                     let mut pending = s == want && state == image::PENDING_VERIFY;
-                    if pending && version.as_ref().is_some_and(|v| self.valid_at_boot.contains(v)) {
+                    if pending
+                        && version
+                            .as_ref()
+                            .is_some_and(|v| self.valid_at_boot.contains(v))
+                    {
                         self.mark_valid();
                         pending = false;
                     }
-                    return Boot::App { slot: s, version, pending };
+                    return Boot::App {
+                        slot: s,
+                        version,
+                        pending,
+                    };
                 }
             }
         }
@@ -207,7 +248,13 @@ impl Sim {
     /// The new firmware passed its self-test (what esp_ota_mark_app_valid_cancel_rollback does).
     pub fn mark_valid(&mut self) {
         let Some(table) = self.table() else { return };
-        let Some(o) = table.iter().find(|p| p.ptype == 1 && p.subtype == 0).cloned() else { return };
+        let Some(o) = table
+            .iter()
+            .find(|p| p.ptype == 1 && p.subtype == 0)
+            .cloned()
+        else {
+            return;
+        };
         let at = o.offset as usize;
         let mut od = self.flash[at..at + 2 * image::OTADATA_SECTOR].to_vec();
         if let Some(c) = image::otadata_choice(&od, image::app_slots(&table).len()) {
@@ -280,7 +327,9 @@ impl Sim {
                 return;
             }
         }
-        let Some(req) = proto::parse_request(frame) else { return };
+        let Some(req) = proto::parse_request(frame) else {
+            return;
+        };
         self.frames += 1;
         self.seen.push(req.op);
         if let Some(n) = self.faults.unplug_after_frames {
@@ -292,7 +341,15 @@ impl Sim {
         if !self.in_download {
             return; // running its firmware: the loader is not listening
         }
-        let w = |i: usize| u32::from_le_bytes(req.data.get(i * 4..i * 4 + 4).unwrap_or(&[0; 4]).try_into().unwrap());
+        let w = |i: usize| {
+            u32::from_le_bytes(
+                req.data
+                    .get(i * 4..i * 4 + 4)
+                    .unwrap_or(&[0; 4])
+                    .try_into()
+                    .unwrap(),
+            )
+        };
         let Some(op) = Op::from_u8(req.op) else {
             self.reply(req.op, 0, &[], false); // e.g. WRITE_REG: refused, and recorded in `seen`
             return;
@@ -331,7 +388,9 @@ impl Sim {
                 self.stub = true;
                 self.out.extend(slip::encode(b"OHAI"));
             }
-            Op::SpiAttach | Op::SpiSetParams | Op::ChangeBaudrate | Op::FlashEnd => self.reply(op as u8, 0, &[], true),
+            Op::SpiAttach | Op::SpiSetParams | Op::ChangeBaudrate | Op::FlashEnd => {
+                self.reply(op as u8, 0, &[], true)
+            }
             Op::WriteReg => {
                 let (addr, value, mask) = (w(0), w(1), w(2));
                 self.reg_writes.push((addr, value, mask));
@@ -352,7 +411,8 @@ impl Sim {
             Op::FlashData => {
                 let len = w(0) as usize;
                 let data = req.data[16..16 + len].to_vec();
-                let ok = proto::checksum(&data) == req.chk && self.write_at + len as u32 <= self.write_end;
+                let ok = proto::checksum(&data) == req.chk
+                    && self.write_at + len as u32 <= self.write_end;
                 if ok {
                     let at = self.write_at;
                     self.write_flash(at, &data);
@@ -400,7 +460,8 @@ impl Sim {
         if nleft == 0 {
             // the stub ends with the MD5 of everything it sent
             let start = self.read_origin;
-            self.out.extend(slip::encode(&Md5::digest(&self.flash[start..nat as usize])));
+            self.out
+                .extend(slip::encode(&Md5::digest(&self.flash[start..nat as usize])));
             self.pending_read = None;
         } else {
             self.pending_read = Some((nat, nleft));
@@ -416,7 +477,10 @@ fn write_state(od: &mut [u8], sector: usize, state: u32) {
 impl Port for Sim {
     fn write_all(&mut self, data: &[u8]) -> io::Result<()> {
         if self.dead {
-            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "the board is unplugged"));
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "the board is unplugged",
+            ));
         }
         let mut frames = Vec::new();
         for &b in data {
@@ -430,7 +494,10 @@ impl Port for Sim {
 
     fn read(&mut self, buf: &mut [u8], _timeout_ms: u32) -> io::Result<usize> {
         if self.dead {
-            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "the board is unplugged"));
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "the board is unplugged",
+            ));
         }
         let n = buf.len().min(self.out.len());
         buf[..n].copy_from_slice(&self.out[..n]);
@@ -451,7 +518,7 @@ impl Port for Sim {
             self.out.clear();
             self.pending_read = None;
             if self.dtr || self.force_download {
-                self.in_download = true;      // GPIO0 low, or forced: the ROM loader again
+                self.in_download = true; // GPIO0 low, or forced: the ROM loader again
             } else {
                 self.in_download = false;
                 let b = self.boot();

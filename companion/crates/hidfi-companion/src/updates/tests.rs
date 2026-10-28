@@ -16,8 +16,13 @@ fn b64(s: &str) -> Vec<u8> {
 }
 
 fn vectors() -> (Value, Value) {
-    (serde_json::from_str(include_str!("../../../../../tests/vectors/ota_v1.json")).unwrap(),
-     serde_json::from_str(include_str!("../../../../../tests/vectors/ota_release_v1.json")).unwrap())
+    (
+        serde_json::from_str(include_str!("../../../../../tests/vectors/ota_v1.json")).unwrap(),
+        serde_json::from_str(include_str!(
+            "../../../../../tests/vectors/ota_release_v1.json"
+        ))
+        .unwrap(),
+    )
 }
 
 /// The signed 4.1.0 release of the vectors: (release, manifest, signature file).
@@ -30,18 +35,42 @@ fn release() -> (Release, Vec<u8>, Vec<u8>) {
 }
 
 fn seen(fw: &str, layout: Option<&str>) -> Seen {
-    Seen { firmware: Some(fw.into()), layout: layout.map(Into::into), state: Some("valid".into()), step: "idle".into(),
-           ..Default::default() }
+    Seen {
+        firmware: Some(fw.into()),
+        layout: layout.map(Into::into),
+        state: Some("valid".into()),
+        step: "idle".into(),
+        ..Default::default()
+    }
 }
 
 // ---- offers -------------------------------------------------------------------------------
 #[test]
 fn a_two_slot_board_is_offered_the_update_over_the_air_with_what_changed() {
     let (r, ..) = release();
-    match offer(Some(&seen("hid_fi_v4.0.4", Some("two_slot"))), Some(&r), "4.0.4", true) {
-        Offer::Board { to, size, changes, over_air, cable_once, .. } => {
-            assert_eq!((to.as_str(), size, over_air, cable_once), ("4.1.0", r.image.size, true, false));
-            assert_eq!(changes.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(), ["4.1.0"], "only what is newer");
+    match offer(
+        Some(&seen("hid_fi_v4.0.4", Some("two_slot"))),
+        Some(&r),
+        "4.0.4",
+        true,
+    ) {
+        Offer::Board {
+            to,
+            size,
+            changes,
+            over_air,
+            cable_once,
+            ..
+        } => {
+            assert_eq!(
+                (to.as_str(), size, over_air, cable_once),
+                ("4.1.0", r.image.size, true, false)
+            );
+            assert_eq!(
+                changes.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
+                ["4.1.0"],
+                "only what is newer"
+            );
         }
         o => panic!("{o:?}"),
     }
@@ -50,8 +79,23 @@ fn a_two_slot_board_is_offered_the_update_over_the_air_with_what_changed() {
 #[test]
 fn a_single_slot_board_needs_the_cable_once() {
     let (r, ..) = release();
-    let o = offer(Some(&seen("hid_fi_v4.0.4", Some("single"))), Some(&r), "4.0.4", true);
-    assert!(matches!(o, Offer::Board { over_air: false, cable_once: true, .. }), "{o:?}");
+    let o = offer(
+        Some(&seen("hid_fi_v4.0.4", Some("single"))),
+        Some(&r),
+        "4.0.4",
+        true,
+    );
+    assert!(
+        matches!(
+            o,
+            Offer::Board {
+                over_air: false,
+                cable_once: true,
+                ..
+            }
+        ),
+        "{o:?}"
+    );
 }
 
 #[test]
@@ -59,16 +103,55 @@ fn firmware_without_the_engine_is_offered_the_cable() {
     // v4.0.4 as released reports no layout at all.
     let (r, ..) = release();
     let o = offer(Some(&seen("hid_fi_v4.0.4", None)), Some(&r), "4.0.4", true);
-    assert!(matches!(o, Offer::Board { over_air: false, cable_once: true, .. }), "{o:?}");
+    assert!(
+        matches!(
+            o,
+            Offer::Board {
+                over_air: false,
+                cable_once: true,
+                ..
+            }
+        ),
+        "{o:?}"
+    );
 }
 
 #[test]
 fn not_over_the_air_when_unpaired_or_older_than_min_from() {
     let (r, ..) = release();
-    let o = offer(Some(&seen("hid_fi_v4.0.4", Some("two_slot"))), Some(&r), "4.0.4", false);
-    assert!(matches!(o, Offer::Board { over_air: false, cable_once: false, .. }), "unpaired: {o:?}");
-    let o = offer(Some(&seen("hid_fi_v4.0.3", Some("two_slot"))), Some(&r), "4.0.4", true);
-    assert!(matches!(o, Offer::Board { over_air: false, .. }), "older than min_from: {o:?}");
+    let o = offer(
+        Some(&seen("hid_fi_v4.0.4", Some("two_slot"))),
+        Some(&r),
+        "4.0.4",
+        false,
+    );
+    assert!(
+        matches!(
+            o,
+            Offer::Board {
+                over_air: false,
+                cable_once: false,
+                ..
+            }
+        ),
+        "unpaired: {o:?}"
+    );
+    let o = offer(
+        Some(&seen("hid_fi_v4.0.3", Some("two_slot"))),
+        Some(&r),
+        "4.0.4",
+        true,
+    );
+    assert!(
+        matches!(
+            o,
+            Offer::Board {
+                over_air: false,
+                ..
+            }
+        ),
+        "older than min_from: {o:?}"
+    );
 }
 
 #[test]
@@ -78,10 +161,34 @@ fn nothing_is_offered_while_verifying_or_without_facts() {
     s.state = Some("pending_verify".into());
     assert_eq!(offer(Some(&s), Some(&r), "4.0.4", true), Offer::Verifying);
     assert_eq!(offer(None, Some(&r), "4.0.4", true), Offer::Unknown);
-    assert_eq!(offer(Some(&seen("hid_fi_v4.0.4", Some("two_slot"))), None, "4.0.4", true), Offer::Unknown,
-               "no release read: never claim it is up to date");
-    assert_eq!(offer(Some(&seen("garbage", Some("two_slot"))), Some(&r), "4.0.4", true), Offer::Unknown);
-    assert_eq!(offer(Some(&seen("hid_fi_v4.1.0", Some("two_slot"))), Some(&r), "4.0.4", true), Offer::UpToDate);
+    assert_eq!(
+        offer(
+            Some(&seen("hid_fi_v4.0.4", Some("two_slot"))),
+            None,
+            "4.0.4",
+            true
+        ),
+        Offer::Unknown,
+        "no release read: never claim it is up to date"
+    );
+    assert_eq!(
+        offer(
+            Some(&seen("garbage", Some("two_slot"))),
+            Some(&r),
+            "4.0.4",
+            true
+        ),
+        Offer::Unknown
+    );
+    assert_eq!(
+        offer(
+            Some(&seen("hid_fi_v4.1.0", Some("two_slot"))),
+            Some(&r),
+            "4.0.4",
+            true
+        ),
+        Offer::UpToDate
+    );
 }
 
 #[test]
@@ -89,15 +196,25 @@ fn a_board_with_a_newer_protocol_asks_for_a_newer_companion() {
     let (r, ..) = release();
     let mut s = seen("hid_fi_v4.0.4", Some("two_slot"));
     s.comp_api = Some(ota::COMP_API_MAX + 1);
-    assert_eq!(offer(Some(&s), Some(&r), "4.0.4", true), Offer::UpdateCompanionFirst);
+    assert_eq!(
+        offer(Some(&s), Some(&r), "4.0.4", true),
+        Offer::UpdateCompanionFirst
+    );
 }
 
 #[test]
 fn the_companion_is_offered_only_its_own_systems_installer() {
     let (r, ..) = release();
     let got = companion_offer(Some(&r), "4.0.4");
-    assert_eq!(got.is_some(), os_name() == "macos", "the vectors carry a macOS installer only");
-    assert!(companion_offer(Some(&r), "4.1.0").is_none(), "same version: nothing");
+    assert_eq!(
+        got.is_some(),
+        os_name() == "macos",
+        "the vectors carry a macOS installer only"
+    );
+    assert!(
+        companion_offer(Some(&r), "4.1.0").is_none(),
+        "same version: nothing"
+    );
     assert!(companion_offer(Some(&r), "garbage").is_none());
     assert!(companion_offer(None, "4.0.4").is_none());
 }
@@ -111,7 +228,14 @@ fn the_boards_progress_reads_as_the_person_should_see_it() {
     s.bytes = 10;
     s.total = 100;
     s.paused = true;
-    assert_eq!(air_phase(&s, 400, "4.1.0"), Job::Downloading { bytes: 10, total: 100, paused: true });
+    assert_eq!(
+        air_phase(&s, 400, "4.1.0"),
+        Job::Downloading {
+            bytes: 10,
+            total: 100,
+            paused: true
+        }
+    );
     s.step = "ready".into();
     assert_eq!(air_phase(&s, 400, "4.1.0"), Job::Ready);
     s.step = "idle".into();
@@ -126,59 +250,133 @@ fn the_boards_progress_reads_as_the_person_should_see_it() {
     assert_eq!(air_phase(&n, 400, "4.1.0"), Job::Verifying);
     n.state = Some("valid".into());
     n.result = Some("updated".into());
-    assert_eq!(air_phase(&n, 400, "4.1.0"), Job::Done { to: "4.1.0".into() });
+    assert_eq!(
+        air_phase(&n, 400, "4.1.0"),
+        Job::Done { to: "4.1.0".into() }
+    );
     let mut back = seen("hid_fi_v4.0.4", Some("two_slot"));
     back.uptime = 3;
     back.result = Some("rolled_back".into());
     assert_eq!(air_phase(&back, 400, "4.1.0"), Job::RolledBack);
     back.result = Some("none".into());
-    assert_eq!(air_phase(&back, 400, "4.1.0"), Job::RolledBack, "restarted, still the old version: not done");
+    assert_eq!(
+        air_phase(&back, 400, "4.1.0"),
+        Job::RolledBack,
+        "restarted, still the old version: not done"
+    );
 }
 
 // ---- the cable -----------------------------------------------------------------------------
 fn com(path: &str, serial: &str) -> ComPort {
-    ComPort { path: path.into(), serial: Some(serial.into()) }
+    ComPort {
+        path: path.into(),
+        serial: Some(serial.into()),
+    }
 }
 
 #[test]
 fn the_cable_takes_this_boards_known_com_port_first() {
     let s = seen("hid_fi_v4.1.0", Some("two_slot"));
     let ports = [com("/dev/a", "AAA"), com("/dev/b", "BBB")];
-    assert_eq!(cable_plan(Some(&s), true, &ports, Some("BBB"), false), Ok(CablePlan::Com("/dev/b".into())),
-               "it works through any extender, and a reset there always brings the board back");
+    assert_eq!(
+        cable_plan(Some(&s), true, &ports, Some("BBB"), false),
+        Ok(CablePlan::Com("/dev/b".into())),
+        "it works through any extender, and a reset there always brings the board back"
+    );
 }
 
 #[test]
 fn the_cable_goes_native_with_a_way_back_when_com_is_not_known() {
     let s = seen("hid_fi_v4.1.0", Some("two_slot"));
-    assert_eq!(cable_plan(Some(&s), true, &[], None, false), Ok(CablePlan::Native { rescue: None }));
-    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], None, false),
-               Ok(CablePlan::Native { rescue: Some("/dev/a".into()) }), "the only COM port is the way back");
-    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA"), com("/dev/b", "BBB")], None, false),
-               Ok(CablePlan::Native { rescue: None }), "two COM ports and none known: never guess");
-    assert_eq!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA"), com("/dev/b", "BBB")], Some("BBB"), true),
-               Ok(CablePlan::Native { rescue: Some("/dev/b".into()) }), "tests can ask for native; the known port rescues");
+    assert_eq!(
+        cable_plan(Some(&s), true, &[], None, false),
+        Ok(CablePlan::Native { rescue: None })
+    );
+    assert_eq!(
+        cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], None, false),
+        Ok(CablePlan::Native {
+            rescue: Some("/dev/a".into())
+        }),
+        "the only COM port is the way back"
+    );
+    assert_eq!(
+        cable_plan(
+            Some(&s),
+            true,
+            &[com("/dev/a", "AAA"), com("/dev/b", "BBB")],
+            None,
+            false
+        ),
+        Ok(CablePlan::Native { rescue: None }),
+        "two COM ports and none known: never guess"
+    );
+    assert_eq!(
+        cable_plan(
+            Some(&s),
+            true,
+            &[com("/dev/a", "AAA"), com("/dev/b", "BBB")],
+            Some("BBB"),
+            true
+        ),
+        Ok(CablePlan::Native {
+            rescue: Some("/dev/b".into())
+        }),
+        "tests can ask for native; the known port rescues"
+    );
 }
 
 #[test]
 fn without_the_engine_or_a_pairing_the_cable_is_com() {
     let ports = [com("/dev/a", "AAA")];
-    assert_eq!(cable_plan(Some(&seen("hid_fi_v4.1.0", Some("two_slot"))), false, &ports, None, false),
-               Ok(CablePlan::Com("/dev/a".into())));
-    assert_eq!(cable_plan(Some(&seen("hid_fi_v4.0.4", None)), true, &ports, None, false), Ok(CablePlan::Com("/dev/a".into())));
-    assert_eq!(cable_plan(None, false, &ports, None, false), Ok(CablePlan::Com("/dev/a".into())));
+    assert_eq!(
+        cable_plan(
+            Some(&seen("hid_fi_v4.1.0", Some("two_slot"))),
+            false,
+            &ports,
+            None,
+            false
+        ),
+        Ok(CablePlan::Com("/dev/a".into()))
+    );
+    assert_eq!(
+        cable_plan(
+            Some(&seen("hid_fi_v4.0.4", None)),
+            true,
+            &ports,
+            None,
+            false
+        ),
+        Ok(CablePlan::Com("/dev/a".into()))
+    );
+    assert_eq!(
+        cable_plan(None, false, &ports, None, false),
+        Ok(CablePlan::Com("/dev/a".into()))
+    );
 }
 
 #[test]
 fn the_cable_never_guesses_and_never_resets_a_board_proving_itself() {
     let mut s = seen("hid_fi_v4.1.0", Some("two_slot"));
     s.state = Some("pending_verify".into());
-    assert!(cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], Some("AAA"), false).is_err(), "a port open would roll it back");
+    assert!(
+        cable_plan(Some(&s), true, &[com("/dev/a", "AAA")], Some("AAA"), false).is_err(),
+        "a port open would roll it back"
+    );
     s.state = Some("valid".into());
     s.step = "downloading".into();
     assert!(cable_plan(Some(&s), true, &[], None, false).is_err());
     assert!(cable_plan(None, false, &[], None, false).is_err());
-    assert!(cable_plan(None, false, &[com("/dev/a", "A"), com("/dev/b", "B")], None, false).is_err(), "which board?");
+    assert!(
+        cable_plan(
+            None,
+            false,
+            &[com("/dev/a", "A"), com("/dev/b", "B")],
+            None,
+            false
+        )
+        .is_err(),
+        "which board?"
+    );
 }
 
 #[test]
@@ -188,10 +386,20 @@ fn com_ports_are_remembered_by_their_own_serial_one_per_board() {
     assert_eq!(com_known(&dir, "B8:1F:3F:DA:1A:2C"), None);
     com_remember(&dir, "5CBC409942", "B8:1F:3F:DA:1A:2C").unwrap();
     com_remember(&dir, "5AF6107189", "DCB4D909F7C8").unwrap();
-    assert_eq!(com_known(&dir, "b81f3fda1a2c").as_deref(), Some("5CBC409942"));
+    assert_eq!(
+        com_known(&dir, "b81f3fda1a2c").as_deref(),
+        Some("5CBC409942")
+    );
     com_remember(&dir, "NEWPORT", "B81F3FDA1A2C").unwrap();
-    assert_eq!(com_known(&dir, "B81F3FDA1A2C").as_deref(), Some("NEWPORT"), "moved to another COM cable");
-    assert_eq!(com_known(&dir, "DCB4D909F7C8").as_deref(), Some("5AF6107189"));
+    assert_eq!(
+        com_known(&dir, "B81F3FDA1A2C").as_deref(),
+        Some("NEWPORT"),
+        "moved to another COM cable"
+    );
+    assert_eq!(
+        com_known(&dir, "DCB4D909F7C8").as_deref(),
+        Some("5AF6107189")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -200,7 +408,11 @@ struct FakeFetch(Mutex<std::collections::HashMap<String, Vec<u8>>>);
 impl Fetch for FakeFetch {
     fn get(&self, url: &str, cap: usize) -> Result<Vec<u8>, String> {
         let b = self.0.lock().unwrap().get(url).cloned().ok_or("404")?;
-        if b.len() > cap { Err("too large".into()) } else { Ok(b) }
+        if b.len() > cap {
+            Err("too large".into())
+        } else {
+            Ok(b)
+        }
     }
 }
 
@@ -225,8 +437,16 @@ fn a_release_is_believed_only_with_its_signature() {
     let (f, image) = source();
     let (r, ..) = fetch_release(&f, "S/", &[test_key()]).unwrap();
     assert_eq!(fetch_asset(&f, "S/", &r.image, image_cap()).unwrap(), image);
-    assert!(fetch_release(&f, "S/", &[]).unwrap_err().contains("not signed"), "no trusted key: nothing believed");
-    f.0.lock().unwrap().get_mut(&format!("S/{MANIFEST}")).unwrap()[10] ^= 1;
+    assert!(
+        fetch_release(&f, "S/", &[])
+            .unwrap_err()
+            .contains("not signed"),
+        "no trusted key: nothing believed"
+    );
+    f.0.lock()
+        .unwrap()
+        .get_mut(&format!("S/{MANIFEST}"))
+        .unwrap()[10] ^= 1;
     assert!(fetch_release(&f, "S/", &[test_key()]).is_err());
 }
 
@@ -234,7 +454,10 @@ fn a_release_is_believed_only_with_its_signature() {
 fn a_file_that_is_not_the_pinned_one_is_refused() {
     let (f, _) = source();
     let (r, ..) = fetch_release(&f, "S/", &[test_key()]).unwrap();
-    f.0.lock().unwrap().get_mut(&format!("S/{}", r.image.name)).unwrap()[100] ^= 1;
+    f.0.lock()
+        .unwrap()
+        .get_mut(&format!("S/{}", r.image.name))
+        .unwrap()[100] ^= 1;
     assert!(fetch_asset(&f, "S/", &r.image, image_cap()).is_err());
 }
 
@@ -242,22 +465,30 @@ fn a_file_that_is_not_the_pinned_one_is_refused() {
 fn the_companion_installer_lands_whole_or_not_at_all() {
     let (f, _) = source();
     let (r, ..) = fetch_release(&f, "S/", &[test_key()]).unwrap();
-    let Some(a) = r.companion_asset("macos").cloned() else { return };
+    let Some(a) = r.companion_asset("macos").cloned() else {
+        return;
+    };
     let dir = std::env::temp_dir().join(format!("hidfi-inst-{}", std::process::id()));
     let p = fetch_installer(&f, "S/", &a, &dir).unwrap();
     assert!(ota::asset_matches(&a, &std::fs::read(&p).unwrap()));
     std::fs::remove_file(&p).unwrap();
-    f.0.lock().unwrap().get_mut(&format!("S/{}", a.name)).unwrap()[0] ^= 1;
+    f.0.lock()
+        .unwrap()
+        .get_mut(&format!("S/{}", a.name))
+        .unwrap()[0] ^= 1;
     assert!(fetch_installer(&f, "S/", &a, &dir).is_err());
-    assert!(!dir.join(&a.name).exists(), "a wrong installer is never left where the person would open it");
+    assert!(
+        !dir.join(&a.name).exists(),
+        "a wrong installer is never left where the person would open it"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ---- the over-the-air job, against a board engine like the firmware's ----------------------------
 #[derive(Default)]
 struct Engine {
-    online: bool,          // can reach the release itself
-    relayed: bool,         // a relay was given for the next check
+    online: bool,  // can reach the release itself
+    relayed: bool, // a relay was given for the next check
     step: String,
     bytes: u64,
     error: String,
@@ -329,9 +560,11 @@ impl BoardLink for FakeBoard {
             }
             _ => {}
         }
-        Ok(serde_json::json!({"firmware": e.firmware, "ota_layout": "two_slot", "ota_state": e.state,
+        Ok(
+            serde_json::json!({"firmware": e.firmware, "ota_layout": "two_slot", "ota_state": e.state,
             "ota_result": e.result, "ota_step": e.step, "ota_bytes": e.bytes, "ota_total": TOTAL,
-            "ota_paused": e.pause_for > 0, "ota_available": e.available, "ota_error": e.error, "uptime_sec": e.uptime}))
+            "ota_paused": e.pause_for > 0, "ota_available": e.available, "ota_error": e.error, "uptime_sec": e.uptime}),
+        )
     }
 
     fn ota(&self, _: &str, act: &str, url: &str) -> Result<Option<String>, String> {
@@ -369,8 +602,15 @@ impl BoardLink for FakeBoard {
 }
 
 fn board() -> FakeBoard {
-    FakeBoard(Mutex::new(Engine { online: true, step: "idle".into(), uptime: 400, firmware: "hid_fi_v4.0.4".into(),
-                                  state: "valid".into(), result: "none".into(), ..Default::default() }))
+    FakeBoard(Mutex::new(Engine {
+        online: true,
+        step: "idle".into(),
+        uptime: 400,
+        firmware: "hid_fi_v4.0.4".into(),
+        state: "valid".into(),
+        result: "none".into(),
+        ..Default::default()
+    }))
 }
 
 struct FastClock(AtomicU64);
@@ -381,14 +621,21 @@ impl Clock for FastClock {
     }
     fn sleep(&self, d: Duration) {
         self.0.fetch_add(d.as_millis() as u64, Ordering::SeqCst);
-        std::thread::sleep(Duration::from_micros(300));   // the "person" thread gets to look
+        std::thread::sleep(Duration::from_micros(300)); // the "person" thread gets to look
     }
 }
 
 struct FakeRelay(AtomicBool);
 impl RelayStarter for FakeRelay {
-    fn start(&self, files: Vec<(String, Vec<u8>)>, _: &str) -> Result<(String, Box<dyn Send>), String> {
-        assert!(files.iter().any(|f| f.0 == MANIFEST) && files.iter().any(|f| f.0 == SIGNATURE), "manifest and signature");
+    fn start(
+        &self,
+        files: Vec<(String, Vec<u8>)>,
+        _: &str,
+    ) -> Result<(String, Box<dyn Send>), String> {
+        assert!(
+            files.iter().any(|f| f.0 == MANIFEST) && files.iter().any(|f| f.0 == SIGNATURE),
+            "manifest and signature"
+        );
         self.0.store(true, Ordering::SeqCst);
         Ok(("http://192.168.0.5:47801/".into(), Box::new(())))
     }
@@ -396,8 +643,21 @@ impl RelayStarter for FakeRelay {
 
 fn run(b: &FakeBoard, sh: &Shared, relay: &FakeRelay) {
     let (r, m, s) = release();
-    let files = move || Ok(vec![(MANIFEST.to_string(), m.clone()), (SIGNATURE.to_string(), s.clone())]);
-    air_job(b, "http://board", &r, &files, relay, &FastClock(AtomicU64::new(0)), sh);
+    let files = move || {
+        Ok(vec![
+            (MANIFEST.to_string(), m.clone()),
+            (SIGNATURE.to_string(), s.clone()),
+        ])
+    };
+    air_job(
+        b,
+        "http://board",
+        &r,
+        &files,
+        relay,
+        &FastClock(AtomicU64::new(0)),
+        sh,
+    );
 }
 
 #[test]
@@ -484,7 +744,11 @@ fn a_failed_self_test_is_reported_as_rolled_back() {
 fn a_board_that_cannot_see_the_release_even_relayed_fails_plainly() {
     struct NoRelay;
     impl RelayStarter for NoRelay {
-        fn start(&self, _: Vec<(String, Vec<u8>)>, _: &str) -> Result<(String, Box<dyn Send>), String> {
+        fn start(
+            &self,
+            _: Vec<(String, Vec<u8>)>,
+            _: &str,
+        ) -> Result<(String, Box<dyn Send>), String> {
             Err("no network address".into())
         }
     }
@@ -492,10 +756,26 @@ fn a_board_that_cannot_see_the_release_even_relayed_fails_plainly() {
     b.0.lock().unwrap().online = false;
     let sh = Shared::new();
     let (r, m, s) = release();
-    let files = move || Ok(vec![(MANIFEST.to_string(), m.clone()), (SIGNATURE.to_string(), s.clone())]);
-    air_job(&b, "http://board", &r, &files, &NoRelay, &FastClock(AtomicU64::new(0)), &sh);
+    let files = move || {
+        Ok(vec![
+            (MANIFEST.to_string(), m.clone()),
+            (SIGNATURE.to_string(), s.clone()),
+        ])
+    };
+    air_job(
+        &b,
+        "http://board",
+        &r,
+        &files,
+        &NoRelay,
+        &FastClock(AtomicU64::new(0)),
+        &sh,
+    );
     assert!(matches!(sh.get(), Job::Failed { why } if why.contains("serve")));
-    assert!(!b.0.lock().unwrap().acts.contains(&"install".to_string()), "nothing installed");
+    assert!(
+        !b.0.lock().unwrap().acts.contains(&"install".to_string()),
+        "nothing installed"
+    );
 }
 
 #[test]
@@ -503,8 +783,10 @@ fn a_board_that_stops_moving_fails_but_a_ready_one_waits() {
     struct Frozen;
     impl BoardLink for Frozen {
         fn status(&self, _: &str) -> Result<Value, String> {
-            Ok(serde_json::json!({"firmware": "hid_fi_v4.0.4", "ota_layout": "two_slot", "ota_state": "valid",
-                "ota_step": "downloading", "ota_bytes": 5, "ota_total": 10, "ota_available": "4.1.0", "uptime_sec": 900}))
+            Ok(
+                serde_json::json!({"firmware": "hid_fi_v4.0.4", "ota_layout": "two_slot", "ota_state": "valid",
+                "ota_step": "downloading", "ota_bytes": 5, "ota_total": 10, "ota_available": "4.1.0", "uptime_sec": 900}),
+            )
         }
         fn ota(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, String> {
             Ok(None)
@@ -518,8 +800,10 @@ fn a_board_that_stops_moving_fails_but_a_ready_one_waits() {
             let mut n = self.0.lock().unwrap();
             *n += 1;
             if *n <= 2 {
-                return Ok(serde_json::json!({"firmware": "hid_fi_v4.0.4", "ota_layout": "two_slot", "ota_state": "valid",
-                    "ota_step": "idle", "ota_available": "4.1.0", "uptime_sec": 900}));
+                return Ok(
+                    serde_json::json!({"firmware": "hid_fi_v4.0.4", "ota_layout": "two_slot", "ota_state": "valid",
+                    "ota_step": "idle", "ota_available": "4.1.0", "uptime_sec": 900}),
+                );
             }
             Frozen.status(b)
         }
@@ -530,7 +814,15 @@ fn a_board_that_stops_moving_fails_but_a_ready_one_waits() {
     let (r, ..) = release();
     let sh = Shared::new();
     let files = || Ok(Vec::new());
-    air_job(&Stuck(Mutex::new(0)), "b", &r, &files, &FakeRelay(AtomicBool::new(false)), &FastClock(AtomicU64::new(0)), &sh);
+    air_job(
+        &Stuck(Mutex::new(0)),
+        "b",
+        &r,
+        &files,
+        &FakeRelay(AtomicBool::new(false)),
+        &FastClock(AtomicU64::new(0)),
+        &sh,
+    );
     assert!(matches!(sh.get(), Job::Failed { why } if why.contains("progress")));
 }
 
@@ -558,6 +850,10 @@ fn a_failed_release_check_is_retried_soon_and_backs_off() {
     use super::center::retry_delay;
     let m = |n| retry_delay(n).as_secs() / 60;
     assert_eq!((m(1), m(2), m(3), m(4)), (1, 2, 4, 8));
-    assert_eq!(retry_delay(40), CHECK_EVERY, "never later than the daily check");
+    assert_eq!(
+        retry_delay(40),
+        CHECK_EVERY,
+        "never later than the daily check"
+    );
     assert!(retry_delay(u32::MAX) <= CHECK_EVERY);
 }
