@@ -152,7 +152,10 @@ class BoardSim:
         self.swallow = set()               # commands to receive once and never answer (a lost reply)
         self.ws_max = 8                    # WS_MAX_CLIENTS: dashboard pages at once
         self.ota = {"layout": "two_slot", "slot": "app0", "state": "valid", "result": "none",
-                    "to": "", "from": "", "why": "", "restart_deferred": False}
+                    "to": "", "from": "", "why": "", "restart_deferred": False,
+                    # the download engine (hid_fi/ota.h): scenarios stage these
+                    "step": "idle", "bytes": 0, "total": 0, "auto": True, "auto_security": False,
+                    "available": "", "error": "", "release": None, "apply_asked": False}
         self.refused = 0                   # ...and how many have been
         self.fail_next = {}                # cmd -> error message, used once
         self.actions_done = []             # (action, keys) the agent commands pressed, in order
@@ -262,7 +265,99 @@ class BoardSim:
     def ota_fields(self):
         o = self.ota
         return {"ota_layout": o["layout"], "ota_slot": o["slot"], "ota_state": o["state"],
-                "ota_result": o["result"], "comp_api": 1}
+                "ota_result": o["result"], "comp_api": 1, **self.ota_job_fields()}
+
+    def ota_job_fields(self):
+        o = self.ota
+        return {"ota_step": o["step"], "ota_bytes": o["bytes"], "ota_total": o["total"], "ota_auto": o["auto"],
+                "ota_auto_security": o["auto_security"], "ota_available": o["available"], "ota_error": o["error"],
+                "ota_paused": o.get("paused", False)}
+
+    def ota_command(self, c, body, transport):
+        """The update commands, replying as hid_fi/ota.h does. Network work is the
+        scenario's to stage (self.ota["release"], .later() for progress)."""
+        o = self.ota
+        OK = lambda reply, **kw: dict({"status": "ok", "reply": reply}, **kw)   # as in _dispatch
+        busy = o["step"] not in ("idle", "ready")
+        if c == "ota_check":
+            if o["layout"] != "two_slot":
+                return {"status": "error", "reply": c, "message": "single_slot"}
+            if o["state"] == "pending_verify":
+                return {"status": "error", "reply": c, "message": "verifying"}
+            if busy:
+                return {"status": "error", "reply": c, "message": "busy"}
+            o["error"], o["available"] = "", ""      # a new check forgets the last one
+            o["step"] = "checking"
+            self.later(0.3, self._ota_checked)
+            return OK(c, step="checking")
+        if c == "ota_install":
+            if o["state"] == "pending_verify":
+                return {"status": "error", "reply": c, "message": "verifying"}
+            if busy or o["step"] == "ready":
+                return {"status": "error", "reply": c, "message": "busy"}
+            if not o["available"]:
+                return {"status": "error", "reply": c, "message": "nothing_to_install"}
+            o["error"] = ""
+            o["step"], o["bytes"], o["total"] = "downloading", 0, (o["release"] or {}).get("size", 1600000)
+            self.later(0.3, self._ota_progress)
+            return OK(c, step="downloading")
+        if c == "ota_cancel":
+            if o["step"] == "switching":
+                return {"status": "error", "reply": c, "message": "switching"}
+            if o["step"] in ("checking", "downloading", "verifying"):
+                o["step"], o["error"], o["bytes"] = "idle", "cancelled", 0
+                return OK(c, done="stopping")
+            if o["step"] == "ready":
+                o["step"], o["apply_asked"] = "idle", False
+                return OK(c, done="switched_back")
+            return OK(c, done="nothing")
+        if c == "ota_apply":
+            if o["step"] != "ready":
+                return {"status": "error", "reply": c, "message": "not_ready"}
+            o["apply_asked"] = True
+            return OK(c, waiting_for_idle=False)
+        if c == "ota_settings":
+            if isinstance(body.get("auto"), bool):
+                o["auto"] = body["auto"]
+            if isinstance(body.get("auto_security"), bool):
+                o["auto_security"] = body["auto_security"]
+            return OK(c, auto=o["auto"], auto_security=o["auto_security"])
+        if c == "ota_source":
+            if transport != "serial":
+                return {"status": "error", "reply": c, "message": "usb_only"}
+            return OK(c, url=body.get("url") or "https://github.com/san-gitlogin/HID-Fi/releases/latest/download/")
+        return None
+
+    def _ota_event(self):
+        o = self.ota
+        ev = {"event": "ota_progress", "step": o["step"], "bytes": o["bytes"], "total": o["total"]}
+        if o["error"] and o["step"] == "idle":
+            ev["error"] = o["error"]
+        self._push(ev)
+
+    def _ota_checked(self):
+        o, r = self.ota, self.ota["release"]
+        o["step"] = "idle"
+        if r is None:
+            o["error"] = "no_connection"
+        elif r.get("bad_signature"):
+            o["error"] = "bad_signature"
+        else:
+            newer = tuple(map(int, r["version"].split("."))) > tuple(map(int, self.firmware.split("_v")[1].split("-")[0].split(".")))
+            o["available"] = r["version"] if newer and not r.get("refusal") else ""
+            o["error"] = r.get("refusal", "")
+        self._ota_event()
+
+    def _ota_progress(self):
+        o = self.ota
+        if o["step"] != "downloading" or o.get("hold"):
+            return
+        o["bytes"] = min(o["total"], o["bytes"] + max(1, o["total"] // 4))
+        if o["bytes"] >= o["total"]:
+            o["step"] = "ready"
+        elif not o.get("hold"):
+            self.later(0.3, self._ota_progress)
+        self._ota_event()
 
     # ---- Playwright wiring --------------------------------------------------------------
     # ---- timed side effects, on Playwright's thread --------------------------------------
@@ -1198,12 +1293,19 @@ class BoardSim:
                       dashboards=dash,
                       note="Device names are not shown. A WiFi client is never required to tell the access point "
                            "its name, and most phones now send a random MAC as well.")
+        if c in ("ota_check", "ota_install", "ota_cancel", "ota_apply", "ota_settings", "ota_source"):
+            return self.ota_command(c, b, transport)
         if c == "ota_status":
             o = self.ota
             extra = {}
             if o["state"] == "pending_verify":
                 extra["selftest"] = {"waiting_for": o.get("waiting_for", "running"),
                                      "remaining_s": o.get("remaining_s", 60), "needs_network": o.get("needs_network", False)}
+            if o["release"] and not o["release"].get("bad_signature"):
+                r = o["release"]
+                extra["release"] = {"version": r["version"], "size": r.get("size", 1600000),
+                                    "security": r.get("security", False), "risk": r.get("risk", ""),
+                                    "installable": bool(o["available"]), "changelog": r.get("changelog", [])}
             return OK("ota_status", **self.ota_fields(), firmware=self.firmware, to=o["to"], **{"from": o["from"]},
                       why=o["why"], restart_deferred=o["restart_deferred"], **extra)
         if c in ("led_set", "led_blink", "led_status"):

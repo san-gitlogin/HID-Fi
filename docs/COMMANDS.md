@@ -701,6 +701,35 @@ of the last update, empty when none is recorded), `why` (for `rolled_back`:
 while `pending_verify` a `selftest` object: `waiting_for` (`running`, `network`,
 `usb_hid`), `remaining_s`, `needs_network`. Read-only, every transport.
 
+Checking and installing (docs/OTA.md). All go through the PIN and home-network
+gates like every other command; none is LAN-safe.
+
+| Command | Fields | What it does |
+|---|---|---|
+| `ota_check` | - | Looks for a release now (the board also looks by itself half a minute after coming online and then daily, unless `auto` is off). The manifest's signature is checked before anything in it is believed. Refused: `single_slot`, `verifying`, `busy` |
+| `ota_install` | - | Installs what the last check found - this command is the consent. Downloads into the slot that is not running, checks the SHA-256 while it streams, after `esp_ota_end()` and by reading the slot back, then switches the boot choice. Refused: `nothing_to_install`, `busy`, `verifying` |
+| `ota_cancel` | - | `done`: `stopping` (checking/downloading/verifying - nothing changed), `switched_back` (ready - the boot choice is put back), `nothing`. Refused with `switching` only during the 0.1 s otadata write |
+| `ota_apply` | - | Restarts into a ready update as soon as the keyboard and mouse have been idle 5 s (`waiting_for_idle`), releasing everything held first. Refused: `not_ready` |
+| `ota_settings` | `auto`, `auto_security` (both optional booleans) | `auto`: look for updates by itself (default on). `auto_security`: install releases marked security by itself (default off - every other install needs `ota_install`). Replies with both |
+| `ota_source` | `url` | **USB only.** Where to look for releases, for tests; empty restores GitHub. The signature rules do not change |
+
+`status` adds `ota_step` (`idle`, `checking`, `downloading`, `verifying`,
+`switching`, `ready`), `ota_bytes`/`ota_total`, `ota_available` (the version a
+check found installable, else empty), `ota_error` (why the last check or install
+stopped: `no_connection`, `bad_signature`, `bad_manifest`, `hash`, `image`,
+`flash_verify`, `cancelled`, `not_newer`, `too_old`, `too_big`, `wrong_chip` ...),
+`ota_auto`, `ota_auto_security`, `ota_paused` (the download is waiting because
+someone used the keyboard or pointer in the last 3 s: it neither reads the network
+nor erases flash then - an erase stalls both cores up to ~50 ms - and goes on when
+they stop). `ota_status` adds `release`: `version`, `size`,
+`security`, `risk`, `installable` and `changelog` - only the sections newer than
+what runs. Events: `{"event":"ota_progress","step","bytes","total"[,"error"]}` at
+most twice a second, `{"event":"ota","result":"updated"|"rolling_back"}`.
+
+The board does not check certificate dates (mbedTLS is built without
+`MBEDTLS_HAVE_TIME_DATE`); the signature on the manifest is what makes a release
+trusted, and TLS only keeps it private.
+
 The self-test keeps a new firmware when it has run a minute without a reset,
 its USB HID started, and - if the board was on its home network when the update
 began - that network is back (within three minutes). Whether a computer has the

@@ -1140,9 +1140,34 @@
    "J{\"cmd\":\"press\",\"keys\":\"z\"}"
   ]
  ],
+ "1400|v-setup|btnOtaApply||Restart now": [
+  [
+   "J{\"cmd\":\"ota_apply\"}"
+  ]
+ ],
+ "1400|v-setup|btnOtaCancel||Cancel": [
+  [
+   "J{\"cmd\":\"ota_cancel\"}"
+  ]
+ ],
+ "1400|v-setup|btnOtaCheck||Check now": [
+  [
+   "J{\"cmd\":\"ota_check\"}"
+  ]
+ ],
+ "1400|v-setup|btnOtaShow||See the update": [
+  [
+   "J{\"cmd\":\"ota_status\"}"
+  ]
+ ],
  "1400|v-setup|btnTestHid||Test HID": [
   [
    "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "1400|v-setup|tOtaAuto||Look for updates by itse": [
+  [
+   "J{\"cmd\":\"ota_settings\",\"auto\":true}"
   ]
  ],
  "1400|v-setup||osSet=auto|Auto": [
@@ -2948,9 +2973,34 @@
    "J{\"cmd\":\"press\",\"keys\":\"z\"}"
   ]
  ],
+ "390|v-setup|btnOtaApply||Restart now": [
+  [
+   "J{\"cmd\":\"ota_apply\"}"
+  ]
+ ],
+ "390|v-setup|btnOtaCancel||Cancel": [
+  [
+   "J{\"cmd\":\"ota_cancel\"}"
+  ]
+ ],
+ "390|v-setup|btnOtaCheck||Check now": [
+  [
+   "J{\"cmd\":\"ota_check\"}"
+  ]
+ ],
+ "390|v-setup|btnOtaShow||See the update": [
+  [
+   "J{\"cmd\":\"ota_status\"}"
+  ]
+ ],
  "390|v-setup|btnTestHid||Test HID": [
   [
    "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "390|v-setup|tOtaAuto||Look for updates by itse": [
+  [
+   "J{\"cmd\":\"ota_settings\",\"auto\":true}"
   ]
  ],
  "390|v-setup||osSet=auto|Auto": [
@@ -4756,9 +4806,34 @@
    "J{\"cmd\":\"press\",\"keys\":\"z\"}"
   ]
  ],
+ "820|v-setup|btnOtaApply||Restart now": [
+  [
+   "J{\"cmd\":\"ota_apply\"}"
+  ]
+ ],
+ "820|v-setup|btnOtaCancel||Cancel": [
+  [
+   "J{\"cmd\":\"ota_cancel\"}"
+  ]
+ ],
+ "820|v-setup|btnOtaCheck||Check now": [
+  [
+   "J{\"cmd\":\"ota_check\"}"
+  ]
+ ],
+ "820|v-setup|btnOtaShow||See the update": [
+  [
+   "J{\"cmd\":\"ota_status\"}"
+  ]
+ ],
  "820|v-setup|btnTestHid||Test HID": [
   [
    "J{\"cmd\":\"test_hid\"}"
+  ]
+ ],
+ "820|v-setup|tOtaAuto||Look for updates by itse": [
+  [
+   "J{\"cmd\":\"ota_settings\",\"auto\":true}"
   ]
  ],
  "820|v-setup||osSet=auto|Auto": [

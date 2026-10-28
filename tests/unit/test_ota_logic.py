@@ -131,6 +131,118 @@ def test_after_a_restart_the_board_knows_what_happened(bench, given, want):
     assert ask(bench, [f"outcome {given}"]) == [want]
 
 
+SLOT = 0x640000
+# version min_from chip size downgrade_ok running slot -> verdict
+INSTALL = [
+    ("4.1.0 4.0.4 esp32s3 1600000 0 hid_fi_v4.0.4 6553600", "ok"),
+    ("4.1.0 4.0.4 esp32s3 1600000 0 hid_fi_v4.0.5 6553600", "ok"),
+    ("4.0.4 4.0.0 esp32s3 1600000 0 hid_fi_v4.0.4 6553600", "not_newer"),       # what already runs
+    ("4.0.3 4.0.0 esp32s3 1600000 0 hid_fi_v4.0.4 6553600", "not_newer"),       # older: anti-rollback
+    ("4.0.3 4.0.0 esp32s3 1600000 1 hid_fi_v4.0.4 6553600", "ok"),              # unless the person chose it
+    ("4.0.4 4.0.0 esp32s3 1600000 1 hid_fi_v4.0.4 6553600", "not_newer"),       # never "update" to the same
+    ("4.1.0 4.0.5 esp32s3 1600000 0 hid_fi_v4.0.4 6553600", "too_old"),         # needs an intermediate (or the cable)
+    ("4.1.0 4.0.4 esp32 1600000 0 hid_fi_v4.0.4 6553600", "wrong_chip"),
+    ("4.1.0 4.0.4 - 1600000 0 hid_fi_v4.0.4 6553600", "wrong_chip"),
+    ("4.1.0 4.0.4 esp32s3 6553601 0 hid_fi_v4.0.4 6553600", "too_big"),
+    ("4.1.0 4.0.4 esp32s3 6553600 0 hid_fi_v4.0.4 6553600", "ok"),              # exactly fits
+    ("4.1.0 4.0.4 esp32s3 0 0 hid_fi_v4.0.4 6553600", "empty"),
+    ("latest 4.0.4 esp32s3 1600000 0 hid_fi_v4.0.4 6553600", "bad_version"),
+    ("4.1.0 4.0.4 esp32s3 1600000 0 garbage 6553600", "bad_version"),
+]
+
+
+@pytest.mark.parametrize("given, want", INSTALL)
+def test_what_may_be_installed(bench, given, want):
+    assert ask(bench, [f"caninstall {given}"]) == [want]
+
+
+CANCEL = [("0", "nothing"), ("1", "stop"), ("2", "stop"), ("3", "stop"), ("4", "refused"), ("5", "switch_back")]
+
+
+@pytest.mark.parametrize("step, want", CANCEL)
+def test_cancel_is_defined_at_every_step(bench, step, want):
+    """docs/OTA.md 'Checkpoints and cancel': only the 0.1 s otadata write refuses."""
+    assert ask(bench, [f"cancel {step}"]) == [want]
+
+
+RESUME = [
+    ("500000 1600000 1 1", "500000"),     # carry on where it broke
+    ("500000 1600000 0 1", "0"),          # server ignores Range: start over
+    ("0 1600000 1 1", "0"),
+    ("1600000 1600000 1 1", "0"),          # "complete" but failed: something is wrong, start over
+    ("500000 1600000 1 7", "500000"),
+    ("500000 1600000 1 8", "-1"),          # eight attempts: give up, nothing switched
+]
+
+
+@pytest.mark.parametrize("given, want", RESUME)
+def test_a_broken_download_resumes_restarts_or_gives_up(bench, given, want):
+    assert ask(bench, [f"resume {given}"]) == [want]
+
+
+def test_retries_back_off_and_are_capped(bench):
+    assert ask(bench, [f"delay {a}" for a in (1, 2, 3, 4, 5, 6, 7, 20)]) == \
+        ["2000", "4000", "8000", "16000", "32000", "60000", "60000", "60000"]
+
+
+# enabled online online_for checked_before since_last busy
+CHECK = [
+    ("1 1 30000 0 0 0", "1"),             # half a minute after coming online, first look
+    ("1 1 29999 0 0 0", "0"),
+    ("0 1 99999 0 0 0", "0"),             # switched off by the person (ETSI 5.3-6B)
+    ("1 0 99999 0 0 0", "0"),             # not on the internet: never from the board's own WiFi
+    ("1 1 99999 0 0 1", "0"),             # already busy
+    ("1 1 99999 1 86399999 0", "0"),      # looked less than a day ago
+    ("1 1 99999 1 86400000 0", "1"),      # once a day
+]
+
+
+@pytest.mark.parametrize("given, want", CHECK)
+def test_when_the_board_looks_by_itself(bench, given, want):
+    assert ask(bench, [f"shouldcheck {given}"]) == [want]
+
+
+# asked auto_security security keys_held pending
+APPLY = [
+    ("1 0 0 0 0", "1"),                   # the person pressed Restart now
+    ("0 0 1 0 0", "0"),                   # a security release, but auto-install is off: consent rules
+    ("0 1 1 0 0", "1"),                   # auto-install of security releases, which the person switched on
+    ("0 1 0 0 0", "0"),                   # ... only for security releases
+    ("1 0 0 1 0", "0"),                   # a key is held: never restart under a finger
+    ("1 0 0 0 1", "0"),                   # still proving the current one
+]
+
+
+@pytest.mark.parametrize("given, want", APPLY)
+def test_when_a_ready_update_may_restart_the_board(bench, given, want):
+    assert ask(bench, [f"mayapply {given}"]) == [want]
+
+
+# Commands that press, type or move something - a restart under them would be
+# a key typed by nobody. None may be counted as a mere query.
+HID_COMMANDS = ["key_down", "key_up", "key_release_all", "press", "type", "unlock", "lock", "mouse_move",
+                "mouse_click", "mouse_abs", "mouse_scroll", "media", "gamepad", "macro_run", "do", "open", "steps",
+                "system", "vault_type", "presenter", "gesture", "wiggle_start", "set_lock_state", "test_hid"]
+
+
+def test_status_polls_are_not_use_but_typing_is(bench):
+    """A dashboard polls status every second; that must not keep a ready update
+    from applying. Typing and moving must."""
+    q = ["status", "ping", "ota_status", "ota_check", "macro_list"]
+    assert ask(bench, [f"queryonly {c}" for c in q]) == ["1"] * len(q)
+    assert ask(bench, [f"queryonly {c}" for c in HID_COMMANDS + ["no_such_command"]]) == \
+        ["0"] * (len(HID_COMMANDS) + 1)
+
+
+def test_the_query_only_list_names_real_commands_and_nothing_that_presses():
+    import re
+    src = LOGIC.read_text()
+    listed = re.findall(r'"([a-z_]+)"', src[src.index("inline bool otaQueryOnly"):])
+    real = set(firmware.dispatch_commands())
+    assert set(listed) <= real, f"not commands: {set(listed) - real}"
+    assert not set(listed) & set(HID_COMMANDS)
+
+
 def test_no_restart_while_a_new_version_proves_itself(bench):
     assert ask(bench, ["restart 1", "restart 0"]) == ["0", "1"]
 
@@ -151,10 +263,15 @@ def test_every_planted_bug_is_caught(tmp_path):
     """Mutation testing over ota_logic.h: each deliberate bug must fail this file."""
     src = LOGIC.read_text()
     muts = json.loads((HERE / "ota_mutations.json").read_text())["mutations"]
+    tables = [("caninstall", INSTALL), ("cancel", CANCEL), ("resume", RESUME), ("shouldcheck", CHECK),
+              ("mayapply", APPLY)]
     lines = ([f"version {t}" for t, _ in VERSIONS] + [f"compare {a} {b}" for a, b, _ in COMPARE]
-             + [f"selftest {g}" for g, _ in SELFTEST] + [f"outcome {g}" for g, _ in OUTCOMES] + ["restart 1", "restart 0"])
+             + [f"selftest {g}" for g, _ in SELFTEST] + [f"outcome {g}" for g, _ in OUTCOMES] + ["restart 1", "restart 0"]
+             + [f"{op} {g}" for op, rows in tables for g, _ in rows] + [f"delay {a}" for a in (1, 2, 6, 20)]
+             + [f"queryonly {c}" for c in ["status", "ota_status", *HID_COMMANDS]])
     want = ([w for _, w in VERSIONS] + [w for *_, w in COMPARE] + [w for _, w in SELFTEST]
-            + [w for _, w in OUTCOMES] + ["0", "1"])
+            + [w for _, w in OUTCOMES] + ["0", "1"] + [w for _, rows in tables for _, w in rows]
+            + ["2000", "4000", "60000", "60000"] + ["1", "1"] + ["0"] * len(HID_COMMANDS))
     finds = [m["find"] for m in muts]
     assert len(set(finds)) == len(finds), "two planted bugs edit the same text - one of them is not tested"
     survived = []

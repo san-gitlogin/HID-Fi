@@ -130,3 +130,127 @@ inline OtaOutcome otaOutcome(const OtaRecord& rec, const char* running, const ch
 // May the firmware restart itself now? Not while proving a new version: that
 // reset would roll the update back. The restart waits for the verdict.
 inline bool otaRestartAllowed(bool pending_verify) { return !pending_verify; }
+
+// ---- installing: may this release go on this board? ---------------------------
+enum OtaRefusal {
+    OTA_INSTALL_OK = 0,
+    OTA_REF_BAD_VERSION,      // the manifest's version or min_from is not a version
+    OTA_REF_NOT_NEWER,        // same or older than what runs (unless the person asked for that one)
+    OTA_REF_TOO_OLD,          // this board runs something older than the release can update from
+    OTA_REF_WRONG_CHIP,
+    OTA_REF_TOO_BIG,          // larger than the other slot
+    OTA_REF_EMPTY,            // a zero-byte image
+};
+
+struct OtaOffer {
+    const char* version;      // "4.1.0"
+    const char* min_from;     // the oldest version it can update from
+    const char* chip;         // "esp32s3"
+    uint32_t size;            // image bytes
+    bool downgrade_ok;        // the person chose this exact older version
+};
+
+inline OtaRefusal otaCanInstall(const OtaOffer& o, const char* running, uint32_t slot_size) {
+    OtaVersion v = otaParseVersion(o.version), m = otaParseVersion(o.min_from), r = otaParseVersion(running);
+    if (!v.ok || !m.ok || !r.ok) return OTA_REF_BAD_VERSION;
+    if (!o.chip || strcmp(o.chip, "esp32s3") != 0) return OTA_REF_WRONG_CHIP;
+    if (o.size == 0) return OTA_REF_EMPTY;
+    if (o.size > slot_size) return OTA_REF_TOO_BIG;
+    if (otaCompare(r, m) < 0) return OTA_REF_TOO_OLD;
+    int c = otaCompare(v, r);
+    if (c < 0 && !o.downgrade_ok) return OTA_REF_NOT_NEWER;
+    if (c == 0) return OTA_REF_NOT_NEWER;              // never "update" to what already runs
+    return OTA_INSTALL_OK;
+}
+
+inline const char* otaRefusalStr(OtaRefusal r) {
+    switch (r) {
+        case OTA_INSTALL_OK:      return "";
+        case OTA_REF_BAD_VERSION: return "bad_version";
+        case OTA_REF_NOT_NEWER:   return "not_newer";
+        case OTA_REF_TOO_OLD:     return "too_old";
+        case OTA_REF_WRONG_CHIP:  return "wrong_chip";
+        case OTA_REF_TOO_BIG:     return "too_big";
+        default:                  return "empty";
+    }
+}
+
+// ---- the steps of an install, and what cancel does in each ----------------------
+enum OtaStep {
+    OTA_STEP_IDLE = 0,
+    OTA_STEP_CHECKING,        // fetching the manifest - nothing written anywhere
+    OTA_STEP_DOWNLOADING,     // writing the INACTIVE slot only
+    OTA_STEP_VERIFYING,       // hashing what was written
+    OTA_STEP_SWITCHING,       // the one otadata write (about 0.1 s)
+    OTA_STEP_READY,           // switched; the new version starts at the next restart
+};
+
+enum OtaCancel {
+    OTA_CANCEL_NOTHING = 0,   // nothing to undo
+    OTA_CANCEL_STOP,          // stop; the inactive slot is ignored (esp_ota_abort)
+    OTA_CANCEL_SWITCH_BACK,   // put the boot choice back on the running slot
+    OTA_CANCEL_REFUSED,       // inside the otadata write: wait a moment
+};
+
+inline OtaCancel otaCancelAction(OtaStep s) {
+    switch (s) {
+        case OTA_STEP_CHECKING:
+        case OTA_STEP_DOWNLOADING:
+        case OTA_STEP_VERIFYING:  return OTA_CANCEL_STOP;
+        case OTA_STEP_SWITCHING:  return OTA_CANCEL_REFUSED;
+        case OTA_STEP_READY:      return OTA_CANCEL_SWITCH_BACK;
+        default:                  return OTA_CANCEL_NOTHING;
+    }
+}
+
+// ---- a download that breaks -------------------------------------------------------
+const int OTA_MAX_ATTEMPTS = 8;
+
+// After a failed attempt: resume from `written` (the write handle is still open,
+// and the server honours Range), start over (0), or give up (-1).
+inline long otaResumeFrom(uint32_t written, uint32_t total, bool range_ok, int attempts) {
+    if (attempts >= OTA_MAX_ATTEMPTS) return -1;
+    if (!range_ok || written == 0 || written >= total) return 0;
+    return (long)written;
+}
+
+// Wait before attempt n (1-based): 2 s, 4 s, 8 s ... capped at 60 s.
+inline uint32_t otaRetryDelayMs(int attempt) {
+    if (attempt <= 1) return 2000;
+    uint32_t d = 2000;
+    for (int i = 1; i < attempt && d < 60000; i++) d *= 2;
+    return d > 60000 ? 60000 : d;
+}
+
+// ---- when to look for an update by itself ---------------------------------------------
+const uint32_t OTA_FIRST_CHECK_MS = 30000;              // after coming online
+const uint32_t OTA_CHECK_EVERY_MS = 24UL * 3600 * 1000;
+
+inline bool otaShouldCheck(bool enabled, bool online, uint32_t online_for_ms, bool checked_before,
+                           uint32_t since_last_ms, bool busy) {
+    if (!enabled || !online || busy) return false;
+    if (!checked_before) return online_for_ms >= OTA_FIRST_CHECK_MS;
+    return since_last_ms >= OTA_CHECK_EVERY_MS;
+}
+
+// May a READY board restart into the new version now? Only when asked, or when
+// the person allowed automatic security installs and nothing is held down (a
+// held key released by a restart would be a key typed by nobody).
+inline bool otaMayApply(bool asked, bool auto_security, bool security, bool keys_held, bool pending_verify) {
+    if (pending_verify || keys_held) return false;
+    return asked || (auto_security && security);
+}
+
+// Commands that only read or manage updates - they never press, type or move
+// anything, so they do not make the board "in use" (a dashboard polls status
+// every second; counting that would keep a ready update from ever applying).
+// Anything not listed counts as use: wrongly counting one only delays a restart.
+inline bool otaQueryOnly(const char* cmd) {
+    static const char* const q[] = {
+        "status", "ping", "echo", "wifi_status", "wifi_networks", "storage_info", "clients", "macro_list",
+        "pc_list", "vault_list", "ui_get", "companion_list", "actions", "ota_status", "ota_check",
+        "ota_install", "ota_cancel", "ota_apply", "ota_settings", "ota_source", "led_status", "auth"};
+    if (!cmd) return false;
+    for (const char* x : q) if (!strcmp(cmd, x)) return true;
+    return false;
+}

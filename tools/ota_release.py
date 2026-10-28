@@ -146,7 +146,8 @@ def canonical(obj):
 
 
 def build_manifest(version, image_bytes, min_from, core, idf, changelog_text, *, security=False, risk="",
-                   released=None, support_months=12, companion=None, comp_api=(1, 1), image_name=None):
+                   released=None, support_months=12, companion=None, comp_api=(1, 1), image_name=None,
+                   _tests_allow_test_build=False):
     if not VERSION.match(version) or not VERSION.match(min_from):
         raise ReleaseError("versions are major.minor[.patch]")
     if vtuple(min_from) >= vtuple(version):
@@ -155,7 +156,7 @@ def build_manifest(version, image_bytes, min_from, core, idf, changelog_text, *,
         raise ReleaseError("a security update says what risk it removes (ETSI EN 303 645, 5.3-11)")
     if b"hid_fi_v" + version.encode() not in image_bytes:
         raise ReleaseError(f"the image does not carry 'hid_fi_v{version}' - it is not the build of this version")
-    if b"-test" in image_bytes.split(b"hid_fi_v" + version.encode(), 1)[1][:8]:
+    if not _tests_allow_test_build and b"-test" in image_bytes.split(b"hid_fi_v" + version.encode(), 1)[1][:8]:
         raise ReleaseError("the image is a test build (version ends in -test) - never released")
     released = released or datetime.date.today()
     until = released.replace(year=released.year + (released.month - 1 + support_months) // 12,

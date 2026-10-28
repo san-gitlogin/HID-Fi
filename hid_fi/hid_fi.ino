@@ -330,6 +330,8 @@ enum PowerMode : uint8_t {
 PowerMode powerMode   = PWR_BALANCED;
 bool      radioAwake  = true;      // what the driver was last told
 uint32_t  lastInputAt = 0;         // millis() of the last client packet
+uint32_t  lastHidAt = 0;           // millis() of the last packet that could press or move something -
+                                   // not status polls: an update restarts only after a quiet spell
 #define   POWER_IDLE_MS 45000      // quiet for this long -> let the radio sleep
 
 // The access point costs power even with nobody on it, because an AP has to keep
@@ -361,12 +363,20 @@ bool heapWarned = false;
 // literals would eventually disagree about what is running.
 // Test builds (tests/board/test_ota_rollback.py) carry a suffix, so one can
 // never pass for a release: tools/make_release.sh refuses it.
-#if defined(HIDFI_TEST_SELFTEST_FAIL) || defined(HIDFI_TEST_CRASH_AT_BOOT)
+#if defined(HIDFI_TEST_SELFTEST_FAIL) || defined(HIDFI_TEST_CRASH_AT_BOOT) || defined(HIDFI_TEST_OTA_KEY) \
+    || defined(HIDFI_TEST_PATCH) || defined(HIDFI_TEST_LOOP_STATS) || defined(HIDFI_TEST_NO_FLASH_WRITE)
 #define  FW_TEST_SUFFIX "-test"
 #else
 #define  FW_TEST_SUFFIX ""
 #endif
+#ifndef HIDFI_TEST_PATCH
 #define  FW_VERSION "hid_fi_v4.0.4" FW_TEST_SUFFIX
+#else
+// A test build that claims a newer patch (tests/board/test_ota_download.py).
+#define  FW_STR2(x) #x
+#define  FW_STR(x) FW_STR2(x)
+#define  FW_VERSION "hid_fi_v4.0." FW_STR(HIDFI_TEST_PATCH) FW_TEST_SUFFIX
+#endif
 
 // ==================== HARDWARE PINS ====================
 #define BOOT_BUTTON    0    // GPIO0 — BOOT button
@@ -927,6 +937,7 @@ void setup() {
     
     // Initialize WiFi (auto-connect if credentials saved)
     setupWifi();
+    otaStartWorker();   // update checks and installs run on core 0, never in loop()
     
     COM_SERIAL.println("========================================");
     COM_SERIAL.println("Inputs: UART0 + HTTP :80 + WebSocket :81");
@@ -975,7 +986,25 @@ void dropUnsignedSockets() {
     }
 }
 
+#ifdef HIDFI_TEST_LOOP_STATS
+// Test builds only: how long loop() passes take, per second (perf investigations).
+volatile uint32_t loopMaxUs = 0, loopAvgUs = 0;
+volatile uint32_t secMax[6] = {0};          // serial, ws, http, sta/power/comp, ota tick+service, rest
+#define SEC_T0 uint32_t _st = micros();
+#define SEC_END(i) { uint32_t _d = micros() - _st; if (_d > secMax[i]) secMax[i] = _d; _st = micros(); }
+#else
+#define SEC_T0
+#define SEC_END(i)
+#endif
 void loop() {
+#ifdef HIDFI_TEST_LOOP_STATS
+    static uint32_t prev = 0, winAt = 0, n = 0, sum = 0, mx = 0;
+    uint32_t now = micros();
+    if (prev) { uint32_t d = now - prev; sum += d; n++; if (d > mx) mx = d; }
+    prev = now;
+    if (now - winAt > 1000000) { loopMaxUs = mx; loopAvgUs = n ? sum / n : 0; mx = sum = n = 0; winAt = now; }
+#endif
+    SEC_T0
     // Handle serial commands (primary)
     if (COM_SERIAL.available()) {
         String line = COM_SERIAL.readStringUntil('\n');
@@ -989,16 +1018,22 @@ void loop() {
         }
     }
 
+    SEC_END(0)
     if (wifiEnabled) {
         webSocket.loop();          // input hot path first
         dropUnsignedSockets();
+        SEC_END(1)
         webServer.handleClient();
+        SEC_END(2)
         updateStaJoin();           // advances a join in progress, never blocks
         checkWifiConnection();
         updatePower();
         compTick();                // companion expiry, never blocks
+        SEC_END(3)
     }
     otaTick();                     // a new firmware's self-test, once a second, never blocks
+    otaService();                  // update checks, a ready update applied when idle - never blocks
+    SEC_END(4)
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds
     // brings the access point back if power saving switched it off. That hold is
@@ -2129,6 +2164,7 @@ void processCommand(const String& line, CmdSource src) {
     }
     
     const char* cmd = inDoc["cmd"] | "unknown";
+    if (!otaQueryOnly(cmd)) lastHidAt = millis();
     if (!fromWifi || verboseLog) {
         COM_SERIAL.printf("%s cmd=%s\n", fromWifi ? "[WIFI]" : "[UART]", cmd);
     }
@@ -2384,6 +2420,24 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "ota_status") == 0) {
         handleOtaStatus();
+    }
+    else if (strcmp(cmd, "ota_check") == 0) {
+        handleOtaCheck();
+    }
+    else if (strcmp(cmd, "ota_install") == 0) {
+        handleOtaInstall();
+    }
+    else if (strcmp(cmd, "ota_cancel") == 0) {
+        handleOtaCancel();
+    }
+    else if (strcmp(cmd, "ota_apply") == 0) {
+        handleOtaApply();
+    }
+    else if (strcmp(cmd, "ota_settings") == 0) {
+        handleOtaSettings(inDoc);
+    }
+    else if (strcmp(cmd, "ota_source") == 0) {
+        handleOtaSource(inDoc, cmdSource == SRC_SERIAL);
     }
     else if (strcmp(cmd, "companion_list") == 0) {
         handleCompanionList();
@@ -3114,6 +3168,13 @@ static uint8_t wsDevices() {
 void buildStatusDoc(JsonDocument& doc) {
     doc["status"] = "ok";
     otaStatusFields(doc);
+    otaJobFields(doc);
+#ifdef HIDFI_TEST_LOOP_STATS
+    doc["loop_us_max"] = loopMaxUs;
+    doc["loop_us_avg"] = loopAvgUs;
+    JsonArray sm = doc["loop_sec_max_us"].to<JsonArray>();
+    for (int i = 0; i < 5; i++) { sm.add(secMax[i]); secMax[i] = 0; }
+#endif
     doc["reply"] = "status";
     doc["chip"] = "ESP32-S3";
     doc["firmware"] = FW_VERSION;
@@ -4169,6 +4230,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             if (num < WS_MAX_CLIENTS && wsFromLan[num] && authToken.length() == 0 && wifiConnected) break;
             if (!hidReady) break;
             noteActivity();
+            lastHidAt = millis();
             commandCount++;
             wifiCommandCount++;
             if (payload[0] == WS_OP_MOVE && len >= 7) {

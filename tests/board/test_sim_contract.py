@@ -47,8 +47,10 @@ READ_ONLY = [
     {"cmd": "companion_list"}, {"cmd": "companion_unpair", "id": "0f" * 16},
     {"cmd": "companion_pair", "id": "0f" * 16}, {"cmd": "companion_pair", "id": "NOT-HEX"},
     {"cmd": "screen_ticket", "id": "0f" * 16},               # serial: always wifi_only
-    # Updates: where the board stands (hid_fi/ota.h).
-    {"cmd": "ota_status"},
+    # Updates: where the board stands, and the refusals that change nothing when
+    # nothing is in progress (hid_fi/ota.h).
+    {"cmd": "ota_status"}, {"cmd": "ota_cancel"}, {"cmd": "ota_install"}, {"cmd": "ota_apply"},
+    {"cmd": "ota_settings"},
 ]
 
 

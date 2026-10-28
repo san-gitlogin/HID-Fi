@@ -7,6 +7,12 @@
 //   selftest <uptime_ms> <hid> <need_net> <net_up> <forced>  -> verdict why
 //   outcome <step> <to> <slot> <running> <running_slot> <pending> <aborted_other> -> outcome
 //   restart <pending>                               -> 0 | 1
+//   caninstall <version> <min_from> <chip> <size> <downgrade_ok> <running> <slot>  -> refusal ("ok" when allowed)
+//   cancel <step 0-5>                               -> nothing | stop | switch_back | refused
+//   resume <written> <total> <range_ok> <attempts>  -> offset (-1 give up)
+//   delay <attempt>                                 -> ms
+//   shouldcheck <enabled> <online> <online_for_ms> <checked_before> <since_last_ms> <busy> -> 0 | 1
+//   mayapply <asked> <auto_security> <security> <keys_held> <pending>  -> 0 | 1
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -53,6 +59,30 @@ int main() {
         } else if (op == "restart") {
             int p; in >> p;
             std::printf("%d\n", otaRestartAllowed(p != 0) ? 1 : 0);
+        } else if (op == "caninstall") {
+            std::string v, m, chip, running; unsigned long size, slot; int down;
+            in >> v >> m >> chip >> size >> down >> running >> slot;
+            OtaOffer o = {arg(v), arg(m), arg(chip), (uint32_t)size, down != 0};
+            OtaRefusal r = otaCanInstall(o, arg(running), (uint32_t)slot);
+            std::printf("%s\n", r == OTA_INSTALL_OK ? "ok" : otaRefusalStr(r));
+        } else if (op == "cancel") {
+            int s; in >> s;
+            const char* n[] = {"nothing", "stop", "switch_back", "refused"};
+            std::printf("%s\n", n[otaCancelAction((OtaStep)s)]);
+        } else if (op == "resume") {
+            unsigned long w, total; int range, att; in >> w >> total >> range >> att;
+            std::printf("%ld\n", otaResumeFrom((uint32_t)w, (uint32_t)total, range != 0, att));
+        } else if (op == "delay") {
+            int a; in >> a; std::printf("%lu\n", (unsigned long)otaRetryDelayMs(a));
+        } else if (op == "shouldcheck") {
+            int en, on, before, busy; unsigned long onfor, since;
+            in >> en >> on >> onfor >> before >> since >> busy;
+            std::printf("%d\n", otaShouldCheck(en, on, (uint32_t)onfor, before, (uint32_t)since, busy) ? 1 : 0);
+        } else if (op == "mayapply") {
+            int asked, autos, sec, held, pend; in >> asked >> autos >> sec >> held >> pend;
+            std::printf("%d\n", otaMayApply(asked, autos, sec, held, pend) ? 1 : 0);
+        } else if (op == "queryonly") {
+            std::string c; in >> c; std::printf("%d\n", otaQueryOnly(c.c_str()) ? 1 : 0);
         } else {
             std::printf("? %s\n", op.c_str());
         }

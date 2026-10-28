@@ -945,6 +945,14 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 /* the join progress bar lives in a card, not the boot overlay */
 #joinBar{width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}
 #joinBar i{display:block;height:100%;width:0%;background:var(--acc);transition:width .5s linear}
+#otaBar{width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}
+#otaBar i{display:block;height:100%;width:0%;background:var(--acc);transition:width .4s linear}
+.otasec{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;margin:10px 0;
+  background:rgba(255,190,60,.12);border:1px solid rgba(255,190,60,.35)}
+.otasec .ic{flex:0 0 auto;width:20px;height:20px}
+.otacl{max-height:40vh;overflow:auto;margin:8px 0}
+.otacl h4{margin:12px 0 4px;font-size:14px}
+.otacl p{margin:0 0 6px;white-space:pre-wrap;font-size:13px;color:var(--fg2)}
 /* the new credentials have to stay on screen - the phone is about to leave the
    network and there is nowhere else to read them from */
 #apnewInfo{background:var(--surface);border:1px solid var(--line);border-radius:12px;
@@ -1857,6 +1865,25 @@ main::after{height:var(--flpad,0px)}
           <div class="log" id="log"></div>
         </div>
 
+        <div class="card span" id="otaCard">
+          <div class="ch"><svg class="ic"><use href="#i-refresh"/></svg><h2>Updates</h2></div>
+          <div class="item"><svg class="ic"><use href="#i-cpu"/></svg>
+            <div class="tx"><b id="otaState">&mdash;</b><span id="otaSub"></span></div>
+          </div>
+          <div class="bar" id="otaBar" style="display:none"><i></i></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn sm" id="btnOtaCheck">Check now</button>
+            <button class="btn sm ok" id="btnOtaShow" style="display:none">See the update</button>
+            <button class="btn sm ok" id="btnOtaApply" style="display:none">Restart now</button>
+            <button class="btn sm" id="btnOtaCancel" style="display:none">Cancel</button>
+          </div>
+          <div class="chips" style="margin-top:12px">
+            <button class="chip" id="tOtaAuto">Look for updates by itself</button>
+            <button class="chip" id="tOtaAutoSec">Install security updates by itself</button>
+          </div>
+          <p class="hint" style="margin-top:10px">Nothing is downloaded or installed until you say so. The new version goes in beside the one that runs, and is kept only after it has started properly &mdash; otherwise the board goes back to the one before by itself. Your settings, PINs, passwords, macros, tiles and pairings stay.</p>
+        </div>
+
         <div class="card span colophon">
           <svg class="mark" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-logo"/></svg>
           <div class="name">HID&#8209;Fi</div>
@@ -2026,6 +2053,7 @@ function connect(){
       else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
       else if(m.event==='companion_pending'){toast((m.name||'A computer')+' wants to share its screen','ok');scrList();}
       else if(m.event==='companion_online')scrList();
+      else if(m.event==='ota_progress'||m.event==='ota')otaEvent(m);
       return;}
     if(m.reply==='status'||m.reply==='pong')applyStatus(m);
     // With a PIN set the board greets every new socket with a bare auth_required
@@ -4626,6 +4654,117 @@ function paintShare(on,active,waiting){
     ?'Phones on the board\'s WiFi have internet. Rejoin the board\'s WiFi on a phone that was already on it.'
     :'Waiting for '+(waiting||'the home network')+' - sharing starts by itself.';
 }
+// ---- updates (docs/OTA.md) -------------------------------------------------------
+// The board does the work; this only shows where it is and asks for consent.
+// Nothing downloads before "Update now", and nothing restarts the board before
+// "Restart now" (or the security switch the person turned on).
+const OTA_ERR={no_connection:'Could not reach the update server.',bad_signature:'An update was offered that HID-Fi did not sign. It was ignored.',
+  bad_manifest:'The update description could not be read.',hash:'The download was damaged. Nothing was changed.',
+  image:'The new version was not valid. Nothing was changed.',flash_verify:'Writing it did not check out. Nothing was changed.',
+  flash_read:'Writing it did not check out. Nothing was changed.',flash_write:'Writing it failed. Nothing was changed.',
+  begin:'Could not start writing. Nothing was changed.',switch:'Could not switch to it. Nothing was changed.',
+  memory:'Not enough memory just now. Try again.',cancelled:'Cancelled. Nothing was changed.',
+  too_old:'This board is too old to update over the air - update it once with the cable (see FLASHING.md).',
+  too_big:'This update does not fit this board.',wrong_chip:'This update is for another kind of board.'};
+const OTA_WHY={did_not_start:'it did not start properly',network:'it could not get back on your network',
+  usb_hid:'its keyboard and mouse did not start',test_build:'it was a test build'};
+let OTA={};
+function otaMb(n){return (n/1048576).toFixed(1)+' MB';}
+function otaVer(s){return String(s||'').replace('hid_fi_','');}
+function paintOta(d){
+  Object.assign(OTA,d);
+  const st=$('otaState'),sub=$('otaSub'),bar=$('otaBar'),fw=otaVer(OTA.firmware||'');
+  const show=(id,on)=>{$(id).style.display=on?'':'none';};
+  ['btnOtaShow','btnOtaApply','btnOtaCancel'].forEach(i=>show(i,false));
+  show('btnOtaCheck',true);
+  $('btnOtaCheck').disabled=false;$('btnOtaCancel').disabled=false;
+  bar.style.display='none';
+  $('tOtaAuto').classList.toggle('on',!!OTA.ota_auto);
+  $('tOtaAutoSec').classList.toggle('on',!!OTA.ota_auto_security);
+  const step=OTA.ota_step||'idle';
+  const err=OTA.ota_error&&OTA.ota_error!=='not_newer'?(OTA_ERR[OTA.ota_error]||('Stopped: '+OTA.ota_error)):'';
+  if(OTA.ota_layout&&OTA.ota_layout!=='two_slot'){
+    st.textContent='One cable update needed';
+    sub.textContent='This board still has the older layout. Flash it once from a computer (FLASHING.md) and it can update over the air from then on.';
+    show('btnOtaCheck',false);return;
+  }
+  if(OTA.ota_state==='pending_verify'){
+    st.textContent='Checking the new version '+fw;
+    sub.textContent='Keyboard and mouse work. It is kept once it has run a minute without trouble.';
+    $('btnOtaCheck').disabled=true;return;
+  }
+  if(step==='checking'){st.textContent='Looking for updates\u2026';sub.textContent='';$('btnOtaCheck').disabled=true;return;}
+  if(step==='downloading'||step==='verifying'||step==='switching'){
+    const pct=OTA.ota_total?Math.min(100,Math.round(100*OTA.ota_bytes/OTA.ota_total)):0;
+    st.textContent=step==='downloading'?('Updating: '+pct+'%'):step==='verifying'?'Checking the download\u2026':'Switching\u2026';
+    sub.textContent=OTA.ota_paused?'Paused while you use the keyboard or mouse - it goes on when you stop.':
+      step==='downloading'&&OTA.ota_total?(otaMb(OTA.ota_bytes)+' of '+otaMb(OTA.ota_total)+'. Keyboard and mouse keep working.'):'Keyboard and mouse keep working.';
+    bar.style.display='';bar.firstElementChild.style.width=(step==='downloading'?pct:100)+'%';
+    show('btnOtaCancel',true);$('btnOtaCancel').disabled=step==='switching';
+    $('btnOtaCheck').disabled=true;return;
+  }
+  if(step==='ready'){
+    st.textContent='Ready: restart into '+(OTA.ota_available||'the new version');
+    sub.textContent='The board restarts once; keyboard and mouse stop for about ten seconds. It waits until nobody is typing.';
+    show('btnOtaApply',true);show('btnOtaCancel',true);$('btnOtaCheck').disabled=true;return;
+  }
+  if(OTA.ota_available){
+    st.textContent='Update available: '+OTA.ota_available;
+    sub.textContent=err||('You run '+fw+'. Nothing is downloaded until you say so.');
+    show('btnOtaShow',true);return;
+  }
+  st.textContent='HID-Fi '+fw;
+  sub.textContent=err||OTA.note||(OTA.ota_auto?'Up to date. It looks for updates once a day.':'Tap Check now to look for updates.');
+  // Ask the board what happened only when the outcome changes - not on every status poll.
+  const res=OTA.ota_result||'none';
+  if(res!==OTA.seenResult){OTA.seenResult=res;if(res==='rolled_back'||res==='updated')otaOutcome();}
+}
+// After a restart: say once what happened (the board keeps it until the next update).
+function otaOutcome(){
+  send({cmd:'ota_status'},r=>{
+    if(!r||r.status!=='ok'||!r.to)return;
+    let seen='';try{seen=localStorage.getItem('otaSeen')||'';}catch(e){}
+    const key=r.ota_result+':'+r.to;
+    if(r.ota_result==='rolled_back'){
+      OTA.note='The update to '+otaVer(r.to)+' was not kept: '+(OTA_WHY[r.why]||r.why||'it failed')+'. HID-Fi went back to '+otaVer(r.firmware)+' by itself.';
+      paintOta({});
+    }
+    if(seen===key)return;
+    try{localStorage.setItem('otaSeen',key);}catch(e){}
+    if(r.ota_result==='updated')toast('Updated to '+otaVer(r.to),'ok');
+    else toast('The update was not kept - HID-Fi went back to '+otaVer(r.firmware),'bad');
+  });
+}
+function otaEvent(m){
+  if(m.event==='ota'){refresh();return;}
+  paintOta({ota_step:m.step,ota_bytes:m.bytes,ota_total:m.total,ota_error:m.error!==undefined?m.error:OTA.ota_error});
+  if(m.step==='idle'||m.step==='ready')refresh();
+}
+function otaSheet(){
+  send({cmd:'ota_status'},r=>{
+    const a=r&&r.release;
+    if(!a||!a.installable){toast('No update to install','bad');refresh();return;}
+    otaSheetShow(a);
+  });
+}
+function otaSheetShow(a){
+    let h='<div class="otainfo"><b>HID-Fi '+esc(a.version)+'</b> &middot; '+otaMb(a.size)+' to download</div>';
+    if(a.security)h+='<div class="otasec"><svg class="ic"><use href="#i-shield"/></svg><div><b>Security update.</b> '+esc(a.risk||'')+'</div></div>';
+    h+='<div class="otacl">';
+    (a.changelog||[]).forEach(s=>{h+='<h4>'+esc(s.version)+'</h4><p>'+esc(s.text||'')+'</p>';});
+    h+='</div><p class="hint">The board restarts once at the end; keyboard and mouse stop for about ten seconds. '+
+      'Settings, PINs, passwords, macros, tiles and pairings stay. If the new version does not start properly, the board goes back by itself.</p>'+
+      '<div class="row" style="margin-top:12px"><button class="btn ok" id="btnOtaInstall">Update now</button>'+
+      '<button class="btn" id="btnOtaLater">Later</button></div>';
+    sheet('Update available',h,()=>{
+      $('btnOtaInstall').onclick=()=>{send({cmd:'ota_install'},q=>{
+        if(q&&q.status==='ok'){closeSheet();toast('Updating - keyboard and mouse keep working','ok');}
+        else toast((q&&OTA_ERR[q.message])||'Could not start the update','bad');
+        refresh();});};
+      $('btnOtaLater').onclick=closeSheet;
+    });
+}
+
 function applyStatus(d){
   if(d.ap_share!==undefined)paintShare(d.ap_share,d.ap_share_active,d.wifi_connected?'the access point':'the home network');
   if(d.mdns)MDNS_NAME=d.mdns;
@@ -4699,6 +4838,7 @@ function applyStatus(d){
     }else adv.style.display='none';
   }
   if(d.power_mode)paintPower(d);
+  if(d.ota_state!==undefined)paintOta(d);
   if(d.gamepad!==undefined&&d.gamepad!==GP.enabled){GP.enabled=d.gamepad;gpSync();}
   if(d.wiggle_mode!==undefined)$('wigState').textContent=d.wiggle_active?('Active - '+d.wiggle_mode):'Idle';
   if(d.firmware){
@@ -5005,6 +5145,24 @@ function bindAll(){
     send({cmd:'power_mode',mode:b.dataset.pwr},r=>{if(r&&r.status==='ok'){paintPower(r);toast('Power: '+r.mode,'ok');}});
     buzz(8);
   });
+  $('btnOtaCheck').onclick=()=>send({cmd:'ota_check'},r=>{
+    if(r&&r.status==='ok')paintOta({ota_step:'checking'});else toast((r&&r.message)==='busy'?'Already busy':'Could not check now','bad');});
+  $('btnOtaShow').onclick=otaSheet;
+  $('btnOtaApply').onclick=()=>send({cmd:'ota_apply'},r=>{
+    if(r&&r.status==='ok')toast(r.waiting_for_idle?'Restarting as soon as nobody is typing':'Restarting now','ok');refresh();});
+  $('btnOtaCancel').onclick=()=>send({cmd:'ota_cancel'},r=>{
+    if(r&&r.status==='ok')toast(r.done==='switched_back'?'Cancelled - the board stays on this version':'Cancelled','ok');
+    else toast('Just switching - try again in a moment','bad');
+    refresh();});
+  $('tOtaAuto').onclick=()=>{
+    const on=!$('tOtaAuto').classList.contains('on');
+    send({cmd:'ota_settings',auto:on},r=>{if(r&&r.status==='ok')paintOta({ota_auto:r.auto,ota_auto_security:r.auto_security});});
+  };
+  $('tOtaAutoSec').onclick=()=>{
+    const on=!$('tOtaAutoSec').classList.contains('on');
+    if(on&&!confirm('Install updates that fix security problems by themselves, as soon as they are found?\n\nThe board restarts once for each, only when nobody is typing. Other updates still wait for you.'))return;
+    send({cmd:'ota_settings',auto_security:on},r=>{if(r&&r.status==='ok')paintOta({ota_auto:r.auto,ota_auto_security:r.auto_security});});
+  };
   $('tApOff').onclick=()=>{
     const on=!$('tApOff').classList.contains('on');
     if(on&&!confirm('Switch the access point off once the board is on your home network and nobody has used it for ten minutes?\n\nHold BOOT for two seconds to bring it back.'))return;

@@ -75,6 +75,81 @@
       "name": "rollback judged by version, not slot",
       "find": "            return strcmp(rec.slot, running_slot) == 0 ? OTA_OUT_UPDATED : OTA_OUT_ROLLED_BACK;",
       "replace": "            {}"
+    },
+    {
+      "name": "downgrades installed silently",
+      "find": "    if (c < 0 && !o.downgrade_ok) return OTA_REF_NOT_NEWER;",
+      "replace": ""
+    },
+    {
+      "name": "same version reinstalled as an update",
+      "find": "    if (c == 0) return OTA_REF_NOT_NEWER;              // never \"update\" to what already runs",
+      "replace": ""
+    },
+    {
+      "name": "min_from ignored",
+      "find": "    if (otaCompare(r, m) < 0) return OTA_REF_TOO_OLD;",
+      "replace": ""
+    },
+    {
+      "name": "image size not checked against the slot",
+      "find": "    if (o.size > slot_size) return OTA_REF_TOO_BIG;",
+      "replace": ""
+    },
+    {
+      "name": "chip not checked",
+      "find": "    if (!o.chip || strcmp(o.chip, \"esp32s3\") != 0) return OTA_REF_WRONG_CHIP;",
+      "replace": ""
+    },
+    {
+      "name": "cancel allowed inside the otadata write",
+      "find": "        case OTA_STEP_SWITCHING:  return OTA_CANCEL_REFUSED;",
+      "replace": "        case OTA_STEP_SWITCHING:  return OTA_CANCEL_STOP;"
+    },
+    {
+      "name": "cancel after switching leaves the switch",
+      "find": "        case OTA_STEP_READY:      return OTA_CANCEL_SWITCH_BACK;",
+      "replace": "        case OTA_STEP_READY:      return OTA_CANCEL_NOTHING;"
+    },
+    {
+      "name": "downloads retried forever",
+      "find": "    if (attempts >= OTA_MAX_ATTEMPTS) return -1;",
+      "replace": ""
+    },
+    {
+      "name": "Range assumed when the server ignores it",
+      "find": "    if (!range_ok || written == 0 || written >= total) return 0;",
+      "replace": "    if (written == 0 || written >= total) return 0;"
+    },
+    {
+      "name": "retry delay uncapped",
+      "find": "    return d > 60000 ? 60000 : d;",
+      "replace": "    return d;"
+    },
+    {
+      "name": "checks while switched off",
+      "find": "    if (!enabled || !online || busy) return false;",
+      "replace": "    if (!online || busy) return false;"
+    },
+    {
+      "name": "checks every boot instantly",
+      "find": "    if (!checked_before) return online_for_ms >= OTA_FIRST_CHECK_MS;",
+      "replace": "    if (!checked_before) return true;"
+    },
+    {
+      "name": "security installs without consent",
+      "find": "    return asked || (auto_security && security);",
+      "replace": "    return asked || security;"
+    },
+    {
+      "name": "restarts under a held key",
+      "find": "    if (pending_verify || keys_held) return false;",
+      "replace": "    if (pending_verify) return false;"
+    },
+    {
+      "name": "a status poll counts as use",
+      "find": "        \"status\", \"ping\", \"echo\",",
+      "replace": "        \"ping\", \"echo\","
     }
   ]
 }
