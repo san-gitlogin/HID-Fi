@@ -496,9 +496,41 @@ The procedure, as it will run on DA1A2C:
 
 ## Build order (each step: tests green, committed on `ota-updates`, nothing pushed)
 
-0. [ ] **Security: core 3.3.1 -> 3.3.12** (skill `hidfi-dependency-upgrade`): no-board
+0. [x] **Security: core 3.3.1 -> 3.3.12** (skill `hidfi-dependency-upgrade`): no-board
    suite, then the board tiers on 09F7C8 with the owner's OK, the multipart crash
    regression test, heap measured (3.3.12 adds ~16 KB static RAM).
+   Progress 2026-10-28 (uncommitted until the board tier passes, as the skill says):
+   - every OTA fact re-checked on 3.3.12 (IDF 5.5.5, rollback on, mbedTLS 3.6.6,
+     bootloader handles PENDING_VERIFY, `verifyRollbackLater` unchanged); the
+     multipart parser now refuses boundaries over 70 characters;
+   - no-board suite on 3.3.12: all green except the size ratchet - static RAM
+     71,564 -> 87,476 bytes, which is TinyUSB **host** buffers the core's new USB
+     Host library links in (`_transfer_buf`, `ep_*_sw_buf`, `_hidh_epbuf`, MSC/CDC/
+     MIDI host state), unused by HID-Fi and not removable without rebuilding the
+     core's libraries;
+   - `tests/board/test_web_hardening.py`: on 09F7C8 at v4.0.3 the board panicked
+     (`Stack canary watchpoint triggered (loopTask)`) one second after a single
+     request from the home network - all four tests fail there, twice; after
+     flashing v4.0.4 built on 3.3.12 all four pass. The first version of the test
+     passed against the crashing board (a socket timeout let the restarted board's
+     uptime pass the old value) - it now requires uptime to advance by the real
+     elapsed time and no boot event;
+   - data on 09F7C8 identical after five crashes and the flash. NVS gained one
+     entry: ESP-IDF's own radio calibration (`phy`/`cal_data`), rewritten after
+     the panics - data comparisons leave the `phy` namespace out;
+   - free internal heap 221.3 KB -> 202.6 KB at 5 s; 195.6 KB low point after
+     60 s on the home network;
+   - `companion/vectors/check_board.sh` moved to mbedTLS 3.6.6 (pairing vectors
+     pass), with a test that it follows the pinned core;
+   - DA1A2C (owner's go-ahead, data compared by hash only): flashed, data
+     identical, web hardening 4/4, board tier 93 passed / 0 failed (19 skipped:
+     tests that refuse a board in real use, and opt-in perf). The one failure on
+     the first run was a race in the test (state read at 8.0 s, changed at 8.4 s
+     on 3.3.1 and 3.3.12 alike - measured by flashing the v4.0.4 release back);
+   - pinned 3.3.12, size golden moved (the only golden that changed),
+     `tools/dep_watch.py`: "OK - everything checked, nothing open";
+   - not yet: a release (owner's decision), Windows/Linux CI on the new core,
+     hostsim (Linux), e2e (needs the owner at the Mac).
 1. [x] `tools/dep_watch.py`: pinned vs latest, and advisories against the pinned
    versions; agent rules (AGENTS.md, CLAUDE.md, the upgrade skill) say to run it
    and to check the web for the latest before relying on any outside fact.

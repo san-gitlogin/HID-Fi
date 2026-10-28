@@ -1,7 +1,7 @@
 {
   "_about": "Versions HID-Fi is verified against. Firmware dependencies are exact pins: they are compiled into the product, so a different version is a different product until the suite says otherwise. Tool versions are minimums. To move a pin, follow docs/TESTING.md#upgrading-a-dependency.",
   "firmware": {
-    "esp32:esp32": "3.3.1",
+    "esp32:esp32": "3.3.12",
     "ArduinoJson": "7.4.3",
     "WebSockets": "2.7.2"
   },
@@ -16,13 +16,11 @@
     "playwright": "1.40.0"
   },
   "verified": {
-    "date": "2026-10-20",
-    "firmware": "hid_fi_v3.10",
+    "date": "2026-10-28",
+    "firmware": "hid_fi_v4.0.4 on core 3.3.12 (IDF 5.5.5)",
     "on": [
-      "macOS 15 (Darwin 24.6), Apple Silicon - board on COM + USB",
-      "Windows 10/11 (Chrome reports NT 10.0) - board USB, COM on a Mac",
-      "Debian 12 VM (kernel 6.1, IBus 1.5.27) - recorded HID reports, no USB",
-      "Ubuntu 24.04 container (arm64, colima VM on an external SSD) - hostsim 312/312; tests/setup_linux.sh as root and as a sudo user"
+      "macOS 15 (Darwin 24.6), Apple Silicon - DA1A2C on COM + USB: board tier 93 passed; 09F7C8 on COM: web hardening",
+      "no-board tiers on macOS: static, unit, ui, build (hostsim and pwsh run in CI)"
     ]
   }
 }

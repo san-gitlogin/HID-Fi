@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compiles the board's pairing crypto (hid_fi/companion_crypto.h) on this
-# computer against the same mbedTLS release the ESP32 core ships (3.6.4), and
+# computer against the same mbedTLS release the ESP32 core ships (3.6.6 in core 3.3.12), and
 # checks it against pairing_v1.json - the vectors the Rust app is held to.
 #
 # The mbedTLS source is downloaded once into companion/target/ (gitignored),
@@ -9,8 +9,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
-ver=3.6.4
-sha=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
+ver=3.6.6
+sha=8fb65fae8dcae5840f793c0a334860a411f884cc537ea290ce1c52bb64ca007a
 work="$repo/companion/target/mbedtls-check"
 src="$work/mbedtls-$ver"
 mkdir -p "$work/o"

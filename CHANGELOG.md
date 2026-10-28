@@ -7,6 +7,43 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+Security: the board's web server could be crashed by anyone on its WiFi or on
+the home network it joined. **Reflash every board** once this is released.
+
+### Security
+
+- **A single request crashed the board** (GHSA-8cmm-3887-r32j, critical, in the
+  ESP32 core's `WebServer`). Every release up to v4.0.4 was built on core
+  3.3.1, whose multipart parser copied a boundary of any length onto the stack
+  before HID-Fi's PIN or home-network gate saw the request. Proven on a board:
+  one POST, a panic one second later, a restart. Built on core **3.3.12** now,
+  which refuses boundaries over 70 characters; the same requests leave the
+  board running. `tests/board/test_web_hardening.py` sends them on every board
+  run.
+- **The access point's DHCP server** read past its buffer on a crafted request
+  (GHSA-g764-gwc3-75m5, ESP-IDF 5.5.1). Core 3.3.12 brings ESP-IDF 5.5.5.
+- Also from the new core: TLS client fixes the coming update check needs, and
+  settings storage that survives a power cut during its own clean-up.
+- `tools/dep_watch.py` now lists every published advisory against what HID-Fi
+  is built from; each one that does not reach HID-Fi is recorded with the
+  reason in `tools/dep_watch_ack.json`.
+
+### Changed
+
+- The firmware uses about 16 KB more RAM (USB host buffers the new core links
+  in; HID-Fi does not use them). Free memory after a minute online is about
+  195 KB, measured on two boards.
+
+### Fixed (tests)
+
+- Two board tests decided too early after the port reset the board: the
+  router-off-at-boot test read the network state at 8.0 s while the board
+  changes it at 8.4 s (measured, same on both cores), and the home-network
+  tests skipped when they ran first. Both now wait, and still fail on what
+  would really be wrong.
+
 ## v4.0.4 - 2026-10-27
 
 HID-Fi Companion: see which version you have, and update without quitting it

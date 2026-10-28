@@ -30,7 +30,13 @@ pytestmark = pytest.mark.board
 
 
 def _online(board):
+    # Opening the COM port resets the board and it rejoins in about 10 s; deciding
+    # "not on a home network" before then skipped this whole file when it ran first.
+    end = time.time() + 40
     st = board.status()
+    while not st.get("wifi_connected") and time.time() < end:
+        time.sleep(1)
+        st = board.status()
     if not st.get("wifi_connected"):
         pytest.skip("the board is not on a home network")
     return st
@@ -111,13 +117,27 @@ def test_router_off_for_a_while_the_ap_stays_and_it_comes_back(board, home, requ
 
 
 def test_router_off_when_the_board_starts(board, home, request, _board_holder):
+    up_before = board.status().get("uptime_sec", 0)
     _fault(board, kind="vanish", s=30, at_boot=True)          # the board restarts itself
-    time.sleep(8)
-    st = board.status()
+    # It says "idle" until its first look for the network ends - measured at 8.4 s
+    # after this command on cores 3.3.1 and 3.3.12 alike. A single reading at 8 s
+    # raced that and failed once in a full run (2026-10-28), so wait for it, and
+    # fail only on what would really be giving up.
+    phases, end, st = [], time.time() + 20, {}
+    while time.time() < end:
+        st = board.status()
+        if st.get("uptime_sec", 0) >= up_before:     # the reply before the restart took effect
+            time.sleep(0.3)
+            continue
+        phases.append(st.get("sta_phase"))
+        assert not st.get("wifi_connected"), "online while the router is off - the fault did not hold"
+        assert st.get("sta_phase") != "failed", f"a board that booted before the router gave up: {phases}"
+        if st.get("sta_phase") in ("connecting", "reconnecting"):
+            break
+        time.sleep(0.5)
     assert st.get("uptime_sec", 99) < 30, "the board did not restart"
-    assert not st.get("wifi_connected")
     assert st.get("sta_phase") in ("connecting", "reconnecting"), \
-        f"a board that booted before the router must keep trying, not give up: {st.get('sta_phase')}"
+        f"a board that booted before the router must keep trying, not give up: {phases}"
     took, st = _wait(board, lambda s: s.get("wifi_connected"), 110, "joining once the router came up")
     _reachable(request, st["wifi_ip"])
 

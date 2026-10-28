@@ -211,14 +211,20 @@ def derived_from_core(core_version, data_dir):
         for p in pkg.get("platforms") or []:
             if p.get("version") == core_version:
                 tools = {t["name"]: t["version"] for t in p.get("toolsDependencies") or []}
-    libs = data_dir / "packages" / "esp32" / "tools" / "esp32-arduino-libs" / tools.get("esp32-arduino-libs", "?")
-    sdk = libs / "esp32s3" / "sdkconfig"
+    # Up to 3.3.11 one esp32-arduino-libs tool held every chip (<libs>/esp32s3/);
+    # from 3.3.12 each chip has its own tool (esp32s3-libs/<ver>/).
+    tdir = data_dir / "packages" / "esp32" / "tools"
+    if "esp32s3-libs" in tools:
+        s3 = tdir / "esp32s3-libs" / tools["esp32s3-libs"]
+    else:
+        s3 = tdir / "esp32-arduino-libs" / tools.get("esp32-arduino-libs", "?") / "esp32s3"
+    sdk = s3 / "sdkconfig"
     if not sdk.is_file():
-        raise CannotCheck(f"esp32-arduino-libs for core {core_version} not found ({libs})")
+        raise CannotCheck(f"the ESP32-S3 libraries of core {core_version} were not found ({s3})")
     m = re.search(r'CONFIG_IDF_INIT_VERSION="([^"]+)"', sdk.read_text())
     idf = m.group(1) if m else None
     mbed = None
-    for h in (libs / "esp32s3" / "include").rglob("build_info.h"):
+    for h in (s3 / "include").rglob("build_info.h"):
         mm = re.search(r'#define MBEDTLS_VERSION_STRING\s+"([^"]+)"', h.read_text(errors="replace"))
         if mm:
             mbed = mm.group(1)

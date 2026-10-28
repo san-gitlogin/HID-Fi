@@ -64,16 +64,18 @@ def test_latest_ignores_prereleases_and_finds_the_branch():
 
 # --------------------------------------------------------------- the run --
 
-def fake_core(tmp_path, core="3.3.1", idf="5.5.1", mbed="3.6.4", esptool="5.1.0"):
+def fake_core(tmp_path, core="3.3.1", idf="5.5.1", mbed="3.6.4", esptool="5.1.0", per_chip=False):
+    """per_chip: the 3.3.12 layout (esp32s3-libs/<ver>/) instead of one esp32-arduino-libs tool."""
     data = tmp_path / "Arduino15"
     plat = data / "packages" / "esp32" / "hardware" / "esp32" / core
     plat.mkdir(parents=True)
+    lib_tool = {"name": "esp32s3-libs", "version": core} if per_chip else {"name": "esp32-arduino-libs", "version": "libs-x"}
     (plat / "installed.json").write_text(json.dumps({"packages": [
         {"name": "esp32", "platforms": [{"version": core, "toolsDependencies": [
-            {"name": "esp32-arduino-libs", "version": "libs-x"},
-            {"name": "esptool_py", "version": esptool}]}]},
+            lib_tool, {"name": "esptool_py", "version": esptool}]}]},
         {"name": "arduino", "platforms": None}]}))
-    libs = data / "packages" / "esp32" / "tools" / "esp32-arduino-libs" / "libs-x" / "esp32s3"
+    tools = data / "packages" / "esp32" / "tools"
+    libs = tools / "esp32s3-libs" / core if per_chip else tools / "esp32-arduino-libs" / "libs-x" / "esp32s3"
     (libs / "include" / "mbedtls" / "mbedtls").mkdir(parents=True)
     (libs / "sdkconfig").write_text(f'CONFIG_IDF_INIT_VERSION="{idf}"\n')
     (libs / "include" / "mbedtls" / "mbedtls" / "build_info.h").write_text(
@@ -187,6 +189,12 @@ def test_open_wins_over_incomplete(setup):
     assert dw.run(net, **setup)["exit"] == 1
 
 
+def test_the_per_chip_library_layout_of_3_3_12_is_read(tmp_path):
+    got = dw.derived_from_core("3.3.12", fake_core(tmp_path, core="3.3.12", idf="5.5.5", mbed="3.6.6",
+                                                   esptool="5.3.1", per_chip=True))
+    assert got == {"ESP-IDF": "5.5.5", "mbedTLS": "3.6.6", "esptool": "5.3.1"}
+
+
 def test_a_core_that_is_not_installed_is_reported(setup, tmp_path):
     setup["data_dir"] = tmp_path / "nothing"
     r = dw.run(FakeNet(), **setup)
@@ -215,3 +223,18 @@ def test_the_real_acknowledgements_are_explained():
 def test_an_advisory_that_reaches_hidfi_is_never_acknowledged():
     acks = json.loads(dw.ACK.read_text())
     assert not REACHES_HIDFI & set(acks)
+
+
+def test_the_pairing_crypto_check_uses_the_mbedtls_the_core_ships():
+    """companion/vectors/check_board.sh compiles the board's pairing crypto against
+    one mbedTLS release; it must be the one the pinned core compiles in, or the
+    check proves the bytes on a library the board does not run (it said 3.6.4
+    while core 3.3.12 ships 3.6.6)."""
+    import re
+    deps = json.loads(dw.DEPS.read_text())
+    try:
+        shipped = dw.derived_from_core(deps["firmware"]["esp32:esp32"], dw.arduino_data_dir())["mbedTLS"]
+    except dw.CannotCheck as e:
+        pytest.skip(f"the pinned core is not installed here: {e}")
+    script = (paths.TESTS.parent / "companion" / "vectors" / "check_board.sh").read_text()
+    assert re.search(r"^ver=(\S+)$", script, re.M).group(1) == shipped
