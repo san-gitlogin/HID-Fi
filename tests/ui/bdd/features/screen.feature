@@ -670,3 +670,42 @@ Feature: Screen - seeing the computer's own picture
     Given a computer "Studio PC" with 3 displays is paired and running, and this screen opens "#wall"
     Then the wall shows 3 monitors, all live
 
+
+  # Reported: on the Screen tab, a double tap on the trackpad zoomed the page.
+  # The trackpad there sits under the picture, so the page has scrolled to it -
+  # where iOS Safari can forget that the pad handles its own touches.
+  Scenario Outline: A double tap on the trackpad never zooms the page, scrolled or not
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "<tab>" tab
+    And I watch what the browser is allowed to do with touches
+    And I double tap with one finger on "#pad"
+    Then the browser was told to leave every touch on "#pad" alone
+    And the page is not zoomed
+    And the picture is not zoomed
+    And the board receives two clicks of the "left" button
+
+    Examples:
+      | tab      |
+      | Screen   |
+      | Trackpad |
+
+  Scenario: A double tap on the picture zooms the picture, never the page
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I watch what the browser is allowed to do with touches
+    And I double tap with one finger on "#scrStage"
+    Then the browser was told to leave every touch on "#scrStage" alone
+    And the page is not zoomed
+    And the picture is zoomed in
+
+  Scenario: The screen's buttons still answer a tap
+    Given the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I watch what the browser is allowed to do with touches
+    And I tap with one finger on "#scrIn"
+    Then the picture is zoomed in

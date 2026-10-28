@@ -2902,6 +2902,15 @@ pad.addEventListener('pointerup',onUp,{passive:false});
 pad.addEventListener('pointercancel',onUp,{passive:false});
 pad.addEventListener('wheel',e=>{scrollPx+=(e.deltaY>0?1:-1)*24*S.scr*(S.nat?-1:1);e.preventDefault();},{passive:false});
 pad.addEventListener('contextmenu',e=>e.preventDefault());
+// The browser must never act on a finger on the pad - above all, never zoom the
+// page on a double tap. touch-action:none says so, but iOS Safari can lose it:
+// its map of which areas handle their own touches goes stale once the page has
+// scrolled, which is exactly the Screen tab, where the pad sits under the
+// picture (reported there; the Trackpad tab, unscrolled, never showed it).
+// Cancelling the touches themselves holds on every engine. The pad has already
+// had its pointer events by now, and nothing in it needs a synthesized click.
+['touchstart','touchend'].forEach(k=>pad.addEventListener(k,e=>{if(e.cancelable)e.preventDefault();},{passive:false}));
+pad.addEventListener('dblclick',e=>e.preventDefault());
 
 function badge(){
   $('padbadge').textContent=dragging?'grab':pts.size?pts.size+(pts.size>1?' fingers':' finger'):'';
@@ -6014,6 +6023,12 @@ function scrFit(){SCR.z={s:1,x:0,y:0};scrApplyZoom();}
   };
   scrStage.addEventListener('pointerup',up);
   scrStage.addEventListener('pointercancel',up);
+  // A double tap here zooms the picture (above), never the page under it - the
+  // same stale-map case as the pad. Its buttons and links keep their own taps.
+  scrStage.addEventListener('touchend',e=>{
+    if(e.cancelable&&!e.target.closest('button,a'))e.preventDefault();
+  },{passive:false});
+  scrStage.addEventListener('dblclick',e=>e.preventDefault());
   // Ctrl+wheel zooms - which is also what a laptop trackpad's pinch sends. A
   // plain wheel pans a zoomed picture and otherwise scrolls the page, so the
   // Computers card below stays reachable with a mouse.

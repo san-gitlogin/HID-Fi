@@ -789,3 +789,81 @@ def open_guide(ctx, el_id):
 @then("the install guide opens on GitHub")
 def guide_opened(ctx):
     assert ctx["notes"].get("guide") == "https://github.com/san-gitlogin/HID-Fi/blob/main/docs/COMPANION.md", ctx["notes"].get("guide")
+
+
+# ---- double taps: the page never zooms (reported on the Screen tab's trackpad) --------------
+WATCH_JS = """() => {
+  window.__touchLog = [];
+  for (const k of ['touchstart', 'touchend', 'dblclick'])
+    // Bubbling, on window: runs after every handler of the page, so it sees
+    // whether one of them told the browser to leave the touch alone.
+    window.addEventListener(k, e => window.__touchLog.push({k: e.type, prevented: e.defaultPrevented,
+      cancelable: e.cancelable, on: e.target.closest('#pad') ? '#pad' : e.target.closest('#scrStage') ? '#scrStage' : 'other'}));
+}"""
+
+
+@when("I watch what the browser is allowed to do with touches")
+def watch_touches(ctx):
+    ctx["ui"].page.evaluate(WATCH_JS)
+
+
+@when(parsers.parse('I double tap with one finger on "{selector}"'))
+def double_tap(ctx, selector):
+    ui = ctx["ui"]
+    x, y = ui._center(selector)        # scrolls it into the open, as a person does
+    for _ in range(2):
+        ui._touch("touchStart", [(x, y, 0)]); ui.page.wait_for_timeout(40)
+        ui._touch("touchEnd", []); ui.page.wait_for_timeout(90)
+    ui.idle(700)                       # past the double-tap window
+
+
+@when(parsers.parse('I tap with one finger on "{selector}"'))
+def one_tap(ctx, selector):
+    ui = ctx["ui"]
+    x, y = ui._center(selector)
+    ui._touch("touchStart", [(x, y, 0)]); ui.page.wait_for_timeout(40)
+    ui._touch("touchEnd", []); ui.idle(400)
+
+
+@then(parsers.parse('the browser was told to leave every touch on "{selector}" alone'))
+def touches_prevented(ctx, selector):
+    log = [e for e in ctx["ui"].page.evaluate("window.__touchLog") if e["on"] == selector]
+    ends = [e for e in log if e["k"] == "touchend"]
+    assert len(ends) == 2, f"two taps, two touchends: {log}"
+    # The zoom is decided on a touch's end (and a dblclick); the pad also gives up
+    # its touch starts - the picture keeps them for the links inside it.
+    kinds = ("touchstart", "touchend", "dblclick") if selector == "#pad" else ("touchend", "dblclick")
+    assert all(e["prevented"] for e in log if e["k"] in kinds), log
+
+
+@then("the page is not zoomed")
+def page_not_zoomed(ctx):
+    s = ctx["ui"].page.evaluate("window.visualViewport ? visualViewport.scale : 1")
+    assert abs(s - 1) < 1e-3, f"the page is zoomed to {s}"
+
+
+@then("the picture is not zoomed")
+def picture_not_zoomed(ctx):
+    assert ctx["ui"].page.evaluate("SCR.z.s") == 1
+
+
+@then("the picture is zoomed in")
+def picture_zoomed(ctx):
+    ui = ctx["ui"]
+    for _ in range(20):
+        if ui.page.evaluate("SCR.z.s") > 1.01:
+            return
+        ui.idle(100)
+    raise AssertionError("the picture did not zoom")
+
+
+@then(parsers.parse('the board receives two clicks of the "{button}" button'))
+def two_clicks(ctx, button):
+    sim, ui = ctx["sim"], ctx["ui"]
+    mask = {"left": 1, "right": 2, "middle": 4}[button]
+    n = lambda: sum(f[3] if len(f) > 3 else 1 for f in sim.frames("button") if f[1] == mask and f[2] == 2)
+    for _ in range(30):
+        if n() >= 2:
+            return
+        ui.idle(100)
+    raise AssertionError(f"a double tap on the pad is two clicks; button frames: {sim.frames('button')}")
