@@ -44,6 +44,14 @@ pub struct State {
     /// Start when the user logs in. On by default (A16).
     #[serde(default = "yes")]
     pub start_at_login: bool,
+    /// Share this computer's sound with its screen (docs/AUDIO.md). On by default:
+    /// the screen is already shared with this person, and sound is part of it.
+    #[serde(default = "yes")]
+    pub share_sound: bool,
+    /// Share the microphone too. Off by default: it carries the room, and it can
+    /// echo when the phone plays near the computer.
+    #[serde(default)]
+    pub share_mic: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

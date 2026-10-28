@@ -22,6 +22,7 @@ fn main() {
         name: "SANTHOSH\u{2019}s MacBook Pro".into(),
         problem: None,
         updates: Default::default(),
+        sound: Default::default(),
     };
     let states = [
         (

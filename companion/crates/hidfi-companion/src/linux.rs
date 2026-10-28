@@ -83,7 +83,7 @@ impl ksni::Tray for Tray {
         if !self.model.actions.is_empty() {
             v.push(MenuItem::Separator);
         }
-        for (label, a) in &self.model.actions {
+        for (label, a) in menu::tray_actions(&self.model) {
             let a = a.clone();
             v.push(
                 StandardItem {
@@ -97,6 +97,30 @@ impl ksni::Tray for Tray {
             );
         }
         v.push(MenuItem::Separator);
+        if let Some((sys, mic)) = menu::sound_switches(&self.model) {
+            v.push(
+                CheckmarkItem {
+                    label: "Share this computer's sound".into(),
+                    checked: sys,
+                    activate: Box::new(move |t: &mut Self| {
+                        let _ = t.tx.send(Ask::Do(Action::Sound { system: Some(!sys), mic: None }));
+                    }),
+                    ..Default::default()
+                }
+                .into(),
+            );
+            v.push(
+                CheckmarkItem {
+                    label: "Share the microphone".into(),
+                    checked: mic,
+                    activate: Box::new(move |t: &mut Self| {
+                        let _ = t.tx.send(Ask::Do(Action::Sound { system: None, mic: Some(!mic) }));
+                    }),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
         v.push(
             CheckmarkItem {
                 label: "Start at login".into(),

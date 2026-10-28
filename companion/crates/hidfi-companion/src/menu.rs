@@ -36,6 +36,10 @@ pub enum Action {
     OpenNetworkSettings,
     /// An update action; the click is the person's consent.
     Update(UpdCmd),
+    /// Share this computer's sound / its microphone (None: leave as is).
+    Sound { system: Option<bool>, mic: Option<bool> },
+    /// The OS's own page for the Microphone permission.
+    AllowMicrophone,
 }
 
 /// This OS's likely reason a board on USB cannot be reached, besides the board
@@ -71,8 +75,64 @@ fn code_spaced(c: &str) -> String {
 
 pub fn model(v: &View) -> Model {
     let mut m = model_boards(v);
+    sound(&v.sound, &mut m.lines, &mut m.actions);
     companion_update(&v.updates.companion, &mut m.lines, &mut m.actions);
     m
+}
+
+/// The two sound switches as a tray shows them, as check marks: (computer's
+/// sound on, microphone on) - read from the model's own switch actions, so a
+/// tray can never disagree with the window. None: this build has no sound.
+pub fn sound_switches(m: &Model) -> Option<(bool, bool)> {
+    let sys = m.actions.iter().find_map(|(_, a)| match a {
+        Action::Sound { system: Some(to), .. } => Some(!to),
+        _ => None,
+    })?;
+    let mic = m.actions.iter().find_map(|(_, a)| match a {
+        Action::Sound { mic: Some(to), .. } => Some(!to),
+        _ => None,
+    })?;
+    Some((sys, mic))
+}
+
+/// The model's actions a tray lists as plain items (the sound switches are check marks there).
+pub fn tray_actions(m: &Model) -> impl Iterator<Item = &(String, Action)> {
+    m.actions.iter().filter(|(_, a)| !matches!(a, Action::Sound { .. }))
+}
+
+/// The computer's sound and microphone: what is shared, what stops it, the
+/// switches. Once, about this computer (docs/AUDIO.md).
+pub fn sound(s: &crate::service::SoundView, lines: &mut Vec<String>, actions: &mut Vec<(String, Action)>) {
+    use hidfi_stream::audio::Share;
+    let Some(st) = &s.state else { return };
+    match &st.system {
+        Share::On => lines.push("Sound: this computer's sound is shared with its screen".into()),
+        Share::Off => lines.push("Sound: not shared".into()),
+        Share::Unavailable(why) => {
+            lines.push(format!("Sound cannot be shared: {why}"));
+            if why.contains("Screen Recording") && !actions.iter().any(|(_, a)| *a == Action::AllowScreenRecording) {
+                actions.push(("Allow Screen Recording\u{2026}".into(), Action::AllowScreenRecording));
+            }
+        }
+    }
+    match &st.mic {
+        Share::On => lines.push("Microphone: shared - whoever watches hears this room".into()),
+        Share::Off => {}
+        Share::Unavailable(why) => {
+            lines.push(format!("The microphone cannot be shared: {why}"));
+            if why.contains("Microphone access") {
+                actions.push(("Allow microphone access\u{2026}".into(), Action::AllowMicrophone));
+            }
+        }
+    }
+    actions.push((
+        if s.system { "Stop sharing this computer's sound" } else { "Share this computer's sound" }.into(),
+        Action::Sound { system: Some(!s.system), mic: None },
+    ));
+    actions.push((
+        if s.mic { "Stop sharing the microphone" } else { "Share the microphone" }.into(),
+        Action::Sound { system: None, mic: Some(!s.mic) },
+    ));
 }
 
 fn model_boards(v: &View) -> Model {
@@ -658,6 +718,7 @@ mod tests {
             name: "Studio PC".into(),
             problem: None,
             updates: Default::default(),
+            sound: Default::default(),
         }
     }
     fn found() -> BoardState {
@@ -1038,5 +1099,51 @@ mod tests {
         let m = model(&v);
         assert!(m.lines.iter().any(|l| l.starts_with("HID-Fi DA1A2C: Update available")), "{:?}", m.lines);
         assert!(m.actions.iter().any(|(l, _)| l == "Update HID-Fi to 4.1.0 (HID-Fi DA1A2C)"));
+    }
+
+    fn with_sound(system: bool, mic: bool, st: Option<hidfi_stream::audio::State>) -> View {
+        let mut v = view(found(), Status::Online);
+        v.sound = crate::service::SoundView { system, mic, state: st };
+        v
+    }
+
+    #[test]
+    fn sound_shared_by_default_with_both_switches() {
+        use hidfi_stream::audio::{Share, State};
+        let m = model(&with_sound(true, false, Some(State { system: Share::On, mic: Share::Off })));
+        assert!(m.lines.iter().any(|l| l.starts_with("Sound: this computer's sound is shared")));
+        assert!(!m.lines.iter().any(|l| l.starts_with("Microphone")), "nothing said about a microphone that is off");
+        assert_eq!(sound_switches(&m), Some((true, false)));
+        assert!(m.actions.iter().any(|(l, a)| l == "Share the microphone"
+            && *a == Action::Sound { system: None, mic: Some(true) }));
+        assert!(!tray_actions(&m).any(|(_, a)| matches!(a, Action::Sound { .. })), "check marks in a tray, not items");
+    }
+
+    #[test]
+    fn a_shared_microphone_is_said_plainly() {
+        use hidfi_stream::audio::{Share, State};
+        let m = model(&with_sound(true, true, Some(State { system: Share::On, mic: Share::On })));
+        assert!(m.lines.iter().any(|l| l.contains("whoever watches hears this room")));
+        assert_eq!(sound_switches(&m), Some((true, true)));
+    }
+
+    #[test]
+    fn what_stops_sound_is_said_with_the_way_to_fix_it() {
+        use hidfi_stream::audio::{Share, State};
+        let st = State {
+            system: Share::Unavailable("Screen Recording is not allowed for HID-Fi Companion".into()),
+            mic: Share::Unavailable("Microphone access is not allowed for HID-Fi Companion".into()),
+        };
+        let m = model(&with_sound(true, true, Some(st)));
+        assert!(m.actions.iter().any(|(_, a)| *a == Action::AllowMicrophone));
+        assert_eq!(m.actions.iter().filter(|(_, a)| *a == Action::AllowScreenRecording).count(), 1, "once");
+        assert!(m.lines.iter().any(|l| l.starts_with("Sound cannot be shared: Screen Recording")));
+    }
+
+    #[test]
+    fn a_build_without_sound_says_nothing_about_it() {
+        let m = model(&with_sound(true, false, None));
+        assert!(sound_switches(&m).is_none());
+        assert!(!m.lines.iter().any(|l| l.starts_with("Sound")));
     }
 }

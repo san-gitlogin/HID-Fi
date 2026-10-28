@@ -7,6 +7,8 @@
 //!   viewer → {"t":"offer","sdp"}                    within 10 s
 //!   app    → {"t":"answer","sdp"}
 //!   app    → {"t":"stats","fps"}                    every second while live
+//!   app    → {"t":"audio","system","mic","why"}     sound shared or not (docs/AUDIO.md):
+//!            "on" | "off" | "unavailable"; with "ready" and whenever it changes
 //!   viewer → {"t":"key"}                            ask for a keyframe
 //!   viewer → {"t":"bye"}
 //!   app    → {"t":"end","reason"}                   then closes
@@ -217,6 +219,8 @@ impl Drop for Server {
 struct Ctx {
     gate: Arc<dyn Gate>,
     pipeline: Arc<Pipeline>,
+    /// The computer's sound, when this build has a way to capture it.
+    audio: Option<Arc<crate::audio::AudioHub>>,
     cert: DtlsCert,
     conns: AtomicUsize,
     viewers: Watchers,
@@ -252,6 +256,22 @@ impl Ctx {
     }
 }
 
+/// The sound state as the viewer reads it.
+fn audio_json(s: &crate::audio::State) -> serde_json::Value {
+    use crate::audio::Share;
+    let word = |x: &Share| match x {
+        Share::On => "on",
+        Share::Off => "off",
+        Share::Unavailable(_) => "unavailable",
+    };
+    let why = |x: &Share| match x {
+        Share::Unavailable(w) => serde_json::Value::String(w.chars().take(120).collect()),
+        _ => serde_json::Value::Null,
+    };
+    serde_json::json!({"t":"audio","system":word(&s.system),"mic":word(&s.mic),
+                       "why":{"system":why(&s.system),"mic":why(&s.mic)}})
+}
+
 /// The displays viewers may choose from, asked when one connects and every
 /// few seconds while it watches (monitors come and go).
 pub type Displays = Box<dyn Fn() -> Vec<Display> + Send + Sync>;
@@ -264,6 +284,7 @@ pub fn start(
     port: Option<u16>,
     gate: Arc<dyn Gate>,
     pipeline: Arc<Pipeline>,
+    audio: Option<Arc<crate::audio::AudioHub>>,
     cert: DtlsCert,
     displays: Displays,
 ) -> std::io::Result<Server> {
@@ -283,6 +304,7 @@ pub fn start(
     let ctx = Arc::new(Ctx {
         gate,
         pipeline,
+        audio,
         cert,
         conns: AtomicUsize::new(0),
         viewers: watchers.clone(),
@@ -433,7 +455,13 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     let mut shown = (c.displays)();
     send(
         &mut ws,
-        serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)}),
+        {
+            let mut r = serde_json::json!({"t":"ready","displays":shown,"display":display::main_id(&shown)});
+            if let Some(h) = &c.audio {
+                r["audio"] = audio_json(&h.state());
+            }
+            r
+        },
     )
     .map_err(|e| e.to_string())?;
     // The offer, within the deadline. A viewer may ask for its monitor first
@@ -481,6 +509,34 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
             control.set_display(d);
         }
     }
+    // Sound, when this viewer asked for it (an offer with an audio section) and
+    // this computer can share it: its own forwarder, so it never waits behind
+    // frames. A packet the session cannot take at once is dropped (Opus and RED
+    // cover a gap); queued sound would be lag that never recovers.
+    let audio_sub = match (&c.audio, sdp.contains("m=audio")) {
+        (Some(h), true) => {
+            let (atx, arx) = sync_channel::<Arc<crate::audio::Packet>>(50);
+            let id = h.subscribe(atx);
+            let (ftx, fstop) = (tx.clone(), stop.clone());
+            let t = std::thread::Builder::new()
+                .name("rtc-audio".into())
+                .spawn(move || {
+                    while !fstop.load(Ordering::Relaxed) {
+                        match arx.recv_timeout(Duration::from_millis(500)) {
+                            Ok(p) => {
+                                let _ = ftx.try_send(ToSession::Audio(p));
+                            }
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                            Err(_) => break,
+                        }
+                    }
+                })
+                .ok();
+            Some((h.clone(), id, t))
+        }
+        _ => None,
+    };
+    let mut told_audio = c.audio.as_ref().map(|h| h.state());
     // Frames hop from the pipeline's channel into the session's.
     let fwd_tx = tx.clone();
     let fwd_stop = stop.clone();
@@ -599,6 +655,16 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
             }
             told = id;
         }
+        // The Companion's sound switches changed, or a device came or went: say so.
+        if let Some(h) = &c.audio {
+            let now = h.state();
+            if told_audio.as_ref() != Some(&now) {
+                if send(&mut ws, audio_json(&now)).is_err() {
+                    break;
+                }
+                told_audio = Some(now);
+            }
+        }
         if last_stats.elapsed() >= Duration::from_secs(1) {
             last_stats = Instant::now();
             if send(
@@ -613,6 +679,12 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
     }
     stop.store(true, Ordering::Relaxed);
     c.pipeline.unsubscribe(id);
+    if let Some((h, aid, t)) = audio_sub {
+        h.unsubscribe(aid);
+        if let Some(t) = t {
+            let _ = t.join();
+        }
+    }
     if let Ok(t) = session {
         let _ = t.join();
     }

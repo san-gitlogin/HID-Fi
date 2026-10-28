@@ -80,5 +80,14 @@ pub fn run(handle: &Handle, a: Action) {
         Action::Update(c) => {
             let _ = handle.tx.send(Cmd::Update(c));
         }
+        Action::Sound { system, mic } => {
+            let _ = handle.tx.send(Cmd::Sound { system, mic });
+        }
+        Action::AllowMicrophone => {
+            #[cfg(target_os = "macos")]
+            open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+            #[cfg(windows)]
+            open("ms-settings:privacy-microphone");
+        }
     }
 }

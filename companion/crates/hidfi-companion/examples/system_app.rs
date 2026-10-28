@@ -94,6 +94,20 @@ fn main() {
         capture_allowed: Arc::new(|| true),
         // HIDFI_RELEASES: a release server of the test's own (the update system tests).
         updates: std::env::var("HIDFI_RELEASES").ok().map(|_| hidfi_companion::updates::center::UpdatesSetup::real()),
+        // HIDFI_SOUND=test: a test sound (a tone, a click at every whole second of
+        // the shared clock) as this computer's sound and a 44.1 kHz mono
+        // microphone; =real: the real capture; unset: no sound offered.
+        sound: match std::env::var("HIDFI_SOUND").as_deref() {
+            Ok("real") => Some(Arc::new(hidfi_stream::audio_capture)),
+            Ok("test") => Some(Arc::new(|i, sink, _ended| {
+                let (rate, ch) = match i {
+                    hidfi_stream::audio::Input::System => (48_000, 2),
+                    hidfi_stream::audio::Input::Microphone => (44_100, 1),
+                };
+                Ok(hidfi_stream::audio::test_sound(hidfi_stream::epoch(), rate, ch, 480, sink))
+            })),
+            _ => None,
+        },
     };
     let h = service::start(store, env);
     let view = h.view.clone();

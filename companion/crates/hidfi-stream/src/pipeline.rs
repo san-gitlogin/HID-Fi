@@ -563,7 +563,7 @@ fn run<S, E>(
     E: Fn(u32, u32, u32, u32) -> Result<Box<dyn Encoder>, String> + Send + Sync + 'static,
 {
     let (make_source, make_encoder) = (Arc::new(make_source), Arc::new(make_encoder));
-    let t0 = Instant::now();
+    let t0 = crate::epoch();
     let mut workers: HashMap<u32, std::thread::JoinHandle<()>> = HashMap::new();
     loop {
         let watched: std::collections::BTreeSet<u32> = {

@@ -55,6 +55,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSHumanReadableCopyright</key><string>PolyForm Noncommercial 1.0.0</string>
   <key>NSLocalNetworkUsageDescription</key><string>HID-Fi Companion finds your HID-Fi board on your home network and sends this screen to your phone over it.</string>
   <key>NSBonjourServices</key><array><string>_hidfi._tcp</string></array>
+  <key>NSMicrophoneUsageDescription</key><string>HID-Fi Companion shares this computer's microphone with your HID-Fi dashboard, only when you switch "Share the microphone" on.</string>
 </dict>
 </plist>
 PLIST

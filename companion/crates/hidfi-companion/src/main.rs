@@ -24,6 +24,14 @@ use std::time::Duration;
 
 fn main() {
     // Which version is installed - for a person, a script or a support request.
+    // A diagnostic, run as the app so it has the app's permissions:
+    //   open -n -W "HID-Fi Companion.app" --args --check-sound system|mic SECS OUT.jsonl
+    // Before everything else, so it never disturbs a Companion already running.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--check-sound") {
+        hidfi_companion::soundcheck::run(&args[i + 1..]);
+        return;
+    }
     if std::env::args().any(|a| a == "--version" || a == "-V") {
         println!("HID-Fi Companion {}", hidfi_companion::handover::VERSION);
         return;
@@ -97,6 +105,7 @@ fn main() {
         displays: Arc::new(hidfi_stream::display::list),
         capture_allowed: Arc::new(service::capture_allowed),
         updates: Some(hidfi_companion::updates::center::UpdatesSetup::real()),
+        sound: Some(Arc::new(hidfi_stream::audio_capture)),
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");
     // Not paired yet: the window opens by itself to say what to do.

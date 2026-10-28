@@ -15,6 +15,10 @@ log = "0.4.34"
 hex = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
+# Sound: Opus in pure Rust (measured against libopus 1.6.1 - docs/AUDIO.md), and
+# resampling for devices that do not run at 48 kHz.
+opus-pure = "0.2.2"
+rubato = "5.0.1"
 
 # WebRTC's DTLS on each OS's own crypto: Apple's on macOS, CNG on Windows, and
 # RustCrypto elsewhere. No C library to build on the platforms that have their own.

@@ -22,6 +22,8 @@ struct Built {
     actions: Vec<(tray_icon::menu::MenuId, Action)>,
     window: MenuItem,
     login: CheckMenuItem,
+    /// The sound switches, when this build can share sound.
+    sound: Option<(CheckMenuItem, CheckMenuItem)>,
     quit: MenuItem,
 }
 
@@ -39,12 +41,19 @@ fn build(m: &menu::Model, start_at_login: bool) -> Built {
     if !m.actions.is_empty() {
         let _ = menu.append(&PredefinedMenuItem::separator());
     }
-    for (label, a) in &m.actions {
+    for (label, a) in menu::tray_actions(m) {
         let it = MenuItem::new(label, true, None);
         actions.push((it.id().clone(), a.clone()));
         let _ = menu.append(&it);
     }
     let _ = menu.append(&PredefinedMenuItem::separator());
+    let sound = menu::sound_switches(m).map(|(sys, mic)| {
+        let s = CheckMenuItem::new("Share this computer's sound", true, sys, None);
+        let k = CheckMenuItem::new("Share the microphone", true, mic, None);
+        let _ = menu.append(&s);
+        let _ = menu.append(&k);
+        (s, k)
+    });
     let login = CheckMenuItem::new("Start at login", true, start_at_login, None);
     let _ = menu.append(&login);
     // Which version this is, where people look for it.
@@ -60,6 +69,7 @@ fn build(m: &menu::Model, start_at_login: bool) -> Built {
         actions,
         window,
         login,
+        sound,
         quit,
     }
 }
@@ -168,6 +178,16 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             if ev.id == *b.window.id() {
                 want_open = true;
                 continue;
+            }
+            if let Some((s, k)) = b.sound.as_ref() {
+                if ev.id == *s.id() {
+                    let _ = handle.tx.send(Cmd::Sound { system: Some(s.is_checked()), mic: None });
+                    continue;
+                }
+                if ev.id == *k.id() {
+                    let _ = handle.tx.send(Cmd::Sound { system: None, mic: Some(k.is_checked()) });
+                    continue;
+                }
             }
             if ev.id == *b.login.id() {
                 state.start_at_login = b.login.is_checked();

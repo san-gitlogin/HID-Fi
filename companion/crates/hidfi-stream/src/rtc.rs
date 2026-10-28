@@ -24,6 +24,8 @@ pub use str0m::crypto::dtls::DtlsCert;
 pub enum ToSession {
     Media(ToViewer),
     Udp(Vec<u8>, SocketAddr),
+    /// 10 ms of sound (docs/AUDIO.md): its own path, never paced against frames.
+    Audio(Arc<crate::audio::Packet>),
 }
 
 impl From<ToViewer> for ToSession {
@@ -78,6 +80,9 @@ pub fn prepare(
         .set_dtls_cert(cert)
         .clear_codecs()
         .enable_h264(true)
+        // Sound: Opus, with RED (each packet also carries the previous frame) so a
+        // lost WiFi packet costs no gap and no wait. Only if the viewer offers it.
+        .enable_opus(true, true)
         // Where the estimate starts: its first probes test 3x and 6x this, so
         // a home network shows a full-size picture within a second or two (at
         // 3 Mbit/s, busy content waited ~6 s for full size). A thin link is
@@ -98,8 +103,44 @@ pub fn prepare(
     Ok(Prepared {
         rtc,
         socket,
-        answer: answer.to_sdp_string(),
+        answer: one_stream(&answer.to_sdp_string()),
     })
+}
+
+/// Picture and sound in one media stream, so the browser keeps them in step
+/// (lip sync is per stream id). str0m gives each media line of an answer a
+/// stream id of its own and has no way to set it; only the browser reads it,
+/// so the answer's text is made to say one: every stream id becomes the first one.
+pub fn one_stream(sdp: &str) -> String {
+    let first = sdp
+        .lines()
+        .find_map(|l| l.strip_prefix("a=msid:").and_then(|r| r.split_whitespace().next()))
+        .map(str::to_string);
+    let Some(first) = first else { return sdp.to_string() };
+    let mut others: Vec<String> = Vec::new();
+    for l in sdp.lines() {
+        let id = l.strip_prefix("a=msid:").and_then(|r| r.split_whitespace().next());
+        let id = id.or_else(|| l.split(" msid:").nth(1).and_then(|r| r.split_whitespace().next()));
+        if let Some(id) = id {
+            if id != first && !others.iter().any(|o| o == id) {
+                others.push(id.to_string());
+            }
+        }
+    }
+    let mut out = String::with_capacity(sdp.len());
+    for l in sdp.split_inclusive('\n') {
+        let mut l = l.to_string();
+        if l.starts_with("a=msid:") || l.contains(" msid:") || l.starts_with("a=msid-semantic") {
+            for o in &others {
+                l = l.replace(&format!(":{o} "), &format!(":{first} ")).replace(&format!(" {o} "), &format!(" {first} "));
+                if l.starts_with("a=msid-semantic") {
+                    l = l.replace(&format!(" {o}"), "");
+                }
+            }
+        }
+        out.push_str(&l);
+    }
+    out
 }
 
 /// Media ports, fixed so a firewall that allows ports (Linux's ufw and
@@ -299,6 +340,7 @@ pub fn run(
     let started = Instant::now();
     let mut connected = false;
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
+    let mut audio: Option<(Mid, str0m::format::PayloadParams)> = None;
     let mut sent_frames = 0u32;
     let mut stats_at = Instant::now();
     let mut pace = Pace::new(3_000_000, Instant::now());
@@ -350,6 +392,12 @@ pub fn run(
                             Some(p) => video = Some((m.mid, p)),
                             None => break End::Failed("no H.264 baseline in the offer".into()),
                         }
+                    }
+                    Event::MediaAdded(m) if m.kind == MediaKind::Audio => {
+                        audio = rtc
+                            .writer(m.mid)
+                            .and_then(|w| w.payload_params().find(|p| p.spec().codec == Codec::Opus).cloned())
+                            .map(|p| (m.mid, p));
                     }
                     Event::KeyframeRequest(_) => control.browser_wants_keyframe(),
                     Event::MediaEgressStats(s) => {
@@ -410,6 +458,18 @@ pub fn run(
                     log::debug!("dropped a packet: {e}");
                 }
             }
+            ToSession::Audio(p) => {
+                let (Some((mid, params)), true) = (&audio, connected) else {
+                    continue;
+                };
+                let pt = params.pt();
+                let Some(w) = rtc.writer(*mid) else { continue };
+                let t = MediaTime::new(p.rtp, Frequency::FORTY_EIGHT_KHZ);
+                // Written with the time it was captured, like the picture.
+                if let Err(e) = w.write(pt, p.at, t, p.data.clone()) {
+                    break End::Failed(e.to_string());
+                }
+            }
             ToSession::Media(ToViewer::Frame(frame, pts_ms)) => {
                 let (Some((mid, params)), true) = (&video, connected) else {
                     continue;
@@ -433,7 +493,9 @@ pub fn run(
                 let pt = params.pt();
                 let Some(w) = rtc.writer(*mid) else { continue };
                 let t = MediaTime::new(pts_ms * 90, Frequency::NINETY_KHZ);
-                if let Err(e) = w.write(pt, Instant::now(), t, frame.data.clone()) {
+                // The capture time, the clock the sound uses too: lip sync.
+                let captured = crate::epoch() + Duration::from_millis(pts_ms);
+                if let Err(e) = w.write(pt, captured, t, frame.data.clone()) {
                     break End::Failed(e.to_string());
                 }
                 sent_frames += 1;
@@ -505,6 +567,18 @@ mod tests {
         s.estimate(6_000_000, ms(5000));
         s.loss(0.01, 3_000_000, ms(5100));
         assert_eq!(s.estimate(3_000_000, ms(5200)), 6_000_000);
+    }
+
+    #[test]
+    fn picture_and_sound_end_up_in_one_stream() {
+        let sdp = "v=0\r\na=msid-semantic: WMS S1x S2y\r\nm=video 9 UDP 96\r\na=mid:0\r\na=msid:S1x vtrack\r\n\
+                   a=ssrc:11 msid:S1x vtrack\r\nm=audio 9 UDP 111\r\na=mid:1\r\na=msid:S2y atrack\r\na=ssrc:22 msid:S2y atrack\r\n";
+        let out = one_stream(sdp);
+        assert!(out.contains("a=msid:S1x vtrack\r\n") && out.contains("a=msid:S1x atrack\r\n"), "{out}");
+        assert!(out.contains("a=ssrc:22 msid:S1x atrack\r\n"), "{out}");
+        assert!(!out.contains("S2y"), "the second id is gone everywhere: {out}");
+        assert!(out.contains("WMS S1x\r\n"), "{out}");
+        assert_eq!(one_stream("v=0\r\nm=video 9\r\n"), "v=0\r\nm=video 9\r\n", "no msid: unchanged");
     }
 
     #[test]

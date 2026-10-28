@@ -64,6 +64,8 @@ pub struct View {
     pub port: Option<u16>,
     pub name: String,
     pub problem: Option<String>,
+    /// Sound: what is shared and whether it can be (docs/AUDIO.md).
+    pub sound: SoundView,
     /// Updates: each board's version, what it is offered, what is running.
     pub updates: crate::updates::center::UpdView,
 }
@@ -73,6 +75,8 @@ pub enum Cmd {
     PairAgain(Option<String>),
     /// Forget the pairing on this computer (the dashboard can remove it too).
     Forget(Option<String>),
+    /// Share this computer's sound / its microphone (None: leave as is).
+    Sound { system: Option<bool>, mic: Option<bool> },
     /// An update action (the person's consent is the click that sends it).
     Update(crate::updates::center::UpdCmd),
     Quit,
@@ -112,6 +116,18 @@ pub struct Env {
     pub capture_allowed: Arc<dyn Fn() -> bool + Send + Sync>,
     /// Updates for the boards and this app; None leaves them out (tests of other things).
     pub updates: Option<crate::updates::center::UpdatesSetup>,
+    /// How this computer's sound is captured; None: no sound offered at all.
+    pub sound: Option<hidfi_stream::audio::Opener>,
+}
+
+/// What the tray and window show about sound.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct SoundView {
+    /// The switches.
+    pub system: bool,
+    pub mic: bool,
+    /// Where each stands (None: this build cannot capture sound at all).
+    pub state: Option<hidfi_stream::audio::State>,
 }
 
 const FIND_SOON: Duration = Duration::from_secs(3);
@@ -155,8 +171,15 @@ pub fn start(store: Store, env: Env) -> Handle {
         port: None,
         name: state.name.clone(),
         problem: None,
+        sound: SoundView { system: state.share_sound, mic: state.share_mic, state: None },
         updates: Default::default(),
     }));
+    // Sound: one capture for every viewer, only while someone listens.
+    let sound_settings = hidfi_stream::audio::Settings::new(state.share_sound, state.share_mic);
+    let hub = env
+        .sound
+        .clone()
+        .map(|opener| Arc::new(hidfi_stream::audio::AudioHub::start(opener, sound_settings.clone())));
     let (tx, rx) = channel();
 
     // Listening for viewers starts at once, and stays: the port and the
@@ -177,6 +200,7 @@ pub fn start(store: Store, env: Env) -> Handle {
                 None,
                 gate,
                 pipeline.clone(),
+                hub.clone(),
                 cert,
                 Box::new(move || displays()),
             ) {
@@ -232,6 +256,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         .spawn(move || {
             run(
                 store, state, env, keys, nonces, listener, pipeline, v, n, rx, upd_boards, upd_tx,
+                (sound_settings, hub),
             )
         })
         .expect("spawning the service thread");
@@ -265,6 +290,7 @@ fn run(
     rx: Receiver<Cmd>,
     upd_boards: Arc<Mutex<Vec<crate::updates::center::BoardHere>>>,
     upd_tx: Option<Sender<crate::updates::center::UpdCmd>>,
+    (sound_settings, hub): (Arc<hidfi_stream::audio::Settings>, Option<Arc<hidfi_stream::audio::AudioHub>>),
 ) {
     let mut id = [0u8; 16];
     let _ = hex::decode_to_slice(&state.id, &mut id);
@@ -494,6 +520,9 @@ fn run(
             v.port = listener.as_ref().map(|(s, _)| s.port);
         });
 
+        // Sound: the switches and where each stands, for the tray and window.
+        let sv = SoundView { system: state.share_sound, mic: state.share_mic, state: hub.as_ref().map(|h| h.state()) };
+        set(&|v: &mut View| v.sound = sv.clone());
         // The update thread's list of boards here: every board on USB, with its
         // address once it answers.
         *upd_boards.lock().unwrap_or_else(|e| e.into_inner()) = on_usb
@@ -515,6 +544,20 @@ fn run(
                         h.session.request_pairing();
                     }
                 }
+            }
+            Ok(Cmd::Sound { system, mic }) => {
+                if let Some(on) = system {
+                    sound_settings.system.store(on, std::sync::atomic::Ordering::Relaxed);
+                    state.share_sound = on;
+                }
+                if let Some(on) = mic {
+                    sound_settings.mic.store(on, std::sync::atomic::Ordering::Relaxed);
+                    state.share_mic = on;
+                }
+                if let Err(e) = store.save_state(&state) {
+                    log::warn!("could not save state: {e}");
+                }
+                log::info!("sound: computer {}, microphone {}", state.share_sound, state.share_mic);
             }
             Ok(Cmd::Update(c)) => {
                 if let Some(tx) = &upd_tx {

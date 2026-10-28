@@ -1,4 +1,13 @@
 //! Capture, encode and send the screen to a dashboard over WebRTC.
+pub mod audio;
+
+/// One clock for picture and sound: every frame's and every sound packet's time
+/// counts from here, so the browser can keep them in step (RTCP sender reports
+/// tie both to the same wall clock).
+pub fn epoch() -> std::time::Instant {
+    static E: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    *E.get_or_init(std::time::Instant::now)
+}
 
 pub mod convert;
 pub mod display;
@@ -14,11 +23,27 @@ pub mod pipeline;
 pub mod rtc;
 #[cfg(target_os = "macos")]
 pub mod sck;
+#[cfg(target_os = "macos")]
+pub mod sck_audio;
 pub mod server;
 #[cfg(target_os = "macos")]
 pub mod vt;
 #[cfg(target_os = "linux")]
 pub mod x11;
+
+/// The computer's own sound or microphone, captured the way this OS allows
+/// (docs/AUDIO.md). An OS without a capture yet says so; the picture carries on.
+pub fn audio_capture(i: audio::Input, sink: audio::Sink, ended: audio::Ended) -> Result<Box<dyn audio::Running>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        sck_audio::open(i, sink, ended)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (i, sink, ended);
+        Err("sound capture is not available on this system yet".into())
+    }
+}
 
 /// The best H.264 encoder this computer has, for `Pipeline::start`.
 pub fn encoder(w: u32, h: u32, fps: u32, bps: u32) -> Result<Box<dyn frame::Encoder>, String> {
