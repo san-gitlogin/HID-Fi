@@ -22,8 +22,12 @@ suite says otherwise. Background: `docs/TESTING.md#upgrading-a-dependency`.
 
 ## Procedure
 
-1. Record the current state: `python tests/run.py doctor` and a green
-   `python tests/run.py` on the current pins.
+1. Record the current state: `python tests/run.py doctor`,
+   `python tools/dep_watch.py` (pinned vs latest, and every advisory against a
+   pinned version), and a green `python tests/run.py` on the current pins.
+   Read the candidate's release notes and advisories **at the source** (GitHub
+   release feed, advisory database) for every row of the table above, plus
+   WebServer, TLS, Update/OTA, NVS and the DHCP server - and date what you found.
 2. Install the candidate (`arduino-cli core install esp32:esp32@X.Y.Z`, or
    `arduino-cli lib install Name@X.Y.Z`). Note the disk cost of a core (~1 GB)
    if the user's machine is short of space.

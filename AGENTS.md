@@ -802,6 +802,52 @@ The app is in `companion/` (Rust workspace); read `companion/REQUIREMENTS.md`,
   - never write a PIN into a file. Linux: `companion/tests/linux/run.sh` (Docker;
   `tests/docker/vm.sh` on a Mac). Windows: the manual `companion.yml` workflow.
 
+## Outside facts and dependencies - the rules
+
+Added 2026-10-28, after a currency check found that every release up to v4.0.4
+shipped a core (3.3.1) with a published, remotely reachable `WebServer` crash
+(GHSA-8cmm-3887-r32j) that nobody here had looked for.
+
+- **Anything taken from outside the repo is checked at its source, on the day,
+  and dated where it is written down**: library and core versions, standards
+  (ETSI EN 303 645, the CRA and its EN 40000 standards), vendor behaviour, API
+  limits, URLs. Memory and old notes are leads, not facts. Prefer primary
+  sources (the project's release feed, the advisory database, the standard's own
+  PDF) over search snippets; say which you used.
+- **Before relying on a dependency, check whether its newer releases affect the
+  product**: `python tools/dep_watch.py` lists pinned vs latest for the core,
+  ESP-IDF, esptool, libraries, Companion crates and test tools, and every
+  published advisory whose range covers a pinned version. Read the release notes
+  between the pin and the latest for the parts HID-Fi uses (WebServer, TLS,
+  Update/OTA, NVS, TinyUSB, the DHCP server).
+- **An advisory that reaches HID-Fi is a security update**, ahead of features:
+  move the pin by the `hidfi-dependency-upgrade` skill, prove it with the full
+  suite and a board, and add a regression test that would have caught it.
+- An advisory that does not reach HID-Fi is recorded in `tools/dep_watch_ack.json`
+  with the reason (for example "HID-Fi never calls `authenticate()`"). The reason
+  is checked again when the code changes; an unexplained acknowledgement is a bug.
+- Moving a pin is never silent: no `latest` in a build, no unpinned install.
+
+## Updates and flashing - the rules (docs/OTA.md)
+
+- **Never touch eFuses** - no `espefuse`, no secure-boot or flash-encryption
+  enabling, no flash-voltage setting. They are one-time and can make a board
+  unrecoverable. The ROM download mode is the guarantee that any update can be
+  finished or undone over the cable; nothing may take it away.
+- **Never overwrite the running firmware** on a two-slot board, over the air or
+  over the cable: write the inactive slot, verify it, then switch `otadata`.
+- **Never mark a new firmware valid before its self-test.** The core marks it
+  valid at start unless `verifyRollbackLater()` returns true (`esp32-hal-misc.c`).
+- **Never write to a device that is not proven to be the chosen HID-Fi**: chip
+  ESP32-S3, 16 MB, MAC equal to the chosen board, a HID-Fi image on it.
+- **Never open the COM port of a board in *pending verify*** - on macOS an open
+  resets it and rolls the update back.
+- **Every step is a checkpoint** in a journal written atomically before and
+  after it; every step has a defined cancel and a defined resume. A new step
+  without both is not done.
+- **Every state is tested at every level** (docs/OTA.md "Every level"), and the
+  fault sweep over the simulated ESP32-S3 covers every step x every fault.
+
 ## Working style expected here
 
 - **Verify, do not assume.** Read the source, the vendor guide, or probe the

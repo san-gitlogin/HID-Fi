@@ -24,3 +24,7 @@ The essentials, in case only this file is loaded:
 - Before calling a change done, list the stories a person lives (a board moved
   to another computer, two boards on one, a phone turned on its side) and make
   each a test; AGENTS.md "Think in scenarios" says where they go.
+- Check outside facts (versions, advisories, standards) at their source on the
+  day and date them; `python tools/dep_watch.py` before relying on a
+  dependency. Updates never touch eFuses or overwrite the running firmware;
+  AGENTS.md "Outside facts and dependencies" and "Updates and flashing".

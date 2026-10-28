@@ -122,6 +122,15 @@ diagnose from the USB device list rather than from serial noise you are causing.
     secret an agent may display - never a PIN or a vault secret. AGENTS.md has the
     full rule.
 
+19. **Outside facts are checked at the source, on the day.** Versions,
+    advisories, standards, vendor behaviour: primary sources, dated where
+    written. `python tools/dep_watch.py` before relying on a dependency; an
+    advisory that reaches HID-Fi is a security update first. AGENTS.md "Outside
+    facts and dependencies".
+20. **Updates never touch eFuses, never overwrite the running firmware, never
+    write to an unproven device, and every step is a checkpoint with a cancel
+    and a resume.** AGENTS.md "Updates and flashing", docs/OTA.md.
+
 ## Expected working style
 
 Verify rather than assume — read the ESP32 core source or the vendor guide when

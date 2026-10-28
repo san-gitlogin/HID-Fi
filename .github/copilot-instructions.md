@@ -36,6 +36,13 @@ WSL; on macOS `tests/docker/run.sh`. Do not install Docker, WSL or a VM without
 asking. Setup from
 nothing, step by step: AGENTS.md, "Setting up and running tests, as an agent".
 
+Outside facts (versions, advisories, standards, vendor behaviour) are checked
+at their source on the day and dated: run `python tools/dep_watch.py` before
+relying on a dependency, and treat an advisory that reaches HID-Fi as a
+security update first. Updates and flashing never touch eFuses, never overwrite
+the running firmware, and every step is a checkpoint with a cancel and a
+resume - AGENTS.md "Outside facts and dependencies" and "Updates and flashing".
+
 A skipped tier is not a passed tier - report the skips. Never edit `tests/golden/`
 to make a failure pass; `--update-golden` is for intended changes, with a reason.
 
