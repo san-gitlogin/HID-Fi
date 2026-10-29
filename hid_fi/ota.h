@@ -280,9 +280,32 @@ static void otaSetRelay(const String& s) {
     xSemaphoreGive(otaMux);
 }
 
+static int otaFetchOnce(const String& url, uint8_t* buf, size_t max, int* transport);
+
 // One GET into a PSRAM buffer, at most `max` bytes. Follows redirects (GitHub
 // sends two, the last with a ~1.3 KB Location). Returns the length, -1 on error.
+// A connection that fails outright is tried again, 1, 2 and 4 s later: on a busy
+// 2.4 GHz network the board stays joined while a connect stalls for seconds
+// (measured: 54 ms, then 2.8 s, then refused) - a full board run lost two
+// checks to it. An answer from the server (404, a wrong size) is final at once.
+#define OTA_FETCH_TRIES 4
 static int otaFetch(const String& url, uint8_t* buf, size_t max) {
+    for (int attempt = 0;; attempt++) {
+        int transport = 0;            // the HTTP client's own (negative) error, if any
+        uint32_t t0 = millis();
+        int n = otaFetchOnce(url, buf, max, &transport);
+        if (n >= 0 || !transport || job.cancel) return n;
+        COM_SERIAL.printf("[OTA] no connection (%d after %lu ms, attempt %d)\n", transport,
+                          (unsigned long)(millis() - t0), attempt + 1);
+        if (attempt == OTA_FETCH_TRIES - 1) return n;
+        for (uint32_t until = millis() + (1000u << attempt); (long)(until - millis()) > 0;) {
+            if (job.cancel) return -1;
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+    }
+}
+
+static int otaFetchOnce(const String& url, uint8_t* buf, size_t max, int* transport) {
     HTTPClient http;
     NetworkClientSecure tls;
     NetworkClient plain;
@@ -293,7 +316,7 @@ static int otaFetch(const String& url, uint8_t* buf, size_t max) {
     http.setRedirectLimit(5);
     http.setTimeout(10000);
     int code = http.GET();
-    if (code != 200) { http.end(); return -1; }
+    if (code != 200) { *transport = code < 0 ? code : 0; http.end(); return -1; }
     int len = http.getSize();
     if (len > (int)max) { http.end(); return -1; }
     NetworkClient* s = http.getStreamPtr();

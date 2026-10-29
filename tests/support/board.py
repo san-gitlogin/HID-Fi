@@ -10,6 +10,7 @@ the boot is waited out, and every test shares the session.
 The legacy scripts in tests/ open the port themselves. Call release() before
 running one, and the next acquire() re-opens (and re-boots) cleanly.
 """
+import collections
 import json
 import time
 
@@ -35,6 +36,10 @@ class Board:
         self.port = port
         self.ser = None
         self.events = []            # unsolicited {"event": ...} lines seen while waiting
+        # The update task's own log lines ("[OTA] ..." - versions and steps only),
+        # for failure messages. Nothing else the board prints is kept: other lines
+        # can carry a person's data.
+        self.ota_log = collections.deque(maxlen=100)
         self.boots = 0
 
     # ---- session ------------------------------------------------------------
@@ -88,6 +93,8 @@ class Board:
         while time.time() < end:
             line = self._readline()
             if not line.startswith("{"):
+                if line.startswith("[OTA]"):
+                    self.ota_log.append(line)
                 continue
             try:
                 d = json.loads(line)

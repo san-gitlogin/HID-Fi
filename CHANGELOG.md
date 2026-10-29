@@ -53,6 +53,9 @@ the home network it joined. **Reflash every board** once this is released.
   Cable updates are recorded step by step: a cancel puts everything back, an
   interrupted one resumes. It downloads its own new version, checked against the
   signed release, and opens it when you ask.
+- **A busy WiFi does not fail a check.** A connection that drops or stalls is
+  tried again (four tries, 1-4 s apart) before the board says there is no
+  connection; an answer from the server is never retried.
 - **A published support period**: security fixes for the latest version until at
   least a date one year after each release (README, SECURITY.md).
 - Releases carry SBOMs (CycloneDX 1.7) for the firmware and the Companion.

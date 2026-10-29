@@ -23,6 +23,7 @@ import base64
 import datetime
 import json
 import os
+import re
 import struct
 import sys
 import time
@@ -131,7 +132,7 @@ def fresh(env):
     """Back to the plain state between scenarios: right files, no faults."""
     srv = env["srv"]
     srv.files.update({k: v for k, v in env["files"].items()})
-    srv.faults.update({"cut_at": None, "ignore_range": False, "chunk_delay": 0.0, "swap": None})
+    srv.faults.update({"cut_at": None, "ignore_range": False, "chunk_delay": 0.0, "swap": None, "drop": 0})
     board = env["holder"].get()
     _settle(board)
     return board
@@ -169,6 +170,42 @@ def test_a_check_finds_the_signed_release(env):
     assert rel["installable"] and rel["size"] == len(env["img"])
     assert [s["version"] for s in rel["changelog"]] == ["4.0.99", "4.0.5"], \
         "every section newer than what runs - not only the newest, not the one that runs"
+
+
+def test_a_check_rides_out_a_wifi_blip(env):
+    """A busy 2.4 GHz network drops or stalls a connection now and then while the
+    board stays joined (a full board run lost two checks to it). A connection that
+    fails is tried again - four tries in all; an answer (404) is final at once.
+    The board's own "[OTA]" lines go into every failure message."""
+    board = fresh(env)
+    srv = env["srv"]
+    why = lambda seen: (seen, list(board.ota_log)[-6:])
+    n = len(srv.log)
+    board.ota_log.clear()
+    srv.faults["drop"] = 2
+    st = check(board)
+    seen = srv.log[n:]
+    assert (st["ota_available"], st["ota_error"]) == ("4.0.99", ""), why(seen)
+    assert [x[2] for x in seen][:2] == ["dropped", "dropped"] and seen[-2][2] == 200, why(seen)
+    n = len(srv.log)
+    board.ota_log.clear()
+    srv.faults["drop"] = 4
+    st = check(board)
+    srv.faults["drop"] = 0             # a try the network itself lost never reached it
+    seen = srv.log[n:]
+    assert (st["ota_available"], st["ota_error"]) == ("", "no_connection"), why(seen)
+    assert seen and all(x[2] == "dropped" for x in seen), why(seen)
+    # Lines from two tasks can share the serial port and one can be lost: the
+    # highest attempt number is the evidence that all four ran.
+    tries = [int(m) for x in board.ota_log for m in re.findall(r"attempt (\d+)", x)]
+    assert max(tries, default=0) == 4, why(seen)
+    n = len(srv.log)
+    board.ota_log.clear()
+    del srv.files["hidfi-ota.json"]
+    st = check(board)
+    seen = srv.log[n:]
+    assert st["ota_error"] == "no_connection" and [x[2] for x in seen] == [404], why(seen)
+    assert not any("no connection" in x for x in board.ota_log), "the server answered: no second try"
 
 
 def test_a_signature_from_another_key_shows_nothing(env):

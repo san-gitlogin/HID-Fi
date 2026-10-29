@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class ReleaseServer:
     def __init__(self, files):
         self.files = dict(files)
-        self.faults = {"cut_at": None, "ignore_range": False, "chunk_delay": 0.0, "swap": None}
+        self.faults = {"cut_at": None, "ignore_range": False, "chunk_delay": 0.0, "swap": None, "drop": 0}
         self.log = []                       # (path, range header, status, bytes sent)
         self.clients = []                   # (client address, path, status) - who asked
         srv = self
@@ -27,6 +27,13 @@ class ReleaseServer:
 
             def do_GET(self):
                 name = self.path.rsplit("/", 1)[-1]
+                if srv.faults.get("drop"):
+                    # A WiFi blip: the connection closes before any answer.
+                    srv.faults["drop"] -= 1
+                    srv.log.append((name, None, "dropped", 0))
+                    self.close_connection = True
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    return
                 # Only at the root - the one place url_for points a board. Anywhere
                 # else is "no release here" (a test's wrong source must look wrong).
                 body = srv.files.get(name) if self.path == "/" + name else None
