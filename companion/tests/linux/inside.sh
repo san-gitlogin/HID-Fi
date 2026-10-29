@@ -87,7 +87,10 @@ PY
 step "stream it: real X11 capture, real OpenH264, WebRTC"
 HIDFI_REAL_SCREEN=1 ./target/release/examples/serve 1920 1080 30 > /tmp/serve.json 2>/tmp/serve.log &
 for i in $(seq 1 40); do [ -s /tmp/serve.json ] && break; sleep 0.25; done
-python3 tests/linux/view_e2e.py /tmp/serve.json; rc=$?
+# Under `set -e` a failing command ends the script before `rc=$?` - so `|| rc=$?`,
+# and every step after it still runs (the window step was hidden by it once).
+rc=0
+python3 tests/linux/view_e2e.py /tmp/serve.json || rc=$?
 grep -E "INFO|WARN|ERROR" /tmp/serve.log | tail -6
 
 step "the window, in the browser, from the real app (docs/COMPANION_WINDOW.md)"
