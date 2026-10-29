@@ -45,6 +45,14 @@ echo "dist/HID-Fi-$TAG-firmware.zip"
 # tools/ota_release.py release_gate must pass or nothing is written.
 if [ -n "${HIDFI_RELEASE_KEY:-}" ]; then
     MIN_FROM="${HIDFI_MIN_FROM:?set HIDFI_MIN_FROM: the oldest version this release may update from}"
+    # The Mac app keeps its permissions across updates only when every version
+    # carries HID-Fi's certificate (tools/sign_mac_release.sh).
+    if [ -n "${HIDFI_COMPANION_DIR:-}" ]; then
+        for d in "$HIDFI_COMPANION_DIR"/HID-Fi-Companion-*-macos.dmg; do
+            [ -e "$d" ] || continue
+            tools/sign_mac_release.sh --check "$d" || exit 1
+        done
+    fi
     IDF=$(python3 -c "import json;print(json.load(open('tools/release_history.json'))['cores'].get('$CORE',''))")
     [ -n "$IDF" ] || { echo "the IDF of core $CORE is not on record (tools/release_history.json)"; exit 1; }
     OTA=dist/HID-Fi-$TAG-ota

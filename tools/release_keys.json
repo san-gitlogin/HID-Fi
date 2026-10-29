@@ -11,5 +11,12 @@
    "key_id": "d06253869d956bec",
    "public_key": "04ee56a32ed79665f6f4580ec7cdf81b84bb5d28d34b2294d24abd16934db81f2fedeaa77bfa9c890fc50ce4c467ce143dab88c499ec05395697eccc9f5057e29a"
   }
- ]
+ ],
+ "macos_signing": {
+  "sha1": "70242AA2394A322FFE6F0C011E83BB2480A9E3DA",
+  "sha256": "A3AA1B9085506DE440084E5B0374AF8BB4B6A5C676B1531D947C81FAB87BBD1C",
+  "subject": "CN=HID-Fi Release (macOS), O=HID-Fi",
+  "until": "2036-10-26",
+  "about": "The Companion's macOS app is signed with this certificate (tools/sign_mac_release.sh) so macOS keeps its permissions across updates. Private key: the release folder, never the repo."
+ }
 }

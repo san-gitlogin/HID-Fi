@@ -42,6 +42,15 @@ the files the installers expect:
 | `hidfi-companion-windows-x86_64.exe` | windows-2022 |
 | `hidfi-companion-linux-x86_64`, `hidfi-companion-linux-aarch64` | ubuntu-24.04, ubuntu-24.04-arm |
 
+**The macOS app is signed with HID-Fi's certificate before anything else**
+(`tools/sign_mac_release.sh <the .dmg>`, from v4.2): the workflow signs it ad
+hoc, and macOS then treats every version as a new app - Screen Recording and
+System Audio Recording asked again after each update. The certificate (its SHA-1
+in `tools/release_keys.json`, `macos_signing`) lives with the release keys in
+`~/.hidfi-release` (its keychain, password file and `.p12` backup); the script
+refuses any other one, and `make_release.sh` refuses a disk image not signed
+with it.
+
 Put them in the release with the firmware zip and **one** `SHA256SUMS` covering
 all of them - `install-windows.ps1` and `install-linux.sh` refuse a download whose
 line in it is missing or wrong:
