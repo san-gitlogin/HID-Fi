@@ -278,3 +278,8 @@ def test_the_version_number_has_the_release_format():
     newest CHANGELOG entry agree is test_firmware_version_matches_changelog."""
     v = firmware.fw_version()
     assert re.fullmatch(r"hid_fi_v\d+\.\d+(\.\d+)?", v), f"{v} is not hid_fi_vMAJOR.MINOR(.PATCH)"
+    # Test builds claiming a newer patch are "hid_fi_v" FW_SERIES "." N: a series
+    # left behind at a release makes every update test offer an older version.
+    s = re.search(r'#define\s+FW_SERIES\s+"([^"]+)"', firmware.ino_text())
+    assert s and s.group(1) == firmware.fw_series(), \
+        f"FW_SERIES {s and s.group(1)} is not the MAJOR.MINOR of {v}"

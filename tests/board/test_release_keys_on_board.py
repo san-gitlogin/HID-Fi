@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from board.test_ota_download import CHANGELOG, _settle
+from board.test_ota_download import CHANGELOG, NEXT, _settle
 from support import firmware, paths
 from support.ota_board import data_hashes, install, wait_status
 from support.release_server import ReleaseServer
@@ -47,7 +47,7 @@ def normal(_board_holder):
     wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the normal build proving itself")
     board.cmd({"cmd": "ota_settings", "auto": False}, "ota_settings")
     img = new.read_bytes()
-    with ReleaseServer({"hid_fi-4.0.99.bin": img}) as srv:
+    with ReleaseServer({f"hid_fi-{NEXT}.bin": img}) as srv:
         ip = wait_status(board, lambda s: s.get("wifi_connected"), 60, "on its network")["wifi_ip"]
         board.cmd({"cmd": "ota_source", "url": srv.url_for(ip)}, "ota_source")
         yield board, srv, img
@@ -58,7 +58,7 @@ def normal(_board_holder):
 
 
 def _check_signed_by(board, srv, img, key):
-    m = R.canonical(R.build_manifest("4.0.99", img, "4.0.3", "3.3.12", "5.5.5", CHANGELOG, image_name="hid_fi-4.0.99.bin",
+    m = R.canonical(R.build_manifest(NEXT, img, "4.0.3", "3.3.12", "5.5.5", CHANGELOG, image_name=f"hid_fi-{NEXT}.bin",
                                      _tests_allow_test_build=True))
     srv.files.update({"hidfi-ota.json": m, "hidfi-ota.sig": json.dumps(R.sign(m, key)).encode()})
     wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "idle")
@@ -71,7 +71,7 @@ def _check_signed_by(board, srv, img, key):
 def test_a_normal_build_trusts_each_release_key(normal, name):
     board, srv, img = normal
     st = _check_signed_by(board, srv, img, _key(name))
-    assert st["ota_available"] == "4.0.99" and st["ota_error"] == "", st
+    assert st["ota_available"] == NEXT and st["ota_error"] == "", st
 
 
 def test_a_normal_build_refuses_the_test_key(normal):

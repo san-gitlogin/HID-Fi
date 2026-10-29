@@ -322,7 +322,7 @@ by cable the boards that cannot update over WiFi (once, for boards from v4.0.4 a
 earlier). Details: [SECURITY.md](SECURITY.md#updates).
 
 Security fixes are released for the latest version. This is committed until at
-least <!--support-until-->2027-10-27<!--/support-until-->; the date moves with
+least <!--support-until-->2027-10-28<!--/support-until-->; the date moves with
 every release, and an end of support will be announced here first.
 
 ## Your board's password, PIN and recovery

@@ -6,7 +6,7 @@ pretend USB bus naming the board, reads the signed test release from the
 release server on this computer, pairs with the board (confirmed over USB, as a
 person would on the dashboard), and then - driven the way the tray drives it -
 
-    is offered 4.0.99 with its size and what changed, over the air
+    is offered a newer test release (NEXT) with its size and what changed, over the air
     updates over the air: check, download, "Restart now", self-test, kept
     cancels a download: nothing changes
     relays the release when the board cannot reach it
@@ -31,7 +31,8 @@ import time
 
 import pytest
 
-from board.test_ota_download import _settle, env  # noqa: F401 - the shared fixture
+from board.test_ota_download import NEXT, RUNS, _settle, env  # noqa: F401 - the shared fixture
+from support import firmware
 from support import paths
 from support.ota_board import install, wait_status
 
@@ -149,9 +150,9 @@ def offered(a):
 def test_the_companion_offers_the_update_with_size_and_changes(env, app):  # noqa: F811
     v = offered(app)
     o = app.upd(v)["offer"]
-    assert 'to: "4.0.99"' in o and f"size: {len(env['img'])}" in o and "over_air: true" in o, o
-    assert '"4.0.99"' in o and '"4.0.5"' in o, f"every section newer than what runs: {o}"
-    assert v["updates"]["latest"] == "4.0.99"
+    assert f'to: "{NEXT}"' in o and f"size: {len(env['img'])}" in o and "over_air: true" in o, o
+    assert f'"{NEXT}"' in o and f'"{firmware.test_patch(5)}"' in o, f"every section newer than what runs: {o}"
+    assert v["updates"]["latest"] == NEXT
 
 
 def test_over_the_air_with_restart_now(env, app):  # noqa: F811
@@ -160,14 +161,14 @@ def test_over_the_air_with_restart_now(env, app):  # noqa: F811
     app.wait(lambda v: app.upd(v).get("job") == "Ready", 600, "the update downloaded and ready")
     app.say(f"restart {app.mac}")
     v = app.wait(lambda v: app.upd(v).get("job", "").startswith(("Done", "RolledBack", "Failed")), 300, "the update kept")
-    assert app.upd(v)["job"] == 'Done { to: "4.0.99" }', app.upd(v)
+    assert app.upd(v)["job"] == f'Done {{ to: "{NEXT}" }}', app.upd(v)
     st = env["holder"].get().status()
-    assert st["firmware"] == "hid_fi_v4.0.99-test" and st["ota_state"] == "valid"
+    assert st["firmware"] == f"hid_fi_v{NEXT}-test" and st["ota_state"] == "valid"
 
 
 def test_a_cancelled_download_changes_nothing(env, app):  # noqa: F811
     board = env["holder"].get()
-    if board.status()["firmware"] != "hid_fi_v4.0.4-test":
+    if board.status()["firmware"] != f"hid_fi_v{RUNS}-test":
         install(env["holder"], env["base"])
         wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 150, "the base build proving itself")
     offered(app)
@@ -182,7 +183,7 @@ def test_a_cancelled_download_changes_nothing(env, app):  # noqa: F811
     finally:
         env["srv"].faults["chunk_delay"] = 0.0
     st = env["holder"].get().status()
-    assert st["firmware"] == "hid_fi_v4.0.4-test" and st["ota_state"] == "valid" and st["ota_step"] == "idle"
+    assert st["firmware"] == f"hid_fi_v{RUNS}-test" and st["ota_state"] == "valid" and st["ota_step"] == "idle"
 
 
 def test_a_board_that_cannot_reach_the_release_gets_it_from_the_companion(env, app):  # noqa: F811
@@ -199,7 +200,7 @@ def test_a_board_that_cannot_reach_the_release_gets_it_from_the_companion(env, a
         asked = env["srv"].clients[n_before:]
         assert not any(ip == board_ip and code in (200, 206) for ip, _, code in asked), \
             f"the board got files from the server, not from the Companion's relay: {asked}"
-        assert any(ip != board_ip and name == "hid_fi-4.0.99.bin" for ip, name, _ in asked), \
+        assert any(ip != board_ip and name == f"hid_fi-{NEXT}.bin" for ip, name, _ in asked), \
             "the Companion fetched the image itself, to relay it"
         app.say(f"cancel {app.mac}")
         app.wait(lambda v: app.upd(v).get("job") == "Stopped", 120, "the ready update withdrawn")
@@ -227,14 +228,14 @@ def _cable(a, env):
             seen.add(j.split('step: "')[1].split('"')[0])
         return j.startswith(("Done", "RolledBack", "Failed", "Stopped"))
     v = a.wait(watch, 900, "the cable update finishing")
-    assert a.upd(v)["job"] == 'Done { to: "4.0.99" }', (a.upd(v), seen)
+    assert a.upd(v)["job"] == f'Done {{ to: "{NEXT}" }}', (a.upd(v), seen)
     st = wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 90, "the board settled")
-    assert st["firmware"] == "hid_fi_v4.0.99-test"
+    assert st["firmware"] == f"hid_fi_v{NEXT}-test"
     return seen
 
 
 def _back_to_base(env):
-    if env["holder"].get().status()["firmware"] != "hid_fi_v4.0.4-test":
+    if env["holder"].get().status()["firmware"] != f"hid_fi_v{RUNS}-test":
         install(env["holder"], env["base"])
         wait_status(env["holder"].get(), lambda s: s.get("ota_state") == "valid", 150, "the base build proving itself")
 

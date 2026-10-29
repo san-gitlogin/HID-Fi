@@ -37,6 +37,21 @@ def fw_version(text=None):
     return m.group(1) if m else None
 
 
+def fw_number():
+    """The release number the source builds: "4.1" or "4.0.4"."""
+    return fw_version().split("_v", 1)[1]
+
+
+def fw_series():
+    """MAJOR.MINOR. Test builds made with HIDFI_TEST_PATCH=N claim "<series>.N",
+    so the update tests offer a newer release whatever the version is today."""
+    return ".".join(fw_number().split(".")[:2])
+
+
+def test_patch(n):
+    return f"{fw_series()}.{n}"
+
+
 def dispatch_commands(text=None):
     """Every command name processCommand() dispatches on."""
     return sorted(set(re.findall(r'strcmp\(cmd,\s*"([a-z_0-9]+)"\)\s*==\s*0', text or ino_text())))

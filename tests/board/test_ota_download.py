@@ -2,8 +2,8 @@
 
 The board runs a test build that trusts the TEST key of tests/vectors/ota_v1.json
 (-DHIDFI_TEST_OTA_KEY - a release never contains it). A server here hands out a
-manifest signed with that key for "4.0.99" and the image of a test build that
-claims to be 4.0.99. ota_source (USB only) points the board at it. Then:
+manifest signed with that key for NEXT (<series>.99) and the image of a test build
+that claims to be it. ota_source (USB only) points the board at it. Then:
 
     a check finds it, with every CHANGELOG section newer than what runs
     a signature from another key is refused and nothing is shown
@@ -39,16 +39,20 @@ import ota_release as R  # noqa: E402
 
 pytestmark = [pytest.mark.board, pytest.mark.slow]
 
+# The test release is a newer patch of the series the source builds, whatever
+# today's version is (FW_SERIES; a release once left these offering an older one).
+RUNS = firmware.fw_number()          # what the base test build reports, with "-test"
+NEXT = firmware.test_patch(99)       # what the test release claims to be
 VEC = json.loads((paths.TESTS / "vectors" / "ota_v1.json").read_text(encoding="utf-8"))
-CHANGELOG = """## v4.0.99 - 2026-11-01
+CHANGELOG = f"""## v{NEXT} - 2026-11-01
 
 Test release.
 
-## v4.0.5 - 2026-10-30
+## v{firmware.test_patch(5)} - 2026-10-30
 
 A section between.
 
-## v4.0.4 - 2026-10-27
+## v{RUNS} - 2026-10-27
 
 What runs now.
 """
@@ -65,8 +69,8 @@ def _untrusted_sig(m):
 
 
 def release(image, min_from="4.0.3", table=None):
-    m = R.canonical(R.build_manifest("4.0.99", image, min_from, "3.3.12", "5.5.5", CHANGELOG,
-                                     released=datetime.date(2026, 11, 1), image_name="hid_fi-4.0.99.bin",
+    m = R.canonical(R.build_manifest(NEXT, image, min_from, "3.3.12", "5.5.5", CHANGELOG,
+                                     released=datetime.date(2026, 11, 1), image_name=f"hid_fi-{NEXT}.bin",
                                      table_bytes=table, _tests_allow_test_build=True))
     return m, json.dumps(R.sign(m, _key())).encode()
 
@@ -93,7 +97,7 @@ def env(_board_holder):
     img = new.read_bytes()
     table = (new.parent / "hid_fi.ino.partitions.bin").read_bytes()
     man, sig = release(img, table=table)
-    files = {"hidfi-ota.json": man, "hidfi-ota.sig": sig, "hid_fi-4.0.99.bin": img, "partitions.bin": table}
+    files = {"hidfi-ota.json": man, "hidfi-ota.sig": sig, f"hid_fi-{NEXT}.bin": img, "partitions.bin": table}
     with ReleaseServer(files) as srv:
         ip = wait_status(board, lambda s: s.get("wifi_connected"), 60, "the board back on its network")["wifi_ip"]
         # The board's own daily check would race the tests' checks (it did: "busy").
@@ -140,9 +144,9 @@ def fresh(env):
 
 def on_base(env):
     """The board on the base test build, whatever an earlier scenario left (the end
-    to end one keeps 4.0.99 - after it, nothing is newer). Order-independent."""
+    to end one keeps NEXT - after it, nothing is newer). Order-independent."""
     board = fresh(env)
-    if board.status()["firmware"] != "hid_fi_v4.0.4-test":
+    if board.status()["firmware"] != f"hid_fi_v{RUNS}-test":
         install(env["holder"], env["base"])
         board = env["holder"].get()
         wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the base build proving itself")
@@ -165,10 +169,10 @@ def _settle(board):
 def test_a_check_finds_the_signed_release(env):
     board = fresh(env)
     st = check(board)
-    assert st["ota_available"] == "4.0.99" and st["ota_error"] == "", st
+    assert st["ota_available"] == NEXT and st["ota_error"] == "", st
     rel = board.cmd({"cmd": "ota_status"}, "ota_status")["release"]
     assert rel["installable"] and rel["size"] == len(env["img"])
-    assert [s["version"] for s in rel["changelog"]] == ["4.0.99", "4.0.5"], \
+    assert [s["version"] for s in rel["changelog"]] == [NEXT, firmware.test_patch(5)], \
         "every section newer than what runs - not only the newest, not the one that runs"
 
 
@@ -185,7 +189,7 @@ def test_a_check_rides_out_a_wifi_blip(env):
     srv.faults["drop"] = 2
     st = check(board)
     seen = srv.log[n:]
-    assert (st["ota_available"], st["ota_error"]) == ("4.0.99", ""), why(seen)
+    assert (st["ota_available"], st["ota_error"]) == (NEXT, ""), why(seen)
     assert [x[2] for x in seen][:2] == ["dropped", "dropped"] and seen[-2][2] == 200, why(seen)
     n = len(srv.log)
     board.ota_log.clear()
@@ -289,7 +293,7 @@ def test_a_server_that_ignores_range_makes_the_board_start_over(env):
 
 def test_a_board_too_old_for_the_release_is_told(env):
     board = fresh(env)
-    man, sig = release(env["img"], min_from="4.0.50")
+    man, sig = release(env["img"], min_from=firmware.test_patch(50))
     env["srv"].files.update({"hidfi-ota.json": man, "hidfi-ota.sig": sig})
     st = check(board)
     assert st["ota_error"] == "too_old" and st["ota_available"] == ""
@@ -362,12 +366,12 @@ def test_end_to_end_with_a_dropped_connection(env, request):
     assert ranged and ranged[-1][2] == 206, "after the drop the board must resume with Range, not start over"
     r = board.cmd({"cmd": "ota_apply"}, "ota_apply")
     assert r["status"] == "ok"
-    st = wait_status(board, lambda s: s.get("firmware", "").startswith("hid_fi_v4.0.99")
-                     and s.get("ota_state") == "pending_verify", 90, "the restart into 4.0.99")
-    st = wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the self-test keeping 4.0.99")
+    st = wait_status(board, lambda s: s.get("firmware", "").startswith(f"hid_fi_v{NEXT}")
+                     and s.get("ota_state") == "pending_verify", 90, f"the restart into {NEXT}")
+    st = wait_status(board, lambda s: s.get("ota_state") == "valid", 150, f"the self-test keeping {NEXT}")
     assert st["ota_result"] == "updated"
     o = board.cmd({"cmd": "ota_status"}, "ota_status")
-    assert o["to"].startswith("hid_fi_v4.0.99") and o["from"].startswith("hid_fi_v4.0.4")
+    assert o["to"].startswith(f"hid_fi_v{NEXT}") and o["from"].startswith(f"hid_fi_v{RUNS}")
     if idle is None:
         pytest.skip("hot-path latency not measured: the board has a PIN and none was given (--board-pin / HIDFI_PIN)")
     p95 = lambda xs: xs[int(len(xs) * 0.95) - 1]
@@ -408,7 +412,7 @@ def test_the_paired_companion_checks_installs_and_cancels(env, app):
     r = app.ota("check")
     assert r["status"] == "ok" and r["act"] == "check", r
     st = wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the Companion's check finishing")
-    assert st["ota_available"] == "4.0.99", st
+    assert st["ota_available"] == NEXT, st
     env["srv"].faults["chunk_delay"] = 0.05
     assert app.ota("install")["status"] == "ok"
     wait_status(board, lambda s: s.get("ota_bytes", 0) > 50000, 120, "the Companion's download starting")
@@ -441,7 +445,7 @@ def test_the_companion_relays_a_release_for_one_check_only(env, app):
         assert app.ota("from", "http://192.0.2.1:9/").get("reply") == "bad_request", "only this computer may relay"
         assert app.ota("from", srv_url)["status"] == "ok"
         st = wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "the relayed check finishing")
-        assert st["ota_available"] == "4.0.99" and st["ota_error"] == "", st
+        assert st["ota_available"] == NEXT and st["ota_error"] == "", st
         r = board.cmd({"cmd": "ota_source"}, "ota_source")
         assert r["url"] == srv_url + "nothing-here/", "reading the setting must not use up or show the relay"
         st = check(board)

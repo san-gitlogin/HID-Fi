@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.1 - 2026-10-29
 
 Security: the board's web server could be crashed by anyone on its WiFi or on
 the home network it joined. **Reflash every board** once this is released.

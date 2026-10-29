@@ -369,13 +369,15 @@ bool heapWarned = false;
 #else
 #define  FW_TEST_SUFFIX ""
 #endif
+// FW_SERIES is FW_VERSION's MAJOR.MINOR (tests/static/test_project_rules.py checks).
+#define  FW_SERIES "4.1"
 #ifndef HIDFI_TEST_PATCH
-#define  FW_VERSION "hid_fi_v4.0.4" FW_TEST_SUFFIX
+#define  FW_VERSION "hid_fi_v4.1" FW_TEST_SUFFIX
 #else
-// A test build that claims a newer patch (tests/board/test_ota_download.py).
+// A test build that claims a newer patch of this series (tests/board/test_ota_download.py).
 #define  FW_STR2(x) #x
 #define  FW_STR(x) FW_STR2(x)
-#define  FW_VERSION "hid_fi_v4.0." FW_STR(HIDFI_TEST_PATCH) FW_TEST_SUFFIX
+#define  FW_VERSION "hid_fi_v" FW_SERIES "." FW_STR(HIDFI_TEST_PATCH) FW_TEST_SUFFIX
 #endif
 
 // ==================== HARDWARE PINS ====================
