@@ -16,11 +16,18 @@
 //! Defences: loopback only; the Host header must be this server (a site that
 //! rebinds a name to 127.0.0.1 gets nothing); every path carries a token made
 //! at start, so no other page can find it or press its button; GET and POST
-//! only, nothing else is served.
+//! only, nothing else is served; a POST that names an Origin must name this
+//! server.
+//!
+//! On Linux, where the app has no window of its own, the same server serves
+//! the window (window.html) to the browser: `/window` the page, `/state` the
+//! window's content (a long poll that answers when it changes), `/act` a
+//! button's id - the same ids the macOS and Windows window sends.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 /// Requests kept for pages opened from the menu (newest last).
@@ -30,7 +37,31 @@ pub struct Opener {
     port: u16,
     token: String,
     pages: Arc<Mutex<Vec<Page>>>,
+    win: Arc<Win>,
 }
+
+/// The window, for a browser: what to show, what a click does, and someone looking.
+pub struct WindowLink {
+    /// The window's JSON now (`window::model(..).json`).
+    pub model: Box<dyn Fn() -> String + Send + Sync>,
+    /// A message from the page (`act:<id>` or `close`).
+    pub act: Box<dyn Fn(&str) + Send + Sync>,
+    /// A page asked for the state: someone is looking (latency on).
+    pub polled: Box<dyn Fn() + Send + Sync>,
+}
+
+#[derive(Default)]
+struct Win {
+    link: Mutex<Option<Arc<WindowLink>>>,
+    version: Mutex<u64>,
+    changed: Condvar,
+    polls: AtomicUsize,
+}
+
+/// How long a page's ask for the state waits for a change.
+const POLL_WAIT: Duration = Duration::from_secs(25);
+/// Pages asking at once (each holds a thread while it waits).
+const MAX_POLLS: usize = 6;
 
 /// One "Open the dashboard": where to look, and the browser it opened in.
 #[derive(Clone)]
@@ -49,19 +80,42 @@ impl Opener {
         getrandom::fill(&mut t).expect("OS randomness");
         let token = hex::encode(t);
         let pages: Arc<Mutex<Vec<Page>>> = Arc::default();
-        let (tk, pg) = (token.clone(), pages.clone());
+        let win: Arc<Win> = Arc::default();
+        let (tk, pg, wn) = (token.clone(), pages.clone(), win.clone());
         let open_settings: Arc<dyn Fn() + Send + Sync> = Arc::from(open_settings);
         std::thread::Builder::new()
             .name("opener".into())
             .spawn(move || {
                 for conn in listener.incoming().flatten() {
-                    let (tk, pg, os) = (tk.clone(), pg.clone(), open_settings.clone());
+                    let (tk, pg, os, wn) =
+                        (tk.clone(), pg.clone(), open_settings.clone(), wn.clone());
                     std::thread::spawn(move || {
-                        let _ = serve(conn, port, &tk, &pg, os.as_ref());
+                        let _ = serve(conn, port, &tk, &pg, os.as_ref(), &wn);
                     });
                 }
             })?;
-        Ok(Opener { port, token, pages })
+        Ok(Opener {
+            port,
+            token,
+            pages,
+            win,
+        })
+    }
+
+    /// Serve the window to browsers (Linux).
+    pub fn set_window(&self, link: WindowLink) {
+        *self.win.link.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(link));
+    }
+
+    /// The window's content changed: pages waiting for it get it now.
+    pub fn changed(&self) {
+        *self.win.version.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        self.win.changed.notify_all();
+    }
+
+    /// The window's address, for the browser.
+    pub fn window_url(&self) -> String {
+        format!("http://127.0.0.1:{}/{}/window", self.port, self.token)
     }
 
     /// The page to open for these addresses of one board, best first.
@@ -102,28 +156,48 @@ fn serve(
     token: &str,
     pages: &Mutex<Vec<Page>>,
     open_settings: &(dyn Fn() + Send + Sync),
+    win: &Win,
 ) -> std::io::Result<()> {
     conn.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut r = BufReader::new(conn.try_clone()?);
     let mut line = String::new();
     r.read_line(&mut line)?;
-    let mut host = None;
+    let (mut host, mut origin, mut len) = (None, None, 0usize);
     loop {
         let mut h = String::new();
         if r.read_line(&mut h)? == 0 || h.trim().is_empty() {
             break;
         }
         if let Some((k, v)) = h.split_once(':') {
-            if k.trim().eq_ignore_ascii_case("host") {
+            let k = k.trim();
+            if k.eq_ignore_ascii_case("host") {
                 host = Some(v.trim().to_string());
+            } else if k.eq_ignore_ascii_case("origin") {
+                origin = Some(v.trim().to_string());
+            } else if k.eq_ignore_ascii_case("content-length") {
+                len = v.trim().parse().unwrap_or(usize::MAX);
             }
         }
     }
     let mut parts = line.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-    let ok_host = host.as_deref() == Some(&format!("127.0.0.1:{port}"))
-        || host.as_deref() == Some(&format!("localhost:{port}"));
-    let reply = route(method, path, ok_host, token, pages, open_settings);
+    let here = |h: &str| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}");
+    let ok_host = host.as_deref().is_some_and(here)
+        // A POST naming another site is refused, token or not.
+        && (method != "POST"
+            || origin.as_deref().is_none_or(|o| o.strip_prefix("http://").is_some_and(here)));
+    let mut body = String::new();
+    if method == "POST" && len <= 256 {
+        let mut b = vec![0u8; len];
+        r.read_exact(&mut b)?;
+        body = String::from_utf8_lossy(&b).into_owned();
+    } else if method == "POST" {
+        return Ok(());
+    }
+    let reply = match window_route(method, path, ok_host, token, win, &body) {
+        Some(r) => r,
+        None => route(method, path, ok_host, token, pages, open_settings),
+    };
     let (code, kind, body) = reply;
     let mut w = conn;
     write!(
@@ -138,6 +212,77 @@ fn serve(
 }
 
 type Reply = (&'static str, &'static str, String);
+
+/// The window's three paths (Linux); None for any other path.
+fn window_route(
+    method: &str,
+    path: &str,
+    ok_host: bool,
+    token: &str,
+    win: &Win,
+    body: &str,
+) -> Option<Reply> {
+    let rest = path.strip_prefix('/')?.strip_prefix(token)?;
+    let (p, query) = rest.split_once('?').unwrap_or((rest, ""));
+    if !matches!(p, "/window" | "/state" | "/act") {
+        return None;
+    }
+    let nf = ("404 Not Found", "text/plain", "Not found".to_string());
+    let link = win.link.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(link) = link.filter(|_| ok_host) else {
+        return Some(nf);
+    };
+    Some(match (method, p) {
+        ("GET", "/window") => (
+            "200 OK",
+            "text/html; charset=utf-8",
+            crate::window::PAGE.replacen(
+                "</body>",
+                &format!("<script>{BROWSER}</script></body>"),
+                1,
+            ),
+        ),
+        ("GET", "/state") => {
+            if win.polls.fetch_add(1, Ordering::SeqCst) >= MAX_POLLS {
+                win.polls.fetch_sub(1, Ordering::SeqCst);
+                return Some(("503 Service Unavailable", "text/plain", "busy".into()));
+            }
+            (link.polled)();
+            let seen: Option<u64> = query.strip_prefix("v=").and_then(|v| v.parse().ok());
+            let mut v = win.version.lock().unwrap_or_else(|e| e.into_inner());
+            if seen == Some(*v) {
+                v = win
+                    .changed
+                    .wait_timeout_while(v, POLL_WAIT, |now| *now == seen.unwrap_or(u64::MAX))
+                    .map(|(g, _)| g)
+                    .unwrap_or_else(|e| e.into_inner().0);
+            }
+            let n = *v;
+            drop(v);
+            win.polls.fetch_sub(1, Ordering::SeqCst);
+            (
+                "200 OK",
+                "application/json",
+                format!("{{\"v\":{n},\"m\":{}}}", (link.model)()),
+            )
+        }
+        ("POST", "/act") => {
+            (link.act)(body.trim());
+            ("200 OK", "text/plain", "ok".into())
+        }
+        _ => nf,
+    })
+}
+
+/// What the browser's copy of the window adds: clicks go to `/act`, the
+/// content comes from `/state` as it changes.
+const BROWSER: &str = r#"(()=>{const base=location.pathname.replace(/\/window$/,"");let v=-1,gone=false;
+window.__hidfiSend=m=>{fetch(base+"/act",{method:"POST",body:m,headers:{"Content-Type":"text/plain"}}).catch(()=>{});};
+const off=()=>{if(gone)return;gone=true;document.title="HID-Fi Companion is not running";
+  document.body.replaceChildren(Object.assign(document.createElement("p"),{textContent:"HID-Fi Companion is not running. Start it, then open this window from its tray icon.",style:"padding:24px;color:#a3b2bf"}));};
+(async()=>{for(;;){try{const r=await fetch(base+"/state?v="+v,{cache:"no-store"});
+  if(r.status===404){off();return;}if(!r.ok)throw 0;const j=await r.json();v=j.v;window.render(j.m);}
+  catch(e){await new Promise(r=>setTimeout(r,2000));}}})();})();"#;
 
 fn route(
     method: &str,
@@ -350,5 +495,137 @@ mod tests {
         );
         assert!(!p.contains("</script><script>alert"));
         assert!(!p.contains(r#"DEF="</script>""#));
+    }
+
+    /// A raw request with headers and a body; (code, whole reply).
+    fn req(port: u16, method: &str, path: &str, headers: &str, body: &str) -> (u16, String) {
+        let mut s = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], port))).unwrap();
+        write!(
+            s,
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{headers}Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        (out[9..12].parse().unwrap(), out)
+    }
+
+    fn window_server() -> (Opener, Arc<Mutex<Vec<String>>>, Arc<AtomicUsize>, String) {
+        let o = Opener::start(Box::new(|| {})).unwrap();
+        let (got, polls) = (
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(AtomicUsize::new(0)),
+        );
+        let (g, p) = (got.clone(), polls.clone());
+        let n = Arc::new(AtomicUsize::new(0));
+        o.set_window(WindowLink {
+            model: Box::new(move || format!("{{\"n\":{}}}", n.fetch_add(1, Ordering::SeqCst))),
+            act: Box::new(move |m| g.lock().unwrap().push(m.to_string())),
+            polled: Box::new(move || {
+                p.fetch_add(1, Ordering::SeqCst);
+            }),
+        });
+        let base = o
+            .window_url()
+            .split_once(&format!(":{}", o.port))
+            .unwrap()
+            .1
+            .trim_end_matches("/window")
+            .to_string();
+        (o, got, polls, base)
+    }
+
+    #[test]
+    fn the_browser_window_is_the_apps_own_page_with_its_way_back() {
+        let (o, _, _, base) = window_server();
+        let (code, body) = req(o.port, "GET", &format!("{base}/window"), "", "");
+        assert_eq!(code, 200);
+        assert!(body.contains("window.render=") && body.contains("window.__hidfiSend="));
+        assert_eq!(
+            body.matches("<script>").count(),
+            2,
+            "the page's script and the browser's"
+        );
+        // Without the token, or for another host: nothing.
+        assert_eq!(req(o.port, "GET", "/window", "", "").0, 404);
+        assert_eq!(
+            get(o.port, &format!("{base}/window"), "evil.example", "GET").0,
+            404
+        );
+    }
+
+    #[test]
+    fn the_state_answers_at_once_when_it_changed_and_waits_when_not() {
+        let (o, _, polls, base) = window_server();
+        let (code, body) = req(o.port, "GET", &format!("{base}/state?v=99"), "", "");
+        assert_eq!(code, 200);
+        assert!(body.ends_with(r#"{"v":0,"m":{"n":0}}"#), "{body}");
+        assert_eq!(polls.load(Ordering::SeqCst), 1, "someone is looking");
+        // Up to date: it waits for the change, and answers with it.
+        let (port, path) = (o.port, format!("{base}/state?v=0"));
+        let t = std::time::Instant::now();
+        let w = std::thread::spawn(move || req(port, "GET", &path, "", ""));
+        std::thread::sleep(Duration::from_millis(300));
+        o.changed();
+        let (_, body) = w.join().unwrap();
+        assert!(body.contains(r#"{"v":1,"#), "{body}");
+        assert!(t.elapsed() >= Duration::from_millis(300) && t.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_click_reaches_the_app_only_by_post_from_this_page() {
+        let (o, got, _, base) = window_server();
+        let act = format!("{base}/act");
+        assert_eq!(
+            req(o.port, "POST", &act, "", "act:open:DCB4D90A0BB8").0,
+            200
+        );
+        let here = format!("Origin: http://127.0.0.1:{}\r\n", o.port);
+        assert_eq!(req(o.port, "POST", &act, &here, "act:check-updates").0, 200);
+        // Another site cannot press a button, even knowing the path.
+        assert_eq!(
+            req(
+                o.port,
+                "POST",
+                &act,
+                "Origin: http://evil.example\r\n",
+                "act:forget:DCB4D90A0BB8"
+            )
+            .0,
+            404
+        );
+        assert_eq!(
+            req(
+                o.port,
+                "POST",
+                &act,
+                "Origin: null\r\n",
+                "act:forget:DCB4D90A0BB8"
+            )
+            .0,
+            404
+        );
+        // GET does nothing; a body too large is not read.
+        assert_eq!(req(o.port, "GET", &act, "", "").0, 404);
+        let _ = std::panic::catch_unwind(|| req(o.port, "POST", &act, "", &"x".repeat(400)));
+        assert_eq!(
+            *got.lock().unwrap(),
+            vec!["act:open:DCB4D90A0BB8", "act:check-updates"]
+        );
+    }
+
+    #[test]
+    fn without_a_window_the_paths_are_not_there() {
+        let o = Opener::start(Box::new(|| {})).unwrap();
+        let base = o
+            .window_url()
+            .split_once(&format!(":{}", o.port))
+            .unwrap()
+            .1
+            .trim_end_matches("/window")
+            .to_string();
+        assert_eq!(req(o.port, "GET", &format!("{base}/window"), "", "").0, 404);
+        assert_eq!(req(o.port, "GET", &format!("{base}/state"), "", "").0, 404);
     }
 }

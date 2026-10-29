@@ -48,6 +48,30 @@ pub struct BoardView {
     pub mac: String,
     pub board: BoardState,
     pub session: Status,
+    /// How quickly it answers - measured only while a window is open.
+    pub link: crate::health::Link,
+    /// Dashboards watching this screen through this board.
+    pub viewers: usize,
+}
+
+impl BoardView {
+    pub fn new(mac: &str, board: BoardState, session: Status) -> BoardView {
+        BoardView {
+            mac: mac.into(),
+            board,
+            session,
+            link: Default::default(),
+            viewers: 0,
+        }
+    }
+}
+
+/// A board this computer is paired with that is not plugged in here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remembered {
+    pub mac: String,
+    /// Where it last answered.
+    pub url: Option<String>,
 }
 
 /// Everything the tray shows.
@@ -68,6 +92,8 @@ pub struct View {
     pub sound: SoundView,
     /// Updates: each board's version, what it is offered, what is running.
     pub updates: crate::updates::center::UpdView,
+    /// Paired with this computer, not plugged in here (shown as offline).
+    pub remembered: Vec<Remembered>,
 }
 
 pub enum Cmd {
@@ -89,6 +115,8 @@ pub struct Handle {
     pub view: Arc<Mutex<View>>,
     pub tx: Sender<Cmd>,
     pub watchers: Option<Watchers>,
+    /// Latency: the window turns it on while it is open.
+    pub health: crate::health::Health,
     notify: Notify,
 }
 
@@ -121,6 +149,8 @@ pub struct Env {
     pub updates: Option<crate::updates::center::UpdatesSetup>,
     /// How this computer's sound is captured; None: no sound offered at all.
     pub sound: Option<hidfi_stream::audio::Opener>,
+    /// Asks each board `/api/ping` while a window is open; None: no latency.
+    pub probe: Option<crate::health::Probe>,
 }
 
 /// What the tray and window show about sound.
@@ -180,6 +210,7 @@ pub fn start(store: Store, env: Env) -> Handle {
             state: None,
         },
         updates: Default::default(),
+        remembered: Vec::new(),
     }));
     // Sound: one capture for every viewer, only while someone listens.
     let sound_settings = hidfi_stream::audio::Settings::new(state.share_sound, state.share_mic);
@@ -261,8 +292,48 @@ pub fn start(store: Store, env: Env) -> Handle {
             }),
         )
     });
+    // Latency, while a window is open: each answering board's /api/ping.
+    let health = crate::health::Health::default();
+    if let Some(probe) = env.probe.clone() {
+        let (v2, n2, h2) = (view.clone(), notify.clone(), health.clone());
+        health.start(
+            probe,
+            {
+                let v = view.clone();
+                move || {
+                    v.lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .boards
+                        .iter()
+                        .filter_map(|b| match &b.board {
+                            BoardState::Found { url, .. } => Some((b.mac.clone(), url.clone())),
+                            _ => None,
+                        })
+                        .collect()
+                }
+            },
+            move || {
+                let mut v = v2.lock().unwrap_or_else(|e| e.into_inner());
+                let mut changed = false;
+                for b in v.boards.iter_mut() {
+                    let l = h2.link(&b.mac);
+                    if b.link != l {
+                        b.link = l;
+                        changed = true;
+                    }
+                }
+                drop(v);
+                if changed {
+                    if let Some(f) = n2.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                        f();
+                    }
+                }
+            },
+        );
+    }
     let v = view.clone();
     let n = notify.clone();
+    let h = health.clone();
     std::thread::Builder::new()
         .name("service".into())
         .spawn(move || {
@@ -280,6 +351,7 @@ pub fn start(store: Store, env: Env) -> Handle {
                 upd_boards,
                 upd_tx,
                 (sound_settings, hub),
+                h,
             )
         })
         .expect("spawning the service thread");
@@ -287,6 +359,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         view,
         tx,
         watchers,
+        health,
         notify,
     }
 }
@@ -317,6 +390,7 @@ fn run(
         Arc<hidfi_stream::audio::Settings>,
         Option<Arc<hidfi_stream::audio::AudioHub>>,
     ),
+    health: crate::health::Health,
 ) {
     let mut id = [0u8; 16];
     let _ = hex::decode_to_slice(&state.id, &mut id);
@@ -509,9 +583,15 @@ fn run(
                         firmware: h.firmware.clone(),
                     },
                     session: h.session.status().clone(),
+                    link: health.link(&m.hex()),
+                    viewers: listener
+                        .as_ref()
+                        .map_or(0, |(s, _)| s.watchers.of_board(mac_tag(m))),
                 },
                 None => BoardView {
                     mac: m.hex(),
+                    link: Default::default(),
+                    viewers: 0,
                     // A fresh install has no address to try, mDNS answers within
                     // a few seconds and a lookup by name can take five on macOS:
                     // look quietly first, then say it is not on this network.
@@ -529,6 +609,19 @@ fn run(
             .collect();
         let watching = listener.as_ref().map_or(0, |(s, _)| s.watchers.count());
         let allowed = (env.capture_allowed)();
+        // Paired, not plugged in here: shown as offline, with where it last was.
+        let remembered: Vec<Remembered> = paired
+            .iter()
+            .filter(|(m, _)| !on_usb.contains(m))
+            .map(|(m, _)| Remembered {
+                mac: m.hex(),
+                url: state
+                    .boards
+                    .iter()
+                    .find(|k| k.mac.eq_ignore_ascii_case(&m.hex()))
+                    .map(|k| k.url.clone()),
+            })
+            .collect();
         set(&|v| {
             match boards.first() {
                 Some(b) => {
@@ -541,6 +634,7 @@ fn run(
                 }
             }
             v.boards = boards.clone();
+            v.remembered = remembered.clone();
             v.watching = watching;
             v.capture_allowed = allowed;
             v.port = listener.as_ref().map(|(s, _)| s.port);
@@ -610,6 +704,20 @@ fn run(
                     if pick(&mac, m) {
                         h.session.reset_pairing();
                         h.session.key_changed = true;
+                    }
+                }
+                // A board that is not plugged in: its key goes from this computer
+                // (its dashboard can remove this computer too).
+                if let Some(m) = mac.as_deref().and_then(Mac::parse) {
+                    if !here.contains_key(&m) && paired.iter().any(|(p, _)| *p == m) {
+                        if let Err(e) = store.save_key_for(&m, None) {
+                            log::error!("could not forget the pairing: {e}");
+                        }
+                        paired = store.keys();
+                        log::info!(
+                            "board {}: pairing forgotten (not plugged in)",
+                            short_mac(&m.hex())
+                        );
                     }
                 }
             }

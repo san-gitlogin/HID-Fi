@@ -232,7 +232,7 @@ fn model_boards(v: &View) -> Model {
 }
 
 /// The menu for one board (`mac` names it in actions when there are several).
-fn model_one(v: &View, mac: Option<&str>) -> Model {
+pub(crate) fn model_one(v: &View, mac: Option<&str>) -> Model {
     let which = mac.map(str::to_string);
     let mut lines = Vec::new();
     let mut actions = Vec::new();
@@ -835,6 +835,7 @@ mod tests {
             problem: None,
             updates: Default::default(),
             sound: Default::default(),
+            remembered: vec![],
         }
     }
     fn found() -> BoardState {
@@ -920,11 +921,7 @@ mod tests {
     }
 
     fn board(mac: &str, board: BoardState, session: Status) -> BoardView {
-        BoardView {
-            mac: mac.into(),
-            board,
-            session,
-        }
+        BoardView::new(mac, board, session)
     }
 
     #[test]
@@ -1129,6 +1126,8 @@ mod tests {
             mac: "B81F3FDA1A2C".into(),
             board: found(),
             session: Status::Online,
+            link: Default::default(),
+            viewers: 0,
         }];
         v.updates.boards = vec![BoardUpd {
             mac: "B81F3FDA1A2C".into(),
@@ -1293,6 +1292,8 @@ mod tests {
             mac: "DCB4D909F7C8".into(),
             board: found(),
             session: Status::Online,
+            link: Default::default(),
+            viewers: 0,
         });
         v.updates.companion = CompUpd::Available {
             to: "4.1.0".into(),
@@ -1332,6 +1333,8 @@ mod tests {
             mac: "DCB4D909F7C8".into(),
             board: found(),
             session: Status::Online,
+            link: Default::default(),
+            viewers: 0,
         });
         let m = model(&v);
         assert!(

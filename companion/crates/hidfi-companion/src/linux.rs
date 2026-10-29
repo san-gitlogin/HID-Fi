@@ -2,23 +2,28 @@
 //! shown by KDE, XFCE, LXQt, Cinnamon, and GNOME with the AppIndicator
 //! extension (which Ubuntu and Fedora ship). Pure Rust, no GTK.
 //!
-//! There is no window here: what the macOS and Windows window says, the menu
-//! says, and the pairing code is also sent once as a desktop notification, so
-//! it is seen without opening anything.
+//! The window - the same page as on macOS and Windows, a card per board - opens
+//! in the browser from this app's loopback server ("Open window", opener.rs);
+//! the menu says the essentials, and the pairing code is also sent once as a
+//! desktop notification, so it is seen without opening anything.
 //!
 //! NOT YET RUN ON LINUX: compiled and checked from macOS only (see
 //! companion/PROGRESS.md for how it gets tested).
 
 use crate::{act, autostart, icons};
 use hidfi_companion::menu::{self, Action, Model};
+use hidfi_companion::opener::WindowLink;
 use hidfi_companion::service::{Cmd, Handle};
 use hidfi_companion::store::{State, Store};
+use hidfi_companion::window;
 use ksni::blocking::TrayMethods;
 use std::sync::mpsc::{channel, Sender};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 enum Ask {
     Do(Action),
+    Window,
     Login(bool),
     Quit,
 }
@@ -97,6 +102,16 @@ impl ksni::Tray for Tray {
             );
         }
         v.push(MenuItem::Separator);
+        v.push(
+            StandardItem {
+                label: "Open window\u{2026}".into(),
+                activate: Box::new(|t: &mut Self| {
+                    let _ = t.tx.send(Ask::Window);
+                }),
+                ..Default::default()
+            }
+            .into(),
+        );
         if let Some((sys, mic)) = menu::sound_switches(&self.model) {
             v.push(
                 CheckmarkItem {
@@ -173,8 +188,56 @@ fn notify(body: &str) {
     }
 }
 
+/// The window for the browser: what it shows, and what its buttons do - by id,
+/// in the model of the moment, as on macOS and Windows.
+fn serve_window(handle: &Handle, tx: Sender<Ask>) -> Option<Arc<Mutex<Instant>>> {
+    let o = act::opener()?;
+    let polled = Arc::new(Mutex::new(Instant::now() - IDLE_WINDOW));
+    let (v1, v2, h, p) = (
+        handle.view.clone(),
+        handle.view.clone(),
+        handle.health.clone(),
+        polled.clone(),
+    );
+    let tx = Mutex::new(tx);
+    o.set_window(WindowLink {
+        model: Box::new(move || {
+            window::model(&v1.lock().unwrap_or_else(|e| e.into_inner()))
+                .json
+                .to_string()
+        }),
+        act: Box::new(move |msg| {
+            let Some(id) = msg.strip_prefix("act:") else {
+                return;
+            };
+            let a = window::model(&v2.lock().unwrap_or_else(|e| e.into_inner()))
+                .action(id)
+                .cloned();
+            match a {
+                Some(a) => {
+                    let _ = tx
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .send(Ask::Do(a));
+                }
+                None => log::info!("window: {id} no longer applies"),
+            }
+        }),
+        polled: Box::new(move || {
+            *p.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+            h.set_active(true);
+        }),
+    });
+    handle.on_change(move || o.changed());
+    Some(polled)
+}
+
+/// No page has asked for this long: nobody is looking, latency off.
+const IDLE_WINDOW: Duration = Duration::from_secs(35);
+
 pub fn run(handle: Handle, mut state: State, store: Store, first_run: bool) {
     let (tx, rx) = channel();
+    let polled = serve_window(&handle, tx.clone());
     let view = || {
         handle
             .view
@@ -234,7 +297,19 @@ pub fn run(handle: Handle, mut state: State, store: Store, first_run: bool) {
                 let _ = store.save_state(&s);
             }
             Ok(Ask::Do(a)) => act::run(&handle, a),
+            Ok(Ask::Window) => match act::opener() {
+                Some(o) => act::open(&o.window_url()),
+                None => notify(
+                    "The window could not be opened: this app's local page server did not start",
+                ),
+            },
             Err(_) => {}
+        }
+        if polled
+            .as_ref()
+            .is_some_and(|p| p.lock().unwrap_or_else(|e| e.into_inner()).elapsed() >= IDLE_WINDOW)
+        {
+            handle.health.set_active(false);
         }
         let m = menu::model(&view());
         if m != shown {

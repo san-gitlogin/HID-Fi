@@ -4,3 +4,4 @@
 # Guard: tests/static/test_embedded_files_exact.py.
 companion/crates/hidfi-flash/stub/** -text
 tests/vectors/** -text
+companion/crates/hidfi-companion/src/window.html -text

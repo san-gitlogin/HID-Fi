@@ -35,15 +35,22 @@ fn network_settings() {
 /// The dashboard, through this app's own page on 127.0.0.1 (see opener.rs):
 /// it tries the board's name and address from the browser, and says what to
 /// switch on when the browser is kept off the network.
-fn open_dashboard(handle: &Handle, url: &str) {
+/// This app's loopback page server, started once (None if it could not start).
+pub fn opener() -> Option<&'static Opener> {
     static OPENER: OnceLock<Option<Opener>> = OnceLock::new();
-    let o = OPENER.get_or_init(|| match Opener::start(Box::new(network_settings)) {
-        Ok(o) => Some(o),
-        Err(e) => {
-            log::warn!("could not start the dashboard opener: {e}");
-            None
-        }
-    });
+    OPENER
+        .get_or_init(|| match Opener::start(Box::new(network_settings)) {
+            Ok(o) => Some(o),
+            Err(e) => {
+                log::warn!("could not start the dashboard opener: {e}");
+                None
+            }
+        })
+        .as_ref()
+}
+
+fn open_dashboard(handle: &Handle, url: &str) {
+    let o = opener();
     let mac = {
         let v = handle.view.lock().unwrap_or_else(|e| e.into_inner());
         v.boards

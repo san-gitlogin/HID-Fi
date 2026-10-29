@@ -2,9 +2,10 @@
 
 use crate::{act, autostart, icons};
 use hidfi_companion::menu::{self, Action, Icon};
-use hidfi_companion::panel::{self, Click, Panel};
+use hidfi_companion::panel::{Click, Panel};
 use hidfi_companion::service::{Cmd, Handle};
 use hidfi_companion::store::{State, Store};
+use hidfi_companion::window;
 use std::time::{Duration, Instant};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -114,9 +115,12 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     }
     let (click_tx, click_rx) = std::sync::mpsc::channel::<Click>();
     let mut panel: Option<Panel> = None;
+    // What the window shows now (its JSON): redrawn only when that changes.
+    let mut drawn: Option<String> = None;
     // The window comes forward by itself once per new thing to do.
     let mut auto = menu::AutoOpen::default();
-    let mut want_open = first_run;
+    // `--window`: open the window at start (a person asking again, and tests).
+    let mut want_open = first_run || std::env::args().any(|a| a == "--window");
 
     event_loop.run(move |event, target, flow| {
         *flow = ControlFlow::Wait;
@@ -153,6 +157,8 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 ..
             } if panel.as_ref().is_some_and(|p| p.id() == window_id) => {
                 panel = None;
+                drawn = None;
+                handle.health.set_active(false);
                 auto.dismissed(&view);
             }
             _ => {}
@@ -213,13 +219,15 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
             match c {
                 Click::Close => {
                     panel = None;
+                    drawn = None;
+                    handle.health.set_active(false);
                     auto.dismissed(&view);
                 }
-                Click::Action(i) => {
-                    if let Some((_, a)) = shown.as_ref().and_then(|m| m.actions.get(i)) {
-                        act.push(a.clone());
-                    }
-                }
+                // By id, in the model of this moment: a button that is gone does nothing.
+                Click::Action(id) => match window::model(&view).action(&id) {
+                    Some(a) => act.push(a.clone()),
+                    None => log::info!("window: {id} no longer applies"),
+                },
             }
         }
         for a in act {
@@ -245,8 +253,11 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                     }
                 }) {
                     Ok(p) => {
-                        p.render(&panel::view_json(&m, &view));
+                        let j = window::model(&view).json.to_string();
+                        p.render(&j);
+                        drawn = Some(j);
                         panel = Some(p);
+                        handle.health.set_active(true);
                     }
                     Err(e) => log::warn!("window: {e}"),
                 },
@@ -266,10 +277,14 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 t.set_menu(Some(Box::new(b.menu.clone())));
                 built = Some(b);
             }
-            if let Some(p) = panel.as_ref() {
-                p.render(&panel::view_json(&m, &view));
-            }
             shown = Some(m);
+        }
+        if let Some(p) = panel.as_ref() {
+            let j = window::model(&view).json.to_string();
+            if drawn.as_deref() != Some(j.as_str()) {
+                p.render(&j);
+                drawn = Some(j);
+            }
         }
         // The main thread must never be busy long: everything on screen waits on it.
         let took = t0.elapsed();

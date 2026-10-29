@@ -53,7 +53,7 @@ jobs:
       - name: Python test tools
         run: |
           python -m pip install playwright cryptography
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium webkit
       - name: Pairing vectors (Python cryptography)
         run: python vectors/check.py
       - name: Board crypto against the vectors (mbedTLS 3.6.4)

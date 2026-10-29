@@ -38,7 +38,7 @@ pin() { python3 -c "import json,sys;print(json.load(open('$DEPS'))['firmware'][s
 if [ "${1:-}" = "--print" ]; then
     echo "apt:  ${APT_PACKAGES[*]}"
     echo "pip:  -r $REQ (into the system python3 - hostsim needs its python3-gi)"
-    echo "then: python3 -m playwright install --with-deps chromium"
+    echo "then: python3 -m playwright install --with-deps chromium webkit"
     echo "and:  arduino-cli, then the pinned firmware deps from $DEPS (unless --no-firmware)"
     exit 0
 fi
@@ -62,7 +62,7 @@ PIP=(python3 -m pip install -q --break-system-packages -r "$REQ")
 # user: Playwright calls sudo itself for the system libraries. (Running it under
 # sudo instead fails when Playwright was installed with --user, as above: root's
 # python cannot see this user's packages - which is what a WSL user gets.)
-python3 -m playwright install --with-deps chromium
+python3 -m playwright install --with-deps chromium webkit
 fi
 # The ESP32 toolchain, at the exact versions in tests/deps.json - what CI's
 # "Pinned firmware dependencies" step installs.

@@ -15,6 +15,8 @@ mod linux;
 mod logfile;
 #[cfg(target_os = "macos")]
 mod replaced;
+#[cfg(any(target_os = "macos", windows))]
+mod windowcheck;
 
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
 use hidfi_companion::service::{self, Env};
@@ -30,6 +32,13 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if let Some(i) = args.iter().position(|a| a == "--check-sound") {
         hidfi_companion::soundcheck::run(&args[i + 1..]);
+        return;
+    }
+    // The window's page in this OS's own web view, every state, then exit
+    // (companion/tests/window_real.py). Touches nothing of the running app.
+    #[cfg(any(target_os = "macos", windows))]
+    if let Some(i) = args.iter().position(|a| a == "--window-check") {
+        windowcheck::run(args.get(i + 1).map_or("window-check.json", String::as_str));
         return;
     }
     if std::env::args().any(|a| a == "--version" || a == "-V") {
@@ -106,6 +115,8 @@ fn main() {
         capture_allowed: Arc::new(service::capture_allowed),
         updates: Some(hidfi_companion::updates::center::UpdatesSetup::real()),
         sound: Some(Arc::new(hidfi_stream::audio_capture)),
+        // A board on the same WiFi answers a ping in milliseconds; 2 s is "not answering".
+        probe: Some(hidfi_companion::health::tcp_probe(Duration::from_secs(2))),
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");
     // Not paired yet: the window opens by itself to say what to do.

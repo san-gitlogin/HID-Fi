@@ -116,6 +116,7 @@ fn main() {
             })),
             _ => None,
         },
+        probe: Some(hidfi_companion::health::tcp_probe(Duration::from_secs(2))),
     };
     let h = service::start(store, env);
     let view = h.view.clone();

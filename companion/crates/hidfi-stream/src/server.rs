@@ -173,12 +173,58 @@ enum FromViewer {
     Bye,
 }
 
-/// What the server tells whoever runs it (the tray): who is watching.
+/// What the server tells whoever runs it (the tray, the window): who is
+/// watching, in all and through which board (its tag: the MAC as a number).
 #[derive(Clone, Default)]
-pub struct Watchers(Arc<AtomicUsize>);
+pub struct Watchers {
+    total: Arc<AtomicUsize>,
+    by_board: Arc<Mutex<HashMap<u64, usize>>>,
+}
 impl Watchers {
     pub fn count(&self) -> usize {
-        self.0.load(Ordering::Relaxed)
+        self.total.load(Ordering::Relaxed)
+    }
+    /// Viewers admitted through this board's tickets.
+    pub fn of_board(&self, tag: u64) -> usize {
+        self.by_board
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&tag)
+            .copied()
+            .unwrap_or(0)
+    }
+    /// Claims a viewer slot for `tag`; None when every slot is taken. The slot
+    /// is given back when the returned guard drops, on every way out.
+    fn claim(&self, tag: u64, max: usize) -> Option<ViewerSlot<'_>> {
+        if self.total.fetch_add(1, Ordering::SeqCst) >= max {
+            self.total.fetch_sub(1, Ordering::SeqCst);
+            return None;
+        }
+        *self
+            .by_board
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(tag)
+            .or_default() += 1;
+        Some(ViewerSlot { w: self, tag })
+    }
+}
+
+struct ViewerSlot<'a> {
+    w: &'a Watchers,
+    tag: u64,
+}
+impl Drop for ViewerSlot<'_> {
+    fn drop(&mut self) {
+        let mut by = self.w.by_board.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(n) = by.get_mut(&self.tag) {
+            *n -= 1;
+            if *n == 0 {
+                by.remove(&self.tag);
+            }
+        }
+        drop(by);
+        self.w.total.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -439,18 +485,10 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
         }
     };
     // Claim a viewer slot; give it back on every way out.
-    if c.viewers.0.fetch_add(1, Ordering::SeqCst) >= MAX_VIEWERS {
-        c.viewers.0.fetch_sub(1, Ordering::SeqCst);
+    let Some(_slot) = c.viewers.claim(tag, MAX_VIEWERS) else {
         let _ = send(&mut ws, serde_json::json!({"t":"error","reason":"busy"}));
         return Err("busy".into());
-    }
-    struct Slot<'a>(&'a Watchers);
-    impl Drop for Slot<'_> {
-        fn drop(&mut self) {
-            self.0 .0.fetch_sub(1, Ordering::SeqCst);
-        }
-    }
-    let _slot = Slot(&c.viewers);
+    };
 
     let mut shown = (c.displays)();
     send(&mut ws, {
@@ -718,6 +756,29 @@ fn serve(c: &Ctx, stream: TcpStream, peer: SocketAddr) -> Result<(), String> {
 mod gate_tests {
     use super::*;
     use hidfi_core::pairing::{ticket, PairKey};
+
+    #[test]
+    fn viewers_are_counted_by_the_board_that_let_them_in() {
+        let w = Watchers::default();
+        let a1 = w.claim(0xA, 3).unwrap();
+        let a2 = w.claim(0xA, 3).unwrap();
+        let b1 = w.claim(0xB, 3).unwrap();
+        assert_eq!((w.count(), w.of_board(0xA), w.of_board(0xB)), (3, 2, 1));
+        assert!(
+            w.claim(0xB, 3).is_none(),
+            "every slot taken: refused, nothing counted"
+        );
+        assert_eq!((w.count(), w.of_board(0xB)), (3, 1));
+        drop(a1);
+        drop(b1);
+        assert_eq!((w.count(), w.of_board(0xA), w.of_board(0xB)), (1, 1, 0));
+        drop(a2);
+        assert_eq!((w.count(), w.of_board(0xA)), (0, 0));
+        assert!(
+            w.by_board.lock().unwrap().is_empty(),
+            "no entry left behind"
+        );
+    }
 
     #[test]
     fn a_ticket_from_any_board_plugged_in_gets_in_and_no_other() {

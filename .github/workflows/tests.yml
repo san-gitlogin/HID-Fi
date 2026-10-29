@@ -31,7 +31,7 @@ jobs:
       - name: Python test dependencies
         run: |
           pip install -r tests/requirements.txt
-          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps chromium webkit
 
       - uses: arduino/setup-arduino-cli@v2
 

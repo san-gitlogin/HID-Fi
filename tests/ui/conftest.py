@@ -9,9 +9,16 @@ import pytest
 
 
 @pytest.fixture(scope="session")
-def browser():
+def pw():
+    """The one Playwright of this process (the Companion window tests launch
+    WebKit from it too)."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        b = p.chromium.launch()
-        yield b
-        b.close()
+        yield p
+
+
+@pytest.fixture(scope="session")
+def browser(pw):
+    b = pw.chromium.launch()
+    yield b
+    b.close()

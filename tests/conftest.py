@@ -296,26 +296,31 @@ def host_os_name():
 # never runs, fails the session. See docs/TESTING.md#the-dashboard-coverage-contract.
 def pytest_sessionstart(session):
     if not hasattr(session.config, "workerinput"):
-        from support import responsive, ui_contract
+        from support import responsive, ui_contract, window_contract
         ui_contract.reset()
         responsive.reset()
+        window_contract.reset()
 
 
 def pytest_runtest_logreport(report):
     f = report.nodeid.split("::")[0].replace("\\", "/")
     if report.when == "call" and "ui/bdd/test_" in f:
         _bdd_ran.add(f.rsplit("/", 1)[-1])
+    if report.when == "call" and "ui/companion/test_" in f:
+        _window_ran.add(f.rsplit("/", 1)[-1])
 
 
 _bdd_ran = set()
+_window_ran = set()
 
 
 def pytest_sessionfinish(session, exitstatus):
     if hasattr(session.config, "workerinput"):
         return
-    from support import responsive, ui_contract
+    from support import responsive, ui_contract, window_contract
     tr = session.config.pluginmanager.get_plugin("terminalreporter")
-    for verdict in (ui_contract.check(session.config, _bdd_ran), responsive.finish(session.config)):
+    for verdict in (ui_contract.check(session.config, _bdd_ran), responsive.finish(session.config),
+                    window_contract.check(session.config, _window_ran)):
         if verdict is None:
             continue
         for line in verdict["lines"]:
