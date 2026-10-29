@@ -121,7 +121,8 @@ captured), so the browser keeps them in step.
   Security), asked once by a probe tap; until it is allowed, or on an older macOS,
   the Companion falls back to ScreenCaptureKit and says which path it took
   (`--check-sound` prints it). Real chain with the tap: both tones arrive,
-  Companion 6.8 % CPU.
+  Companion 6.8 % CPU through DA1A2C; through 09F7C8 (v4.1 on both, full board
+  tiers 127/0 each) the same, Companion 3.4 % CPU.
   The tap's device only runs while some app plays: the first chunk comes about
   100 ms after sound starts, and a quiet computer is not a fault. Its clock is
   one output device; when that output goes away (headphones unplugged, a
@@ -158,5 +159,5 @@ captured), so the browser keeps them in step.
 3. [x] macOS capture: system sound and microphone via ScreenCaptureKit.
 4. [x] Companion settings and tray, signalling states.
 5. [x] Dashboard: controls in every mode; BDD.
-6. [~] System, real-capture, real-board and performance tests.
+6. [x] System, real-capture, real-board and performance tests.
 7. [x] Windows (WASAPI) and Linux (Pulse) capture; their checks.
