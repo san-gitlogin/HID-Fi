@@ -1,0 +1,6 @@
+# Files the Companion embeds and checks by hash (or parses byte-for-byte) are
+# checked out exactly as committed on every OS: Windows' CRLF conversion changed
+# the vendored flasher stub's SHA-256 and failed every cable-update test there.
+# Guard: tests/static/test_embedded_files_exact.py.
+companion/crates/hidfi-flash/stub/** -text
+tests/vectors/** -text
