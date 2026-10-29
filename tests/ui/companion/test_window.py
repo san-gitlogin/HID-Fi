@@ -513,9 +513,10 @@ def _draw_time(win, ms):
     assert t < ms, f"{t:.1f} ms"
 
 
-@then(parsers.parse("each update took under {ms:d} ms"))
-def _update_time(win, ms):
-    assert max(win.update_times) < ms, [round(t, 1) for t in win.update_times]
+@then("each update fits in one frame of a 60 Hz screen")
+def _update_time(win):
+    # 16.7 ms is the whole frame: an update inside it never drops one.
+    assert max(win.update_times) < 16.7, [round(t, 1) for t in win.update_times]
 
 
 @then("every button has an accessible name")

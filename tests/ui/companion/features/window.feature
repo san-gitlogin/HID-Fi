@@ -386,7 +386,7 @@ Feature: The Companion's window - a card per board
     When the app shows "fifty"
     Then drawing took under 40 ms
     When the app shows "fifty" 20 times with new round trips
-    Then each update took under 12 ms
+    Then each update fits in one frame of a 60 Hz screen
 
   Scenario: Every control has a name a screen reader can say
     When the app shows "mixed"

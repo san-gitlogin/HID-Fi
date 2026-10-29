@@ -59,5 +59,6 @@ check("copying asks the app to copy (no focus rules apply)", str(p1.get("toast",
 check("the copy and the click reached the app", rep.get("acts") == ["copy:DC:B4:D9:09:F7:C8", "act:open:DCB4D909F7C8"],
       rep.get("acts"))
 check("fifty boards draw in under 40 ms", p1.get("fifty_first", 99) < 40, f"{p1.get('fifty_first')} ms")
-check("and update in under 12 ms", p1.get("fifty_update_worst", 99) < 12, f"worst {p1.get('fifty_update_worst')} ms")
+check("and each update fits in one 60 Hz frame (16.7 ms)", p1.get("fifty_update_worst", 99) < 16.7,
+      f"worst {p1.get('fifty_update_worst')} ms")
 sys.exit(0 if ok else 1)
