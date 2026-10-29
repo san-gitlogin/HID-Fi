@@ -31,6 +31,17 @@ dashboard's **Screen** tab.
 3. Its window opens and walks you through three steps. It lives in the menu bar
    (no Dock icon) and starts at login.
 
+**The window** shows this computer (its sound switches, *Check for updates*) and
+a card for each board: *Online*, *Live* (someone is watching through it), *Needs
+you*, *Connecting* or *Offline*, and how quickly it answers in milliseconds -
+green under 50, amber under 150, red above (a board in its power-saving WiFi mode
+answers in about 100). **Details** on a card shows its MAC, address, round trip
+and more, each copyable. Click a card to select it, Cmd/Ctrl-click or Shift-click
+to select several, and the bar at the bottom opens, updates, pairs or forgets
+them together. Boards paired with this computer but plugged in elsewhere show as
+*Not plugged in*. On Linux the same window opens in your browser from the tray's
+**Open window**.
+
 **What macOS will ask, and what to choose.** These come from macOS, not from
 HID-Fi; each is asked once unless noted.
 
@@ -148,8 +159,15 @@ inside your user session. For those, an HDMI capture device is the route today.
 
 ## Update
 
+**From v4.2 the app updates itself.** When a new version is out, its window
+says so: **Download**, then **Install and restart** - it checks the download
+against HID-Fi's signed release, puts it where the app is, and starts it; your
+pairings and settings stay. If it cannot (a folder it may not write to), it opens
+the installer instead and says why. On a Mac, the update from 4.1 asks for Screen
+Recording (and System Audio Recording) once more; from 4.2 on, never again.
+
 **Which version you have:** the app's menu (tray or menu bar) shows *Version
-4.0.4* above Quit, and its window shows it next to the name. From a terminal:
+4.2.0* above Quit, and its window shows it next to the name. From a terminal:
 `hidfi-companion --version` (on Windows its output must be redirected, since
 it has no console).
 
