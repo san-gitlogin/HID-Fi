@@ -718,7 +718,7 @@ The procedure, as it will run on DA1A2C:
      (2026-10-28) gives the rest: RAM blocks of 0x800 over OTG, then clear the flag
      and hold RTS 0.2 s. Preflight over it: 1.5 s (7.5 s over COM). The Companion then
      wrote, left the loader and watched the self-test: kept.
-9. [~] Release tooling: signing, manifest, SBOM, support-period date;
+9. [x] Release tooling: signing, manifest, SBOM, support-period date;
    CHANGELOG, SECURITY.md, README.
    Built 2026-10-28: `tools/ota_release.py release` (manifest with the table and the
    Companion installers, signature, verify) behind a gate that refuses - not warns -
@@ -732,9 +732,19 @@ The procedure, as it will run on DA1A2C:
    table). `tools/sbom.py`: CycloneDX 1.7 (current, 1.7.2 of 2026-09-17) for the
    firmware and the Companion (522 crates, each with its registry checksum).
    `tools/make_release.sh` writes the OTA files when `HIDFI_RELEASE_KEY` is set.
-   Left: the release keys (the owner decides where the offline backup lives), the
-   keys embedded in firmware and Companion, CHANGELOG, SECURITY.md, README.
-10. [~] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
+   Done 2026-10-29: **v4.1 published, the first signed release** (primary key
+   `fa48e032c618628f`, `security` with its risk, `min_from` 4.0.4, support until
+   2027-10-28), after both boards' full tiers on its source (127/0 each). Checked
+   from the public "latest" links: every SHA-256, the signature; DA1A2C on v4.1
+   checked GitHub itself and found nothing newer, with no error. Found at the
+   release: the gate's Companion names were never the workflow's - it now reads
+   `HID-Fi-Companion-<ver>-macos.dmg` and `hidfi-companion-windows-x86_64.exe`.
+   **Open (v4.2):** the self-update asks by system only (`updates.rs os_name`), and
+   Linux ships x86-64 and ARM64 - so Linux is left out of the manifest until the
+   Companion asks by system *and* architecture (an ARM64 computer must never be
+   offered the x86-64 file). Until then a Linux Companion is updated by its
+   install script.
+10. [x] Upgrade path from v4.0.4 with data, on 09F7C8, then DA1A2C with the
    owner's word.
    DA1A2C, 2026-10-28 (the owner's go-ahead for DA1A2C while away): put back to the
    *published* v4.0.4 release zip with its single-slot table, then switched and

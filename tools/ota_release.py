@@ -309,7 +309,7 @@ def main(argv=None):
     for x in ("--version", "--image", "--table", "--min-from", "--core", "--idf", "--key", "--out-dir"):
         r.add_argument(x, required=True)
     r.add_argument("--security", action="store_true"); r.add_argument("--risk", default="")
-    r.add_argument("--companion-dir", help="installers named HID-Fi-Companion-<version>-<os>.*")
+    r.add_argument("--companion-dir", help="the companion workflow's files (RELEASING.md)")
     r.add_argument("--companion-version")
     r.add_argument("--changelog", default=str(ROOT / "CHANGELOG.md"))
     a = ap.parse_args(argv)
@@ -337,16 +337,30 @@ def main(argv=None):
     return 0
 
 
+# The files the companion workflow builds (RELEASING.md), by the name the
+# install scripts and "latest" links expect - one per system the Companion's
+# self-update knows (updates.rs os_name). Linux ships two architectures under one
+# system name, so it is left out until the Companion asks per architecture: an
+# ARM64 computer must never be offered the x86-64 file.
+def _companion_names(version):
+    return {"macos": rf"HID-Fi-Companion-{re.escape(version)}-macos\.dmg",
+            "windows": r"hidfi-companion-windows-x86_64\.exe"}
+
+
 def companion_assets(folder, version):
-    """{os: {name, size, sha256}} for HID-Fi-Companion-<version>-<os>.<ext> in folder."""
+    """{os: {name, size, sha256}} for the Companion installers in folder."""
     out = {}
+    names = _companion_names(version)
     for p in sorted(Path(folder).iterdir()):
-        m = re.match(rf"^HID-Fi-Companion-{re.escape(version)}-(macos|windows|linux)[A-Za-z0-9._-]*$", p.name)
-        if m:
-            if m.group(1) in out:
-                raise ReleaseError(f"two installers for {m.group(1)}: {out[m.group(1)]['name']} and {p.name}")
+        system = next((k for k, rx in names.items() if re.fullmatch(rx, p.name)), None)
+        if system:
+            if system in out:
+                raise ReleaseError(f"two installers for {system}: {out[system]['name']} and {p.name}")
             b = p.read_bytes()
-            out[m.group(1)] = {"name": p.name, "size": len(b), "sha256": hashlib.sha256(b).hexdigest()}
+            out[system] = {"name": p.name, "size": len(b), "sha256": hashlib.sha256(b).hexdigest()}
+    missing = sorted(set(names) - set(out))
+    if out and missing:
+        raise ReleaseError(f"no Companion installer for {', '.join(missing)} in {folder}")
     if not out:
         raise ReleaseError(f"no Companion installers for {version} in {folder}")
     return out

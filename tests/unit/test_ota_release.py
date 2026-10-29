@@ -6,6 +6,7 @@ release must make, because a wrong manifest reaches every board.
 """
 import base64
 import datetime
+import hashlib
 import json
 import os
 import subprocess
@@ -285,3 +286,21 @@ def test_release_refuses_a_key_that_is_not_published(tmp_path, capsys):
                  "--min-from", "4.0.4", "--core", "3.3.12", "--idf", "5.5.5", "--key", str(kp), "--out-dir", str(tmp_path / "o")])
     assert rc == 2 and "release_keys.json" in capsys.readouterr().err
     assert not (tmp_path / "o").exists(), "nothing written"
+
+
+def test_the_companion_part_lists_the_workflows_own_files(tmp_path):
+    """The companion workflow's names (RELEASING.md), by the system the Companion's
+    self-update asks for. Linux is left out: two architectures, one system name -
+    an ARM64 computer must never be offered the x86-64 file."""
+    for n in ("HID-Fi-Companion-4.1.0-macos.dmg", "hidfi-companion-windows-x86_64.exe",
+              "hidfi-companion-linux-x86_64", "hidfi-companion-linux-aarch64", "SHA256SUMS"):
+        (tmp_path / n).write_bytes(n.encode())
+    got = R.companion_assets(tmp_path, "4.1.0")
+    assert sorted(got) == ["macos", "windows"]
+    assert got["windows"]["name"] == "hidfi-companion-windows-x86_64.exe"
+    assert got["macos"]["sha256"] == hashlib.sha256(b"HID-Fi-Companion-4.1.0-macos.dmg").hexdigest()
+    (tmp_path / "hidfi-companion-windows-x86_64.exe").unlink()
+    with pytest.raises(R.ReleaseError, match="windows"):
+        R.companion_assets(tmp_path, "4.1.0")
+    with pytest.raises(R.ReleaseError, match="no Companion installers"):
+        R.companion_assets(tmp_path, "4.2.0")

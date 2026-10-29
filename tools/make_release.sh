@@ -53,7 +53,7 @@ if [ -n "${HIDFI_RELEASE_KEY:-}" ]; then
         --table "$BUILD/hid_fi.ino.partitions.bin" --min-from "$MIN_FROM" --core "$CORE" --idf "$IDF" \
         --key "$HIDFI_RELEASE_KEY" --out-dir "$OTA" \
         ${HIDFI_SECURITY_RISK:+--security --risk "$HIDFI_SECURITY_RISK"} \
-        ${HIDFI_COMPANION_DIR:+--companion-dir "$HIDFI_COMPANION_DIR"}
+        ${HIDFI_COMPANION_DIR:+--companion-dir "$HIDFI_COMPANION_DIR" --companion-version "$(sed -n 's/^version = "\(.*\)"/\1/p' companion/Cargo.toml | head -1)"}
     python3 tools/sbom.py companion "${TAG#v}" > "$OTA/sbom-companion.cdx.json"
     cp "$OUT/sbom-firmware.cdx.json" "$OTA/"
     echo "$OTA: upload every file in it as a release asset"

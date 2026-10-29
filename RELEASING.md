@@ -67,5 +67,16 @@ Linux (x86-64, ARM64), with one `SHA256SUMS` for all of them.
 first release whose `pinned` job (the whole suite on Ubuntu, about 75 minutes)
 passed, with the Linux layout baselines in `tests/golden/`.
 
+`v4.1` (2026-10-29): the first **signed** release. Besides the set above, the
+over-the-air files at the root of the release - `hidfi-ota.json`, its
+`hidfi-ota.sig` (primary key `fa48e032c618628f`), `hid_fi-4.1.bin`,
+`partitions.bin` and the two SBOMs - all in the one `SHA256SUMS`. Made with
+`HIDFI_RELEASE_KEY=~/.hidfi-release/hidfi-release-primary.pem HIDFI_MIN_FROM=4.0.4
+HIDFI_COMPANION_DIR=<the companion workflow's files> HIDFI_SECURITY_RISK="..."
+tools/make_release.sh v4.1`. The manifest's Companion part lists macOS and Windows
+only: the self-update asks by system, and Linux ships two architectures under
+one name (docs/OTA.md, open items). Each workflow `SHA256SUMS-<os>` carries a
+line for itself hashed while empty - check the other lines.
+
 Do not name a working branch like a tag (`v4.0.2`): `git push origin v4.0.2`
 then refuses as ambiguous. Push `refs/tags/vX.Y` explicitly if one exists.
