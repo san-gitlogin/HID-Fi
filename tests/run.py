@@ -180,10 +180,10 @@ def main():
         # parallel workers: they measured the load, not the code. They run after,
         # alone, into the same table.
         timed_args = list(pyargs)
-        timed_args[2] = f"({pyargs[2]}) and timing"
+        timed_args[2] = f"({pyargs[2]}) and (timing or alone)"
         timed_args[timed_args.index(f"--junitxml={HERE / '.reports' / 'junit.xml'}")] = \
             f"--junitxml={HERE / '.reports' / 'junit_timing.xml'}"
-        pyargs[2] = f"({pyargs[2]}) and not timing"
+        pyargs[2] = f"({pyargs[2]}) and not (timing or alone)"
         pyargs += ["-n", os.environ.get("HIDFI_WORKERS") or "auto", "--dist", "loadgroup"]
     pyargs += passthrough
     if timed_args is not None:
@@ -196,7 +196,7 @@ def main():
     t0 = time.time()
     code = pytest.main(pyargs, plugins=[col])
     if timed_args is not None:
-        print("\n-- timing tests, alone on a quiet machine --")
+        print("\n-- timing tests and the Companion window, alone on a quiet machine --")
         timed = pytest.main(timed_args, plugins=[col])
         if timed not in (0, 5):                 # 5: none selected for these tiers
             code = timed if code in (0, 5) else code

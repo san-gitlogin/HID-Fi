@@ -62,12 +62,13 @@ ENGINES = ["chromium", "webkit"]
 
 
 def pytest_collection_modifyitems(items):
-    # One worker for the whole window suite: two engines per test on every
-    # worker at once starved the dashboard's large-screen layout checks on a
-    # 4-CPU CI runner ("nothing is drawn for this state").
+    # After the parallel phase, alone (run.py, marker "alone"): two browser
+    # engines beside the parallel dashboard tests starved its large-screen
+    # layout checks ("nothing is drawn", "the board model never answered") on a
+    # 4-CPU runner and once on this Mac.
     for it in items:
         if "/ui/companion/" in str(it.fspath).replace("\\", "/"):
-            it.add_marker(pytest.mark.xdist_group("companion-window"))
+            it.add_marker(pytest.mark.alone)
 
 
 def pytest_generate_tests(metafunc):
