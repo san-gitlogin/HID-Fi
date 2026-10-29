@@ -10,6 +10,14 @@ pytestmark = pytest.mark.ui
 
 scenarios("features/window.feature")
 
+# Speed is measured alone, after the parallel phase (run.py, marker "timing").
+# Marked here, not only by the feature's @timing tag: in a full run the
+# dashboard's pytest_bdd_apply_tag (ui/bdd/conftest.py) handles every feature's
+# tags and keeps none but known_issue as markers - so the tag alone put the
+# scenario in the parallel phase on CI, while a run of this folder alone
+# (which never loads that conftest) behaved.
+test_fifty_boards_draw_and_update_quickly = pytest.mark.timing(test_fifty_boards_draw_and_update_quickly)  # noqa: F821
+
 ADD = "ControlOrMeta"      # the add-to-selection key: Command on a Mac, Control elsewhere
 
 

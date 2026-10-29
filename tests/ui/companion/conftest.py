@@ -61,6 +61,15 @@ def states():
 ENGINES = ["chromium", "webkit"]
 
 
+def pytest_collection_modifyitems(items):
+    # One worker for the whole window suite: two engines per test on every
+    # worker at once starved the dashboard's large-screen layout checks on a
+    # 4-CPU CI runner ("nothing is drawn for this state").
+    for it in items:
+        if "/ui/companion/" in str(it.fspath).replace("\\", "/"):
+            it.add_marker(pytest.mark.xdist_group("companion-window"))
+
+
 def pytest_generate_tests(metafunc):
     # Every scenario, in both engines (a parametrised fixture does not reach
     # pytest-bdd's generated tests; a test parameter does).
