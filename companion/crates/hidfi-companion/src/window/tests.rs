@@ -587,6 +587,21 @@ fn the_golden_states_are_current() {
     let have = std::fs::read_to_string(p)
         .unwrap_or_default()
         .replace("\r\n", "\n");
+    // Made on macOS: other systems word their own hints (the network one, the
+    // steps), so there the file must hold the same states, not the same words.
+    if !cfg!(target_os = "macos") {
+        let names = |s: &str| -> Vec<String> {
+            s.lines()
+                .map(|l| l.split('\t').next().unwrap_or("").to_string())
+                .collect()
+        };
+        assert_eq!(
+            names(&have),
+            names(&samples::golden()),
+            "a state was added or renamed: regenerate the file on macOS"
+        );
+        return;
+    }
     assert!(
         have == samples::golden(),
         "tests/golden/companion_window_states.tsv is out of date: from companion/, run\n  \

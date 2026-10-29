@@ -10,5 +10,6 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
     && /root/.cargo/bin/rustup component add clippy
-RUN python3 -m venv /venv && /venv/bin/pip install -q aiortc==1.9.0 websockets numpy
+RUN python3 -m venv /venv && /venv/bin/pip install -q aiortc==1.9.0 websockets numpy playwright \
+    && /venv/bin/playwright install --with-deps chromium
 ENV PATH=/root/.cargo/bin:/venv/bin:$PATH

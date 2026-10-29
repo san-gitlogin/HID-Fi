@@ -441,7 +441,8 @@ pub fn model(v: &View) -> Window {
             .collect();
         banners.push(json!({"id": "companion", "tone": tone, "title": title,
             "text": match &v.updates.companion {
-                CompUpd::Ready { .. } => "Install it when you like: the running Companion hands over to it without losing your pairings.",
+                CompUpd::Ready { .. } => "It installs in place of this one and restarts - pairings and settings stay.",
+                CompUpd::Installing { .. } => "The new version starts and takes over in a few seconds.",
                 CompUpd::Available { .. } => "Checked against HID-Fi's signed release before it is opened.",
                 _ => "",
             }, "actions": actions}));

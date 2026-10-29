@@ -807,7 +807,9 @@ The Rust app has its own tests, listed in `companion/README.md`:
 | any | `python3 companion/tests/e2e_view.py`, `multi_view.py`, `system.py`, `boards.py`, `dashboard_live.py` | hardware H.264 over WebRTC into real Chrome; six viewers, a slow one and a poor link; the real service; two boards moving between computers; the real dashboard |
 | macOS (Apple silicon) | `companion/tests/windows/` (`build.sh`, `vm.sh`) | Windows builds made on the Mac, and a Windows 11 VM to run them and the tests above in - see its README |
 | any | `python3 companion/tests/overload.py` | the field conditions together: six viewers on two monitors, a swinging link, a stalling device, rejoins, a link that drops, jittery WiFi, light and busy content - judged per second from each browser's own WebRTC statistics |
-| any | `python3 companion/tests/panel_review.py` | the app's window in every state fits and says what to do |
+| any | `python tests/run.py --tier ui` | the Companion's window page (tests/ui/companion) in Chromium and WebKit, with its coverage contract |
+| macOS, Windows | `python3 companion/tests/window_real.py` | the window in the OS's own web view, every state |
+| macOS | `python3 companion/tests/self_update_mac.py` | the Companion updating itself, end to end |
 | Linux (Docker) | `companion/tests/linux/run.sh` | build + tests on Linux, the app without a tray, real X11 capture + OpenH264 on two monitors |
 | Windows | the manual `companion.yml` workflow | build, tests, capture and encoding on a real Windows runner |
 | board | `HIDFI_PIN=... python3 companion/tests/hardware.py`, `board_pages.py` | the real board: pairing, six viewers, eight pages, "board is full" |

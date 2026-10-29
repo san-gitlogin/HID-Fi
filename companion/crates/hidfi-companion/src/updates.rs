@@ -636,6 +636,7 @@ pub fn image_cap() -> usize {
 }
 
 pub mod center;
+pub mod install;
 pub mod real;
 
 #[cfg(test)]

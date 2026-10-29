@@ -238,6 +238,21 @@ const IDLE_WINDOW: Duration = Duration::from_secs(35);
 pub fn run(handle: Handle, mut state: State, store: Store, first_run: bool) {
     let (tx, rx) = channel();
     let polled = serve_window(&handle, tx.clone());
+    // `--window-url-file PATH`: where the window is, for tests; `--window`: open it now.
+    let args: Vec<String> = std::env::args().collect();
+    if let (Some(i), Some(o)) = (
+        args.iter().position(|a| a == "--window-url-file"),
+        act::opener(),
+    ) {
+        if let Some(p) = args.get(i + 1) {
+            if let Err(e) = std::fs::write(p, o.window_url()) {
+                log::warn!("--window-url-file: {e}");
+            }
+        }
+    }
+    if args.iter().any(|a| a == "--window") {
+        let _ = tx.send(Ask::Window);
+    }
     let view = || {
         handle
             .view

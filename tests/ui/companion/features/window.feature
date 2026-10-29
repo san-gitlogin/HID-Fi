@@ -198,7 +198,7 @@ Feature: The Companion's window - a card per board
     And I click "Download Companion 4.2.0"
     Then the app is asked "act:companion-get"
     When the app shows "companion-ready"
-    And I click "Install Companion 4.2.0"
+    And I click "Install 4.2.0 and restart"
     Then the app is asked "act:companion-install"
 
   Scenario: Copying a board's address from its details
@@ -206,6 +206,15 @@ Feature: The Companion's window - a card per board
     And I open the details of "HID-Fi 0A0BB8"
     And I copy "MAC" of "HID-Fi 0A0BB8"
     Then a note says "Copied DC:B4:D9:0A:0B:B8"
+
+  Scenario: In a browser (Linux), copying uses the browser's own clipboard
+    Given the window is open in a browser, not the app
+    When the app shows "one-online"
+    And I open the details of "HID-Fi 0A0BB8"
+    And I copy "Address" of "HID-Fi 0A0BB8"
+    Then a note says "Copied 192.168.0.104"
+    And the clipboard holds "192.168.0.104" where the browser lets a test read it
+    And the app was asked nothing
 
   Scenario: Details show the round trip and when it last answered
     Given the clock is 3 seconds after the last answer

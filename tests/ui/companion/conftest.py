@@ -20,7 +20,8 @@ URL = "http://localhost/companion-window"     # a secure context, as the app's o
 # What the page asks the app, and what the person touched - before the page's own script.
 INIT = """
 window.__sent = [];
-window.ipc = {postMessage: m => window.__sent.push(m)};
+if (!window.__inBrowser) window.ipc = {postMessage: m => window.__sent.push(m)};
+else window.__hidfiSend = m => window.__sent.push(m);
 window.__touched = new Set();
 const fam = t => {
   if (t.dataset.act) return 'act:' + t.dataset.act.split(':')[0];
@@ -105,6 +106,7 @@ class Win:
         self.reduced = False
         self.clock_at = None
         self.ctx = None
+        self.in_browser = False     # Linux: the page in a browser, no app channel
 
     def open(self):
         if self.page:
@@ -120,6 +122,8 @@ class Win:
             p.clock.install(time=self.clock_at)
         html = PAGE.read_text(encoding="utf-8")
         p.route(URL, lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=html))
+        if self.in_browser:
+            p.add_init_script("window.__inBrowser = true;")
         p.add_init_script(INIT)
         if self.engine == "chromium":
             self.cdp = self.ctx.new_cdp_session(p)

@@ -74,6 +74,15 @@ jobs:
       - name: Boards moving between computers, two boards on one computer
         if: runner.arch != 'ARM64'   # no Google Chrome for Linux on ARM
         run: python tests/boards.py
+      - name: The window in this OS's own web view (WKWebView, WebView2) - docs/COMPANION_WINDOW.md
+        if: runner.os != 'Linux'
+        run: python tests/window_real.py
+      - name: The window in the browser, from the real app (Linux has no native window)
+        if: runner.os == 'Linux'
+        run: |
+          Xvfb :98 -screen 0 1280x800x24 &
+          sleep 1
+          DISPLAY=:98 python tests/linux/window_browser.py ./target/release/hidfi-companion
       - name: Real X11 screen capture + encode (virtual display)
         if: runner.os == 'Linux'
         run: |

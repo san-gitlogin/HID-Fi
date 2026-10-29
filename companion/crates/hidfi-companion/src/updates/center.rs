@@ -36,10 +36,14 @@ pub enum CompUpd {
     Downloading {
         to: String,
     },
-    /// Checked against the signed manifest; opens when the person asks.
+    /// Checked against the signed manifest; installed when the person asks.
     Ready {
         to: String,
         path: PathBuf,
+    },
+    /// Put in place of this app and started; it takes over (handover.rs).
+    Installing {
+        to: String,
     },
     Failed {
         why: String,
@@ -104,6 +108,9 @@ pub type CableFn = dyn Fn(CablePlan, &str, Option<(&dyn BoardLink, &str)>, &[u8]
     + Send
     + Sync;
 
+/// Installs the checked installer and starts it; Err says why not.
+pub type InstallFn = dyn Fn(&Path) -> Result<(), String> + Send + Sync;
+
 pub struct CenterEnv {
     pub fetch: Arc<dyn Fetch>,
     /// Status for any board; signed requests only for a paired one (`paired`).
@@ -111,7 +118,9 @@ pub struct CenterEnv {
     pub relay: Arc<dyn RelayStarter>,
     pub cable: Arc<CableFn>,
     pub com_ports: Arc<dyn Fn() -> Vec<ComPort> + Send + Sync>,
-    pub open: Arc<dyn Fn(&Path) + Send + Sync>,
+    /// Install the checked installer and start it; Err says why not (the
+    /// installer has then been opened for the person instead).
+    pub install: Arc<InstallFn>,
     pub source: String,
     pub dir: PathBuf,
     pub this_version: String,
@@ -279,7 +288,27 @@ fn run(
         } else {
             Duration::from_secs(2)
         };
-        match rx.recv_timeout(wait) {
+        // Test builds only (feature "test-ota-key", which also trusts the TEST
+        // key): HIDFI_TEST_AUTO_UPDATE=1 presses Download, then Install and
+        // restart, as soon as they are offered - so the update of the app itself
+        // runs end to end without a person (companion/tests/self_update_mac.py).
+        #[cfg(feature = "test-ota-key")]
+        let auto = if std::env::var_os("HIDFI_TEST_AUTO_UPDATE").is_some() {
+            match &view.companion {
+                CompUpd::Available { .. } => Some(UpdCmd::GetCompanion),
+                CompUpd::Ready { .. } => Some(UpdCmd::OpenInstaller),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        #[cfg(not(feature = "test-ota-key"))]
+        let auto: Option<UpdCmd> = None;
+        let got = match auto {
+            Some(c) => Ok(c),
+            None => rx.recv_timeout(wait),
+        };
+        match got {
             Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {}
             Ok(UpdCmd::CheckNow) => next_release = env.clock.now(),
@@ -412,10 +441,20 @@ fn run(
                 });
             }
             Ok(UpdCmd::OpenInstaller) => {
-                if let CompUpd::Ready { path, .. } =
-                    &*comp.lock().unwrap_or_else(|e| e.into_inner())
-                {
-                    (env.open)(path);
+                let ready = match &*comp.lock().unwrap_or_else(|e| e.into_inner()) {
+                    CompUpd::Ready { to, path } => Some((to.clone(), path.clone())),
+                    _ => None,
+                };
+                if let Some((to, path)) = ready {
+                    *comp.lock().unwrap_or_else(|e| e.into_inner()) =
+                        CompUpd::Installing { to: to.clone() };
+                    let (install, c) = (env.install.clone(), comp.clone());
+                    std::thread::spawn(move || {
+                        if let Err(why) = install(&path) {
+                            log::warn!("Companion {to}: {why}");
+                            *c.lock().unwrap_or_else(|e| e.into_inner()) = CompUpd::Failed { why };
+                        }
+                    });
                 }
             }
         }
@@ -429,7 +468,7 @@ pub struct UpdatesSetup {
     pub relay: Arc<dyn RelayStarter>,
     pub cable: Arc<CableFn>,
     pub com_ports: Arc<dyn Fn() -> Vec<ComPort> + Send + Sync>,
-    pub open: Arc<dyn Fn(&Path) + Send + Sync>,
+    pub install: Arc<InstallFn>,
     pub source: String,
     pub this_version: String,
     pub trusted: Vec<[u8; 65]>,
@@ -447,7 +486,13 @@ impl UpdatesSetup {
                 real::cable_job(plan, mac, link, img, table, journal, to, sh)
             }),
             com_ports: Arc::new(real::com_ports),
-            open: Arc::new(open_path),
+            install: Arc::new(|p: &Path| {
+                super::install::install_and_restart(p).map_err(|why| {
+                    // The person can still install it by hand.
+                    open_path(p);
+                    format!("{why}. The installer is open: install it from there")
+                })
+            }),
             source: std::env::var("HIDFI_RELEASES")
                 .ok()
                 .filter(|s| s.ends_with('/'))
@@ -465,7 +510,7 @@ impl UpdatesSetup {
             relay: self.relay,
             cable: self.cable,
             com_ports: self.com_ports,
-            open: self.open,
+            install: self.install,
             source: self.source,
             dir,
             this_version: self.this_version,
@@ -475,8 +520,8 @@ impl UpdatesSetup {
     }
 }
 
-/// Opens the downloaded installer with the system (Finder / Explorer / xdg-open):
-/// the person installs it; nothing runs by itself.
+/// Opens the downloaded installer with the system (Finder / Explorer / xdg-open),
+/// when installing it in place could not be done.
 fn open_path(p: &Path) {
     let p = p.as_os_str();
     #[cfg(target_os = "macos")]

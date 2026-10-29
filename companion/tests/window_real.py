@@ -47,8 +47,10 @@ for name, p in (("at the window's size", p1), ("at its narrowest", p2)):
           f"slowest {max((f['ms'] for f in fits), default=0)} ms")
 check("a click selects the card", p1.get("selected") == 1, p1.get("selected"))
 check("Details opens", p1.get("open") is True)
-check("copying works in this web view", str(p1.get("toast", "")).startswith("Copied DC:B4:D9:"), p1.get("toast"))
-check("the click reached the app, by id", rep.get("acts") == ["act:open:DCB4D909F7C8"], rep.get("acts"))
+check("copying asks the app to copy (no focus rules apply)", str(p1.get("toast", "")).startswith("Copied DC:B4:D9:"),
+      p1.get("toast"))
+check("the copy and the click reached the app", rep.get("acts") == ["copy:DC:B4:D9:09:F7:C8", "act:open:DCB4D909F7C8"],
+      rep.get("acts"))
 check("fifty boards draw in under 40 ms", p1.get("fifty_first", 99) < 40, f"{p1.get('fifty_first')} ms")
 check("and update in under 12 ms", p1.get("fifty_update_worst", 99) < 12, f"worst {p1.get('fifty_update_worst')} ms")
 sys.exit(0 if ok else 1)

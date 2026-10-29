@@ -89,4 +89,7 @@ HIDFI_REAL_SCREEN=1 ./target/release/examples/serve 1920 1080 30 > /tmp/serve.js
 for i in $(seq 1 40); do [ -s /tmp/serve.json ] && break; sleep 0.25; done
 python3 tests/linux/view_e2e.py /tmp/serve.json; rc=$?
 grep -E "INFO|WARN|ERROR" /tmp/serve.log | tail -6
+
+step "the window, in the browser, from the real app (docs/COMPANION_WINDOW.md)"
+python3 tests/linux/window_browser.py ./target/release/hidfi-companion || rc=1
 exit $rc

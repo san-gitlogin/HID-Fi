@@ -24,6 +24,23 @@ use hidfi_companion::store::Store;
 use std::sync::Arc;
 use std::time::Duration;
 
+/// This computer's USB. Test builds only (feature "test-ota-key"):
+/// HIDFI_TEST_NO_USB sees no board, so a test copy of the app never asks a real
+/// board on this desk to pair (companion/tests/self_update_mac.py).
+fn usb() -> Box<dyn hidfi_agent::env::UsbList> {
+    #[cfg(feature = "test-ota-key")]
+    if std::env::var_os("HIDFI_TEST_NO_USB").is_some() {
+        struct NoUsb;
+        impl hidfi_agent::env::UsbList for NoUsb {
+            fn list(&self) -> Vec<hidfi_core::discovery::UsbDevice> {
+                Vec::new()
+            }
+        }
+        return Box::new(NoUsb);
+    }
+    Box::new(NusbList)
+}
+
 fn main() {
     // Which version is installed - for a person, a script or a support request.
     // A diagnostic, run as the app so it has the app's permissions:
@@ -95,6 +112,8 @@ fn main() {
         }
     };
     hidfi_companion::handover::announce(store.dir());
+    // This copy runs: what an update replaced can go.
+    hidfi_companion::updates::install::clean_old();
     log::info!("starting, version {}", env!("CARGO_PKG_VERSION"));
     std::panic::set_hook(Box::new(|p| log::error!("panic: {p}")));
 
@@ -107,7 +126,7 @@ fn main() {
     }
 
     let env = Env {
-        usb: Box::new(NusbList),
+        usb: usb(),
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
         browse: Box::new(MdnsBrowse::start()),
         source: Arc::new(service::real_source),

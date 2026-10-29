@@ -7,6 +7,29 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+### Companion: a card per board
+
+- **The Companion's window shows each board as a card**, in a grid that fits
+  any window: whether it is online, live (someone watching through it), needs
+  you, or offline; how quickly it answers, in ms, coloured good, fair or poor;
+  its address, version, viewers; the pairing code in its own card; its update
+  in one panel with its size and what is new. **Details** opens more in place
+  (MAC, address, round trip, last answer, pairing), each value copyable.
+- **Select one board or several** (click, Cmd/Ctrl, Shift, the box, or the
+  keyboard) and open, update, pair again or forget them together - only what
+  every selected board can do. From four boards, a filter.
+- **Paired boards that are not plugged in** show as offline, and can be
+  forgotten from here.
+- **The Companion installs its own update and restarts**, in its own place,
+  keeping pairings and settings; if it cannot, it opens the installer and says
+  why.
+- **On Linux the same window opens in the browser** from the tray ("Open
+  window").
+- A click in the window can no longer land on another button when a board
+  appears at that moment: buttons are found by what they do, not where they are.
+
 ## v4.1 - 2026-10-29
 
 Security: the board's web server could be crashed by anyone on its WiFi or on

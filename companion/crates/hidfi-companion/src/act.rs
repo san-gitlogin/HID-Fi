@@ -20,6 +20,30 @@ pub fn open(target: &str) {
     }
 }
 
+/// Puts `text` on the clipboard (the window's copy buttons): the system's own
+/// tool, fed on stdin - nothing is parsed by a shell.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+pub fn copy(text: &str) {
+    use std::io::Write;
+    let tool = if cfg!(target_os = "macos") {
+        "pbcopy"
+    } else {
+        "clip"
+    };
+    let r = std::process::Command::new(tool)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut c| {
+            if let Some(mut s) = c.stdin.take() {
+                s.write_all(text.as_bytes())?;
+            }
+            c.wait().map(|_| ())
+        });
+    if let Err(e) = r {
+        log::warn!("could not copy: {e}");
+    }
+}
+
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SCREEN_RECORDING_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";

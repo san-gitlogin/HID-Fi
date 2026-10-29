@@ -223,6 +223,7 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                     handle.health.set_active(false);
                     auto.dismissed(&view);
                 }
+                Click::Copy(t) => act::copy(&t),
                 // By id, in the model of this moment: a button that is gone does nothing.
                 Click::Action(id) => match window::model(&view).action(&id) {
                     Some(a) => act.push(a.clone()),

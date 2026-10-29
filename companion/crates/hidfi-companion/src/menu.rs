@@ -577,9 +577,12 @@ pub fn companion_update(c: &CompUpd, lines: &mut Vec<String>, actions: &mut Vec<
         CompUpd::Ready { to, .. } => {
             lines.push(format!("HID-Fi Companion {to} is downloaded and checked"));
             actions.push((
-                format!("Install Companion {to}…"),
+                format!("Install {to} and restart"),
                 Action::Update(UpdCmd::OpenInstaller),
             ));
+        }
+        CompUpd::Installing { to } => {
+            lines.push(format!("Installing HID-Fi Companion {to} and restarting…"))
         }
         CompUpd::Failed { why } => {
             lines.push(format!("The Companion update did not download: {why}"))

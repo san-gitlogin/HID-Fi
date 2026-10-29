@@ -13,6 +13,8 @@ use wry::{WebView, WebViewBuilder};
 #[derive(Debug, PartialEq, Eq)]
 pub enum Click {
     Action(String),
+    /// Put this on the clipboard (a MAC, an address).
+    Copy(String),
     Close,
 }
 
@@ -20,6 +22,11 @@ pub enum Click {
 pub fn parse(msg: &str) -> Option<Click> {
     if msg == "close" {
         return Some(Click::Close);
+    }
+    if let Some(t) = msg.strip_prefix("copy:") {
+        // What the page copies is a MAC or an address: short, plain.
+        return (!t.is_empty() && t.len() <= 64 && t.bytes().all(|b| b.is_ascii_graphic()))
+            .then(|| Click::Copy(t.to_string()));
     }
     let id = msg.strip_prefix("act:")?;
     // Ids are short, plain ASCII (`open:DCB4D90A0BB8`).
@@ -94,6 +101,18 @@ mod tests {
         );
         assert_eq!(parse("close"), Some(Click::Close));
         // A position (the old protocol), junk, or something long: nothing.
+        assert_eq!(
+            parse("copy:DC:B4:D9:0A:0B:B8"),
+            Some(Click::Copy("DC:B4:D9:0A:0B:B8".into()))
+        );
+        assert_eq!(
+            parse("copy:192.168.0.104"),
+            Some(Click::Copy("192.168.0.104".into()))
+        );
+        let long = format!("copy:{}", "a".repeat(65));
+        for bad in ["copy:", "copy:a b", "copy:$(rm -rf)\n", long.as_str()] {
+            assert_eq!(parse(bad), None, "{bad}");
+        }
         for bad in [
             "act:",
             "act:<script>",

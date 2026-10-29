@@ -59,7 +59,10 @@ adding a login item - for development and tests.
 | `tests/open_dashboard.py` | the menu's Open the dashboard page in Chrome: goes to the board, prefers its own name, explains (and opens the setting) when the browser is kept off the network |
 | `tests/boards.py` | two board models + the real service + Chrome: a board paired with another (now off) computer offered here, both pair and watch, unplug one (its viewers end, the other plays), replug (no new pairing), one removes this computer (only it re-pairs) |
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
-| `tests/panel_review.py` | the app's window in every state: fits, nothing cut off, each step says what to do (`cargo run --example panel_states` first) |
+| `tests/ui/companion` (repo root, `python tests/run.py --tier ui`) | the window page in Chromium and WebKit: every state the app's model produces (`tests/golden/companion_window_states.tsv`, regenerate with `cargo run --example window_states`), at every width, every button, selection, keyboard, filter, timing; its own coverage contract (docs/COMPANION_WINDOW.md) |
+| `tests/window_real.py` | the window in this OS's own web view (WKWebView / WebView2): every state at two sizes, clicks, copy, fifty boards against the clock |
+| `tests/linux/window_browser.py` | Linux: the real app serves the window to a browser; it draws, the state long-polls, a click arrives, another site's POST is refused |
+| `tests/self_update_mac.py` | the Companion updating itself on a Mac: finds the release, downloads and checks it, installs in place, the new one takes over, the old is removed, the app's folder untouched |
 | `tests/board_pages.py` | the REAL board: 8 dashboard pages at once, the 9th told the board is full (`HIDFI_PIN`) |
 | `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors |
 | `tests/multi_monitor_mac.py` | REAL monitors on a one-screen Mac: `tools/vdisplay` makes 3 virtual displays; the real app, board and Chrome show each at its shape, two at once, and an unplugged one falls back (`HIDFI_PIN`) |

@@ -294,7 +294,8 @@ permission prompts nobody warned about; Screen tab with no app = just a link
   into a replaced bundle (macOS); re-ask pairing after a board restart;
   unreachable addresses logged with the reason; per-OS cause + settings
   button when unreachable; later steps show only their title; render check
-  for all 12 window states (panel_review.py); per-OS guidance on the
+  for all 12 window states (panel_review.py, since replaced by the card window's
+  tests - docs/COMPANION_WINDOW.md); per-OS guidance on the
   dashboard (what each OS asks; where the app lives).
 - Linux (VM on the SSD): companion/tests/linux/run.sh passes - build, unit
   tests, app without tray, real X11 + OpenH264 + WebRTC on two monitors,

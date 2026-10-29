@@ -110,10 +110,53 @@ in the browser from the tray.
 
 ## Build order
 
-1. [ ] Data: latency probe, per-board viewers, remembered boards, `window::model`
+1. [x] Data: latency probe, per-board viewers, remembered boards, `window::model`
        with action ids; unit tests.
-2. [ ] The page: cards, grid, details, selection, bulk bar, filter; Playwright
+2. [x] The page: cards, grid, details, selection, bulk bar, filter; Playwright
        tests in both engines; coverage contract.
-3. [ ] Wiring: wry IPC by id (macOS, Windows); the loopback page (Linux).
-4. [ ] Real-engine self-check; CI on three OSes.
-5. [ ] Release and the installed Companion's update, on the owner's Mac.
+3. [x] Wiring: wry IPC by id (macOS, Windows); the loopback page (Linux).
+4. [x] Real-engine self-check; CI on three OSes (workflow steps added; runs on
+       the next push).
+5. [~] Release, and the installed Companion's update on the owner's Mac.
+
+## Verified (2026-10-29)
+
+- **The real window on this Mac** (WKWebView), with DA1A2C and 09F7C8: both
+  cards online with their round trips; `--window-check`: all 17 states fit at
+  920 and 380 px, no script error, the slowest draw 9 ms, fifty boards 6 ms to
+  draw and 3 ms to update, a click selects, Details opens, copy and click reach
+  the app (`companion/tests/window_real.py`, 14 checks).
+- **The page in Chromium and WebKit:** 64 scenarios each (128 tests, 15 s in
+  parallel), contract: 42 control kinds touched, 26 functions run. Mutation
+  check: removing the `[hidden]` rule, skipping the Forget confirm, or
+  rebuilding cards on update each fails a scenario. Found and fixed by them: the
+  bulk bar ignored the update panel's and Details' buttons; WebKit does not
+  focus a clicked button (the dialog lost its way back); buttons under 34 px at
+  380 px; a confirm button with no name until opened.
+- **Latency:** the board's round trip on the owner's network swings 6-103 ms (a
+  board in WiFi modem sleep), the whole answer about 10 ms more - so the number
+  shown is the connection's round trip, the answer kept for Details.
+- **The Companion updating itself** (macOS, `companion/tests/self_update_mac.py`):
+  an installed copy in a folder of its own finds a newer release, downloads and
+  checks it, installs in place, the new one takes over in 8 s, the old one
+  quits, what it replaced and the disk image are gone, the signature holds, the
+  app's folder untouched. Found on the way: `open` starts an app without the
+  caller's environment - a copy with its own folder would have come back on the
+  owner's; the app's HIDFI_* settings now go with it (`open --env`).
+- **Copy:** WebKit allows the page's copy only with focus and a person's
+  gesture (failed 1 run in 2 under test); in the app's own window the app now
+  copies (`pbcopy` / `clip`), proven to the clipboard (and the owner's
+  clipboard put back); in a browser (Linux) the browser's own clipboard.
+- **Linux:** the routes (token, Host, Origin, long poll) tested through the
+  real server; the VM run builds and passes 98 of 99 Rust tests - the golden
+  file is macOS-worded (now exact on macOS, same states elsewhere).
+
+## Open: the macOS app's signature
+
+The released app is signed ad hoc: macOS knows it only by its code hash, so
+each new version is a stranger - Screen Recording and System Audio Recording
+must be allowed again after every update, and a browser download is refused by
+Gatekeeper. Two ways out, the owner's choice: an Apple Developer ID (paid;
+also no Gatekeeper warning), or a HID-Fi signing certificate of the owner's own,
+kept on this Mac like the release keys (permissions survive updates from the
+first version signed with it; the warning stays).

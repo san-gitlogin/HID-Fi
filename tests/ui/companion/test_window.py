@@ -47,6 +47,18 @@ def _clock(win, states):
     win.clock_at = (states["one-online"]["boards"][0]["latency"]["last_ok"] + 3000) / 1000
 
 
+@given("the window is open in a browser, not the app")
+def _browser(win):
+    win.in_browser = True
+
+
+@then(parsers.parse('the clipboard holds "{text}" where the browser lets a test read it'))
+def _clipboard(win, text):
+    if win.engine != "chromium":
+        return      # WebKit gives a test no clipboard reading permission; the note above is its proof
+    assert win.page.evaluate("navigator.clipboard.readText()") == text
+
+
 @given("the person asked for reduced motion")
 def _reduced(win):
     win.reduced = True

@@ -464,7 +464,10 @@ function doBulk(kind,from){
     ["Their dashboards will not show this screen until you pair again:",cs.map(c=>c.name)],"Forget",go,from);
   else go();
 }
-async function copy(t){let ok=false;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(t);ok=true;}}catch(e){}
+async function copy(t){let ok=false;
+  // In the app's own window the app copies (no focus or gesture rules apply).
+  if(window.ipc&&window.ipc.postMessage){send("copy:"+t);toast("Copied "+t);return;}
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(t);ok=true;}}catch(e){}
   if(!ok){const a=el("textarea");a.value=t;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();
     try{ok=document.execCommand("copy");}catch(e){}a.remove();}
   toast(ok?"Copied "+t:"Could not copy");}
