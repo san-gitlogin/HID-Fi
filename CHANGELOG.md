@@ -7,7 +7,11 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.2 - 2026-10-29
+
+The firmware is unchanged apart from its number: this release is the
+Companion's. Updating the board is optional - and the first update from a
+signed release that a board can take over the air.
 
 ### Companion: a card per board
 
@@ -29,6 +33,11 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   window").
 - A click in the window can no longer land on another button when a board
   appears at that moment: buttons are found by what they do, not where they are.
+- **macOS keeps the Companion's permissions across updates** from this version:
+  the app is signed with HID-Fi's own certificate. Updating from 4.1 asks for
+  Screen Recording (and System Audio Recording) once more, then never again.
+- Windows: a program the Companion starts (the browser, the new version) no
+  longer holds the app's network connections open.
 
 ## v4.1 - 2026-10-29
 
