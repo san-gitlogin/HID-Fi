@@ -87,5 +87,15 @@ only: the self-update asks by system, and Linux ships two architectures under
 one name (docs/OTA.md, open items). Each workflow `SHA256SUMS-<os>` carries a
 line for itself hashed while empty - check the other lines.
 
+`v4.2` (2026-10-29): the Companion's card window and Install and restart; the
+first release whose Mac app carries HID-Fi's certificate
+(`tools/sign_mac_release.sh` after downloading the workflow's files, before
+`make_release.sh`). Firmware unchanged apart from its number. Two things met on
+the way: GitHub refused an artifact download once ("Egress is over the account
+limit") - download the missing ones one at a time (`gh run download <id> -n
+<name>`), a minute apart; and a known timing test (two displays encode in
+parallel) failed once on the macOS runner - re-run the failed job
+(`gh run rerun <id> --failed`) rather than the whole workflow.
+
 Do not name a working branch like a tag (`v4.0.2`): `git push origin v4.0.2`
 then refuses as ambiguous. Push `refs/tags/vX.Y` explicitly if one exists.
