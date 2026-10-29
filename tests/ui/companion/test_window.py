@@ -68,6 +68,12 @@ def _reduced(win):
 
 @when(parsers.re(r'the app shows "(?P<state>[^"]+)"'))
 def _show(win, state):
+    p = win.open()
+    # Which cards started their entry animation (a slow machine may finish it
+    # before a test looks).
+    p.evaluate("""() => { if (!window.__anim) { window.__anim = [];
+        document.addEventListener('animationstart', e => e.target.dataset && e.target.dataset.mac
+          && window.__anim.push(e.target.dataset.mac), true); } }""")
     win.show(state)
     win.page.wait_for_timeout(30)
 
@@ -470,7 +476,8 @@ def _kept(win):
 
 @then(parsers.parse('the card "{name}" arrives with an animation'))
 def _arrives(win, name):
-    assert "enter" in card(win, name).get_attribute("class").split()
+    mac = card(win, name).get_attribute("data-mac")
+    win.page.wait_for_function("m => (window.__anim || []).includes(m)", arg=mac, timeout=3000)
 
 
 # ---- then: filter ----

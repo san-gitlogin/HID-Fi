@@ -380,6 +380,7 @@ Feature: The Companion's window - a card per board
 
   # ---- fast, accessible, calm ----
 
+  @timing
   Scenario: Fifty boards draw and update quickly
     Given the window is 1280 px wide
     When the app shows "fifty"

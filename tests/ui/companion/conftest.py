@@ -119,7 +119,9 @@ class Win:
         p.on("pageerror", lambda e: self.errors.append(str(e)))
         p.on("console", lambda m: m.type == "error" and self.errors.append(m.text))
         if self.clock_at is not None:
+            # Paused: a slow machine must not add seconds of its own ("9 s ago").
             p.clock.install(time=self.clock_at)
+            p.clock.pause_at(self.clock_at)
         html = PAGE.read_text(encoding="utf-8")
         p.route(URL, lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=html))
         if self.in_browser:
