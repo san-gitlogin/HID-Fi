@@ -33,6 +33,7 @@ pub fn run(args: &[String]) {
         }),
         Arc::new(move |why| e.lock().unwrap_or_else(|e| e.into_inner()).push(why)),
     );
+    let opened = Instant::now();
     let _cap = match cap {
         Ok(c) => c,
         Err(e) => {
@@ -40,11 +41,21 @@ pub fn run(args: &[String]) {
             return;
         }
     };
-    let _ = writeln!(f, "{}", serde_json::json!({"started": true}));
+    let _ = writeln!(
+        f,
+        "{}",
+        serde_json::json!({"started": true, "path": path()})
+    );
+    let mut first_ms: Option<u128> = None;
     for _ in 0..secs {
         std::thread::sleep(Duration::from_secs(1));
         let v: Vec<(Chunk, Instant)> =
             std::mem::take(&mut *got.lock().unwrap_or_else(|e| e.into_inner()));
+        if first_ms.is_none() {
+            first_ms = v
+                .first()
+                .map(|(_, got)| got.duration_since(opened).as_millis());
+        }
         let (rate, ch) = v
             .first()
             .map(|(c, _)| (c.rate, c.channels))
@@ -76,7 +87,7 @@ pub fn run(args: &[String]) {
             f,
             "{}",
             serde_json::json!({"chunks": v.len(), "rate": rate, "channels": ch, "rms": rms, "freq": freq.round(),
-                               "age_ms_max": age, "frames_min": frames.iter().min(), "frames_max": frames.iter().max(),
+                               "age_ms_max": age, "first_chunk_ms": first_ms, "frames_min": frames.iter().min(), "frames_max": frames.iter().max(),
                                "ended": ended_log.lock().unwrap_or_else(|e| e.into_inner()).clone(),
                                "delivered": diag().0, "unreadable": diag().1, "last_format": diag().2})
         );
@@ -106,5 +117,26 @@ fn diag() -> (usize, usize, String) {
     #[cfg(not(target_os = "macos"))]
     {
         (0, 0, String::new())
+    }
+}
+
+/// Which capture the system sound uses here, and why (macOS: the tap or ScreenCaptureKit).
+fn path() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        format!(
+            "tap permission: {:?}; build: {}; last refusal: {}",
+            hidfi_stream::tap_audio::permission(),
+            hidfi_stream::tap_audio::LAST_BUILD
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+            hidfi_stream::LAST_TAP_REFUSAL
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        String::new()
     }
 }

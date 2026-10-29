@@ -29,11 +29,17 @@ pub mod sck;
 pub mod sck_audio;
 pub mod server;
 #[cfg(target_os = "macos")]
+pub mod tap_audio;
+#[cfg(target_os = "macos")]
 pub mod vt;
 #[cfg(windows)]
 pub mod wasapi;
 #[cfg(target_os = "linux")]
 pub mod x11;
+
+/// Why the last macOS process tap was not used (diagnostics, `--check-sound`).
+#[cfg(target_os = "macos")]
+pub static LAST_TAP_REFUSAL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 /// The computer's own sound or microphone, captured the way this OS allows
 /// (docs/AUDIO.md). An OS without a capture yet says so; the picture carries on.
@@ -44,6 +50,20 @@ pub fn audio_capture(
 ) -> Result<Box<dyn audio::Running>, String> {
     #[cfg(target_os = "macos")]
     {
+        // The system sound through a process tap when allowed (about 10 ms);
+        // otherwise, and for the microphone, ScreenCaptureKit.
+        if i == audio::Input::System {
+            match tap_audio::open(sink.clone(), ended.clone()) {
+                Ok(t) => {
+                    log::info!("sound: capturing through a Core Audio process tap");
+                    return Ok(t);
+                }
+                Err(why) => {
+                    log::info!("sound: ScreenCaptureKit for the system sound ({why})");
+                    *LAST_TAP_REFUSAL.lock().unwrap_or_else(|e| e.into_inner()) = why;
+                }
+            }
+        }
         sck_audio::open(i, sink, ended)
     }
     #[cfg(windows)]

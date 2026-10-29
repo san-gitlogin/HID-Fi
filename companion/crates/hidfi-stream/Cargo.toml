@@ -46,6 +46,11 @@ dispatch2 = "0.3"
 objc2-foundation = "0.3"
 objc2-core-media = "0.3"
 objc2-core-video = "0.3"
+# Sound on macOS 14.2+: a Core Audio process tap (docs/AUDIO.md).
+objc2-core-audio = "0.3.2"
+objc2-core-audio-types = "0.3.2"
+objc2-core-foundation = "0.3"
+libc = "0.2"
 objc2-screen-capture-kit = { version = "0.3", features = ["SCStream", "SCShareableContent", "SCError", "block2", "objc2-core-media", "objc2-core-graphics", "objc2-core-foundation", "dispatch2"] }
 
 [dev-dependencies]

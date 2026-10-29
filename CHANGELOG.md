@@ -57,6 +57,25 @@ the home network it joined. **Reflash every board** once this is released.
   least a date one year after each release (README, SECURITY.md).
 - Releases carry SBOMs (CycloneDX 1.7) for the firmware and the Companion.
 
+### Added: sound
+
+- **The computer's sound comes with its screen** - in the Screen tab, the
+  floating window, watch-only full screen and the wall - with a mute button and a
+  volume slider in every mode (iPhone and iPad: mute only, the phone's buttons set
+  the volume). Opus at 48 kHz stereo, sent ahead of the picture and kept in step
+  with it. Measured: about 50 ms from the Companion to the page; on macOS 14.2+
+  the sound is about 25 ms old when the Companion gets it.
+- **The microphone can come too**, mixed in like a call app - off until you
+  switch it on in the Companion. *Share this computer's sound* and *Share the
+  microphone* are in the Companion's tray and window; the viewer says when either
+  is off or unavailable, and why.
+- One window per computer plays the sound: opening a second one moves it there,
+  never doubles it. Nothing is captured while nobody listens. Changing the
+  output device (headphones, Bluetooth) does not stop the sound; on macOS the
+  sound is taken before the Mac's own volume and mute.
+- macOS asks for *System Audio Recording* (and *Microphone*, when that is
+  shared); Windows and Linux need nothing new.
+
 ### Fixed
 
 - **A double tap on the trackpad under a shared screen zoomed the page.** On

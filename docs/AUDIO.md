@@ -18,7 +18,7 @@ This file is the plan and the progress log, like docs/OTA.md.
 | Lowest latency | `RestrictedLowDelay` (CELT only): 2.5 ms look-ahead; 10 ms frames. Total algorithmic delay 12.5 ms. | opus-pure `Application`, RFC 6716 |
 | Transport | str0m 0.24.1 `enable_opus(enabled, use_red)`: Opus, optionally with RED (RFC 2198) - each packet carries the previous frame too, so one lost WiFi packet costs no gap and no added delay. | `str0m/src/config.rs` |
 | Resampling | `rubato` 5.0.1 (MIT/Apache, pure Rust), only where a device will not give 48 kHz (Windows loopback runs at the mix format). | crates.io |
-| macOS system sound | ScreenCaptureKit: `capturesAudio`, `sampleRate` 48000, `channelCount` 2, `excludesCurrentProcessAudio`; audio of the apps in the filter, before routing to any device - so the output device (speakers, headphones, a virtual device) does not matter. | Apple, SCStreamConfiguration |
+| macOS system sound | Core Audio process tap (macOS 14.2+, `CATapDescription` + aggregate device; *System Audio Recording* permission) - fresher; else ScreenCaptureKit: `capturesAudio`, `sampleRate` 48000, `channelCount` 2, `excludesCurrentProcessAudio`; audio of the apps in the filter, before routing to any device - so the output device (speakers, headphones, a virtual device) does not matter. | Apple, SCStreamConfiguration |
 | macOS microphone | ScreenCaptureKit `captureMicrophone` + `microphoneCaptureDeviceID`, macOS 15+; needs the Microphone permission (and `NSMicrophoneUsageDescription`). | Apple |
 | Windows system sound | WASAPI process loopback, excluding the Companion's own process tree (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`, Windows 10 build 20348+ / Windows 11): every app's sound, whichever device plays it. Older Windows: loopback of the default output device, reopened when the default changes. | Microsoft Learn |
 | Linux system sound | PulseAudio / PipeWire-Pulse: record `@DEFAULT_MONITOR@` with libpulse-simple, loaded at run time (like OpenH264) - no C build; reopened when the default output changes. | freedesktop |
@@ -113,6 +113,22 @@ captured), so the browser keeps them in step.
   buffer is about 60-70 ms old when it arrives (ScreenCaptureKit's own delay).
   macOS refuses a buffer list larger than it asked for (-12737): read with the
   exact size it reports.
+- **macOS 14.2+, a Core Audio process tap first** (`tap_audio.rs`): a global
+  stereo tap of every process but the Companion, read through a private aggregate
+  device on the default output, buffers of 240 frames (5 ms). Measured: a 1 kHz
+  tone at its exact level (0.212 for 0.3), chunks **25 ms old** against
+  ScreenCaptureKit's 60-70 ms. It needs *System Audio Recording* (Privacy &
+  Security), asked once by a probe tap; until it is allowed, or on an older macOS,
+  the Companion falls back to ScreenCaptureKit and says which path it took
+  (`--check-sound` prints it). Real chain with the tap: both tones arrive,
+  Companion 6.8 % CPU.
+  The tap's device only runs while some app plays: the first chunk comes about
+  100 ms after sound starts, and a quiet computer is not a fault. Its clock is
+  one output device; when that output goes away (headphones unplugged, a
+  Bluetooth speaker gone) the tap is built again on the output macOS uses now -
+  checked every 250 ms. Proven by making a temporary device the default output,
+  starting the tap on it and removing it mid-capture: the tap moved to the
+  speakers and the next tone arrived exactly.
 - **The whole chain:** the real Companion app, this Mac's sound, DA1A2C serving
   its dashboard and tickets, real Chrome: both tones arrive at their own
   frequency on the dashboard, sound on by default after the PIN was typed;
