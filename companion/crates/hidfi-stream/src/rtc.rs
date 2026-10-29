@@ -325,7 +325,10 @@ pub fn run(
         Err(e) => return End::Failed(e.to_string()),
     };
     let reader = match socket.try_clone() {
-        Ok(s) => s,
+        Ok(s) => {
+            crate::keep_to_this_process(&s); // Windows makes a clone inheritable
+            s
+        }
         Err(e) => return End::Failed(e.to_string()),
     };
     let reader_stop = stop.clone();

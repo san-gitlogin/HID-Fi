@@ -310,16 +310,38 @@ mod tests {
     }
 
     #[test]
-    fn the_running_program_can_be_moved_aside_on_this_os() {
-        // What Windows allows for a running .exe and every OS for this test's own:
-        // a rename. Copy this test binary, start nothing, prove rename-while-open works.
+    fn a_running_program_is_replaced_while_it_runs() {
+        // What the update does to this app on every OS: a program that is
+        // running (its image mapped, which on Windows forbids overwriting and
+        // deleting it) is moved aside and the new one put in its place.
         let d = tmp();
-        let cur = d.join("prog");
-        std::fs::copy(std::env::current_exe().unwrap(), &cur).unwrap();
-        let f = std::fs::File::open(&cur).unwrap(); // held open, as a running program is
-        std::fs::write(d.join("prog.new"), "new").unwrap();
-        swap_in(&cur, &d.join("prog.new")).unwrap();
-        drop(f);
-        assert_eq!(std::fs::read_to_string(&cur).unwrap(), "new");
+        let (src, args): (&str, &[&str]) = if cfg!(windows) {
+            (r"C:\Windows\System32\PING.EXE", &["-n", "30", "127.0.0.1"])
+        } else {
+            ("/bin/sleep", &["30"])
+        };
+        let cur = d.join(if cfg!(windows) { "prog.exe" } else { "prog" });
+        std::fs::copy(src, &cur).unwrap();
+        let mut running = Command::new(&cur)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(running.try_wait().unwrap().is_none(), "it runs");
+        let staged = sibling(&cur, ".new");
+        std::fs::write(&staged, "the new version").unwrap();
+        swap_in(&cur, &staged).unwrap();
+        assert_eq!(std::fs::read_to_string(&cur).unwrap(), "the new version");
+        assert!(
+            sibling(&cur, ".old").exists(),
+            "the running one, moved aside"
+        );
+        assert!(
+            running.try_wait().unwrap().is_none(),
+            "and it never noticed"
+        );
+        let _ = running.kill();
+        let _ = running.wait();
     }
 }

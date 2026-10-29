@@ -218,7 +218,10 @@ fn serve(c: TcpStream, files: &[(String, Vec<u8>)]) {
     let _ = c.set_read_timeout(Some(Duration::from_secs(20)));
     let _ = c.set_write_timeout(Some(Duration::from_secs(60)));
     let mut rd = BufReader::new(match c.try_clone() {
-        Ok(x) => x,
+        Ok(x) => {
+            hidfi_stream::keep_to_this_process(&x); // Windows makes a clone inheritable
+            x
+        }
         Err(_) => return,
     });
     let mut line = String::new();

@@ -159,7 +159,9 @@ fn serve(
     win: &Win,
 ) -> std::io::Result<()> {
     conn.set_read_timeout(Some(Duration::from_secs(5)))?;
-    let mut r = BufReader::new(conn.try_clone()?);
+    let rd = conn.try_clone()?;
+    hidfi_stream::keep_to_this_process(&rd); // Windows makes a clone inheritable
+    let mut r = BufReader::new(rd);
     let mut line = String::new();
     r.read_line(&mut line)?;
     let (mut host, mut origin, mut len) = (None, None, 0usize);
