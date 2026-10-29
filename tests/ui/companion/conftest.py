@@ -79,7 +79,9 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("engine_name", ENGINES)
 
 
-@pytest.fixture(scope="session")
+# Per module: the browsers close when the window's tests are done, so they never
+# sit beside the dashboard's speed tests that run after them in the same phase.
+@pytest.fixture(scope="module")
 def _browsers():
     out = {}
     yield out

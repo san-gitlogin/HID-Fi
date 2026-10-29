@@ -507,14 +507,26 @@ def _no_filter(win):
 
 # ---- then: fast, accessible, calm ----
 
+def _timed_here(win):
+    # Speed is judged in the engines the window runs in: Chromium (WebView2 on
+    # Windows; Linux's browsers) everywhere, WebKit on macOS. Playwright's Linux
+    # WebKit is another port, software-rendered, that no person runs it in; the
+    # real engines are also timed by companion/tests/window_real.py.
+    import platform
+    if win.engine == "webkit" and platform.system() != "Darwin":
+        pytest.skip("WebKit's speed is judged on macOS, where the window runs in it")
+
+
 @then(parsers.parse("drawing took under {ms:d} ms"))
 def _draw_time(win, ms):
+    _timed_here(win)
     t = win.page.evaluate("__S.lastRender")
     assert t < ms, f"{t:.1f} ms"
 
 
 @then("each update fits in one frame of a 60 Hz screen")
 def _update_time(win):
+    _timed_here(win)
     # 16.7 ms is the whole frame: an update inside it never drops one.
     assert max(win.update_times) < 16.7, [round(t, 1) for t in win.update_times]
 
