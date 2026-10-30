@@ -7,6 +7,28 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.2.1 - 2026-10-30
+
+A fix release for the Companion. The firmware is unchanged apart from its
+number; updating the board is optional.
+
+### Companion
+
+- **The window always comes back.** After the window was minimized (or hidden,
+  or the app hidden with Cmd-H), "Open HID-Fi Companion..." did nothing until
+  the app was quit and started again. It now brings the window to the front
+  from any state, on macOS and Windows.
+- **Opening the app again shows it.** Starting HID-Fi Companion while it already
+  runs - from Applications, Spotlight, Launchpad, the Start menu or a
+  double-click - now shows its window instead of doing nothing. On Linux it
+  opens the window in the browser.
+- **A new release is found even if the computer slept.** The daily look for a
+  release counted only time awake, so a laptop that sleeps at night could hear
+  of a release days late. It now counts time of day, and a board running a
+  newer firmware than any release the app knows of makes it look at once.
+
+---
+
 ## v4.2 - 2026-10-29
 
 The firmware is unchanged apart from its number: this release is the
