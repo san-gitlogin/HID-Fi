@@ -6,6 +6,7 @@ because repository advisories write them by hand and the parser has to read
 what is really out there (AGENTS.md, "Outside facts and dependencies").
 """
 import json
+import re
 import sys
 
 import pytest
@@ -218,6 +219,24 @@ def test_the_real_acknowledgements_are_explained():
         missing = {"reason", "evidence", "date", "revisit"} - set(a)
         assert not missing, f"{gid} lacks {missing}"
         assert len(a["reason"]) > 20, f"{gid}: say why it does not reach HID-Fi"
+
+
+def test_the_dns_cache_overflow_cannot_happen_in_the_pinned_core():
+    """GHSA-ch63-jxm5-vmvf (ESP-IDF <= 5.5.5, lwIP dns_lookup) is acknowledged only
+    because its precondition is absent: it needs CONFIG_LWIP_DNS_MAX_HOST_IP > 1. A
+    core that raises it makes the advisory reach HID-Fi - this fails, and the fix
+    (a core with ESP-IDF >= 5.5.6) comes first."""
+    core = json.loads(dw.DEPS.read_text(encoding="utf-8"))["firmware"]["esp32:esp32"]
+    data = dw.arduino_data_dir()
+    libs = data and data / "packages" / "esp32" / "tools" / "esp32s3-libs" / core
+    if not libs or not libs.is_dir():
+        pytest.skip(f"the ESP32-S3 libraries of core {core} are not installed here")
+    configs = [libs / "sdkconfig", *libs.glob("*/include/sdkconfig.h")]
+    assert len(configs) > 1, f"no per-variant sdkconfig.h under {libs}"
+    for f in configs:
+        m = re.search(r"CONFIG_LWIP_DNS_MAX_HOST_IP[ =](\d+)", f.read_text(encoding="utf-8"))
+        assert m, f"{f}: CONFIG_LWIP_DNS_MAX_HOST_IP not found"
+        assert int(m.group(1)) == 1, f"{f}: CONFIG_LWIP_DNS_MAX_HOST_IP={m.group(1)} - GHSA-ch63-jxm5-vmvf reaches HID-Fi"
 
 
 def test_an_advisory_that_reaches_hidfi_is_never_acknowledged():
