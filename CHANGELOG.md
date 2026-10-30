@@ -7,6 +7,27 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## v4.2.2 - 2026-10-31
+
+A fix release for the Companion on macOS. The firmware is unchanged apart from
+its number; updating the board is optional.
+
+### Companion (macOS)
+
+- **Screen Recording is asked for once, and it sticks.** macOS keeps a
+  permission with the app's signature. After an update that changed it (4.1 to
+  4.2, or a self-built copy replaced by a release), System Settings showed HID-Fi
+  Companion switched on while macOS refused it and kept asking - allowing again
+  changed nothing. The app now clears its own old entries once when that happens,
+  and macOS asks once for the version you run. A permission that works, or a
+  "Don't Allow" you gave, is never touched.
+- **Watching never raises a system dialog.** A phone or browser connecting to the
+  Screen tab asked macOS for Screen Recording each time it tried. Now only your
+  click on Allow Screen Recording does; when someone tries to watch, the
+  Companion's window comes forward once with that button.
+
+---
+
 ## v4.2.1 - 2026-10-30
 
 A fix release for the Companion. The firmware is unchanged apart from its

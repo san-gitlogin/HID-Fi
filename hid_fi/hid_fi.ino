@@ -372,7 +372,7 @@ bool heapWarned = false;
 // FW_SERIES is FW_VERSION's MAJOR.MINOR (tests/static/test_project_rules.py checks).
 #define  FW_SERIES "4.2"
 #ifndef HIDFI_TEST_PATCH
-#define  FW_VERSION "hid_fi_v4.2.1" FW_TEST_SUFFIX
+#define  FW_VERSION "hid_fi_v4.2.2" FW_TEST_SUFFIX
 #else
 // A test build that claims a newer patch of this series (tests/board/test_ota_download.py).
 #define  FW_STR2(x) #x
