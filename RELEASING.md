@@ -107,5 +107,15 @@ excluded; and the release-key board test failed its setup once when the board
 was still restarting from the rollback scenarios before it - `_settle` now
 waits for the board to answer.
 
+`v4.2.2` (2026-10-31): the Companion on macOS asks for Screen Recording once
+and it sticks (a grant kept for an older signature is cleared once); watching
+never raises a system dialog. Firmware number only. Met on the way: the macOS
+runner failed `two_displays_encode_in_parallel_not_one_after_the_other` once
+more (10 and 10 fps against 14 alone on its virtual GPU) and passed on
+`gh run rerun --failed`; after publishing, 09F7C8 could not reach the internet
+at all (plain HTTP to github.com too) while it reached this Mac and DA1A2C, on
+identical WiFi, gateway and DNS, checked the live release - a per-device rule
+on the router, not the release (DA1A2C: "checked: up to date 4.2.2").
+
 Do not name a working branch like a tag (`v4.0.2`): `git push origin v4.0.2`
 then refuses as ambiguous. Push `refs/tags/vX.Y` explicitly if one exists.
