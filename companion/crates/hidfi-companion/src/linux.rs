@@ -290,6 +290,8 @@ pub fn run(handle: Handle, mut state: State, store: Store, first_run: bool) {
     loop {
         let asked = if hidfi_companion::handover::quit_requested() {
             Ok(Ask::Quit)
+        } else if hidfi_companion::handover::show_requested() {
+            Ok(Ask::Window)
         } else {
             rx.recv_timeout(Duration::from_millis(500))
         };

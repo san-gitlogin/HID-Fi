@@ -77,6 +77,12 @@ jobs:
       - name: The window in this OS's own web view (WKWebView, WebView2) - docs/COMPANION_WINDOW.md
         if: runner.os != 'Linux'
         run: python tests/window_real.py
+      - name: The window comes back from every state - minimized, hidden, behind, closed (v4.2 could not)
+        if: runner.os != 'Linux'
+        run: python tests/window_life.py
+      - name: Opening the app again shows its window (then the normal build is put back)
+        if: runner.os != 'Linux'
+        run: python tests/opened_again.py
       - name: The window in the browser, from the real app (Linux has no native window)
         if: runner.os == 'Linux'
         run: |
@@ -135,8 +141,21 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
             if ($errs) { $errs | Format-List; throw "$f does not parse" }
           }
-      - name: Name the build as the installers expect it
+      - name: The app to ship does not trust the TEST key (a test build left in target/release)
+        id: no_test_key
         if: always()
+        shell: python
+        run: |
+          # tests/vectors/ota_v1.json's public TEST key: built in only with the
+          # feature test-ota-key, which tests (opened_again.py) build and replace.
+          import pathlib, sys
+          key = b"0446f73c2faa078cc0ed394029be39afcda7fd03afaa8506813679dc7a659057"
+          app = pathlib.Path("target/release") / ("hidfi-companion.exe" if sys.platform == "win32" else "hidfi-companion")
+          if key in app.read_bytes():
+              sys.exit(f"{app} trusts the public TEST key - it is a test build, never to be shipped")
+          print(f"{app}: no TEST key")
+      - name: Name the build as the installers expect it
+        if: always() && steps.no_test_key.outcome == 'success'
         shell: bash
         run: |
           mkdir -p dist

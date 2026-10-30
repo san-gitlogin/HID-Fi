@@ -3,12 +3,12 @@
 //! service (pairing, heartbeats, screen sharing): the service hands it the
 //! boards it sees and reads back a view.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use hidfi_core::ota::Release;
 use hidfi_flash::update::{Journal, Step};
@@ -140,6 +140,31 @@ pub fn retry_delay(n: u32) -> Duration {
     Duration::from_secs(mins * 60).min(CHECK_EVERY)
 }
 
+/// Is the next look for a release due? Kept in wall-clock time: the monotonic
+/// clock stops while the computer sleeps (macOS, Linux), so "a day" of it was
+/// days of a laptop's life - v4.1 and v4.2 heard of a release only after a day
+/// awake. A clock set back by more than one wait counts as due.
+pub fn release_due(now: SystemTime, next: SystemTime) -> bool {
+    match next.duration_since(now) {
+        Err(_) => true,
+        Ok(left) => left.is_zero() || left > CHECK_EVERY,
+    }
+}
+
+/// A board runs firmware newer than the newest release known here: a release
+/// came out since the last look (the board was updated from another computer,
+/// or by cable). Worth a look now instead of up to a day later.
+pub fn board_ahead(firmware: &str, known: Option<&Release>) -> bool {
+    let Some(known) = known else { return false };
+    match (
+        hidfi_core::ota::parse_version(firmware),
+        hidfi_core::ota::parse_version(&known.version),
+    ) {
+        (Some(b), Some(k)) => b > k,
+        _ => false,
+    }
+}
+
 pub fn journal_path(dir: &Path, mac: &str) -> PathBuf {
     dir.join("updates")
         .join(format!("{}.json", mac.replace(':', "").to_uppercase()))
@@ -175,7 +200,10 @@ fn run(
     let env = Arc::new(env);
     let rel: Arc<Mutex<Rel>> = Arc::default();
     let mut view = UpdView::default();
-    let mut next_release = env.clock.now();
+    let mut next_release = env.clock.wall();
+    // Firmware versions already looked for once (board_ahead): a board ahead of
+    // every release (a development build) must not ask GitHub every loop.
+    let mut looked_for: HashSet<String> = HashSet::new();
     // Failed checks in a row: the next one comes sooner than a day, backing off.
     let failures = Arc::new(std::sync::atomic::AtomicU32::new(0));
     let retry_due: Arc<Mutex<Option<Duration>>> = Arc::default();
@@ -186,8 +214,9 @@ fn run(
     let problem: Arc<Mutex<Option<String>>> = Arc::default();
     loop {
         let now = env.clock.now();
-        if now >= next_release && !checking.load(Ordering::SeqCst) {
-            next_release = now + CHECK_EVERY;
+        let wall = env.clock.wall();
+        if release_due(wall, next_release) && !checking.load(Ordering::SeqCst) {
+            next_release = wall + CHECK_EVERY;
             checking.store(true, Ordering::SeqCst);
             let (e, r, c, p) = (env.clone(), rel.clone(), checking.clone(), problem.clone());
             let (fails, due) = (failures.clone(), retry_due.clone());
@@ -208,7 +237,7 @@ fn run(
             });
         }
         if let Some(d) = retry_due.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            next_release = now + d;
+            next_release = wall + d;
         }
         let here = boards.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let busy = jobs.values().any(|j| j.done_at.is_none());
@@ -245,6 +274,14 @@ fn run(
                 job,
                 resumable: resumable(&env.dir, &b.mac),
             });
+        }
+        for f in out.iter().filter_map(|b| b.firmware.as_deref()) {
+            if board_ahead(f, release.as_ref().map(|r| &r.0)) && looked_for.insert(f.to_string()) {
+                log::info!(
+                    "a board runs {f}, newer than the newest release known here - looking again"
+                );
+                next_release = wall;
+            }
         }
         // A finished job's result stays on screen for a while, then clears.
         for j in jobs.values_mut() {
@@ -311,7 +348,7 @@ fn run(
         match got {
             Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {}
-            Ok(UpdCmd::CheckNow) => next_release = env.clock.now(),
+            Ok(UpdCmd::CheckNow) => next_release = env.clock.wall(),
             Ok(UpdCmd::Cancel(mac)) => {
                 if let Some(j) = jobs.get(&mac) {
                     j.sh.cancel.store(true, Ordering::SeqCst);

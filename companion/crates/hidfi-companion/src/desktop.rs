@@ -2,7 +2,7 @@
 
 use crate::{act, autostart, icons};
 use hidfi_companion::menu::{self, Action, Icon};
-use hidfi_companion::panel::{Click, Panel};
+use hidfi_companion::panel::{self, Click, Panel};
 use hidfi_companion::service::{Cmd, Handle};
 use hidfi_companion::store::{State, Store};
 use hidfi_companion::window;
@@ -161,7 +161,13 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 handle.health.set_active(false);
                 auto.dismissed(&view);
             }
+            // macOS: the app opened again from Finder, Spotlight or Launchpad
+            // while it runs - no second copy starts, the running one is told.
+            Event::Reopen { .. } => want_open = true,
             _ => {}
+        }
+        if hidfi_companion::handover::show_requested() {
+            want_open = true;
         }
 
         if hidfi_companion::handover::quit_requested() {
@@ -244,24 +250,23 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
         let m = menu::model(&view);
         if want_open {
             want_open = false;
-            match panel.as_ref() {
-                Some(p) => p.focus(),
-                None => match Panel::open(target, {
-                    let (tx, wake) = (click_tx.clone(), proxy.clone());
-                    move |c| {
-                        let _ = tx.send(c);
-                        let _ = wake.send_event(());
-                    }
-                }) {
-                    Ok(p) => {
-                        let j = window::model(&view).json.to_string();
-                        p.render(&j);
-                        drawn = Some(j);
-                        panel = Some(p);
-                        handle.health.set_active(true);
-                    }
-                    Err(e) => log::warn!("window: {e}"),
-                },
+            // The same call companion/tests/window_life.py drives on this OS.
+            let was_open = panel.is_some();
+            match panel::show(&mut panel, target, {
+                let (tx, wake) = (click_tx.clone(), proxy.clone());
+                move |c| {
+                    let _ = tx.send(c);
+                    let _ = wake.send_event(());
+                }
+            }) {
+                Ok(p) if !was_open => {
+                    let j = window::model(&view).json.to_string();
+                    p.render(&j);
+                    drawn = Some(j);
+                    handle.health.set_active(true);
+                }
+                Ok(_) => {}
+                Err(e) => log::warn!("window: {e}"),
             }
         }
 

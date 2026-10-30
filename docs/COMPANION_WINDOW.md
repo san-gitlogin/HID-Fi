@@ -151,6 +151,55 @@ in the browser from the tray.
   real server; the VM run builds and passes 98 of 99 Rust tests - the golden
   file is macOS-worded (now exact on macOS, same states elsewhere).
 
+## Fixed after release (2026-10-30): a window that would not come back
+
+The owner minimized the window; from then on "Open HID-Fi Companion..." did
+nothing, and only Quit and start again brought it back. Found while testing the
+v4.2 update on the owner's Mac (running 4.1.0).
+
+- **Cause:** a window that was already open was only focused, and tao's
+  `set_focus` skips a window that is minimized or not visible, on macOS and on
+  Windows. Same for a window ordered out and an app hidden with Cmd-H.
+  `panel::show` now unhides the app (macOS), restores, shows, then focuses.
+- **Opening the app again did nothing either:** a second start logged
+  "already running" and left; on macOS, opening the running app from Finder,
+  Spotlight or Launchpad sends a reopen event, which was ignored. Now both show
+  the window (`show.request`, handover.rs; `Event::Reopen`, desktop.rs).
+- **Why no test saw it:** window_real.py checks what the page draws, in a window
+  it makes itself; nothing ever minimized, hid or reopened the app's window, and
+  nothing started the app twice. `window_life.py` and `opened_again.py` do, each
+  proven to fail on the v4.2 code (minimized, hidden, app hidden; second start,
+  reopen) and pass on the fix.
+- **Found on the way, the same evening:** the 4.1 app did not know 4.2 existed.
+  It looked for a release once a day by the monotonic clock, which stops while
+  the computer sleeps (macOS, Linux) - a release out at 20:40 would have reached
+  this laptop after a day awake. It now counts in time of day (`release_due`), and
+  a board running firmware newer than every release it knows (updated from another
+  computer or by cable) makes it look again at once, once per version
+  (`board_ahead`). Tests drive the update thread with a clock that stands still
+  while the day moves; both fail on the old schedule.
+- `a_running_program_is_replaced_while_it_runs` failed on this Mac before any of
+  this: macOS 15.8.1 kills a copy of /bin/sleep at launch. It now copies its own
+  test program.
+- **Verified 2026-10-30.** macOS (this Mac): window_life 9/9 three runs,
+  opened_again 11/11 twice, window_real 14/14, cargo test 256/256, `tests/run.py`
+  green. Windows 11 VM (x64 build, logged-on desktop): window_life 6 runs, 48/48;
+  opened_again 6/6; window_real 14/14. Linux VM (aarch64): `companion/tests/linux/run.sh`
+  all green, with a new step - a second start makes the running app open its
+  window page (a stand-in xdg-open records it). The owner's Mac updated itself
+  4.1.0 -> 4.2.0 in place (the 4.1 path installs in place too).
+- **Found by running it on Windows:** a new window is the foreground window but
+  tao's `is_focused` reads false (WebView2's child holds the focus): the check
+  asks Windows (`GetForegroundWindow`). And tao's timed wake (`WaitUntil`) was
+  lost on Windows right after a WebView2 window opened - the check then waited
+  for ever, 6 runs out of 6. The app never uses it (it sleeps in `Wait` and is
+  woken by events, as the check now is); a watchdog in the check names the step
+  where a loop stops. Windows' firewall prompt for a new program holds the
+  foreground, as it should: a test machine allows its test programs first.
+- CI refuses to package an app that trusts the TEST key (`no_test_key` step):
+  one build script that stopped early left a test build in place, and only the
+  key check caught it.
+
 ## Open: the macOS app's signature
 
 The released app is signed ad hoc: macOS knows it only by its code hash, so

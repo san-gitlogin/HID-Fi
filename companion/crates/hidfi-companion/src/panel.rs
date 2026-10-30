@@ -80,8 +80,43 @@ impl Panel {
             .evaluate_script(&format!("window.render&&window.render({json})"));
     }
 
-    pub fn focus(&self) {
+    /// To the front, from whatever state a person left it in. tao's set_focus
+    /// alone skips a window that is minimized or hidden (macOS and Windows) -
+    /// in v4.1 and v4.2 Open then did nothing until the app was quit.
+    pub fn bring_forward<T: 'static>(&self, target: &EventLoopWindowTarget<T>) {
+        #[cfg(target_os = "macos")]
+        {
+            // Cmd-H hid the whole app: its windows come back only with it.
+            use tao::platform::macos::EventLoopWindowTargetExtMacOS;
+            target.show_application();
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = target;
+        if self.window.is_minimized() {
+            self.window.set_minimized(false);
+        }
+        self.window.set_visible(true);
         self.window.set_focus();
+    }
+
+    pub fn window(&self) -> &Window {
+        &self.window
+    }
+}
+
+/// The window, asked for ("Open HID-Fi Companion...", the app opened again,
+/// something new to do): built if there is none, else brought forward.
+pub fn show<'a, T: 'static>(
+    panel: &'a mut Option<Panel>,
+    target: &EventLoopWindowTarget<T>,
+    clicks: impl Fn(Click) + 'static,
+) -> Result<&'a Panel, String> {
+    match panel {
+        Some(p) => {
+            p.bring_forward(target);
+            Ok(p)
+        }
+        None => Ok(panel.insert(Panel::open(target, clicks)?)),
     }
 }
 

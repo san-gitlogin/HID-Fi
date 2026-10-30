@@ -857,3 +857,177 @@ fn a_failed_release_check_is_retried_soon_and_backs_off() {
     );
     assert!(retry_delay(u32::MAX) <= CHECK_EVERY);
 }
+
+// ---- when to look for a release -----------------------------------------------------------
+// v4.1 and v4.2 looked once a day by the monotonic clock, which stops while the
+// computer sleeps: a release out in the evening reached a laptop only after a
+// day awake. And a board updated elsewhere to firmware newer than any release
+// the app knew of was shown as "up to date" until then.
+
+/// Counts the looks at the release (its manifest).
+struct Counting(FakeFetch, AtomicU64);
+impl Fetch for Counting {
+    fn get(&self, url: &str, cap: usize) -> Result<Vec<u8>, String> {
+        if url.ends_with(MANIFEST) {
+            self.1.fetch_add(1, Ordering::SeqCst);
+        }
+        self.0.get(url, cap)
+    }
+}
+
+/// A computer asleep: the monotonic clock stands still, the time of day moves
+/// (the test moves it).
+struct AsleepClock(Mutex<std::time::SystemTime>);
+impl Clock for AsleepClock {
+    fn now(&self) -> Instant {
+        static T: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        *T.get_or_init(Instant::now)
+    }
+    fn sleep(&self, d: Duration) {
+        std::thread::sleep(d)
+    }
+    fn wall(&self) -> std::time::SystemTime {
+        *self.0.lock().unwrap()
+    }
+}
+impl AsleepClock {
+    fn forward(&self, d: Duration) {
+        *self.0.lock().unwrap() += d;
+    }
+    fn back(&self, d: Duration) {
+        *self.0.lock().unwrap() -= d;
+    }
+}
+
+/// The update centre with one board (running `fw`) and the signed 4.1.0 release.
+fn centre(
+    fw: &str,
+) -> (
+    Arc<Counting>,
+    Arc<AsleepClock>,
+    std::sync::mpsc::Sender<super::center::UpdCmd>,
+    PathBuf,
+) {
+    use super::center::{start, BoardHere, CableFn, CenterEnv};
+    let fetch = Arc::new(Counting(source().0, AtomicU64::new(0)));
+    let clock = Arc::new(AsleepClock(Mutex::new(std::time::SystemTime::now())));
+    let b = board();
+    b.0.lock().unwrap().firmware = fw.into();
+    let link: Arc<dyn BoardLink> = Arc::new(b);
+    let cable: Arc<CableFn> = Arc::new(
+        |_: CablePlan,
+         _: &str,
+         _: Option<(&dyn BoardLink, &str)>,
+         _: &[u8],
+         _: &[u8],
+         _: &Path,
+         _: &str,
+         _: &Shared| {},
+    );
+    let dir = std::env::temp_dir().join(format!(
+        "hidfi-centre-{}-{}",
+        std::process::id(),
+        fw.replace('.', "_")
+    ));
+    let tx = start(
+        CenterEnv {
+            fetch: fetch.clone(),
+            link_for: Arc::new(move |_| (link.clone(), true)),
+            relay: Arc::new(FakeRelay(AtomicBool::new(false))),
+            cable,
+            com_ports: Arc::new(Vec::new),
+            install: Arc::new(|_| Ok(())),
+            source: "S/".into(),
+            dir: dir.clone(),
+            this_version: "4.0.4".into(),
+            trusted: vec![test_key()],
+            clock: clock.clone(),
+        },
+        Arc::new(Mutex::new(vec![BoardHere {
+            mac: "DCB4D909F7C8".into(),
+            url: Some("http://192.168.0.101".into()),
+        }])),
+        Box::new(|_| {}),
+    );
+    (fetch, clock, tx, dir)
+}
+
+/// Waits up to `within` for the count to reach `n`; the count then.
+fn looks(f: &Counting, n: u64, within: Duration) -> u64 {
+    let end = Instant::now() + within;
+    while f.1.load(Ordering::SeqCst) < n && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    f.1.load(Ordering::SeqCst)
+}
+
+#[test]
+fn a_release_is_looked_for_after_a_night_asleep() {
+    let (f, clock, _tx, dir) = centre("hid_fi_v4.0.4");
+    assert_eq!(looks(&f, 1, Duration::from_secs(5)), 1, "once at start");
+    clock.forward(Duration::from_secs(3600));
+    assert_eq!(
+        looks(&f, 2, Duration::from_secs(5)),
+        1,
+        "not again an hour later"
+    );
+    // Asleep overnight: the monotonic clock stood still, the day went by.
+    clock.forward(CHECK_EVERY);
+    assert_eq!(
+        looks(&f, 2, Duration::from_secs(5)),
+        2,
+        "a day later, asleep or not"
+    );
+    // The clock set back by days (a dead battery, a manual change): look, then carry on daily.
+    clock.back(CHECK_EVERY * 3);
+    assert_eq!(
+        looks(&f, 3, Duration::from_secs(5)),
+        3,
+        "a clock set back counts as due"
+    );
+    assert_eq!(looks(&f, 4, Duration::from_secs(5)), 3, "and only once");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_board_ahead_of_every_known_release_makes_the_app_look_again_once() {
+    // The board was updated elsewhere to 4.2.0; this app last saw the 4.1.0 release.
+    let (f, _clock, _tx, dir) = centre("hid_fi_v4.2.0");
+    assert!(
+        looks(&f, 2, Duration::from_secs(8)) >= 2,
+        "looked again without waiting a day"
+    );
+    // Still 4.1.0 (a development build ahead of every release): no asking GitHub every loop.
+    assert_eq!(looks(&f, 3, Duration::from_secs(6)), 2, "once per firmware");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ahead_and_due_read_versions_and_times_plainly() {
+    use super::center::{board_ahead, release_due};
+    let r = release().0; // 4.1.0
+    assert!(board_ahead("hid_fi_v4.2", Some(&r)));
+    assert!(board_ahead("hid_fi_v4.1.1", Some(&r)));
+    assert!(
+        !board_ahead("hid_fi_v4.1.0", Some(&r)),
+        "the same is not ahead"
+    );
+    assert!(!board_ahead("hid_fi_v4.0.4", Some(&r)));
+    assert!(
+        !board_ahead("hid_fi_vX", Some(&r)),
+        "unreadable: never guess"
+    );
+    assert!(
+        !board_ahead("hid_fi_v4.2", None),
+        "nothing known: the retry looks already"
+    );
+    let t = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+    assert!(release_due(t, t));
+    assert!(release_due(t + Duration::from_secs(1), t));
+    assert!(!release_due(t, t + Duration::from_secs(60)));
+    assert!(!release_due(t, t + CHECK_EVERY));
+    assert!(
+        release_due(t, t + CHECK_EVERY + Duration::from_secs(1)),
+        "set back"
+    );
+}

@@ -9,7 +9,10 @@
 //! path) and watches for `quit.request`. A second launch that is newer, or the
 //! same version from a different program file (a fresh download), writes that
 //! request; the running app quits the way its own Quit does, and the new one
-//! takes its place. The same version launched again still leaves quietly.
+//! takes its place. The same version launched again leaves too, but first
+//! writes `show.request`: the running app shows its window, so opening the app
+//! a second time (a double-click, the Start menu) answers instead of doing
+//! nothing. (macOS opens a running app by a reopen event instead: desktop.rs.)
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -19,8 +22,10 @@ use std::time::Duration;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 const INFO: &str = "instance.json";
 const REQUEST: &str = "quit.request";
+const SHOW: &str = "show.request";
 
 static QUIT: AtomicBool = AtomicBool::new(false);
+static SHOW_ASKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Instance {
@@ -61,7 +66,9 @@ pub fn announce(dir: &Path) {
         pid: std::process::id(),
         exe: current_exe(),
     };
-    let _ = std::fs::remove_file(dir.join(REQUEST)); // a stale request is not for us
+    // Stale requests are not for us.
+    let _ = std::fs::remove_file(dir.join(REQUEST));
+    let _ = std::fs::remove_file(dir.join(SHOW));
     if let Ok(s) = serde_json::to_string(&me) {
         let _ = std::fs::write(dir.join(INFO), s);
     }
@@ -82,12 +89,22 @@ pub fn ask_to_quit(dir: &Path) -> bool {
     }
 }
 
+/// The same app launched again: ask the running one to show its window.
+pub fn ask_to_show(dir: &Path) -> bool {
+    std::fs::write(dir.join(SHOW), VERSION).is_ok()
+}
+
 /// The running app watches for a request; `wake` nudges its event loop.
 pub fn watch(dir: PathBuf, wake: impl Fn() + Send + 'static) {
     let _ = std::thread::Builder::new()
         .name("handover".into())
         .spawn(move || loop {
             std::thread::sleep(Duration::from_millis(400));
+            if std::fs::remove_file(dir.join(SHOW)).is_ok() {
+                log::info!("HID-Fi Companion was opened again - showing the window");
+                SHOW_ASKED.store(true, Ordering::SeqCst);
+                wake();
+            }
             if dir.join(REQUEST).exists() {
                 let _ = std::fs::remove_file(dir.join(REQUEST));
                 log::info!("a newer HID-Fi Companion asked to take over - quitting");
@@ -100,6 +117,11 @@ pub fn watch(dir: PathBuf, wake: impl Fn() + Send + 'static) {
 
 pub fn quit_requested() -> bool {
     QUIT.load(Ordering::SeqCst)
+}
+
+/// Was the window asked for by a second launch? Answers yes once per request.
+pub fn show_requested() -> bool {
+    SHOW_ASKED.swap(false, Ordering::SeqCst)
 }
 
 fn current_exe() -> String {
@@ -172,6 +194,27 @@ mod tests {
         }
         assert!(woke.load(Ordering::SeqCst) && quit_requested());
         assert!(!dir.join(REQUEST).exists(), "the request is consumed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn opening_the_app_again_shows_the_running_one_once() {
+        let dir = std::env::temp_dir().join(format!("hidfi-show-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let woke = std::sync::Arc::new(AtomicBool::new(false));
+        let w = woke.clone();
+        watch(dir.clone(), move || w.store(true, Ordering::SeqCst));
+        assert!(ask_to_show(&dir));
+        for _ in 0..30 {
+            if woke.load(Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(woke.load(Ordering::SeqCst), "the running app was woken");
+        assert!(show_requested(), "and told to show its window");
+        assert!(!show_requested(), "once per request");
+        assert!(!dir.join(SHOW).exists(), "the request is consumed");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

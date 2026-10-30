@@ -61,10 +61,12 @@ adding a login item - for development and tests.
 | `tests/dashboard_live.py` | the real dashboard Screen tab with live H.264, zoom, float, unplug |
 | `tests/ui/companion` (repo root, `python tests/run.py --tier ui`) | the window page in Chromium and WebKit: every state the app's model produces (`tests/golden/companion_window_states.tsv`, regenerate with `cargo run --example window_states`), at every width, every button, selection, keyboard, filter, timing; its own coverage contract (docs/COMPANION_WINDOW.md) |
 | `tests/window_real.py` | the window in this OS's own web view (WKWebView / WebView2): every state at two sizes, clicks, copy, fifty boards against the clock |
+| `tests/window_life.py` | the window's own life on this OS (macOS, Windows), through the app's code: never opened, minimized, hidden, behind another window, the app hidden (macOS), closed, minimized twice - each time Open brings it to the front |
+| `tests/opened_again.py` | the real app (test build, no USB board, its own folder): started again it shows the running one's window; macOS: opened again from Finder (a reopen event) does the same with no second copy; then the normal build is put back in `target/release` and checked for the TEST key |
 | `tests/linux/window_browser.py` | Linux: the real app serves the window to a browser; it draws, the state long-polls, a click arrives, another site's POST is refused |
 | `tests/self_update_mac.py` | the Companion updating itself on a Mac: finds the release, downloads and checks it, installs in place, the new one takes over, the old is removed, the app's folder untouched |
 | `tests/board_pages.py` | the REAL board: 8 dashboard pages at once, the 9th told the board is full (`HIDFI_PIN`) |
-| `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors |
+| `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors, the window in a browser, a second start opening the running app's window |
 | `tests/multi_monitor_mac.py` | REAL monitors on a one-screen Mac: `tools/vdisplay` makes 3 virtual displays; the real app, board and Chrome show each at its shape, two at once, and an unplugged one falls back (`HIDFI_PIN`) |
 | `tests/hardware.py` | the REAL board and service: pair by code, live picture, four viewers, one PIN (`HIDFI_PIN`) |
 

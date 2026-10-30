@@ -17,6 +17,8 @@ mod logfile;
 mod replaced;
 #[cfg(any(target_os = "macos", windows))]
 mod windowcheck;
+#[cfg(any(target_os = "macos", windows))]
+mod windowlife;
 
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
 use hidfi_companion::service::{self, Env};
@@ -58,6 +60,13 @@ fn main() {
         windowcheck::run(args.get(i + 1).map_or("window-check.json", String::as_str));
         return;
     }
+    // The window's own life (minimized, hidden, behind, closed) and Open each
+    // time, then exit (companion/tests/window_life.py).
+    #[cfg(any(target_os = "macos", windows))]
+    if let Some(i) = args.iter().position(|a| a == "--window-life") {
+        windowlife::run(args.get(i + 1).map_or("window-life.json", String::as_str));
+        return;
+    }
     if std::env::args().any(|a| a == "--version" || a == "-V") {
         println!("HID-Fi Companion {}", hidfi_companion::handover::VERSION);
         return;
@@ -91,7 +100,12 @@ fn main() {
             // fresh download) asks it to quit and takes its place; the same app
             // launched again leaves it be. See handover.rs.
             if !hidfi_companion::handover::ask_to_quit(store.dir()) {
-                log::info!("already running");
+                // A person opening the app again wants to see it.
+                if hidfi_companion::handover::ask_to_show(store.dir()) {
+                    log::info!("already running - asked it to show its window");
+                } else {
+                    log::info!("already running");
+                }
                 return;
             }
             let end = std::time::Instant::now() + Duration::from_secs(10);

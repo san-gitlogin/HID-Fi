@@ -95,4 +95,26 @@ grep -E "INFO|WARN|ERROR" /tmp/serve.log | tail -6
 
 step "the window, in the browser, from the real app (docs/COMPANION_WINDOW.md)"
 python3 tests/linux/window_browser.py ./target/release/hidfi-companion || rc=1
+
+step "opened again: the running app opens its window (handover.rs show.request)"
+# Until v4.2 a second start left without a word. A stand-in xdg-open records what
+# the app asks the desktop to open; a made-up pairing means set up already, so the
+# first start opens nothing.
+H=$(mktemp -d); B=$(mktemp -d)
+printf 'abababababababababababababababababababababababababababababababab' > "$H/pairing-0000000000A1.key"
+printf '#!/bin/sh\necho "$1" >> %s/opened\n' "$H" > "$B/xdg-open"; chmod +x "$B/xdg-open"
+PATH="$B:$PATH" HIDFI_HOME=$H HIDFI_NO_AUTOSTART=1 dbus-run-session -- ./target/release/hidfi-companion >/tmp/again.out 2>&1 &
+APP=$!
+for i in $(seq 1 40); do [ -s "$H/instance.json" ] && break; sleep 0.25; done
+sleep 2
+before=$(cat "$H/opened" 2>/dev/null | wc -l)
+PATH="$B:$PATH" HIDFI_HOME=$H HIDFI_NO_AUTOSTART=1 ./target/release/hidfi-companion >/tmp/again2.out 2>&1; second=$?
+for i in $(seq 1 20); do [ "$(cat "$H/opened" 2>/dev/null | wc -l)" -gt "$before" ] && break; sleep 0.25; done
+after=$(cat "$H/opened" 2>/dev/null | wc -l)
+if [ "$before" -eq 0 ] && [ "$second" -eq 0 ] && [ "$after" -eq 1 ] && grep -q '^http://127.0.0.1:' "$H/opened" && kill -0 $APP 2>/dev/null; then
+  echo "ok   a second start leaves, and the running app opens its window ($(cat "$H/opened"))"
+else
+  echo "FAIL opened again: before=$before second-exit=$second after=$after"; cat "$H/opened" 2>/dev/null; tail -5 "$H/companion.log"; rc=1
+fi
+kill $APP 2>/dev/null; wait $APP 2>/dev/null || true
 exit $rc

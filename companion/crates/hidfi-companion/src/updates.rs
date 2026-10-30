@@ -473,6 +473,10 @@ impl Shared {
 pub trait Clock: Send + Sync {
     fn now(&self) -> Instant;
     fn sleep(&self, d: Duration);
+    /// The time of day, for what must count while the computer sleeps.
+    fn wall(&self) -> std::time::SystemTime {
+        std::time::SystemTime::now()
+    }
 }
 
 pub struct RealClock;

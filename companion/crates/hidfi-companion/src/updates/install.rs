@@ -309,16 +309,37 @@ mod tests {
         assert!(!d.join("hidfi-companion.old").exists());
     }
 
+    /// Run by a_running_program_is_replaced_while_it_runs as a program to replace.
+    #[test]
+    #[ignore = "a helper: it only waits"]
+    fn waits_for_the_test_above() {
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
     #[test]
     fn a_running_program_is_replaced_while_it_runs() {
         // What the update does to this app on every OS: a program that is
         // running (its image mapped, which on Windows forbids overwriting and
         // deleting it) is moved aside and the new one put in its place.
         let d = tmp();
-        let (src, args): (&str, &[&str]) = if cfg!(windows) {
-            (r"C:\Windows\System32\PING.EXE", &["-n", "30", "127.0.0.1"])
+        // macOS (15.8.1, seen 2026-10-30) kills a copy of a system program such as /bin/sleep
+        // at launch, signed again or not: copy this test program instead and
+        // run its helper below, which only waits.
+        let me = std::env::current_exe().unwrap();
+        let (src, args): (std::path::PathBuf, &[&str]) = if cfg!(windows) {
+            (
+                r"C:\Windows\System32\PING.EXE".into(),
+                &["-n", "30", "127.0.0.1"],
+            )
         } else {
-            ("/bin/sleep", &["30"])
+            (
+                me,
+                &[
+                    "--ignored",
+                    "--exact",
+                    "updates::install::tests::waits_for_the_test_above",
+                ],
+            )
         };
         let cur = d.join(if cfg!(windows) { "prog.exe" } else { "prog" });
         std::fs::copy(src, &cur).unwrap();

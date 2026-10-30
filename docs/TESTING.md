@@ -809,6 +809,8 @@ The Rust app has its own tests, listed in `companion/README.md`:
 | any | `python3 companion/tests/overload.py` | the field conditions together: six viewers on two monitors, a swinging link, a stalling device, rejoins, a link that drops, jittery WiFi, light and busy content - judged per second from each browser's own WebRTC statistics |
 | any | `python tests/run.py --tier ui` | the Companion's window page (tests/ui/companion) in Chromium and WebKit, with its coverage contract |
 | macOS, Windows | `python3 companion/tests/window_real.py` | the window in the OS's own web view, every state |
+| macOS, Windows | `python3 companion/tests/window_life.py` | Open brings the window back from every state a person leaves it in (minimized, hidden, behind, app hidden, closed) |
+| macOS, Windows | `python3 companion/tests/opened_again.py` | the real app opened again shows its window (second start; macOS reopen event); restores the normal build |
 | macOS | `python3 companion/tests/self_update_mac.py` | the Companion updating itself, end to end |
 | Linux (Docker) | `companion/tests/linux/run.sh` | build + tests on Linux, the app without a tray, real X11 capture + OpenH264 on two monitors |
 | Windows | the manual `companion.yml` workflow | build, tests, capture and encoding on a real Windows runner |
