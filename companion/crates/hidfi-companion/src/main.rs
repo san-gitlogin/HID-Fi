@@ -126,6 +126,15 @@ fn main() {
         }
     };
     hidfi_companion::handover::announce(store.dir());
+    // macOS: a grant kept for an older signature of this app is cleared once,
+    // so Screen Recording is not asked for again and again (permissions.rs).
+    #[cfg(target_os = "macos")]
+    {
+        let dir = store.dir().to_path_buf();
+        let _ = std::thread::Builder::new()
+            .name("permissions".into())
+            .spawn(move || hidfi_companion::permissions::check(&dir, service::capture_allowed()));
+    }
     // This copy runs: what an update replaced can go.
     hidfi_companion::updates::install::clean_old();
     log::info!("starting, version {}", env!("CARGO_PKG_VERSION"));

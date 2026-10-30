@@ -83,6 +83,9 @@ jobs:
       - name: Opening the app again shows its window (then the normal build is put back)
         if: runner.os != 'Linux'
         run: python tests/opened_again.py
+      - name: macOS - a grant kept for an older signature is cleared once, never the installed app's
+        if: runner.os == 'macOS'
+        run: python tests/permissions_mac.py
       - name: The window in the browser, from the real app (Linux has no native window)
         if: runner.os == 'Linux'
         run: |

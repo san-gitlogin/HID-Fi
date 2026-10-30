@@ -85,6 +85,9 @@ pub struct View {
     pub boards: Vec<BoardView>,
     pub watching: usize,
     pub capture_allowed: bool,
+    /// A viewer asked for this screen and could not have it: Screen Recording
+    /// is not allowed. The window comes forward with its Allow button.
+    pub capture_refused: bool,
     pub port: Option<u16>,
     pub name: String,
     pub problem: Option<String>,
@@ -201,6 +204,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         boards: Vec::new(),
         watching: 0,
         capture_allowed: (env.capture_allowed)(),
+        capture_refused: false,
         port: None,
         name: state.name.clone(),
         problem: None,
@@ -380,7 +384,7 @@ fn run(
     keys: Arc<RwLock<Vec<GateKey>>>,
     nonces: TicketNonces,
     listener: Option<(Server, Listener)>,
-    _pipeline: Arc<Pipeline>,
+    pipeline: Arc<Pipeline>,
     view: Arc<Mutex<View>>,
     notify: Notify,
     rx: Receiver<Cmd>,
@@ -609,6 +613,10 @@ fn run(
             .collect();
         let watching = listener.as_ref().map_or(0, |(s, _)| s.watchers.count());
         let allowed = (env.capture_allowed)();
+        let refused = !allowed
+            && pipeline
+                .last_error()
+                .is_some_and(|e| e.contains("Screen Recording"));
         // Paired, not plugged in here: shown as offline, with where it last was.
         let remembered: Vec<Remembered> = paired
             .iter()
@@ -637,6 +645,7 @@ fn run(
             v.remembered = remembered.clone();
             v.watching = watching;
             v.capture_allowed = allowed;
+            v.capture_refused = refused;
             v.port = listener.as_ref().map(|(s, _)| s.port);
         });
 

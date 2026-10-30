@@ -150,7 +150,7 @@ its viewers at once; the other carries on.
 | "HID-Fi is not plugged into …" | The board's **USB** port (not COM) goes into that computer |
 | "Stopped for your safety" | The computer answered with a certificate the board did not vouch for. Remove it on the Screen tab and pair again |
 | "Update the board's firmware to use screen sharing" (in the app) | Flash the latest firmware ([FLASHING.md](FLASHING.md)) |
-| macOS: black picture, or "… is not allowed to record its screen yet" | System Settings, Privacy & Security, Screen & System Audio Recording: switch HID-Fi Companion on. If it already looks on, switch it off and on again (macOS keeps the switch of an earlier version), then Quit & Reopen |
+| macOS: black picture, or "… is not allowed to record its screen yet" | System Settings, Privacy & Security, Screen & System Audio Recording: switch HID-Fi Companion on. If it already looks on, switch it off and on again (macOS keeps the switch of an earlier version), then Quit & Reopen. From 4.2.2 the app does this itself: when its signature has changed (an update to a new certificate, a development build replaced by a release) and Screen Recording does not work, it clears its own old entries once at start, and macOS asks once for the new signature (`permissions.rs`). A phone watching never raises the dialog: the window comes forward with Allow Screen Recording instead |
 | Linux: "this is a Wayland desktop" | Log in with an Xorg session |
 | Linux: no tray icon on GNOME | Install the AppIndicator extension; the code still comes as a notification |
 

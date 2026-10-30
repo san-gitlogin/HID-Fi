@@ -119,8 +119,10 @@ pub fn encoder(w: u32, h: u32, fps: u32, bps: u32) -> Result<Box<dyn frame::Enco
 pub fn screen(display: Option<u32>, fps: u32) -> Result<Box<dyn pipeline::Source>, String> {
     #[cfg(target_os = "macos")]
     {
+        // Never asks: a viewer connecting (a phone retrying the Screen tab)
+        // must not put a system dialog in front of the person, again and again.
+        // The app shows "Allow Screen Recording", and only that click asks.
         if !sck::allowed() {
-            sck::ask();
             return Err("Screen Recording is not allowed for HID-Fi Companion".into());
         }
         sck::ScreenSource::start(display, fps).map(|s| Box::new(s) as Box<dyn pipeline::Source>)

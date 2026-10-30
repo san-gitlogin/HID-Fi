@@ -724,6 +724,10 @@ fn steps_one(v: &View) -> Steps {
 /// Whether the window should come forward on its own: the user has to do
 /// something they cannot see from the menu bar alone.
 pub fn needs_window(v: &View) -> bool {
+    // Someone is trying to watch and Screen Recording stands in the way.
+    if v.capture_refused && !v.capture_allowed {
+        return true;
+    }
     if v.boards.len() > 1 {
         return v.boards.iter().any(|b| {
             needs_window(&View {
@@ -743,6 +747,9 @@ pub fn needs_window(v: &View) -> bool {
 
 /// A name for "the thing the user is being asked to do now".
 pub fn episode(v: &View) -> String {
+    if v.capture_refused && !v.capture_allowed {
+        return "screen-recording".into();
+    }
     if v.boards.len() > 1 {
         return v
             .boards
@@ -826,6 +833,61 @@ mod tests {
         assert!(a.tick(&waiting), "asked to pair again later: forward again");
     }
 
+    #[test]
+    fn a_viewer_refused_for_screen_recording_brings_the_window_once() {
+        // A phone's Screen tab retrying must not raise a system dialog (it did,
+        // on every viewer); the window comes forward with Allow Screen Recording,
+        // once, and stays closed if the person closes it.
+        let mut a = AutoOpen::default();
+        let mut v = view(found(), Status::Online);
+        v.capture_allowed = false;
+        assert!(
+            !a.tick(&v),
+            "not allowed but nobody watching: nothing to bring up"
+        );
+        v.capture_refused = true;
+        assert!(needs_window(&v));
+        let opened = (0..50).filter(|_| a.tick(&v)).count();
+        assert_eq!(opened, 1, "once, not on every retry");
+        a.dismissed(&v);
+        assert!(!a.tick(&v), "closed on it: stays closed");
+        v.capture_allowed = true;
+        assert!(!needs_window(&v), "allowed: nothing to do");
+    }
+
+    #[test]
+    fn only_a_click_asks_macos_for_screen_recording() {
+        // CGRequestScreenCaptureAccess (sck::ask) puts a dialog in front of the
+        // person. Only "Allow Screen Recording" (act.rs) may call it.
+        let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut callers = Vec::new();
+        for dir in ["hidfi-companion/src", "hidfi-stream/src"] {
+            let mut stack = vec![crates.join(dir)];
+            while let Some(d) = stack.pop() {
+                for e in std::fs::read_dir(&d).unwrap().flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else if p.extension().is_some_and(|x| x == "rs") {
+                        let text = std::fs::read_to_string(&p).unwrap();
+                        let own = p.ends_with("menu.rs");
+                        for l in text.lines() {
+                            let l = l.trim_start();
+                            if l.contains("sck::ask(") && !l.starts_with("//") && !own {
+                                callers.push(p.file_name().unwrap().to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            callers,
+            vec!["act.rs".to_string()],
+            "sck::ask() called from {callers:?}"
+        );
+    }
+
     fn view(board: BoardState, session: Status) -> View {
         View {
             board,
@@ -833,6 +895,7 @@ mod tests {
             boards: vec![],
             watching: 0,
             capture_allowed: true,
+            capture_refused: false,
             port: Some(47800),
             name: "Studio PC".into(),
             problem: None,

@@ -46,6 +46,7 @@ fn view(boards: Vec<BoardView>) -> View {
         watching: boards.iter().map(|b| b.viewers).sum(),
         boards,
         capture_allowed: true,
+        capture_refused: false,
         port: Some(47800),
         name: "SANTHOSH\u{2019}s MacBook Pro".into(),
         problem: None,

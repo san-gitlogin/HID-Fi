@@ -810,6 +810,7 @@ The Rust app has its own tests, listed in `companion/README.md`:
 | any | `python tests/run.py --tier ui` | the Companion's window page (tests/ui/companion) in Chromium and WebKit, with its coverage contract |
 | macOS, Windows | `python3 companion/tests/window_real.py` | the window in the OS's own web view, every state |
 | macOS, Windows | `python3 companion/tests/window_life.py` | Open brings the window back from every state a person leaves it in (minimized, hidden, behind, app hidden, closed) |
+| macOS | `python3 companion/tests/permissions_mac.py` | a grant kept for an older signature of the app is cleared once, so Screen Recording is not asked for again and again |
 | macOS, Windows | `python3 companion/tests/opened_again.py` | the real app opened again shows its window (second start; macOS reopen event); restores the normal build |
 | macOS | `python3 companion/tests/self_update_mac.py` | the Companion updating itself, end to end |
 | Linux (Docker) | `companion/tests/linux/run.sh` | build + tests on Linux, the app without a tray, real X11 capture + OpenH264 on two monitors |

@@ -36,6 +36,7 @@ fn view(boards: Vec<BoardView>) -> View {
         boards,
         watching: 0,
         capture_allowed: true,
+        capture_refused: false,
         port: Some(47800),
         name: "Studio Mac".into(),
         problem: None,
