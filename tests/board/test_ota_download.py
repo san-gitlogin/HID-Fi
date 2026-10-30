@@ -158,8 +158,11 @@ def on_base(env):
 
 def _settle(board):
     """Whatever an earlier scenario left running or ready is cancelled first - one
-    failure must not hold every scenario after it (it did)."""
-    st = board.status()
+    failure must not hold every scenario after it (it did). The board may still be
+    restarting from the scenario before (a rollback test's build restarts on its
+    own): wait for it to answer, as a person would - one status unanswered for 10 s
+    failed the next module's setup (2026-10-30, 09F7C8, after test_ota_rollback)."""
+    st = wait_status(board, lambda s: True, 60, "the board answering")
     if st.get("ota_step") not in ("idle", None):
         board.cmd({"cmd": "ota_cancel"}, "ota_cancel")
     wait_status(board, lambda s: s.get("ota_state") == "valid" and s.get("ota_step") in ("idle", None), 150,

@@ -97,5 +97,15 @@ limit") - download the missing ones one at a time (`gh run download <id> -n
 parallel) failed once on the macOS runner - re-run the failed job
 (`gh run rerun <id> --failed`) rather than the whole workflow.
 
+`v4.2.1` (2026-10-30): a Companion fix release - the window comes back from any
+state, opening the app again shows it, a release is found after the computer
+slept; firmware number only. The workflow ran on `main` before the tag, so a
+failure on GitHub's runners (the two new window tests had never run there)
+could not leave a published tag behind. Met on the way: `tests/docker/run.sh`
+copied `companion/target` (26 GB) into the Linux VM and filled its disk - now
+excluded; and the release-key board test failed its setup once when the board
+was still restarting from the rollback scenarios before it - `_settle` now
+waits for the board to answer.
+
 Do not name a working branch like a tag (`v4.0.2`): `git push origin v4.0.2`
 then refuses as ambiguous. Push `refs/tags/vX.Y` explicitly if one exists.

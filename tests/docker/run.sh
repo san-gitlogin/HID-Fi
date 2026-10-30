@@ -46,7 +46,10 @@ docker run --rm --init --shm-size="${HIDFI_SHM:-1g}" \
     -v "$PWD":/src:ro -v "$OUT":/out \
     -e TIERS="$TIERS" -e HIDFI_WORKERS="${HIDFI_WORKERS:-2}" -e HIDFI_K="${HIDFI_K:-}" -e HIDFI_RUN_ARGS="${HIDFI_RUN_ARGS:-}" \
     "$IMAGE" bash -c '
-        rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" /src/ /work/ && cd /work &&
+        # Never the Mac'"'"'s own build output: companion/target alone reached 26 GB
+        # and filled the VM'"'"'s disk mid-copy (2026-10-30).
+        rsync -a --exclude .git --exclude tests/.build --exclude tests/.reports --exclude "hid_fi/build" \
+              --exclude companion/target /src/ /work/ && cd /work &&
         ls tests/golden > /tmp/before &&
         python3 tests/run.py --tier "$TIERS" ${HIDFI_K:+-k "$HIDFI_K"} $HIDFI_RUN_ARGS; code=$?
         cp -r tests/.reports/. /out/ 2>/dev/null

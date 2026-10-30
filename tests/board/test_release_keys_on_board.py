@@ -40,8 +40,8 @@ def normal(_board_holder):
     board = _board_holder.get()
     if board.status().get("ota_layout") != "two_slot":
         pytest.skip("single-slot board")
+    _settle(board)  # first: the scenario before may have left it restarting
     before = data_hashes(board)
-    _settle(board)
     install(_board_holder, good)
     board = _board_holder.get()
     wait_status(board, lambda s: s.get("ota_state") == "valid", 150, "the normal build proving itself")
