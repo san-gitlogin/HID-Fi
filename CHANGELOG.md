@@ -43,6 +43,16 @@ Recovery is still USB only, and holding the board is still the proof.
   password, set a new one, reset the access PIN (ERASE typed only when stored
   passwords would go), close. The password is never in the app's model, log or
   store. macOS, Windows and Linux.
+- **HID-Fi's icon wherever the app shows.** macOS: a Dock icon (and Cmd-Tab) while
+  the window is open, the menu bar only once it closes. Windows: the .exe carries
+  HID-Fi's icon and its publisher, product and version, so Explorer, the Start
+  menu, the title bar, the taskbar and Task Manager show the mark instead of a
+  blank, generic icon.
+- **The Windows installer asks first.** It shows the publisher, where the app comes
+  from (checksum checked), what it will do and the licence, then asks
+  `Install HID-Fi Companion? [Y/n]` (`-Yes` for scripts). The app is listed in
+  Settings, Apps with its icon, publisher and version, and Uninstall there works
+  offline.
 
 ### Dashboard
 
