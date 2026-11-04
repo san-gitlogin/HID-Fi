@@ -10,6 +10,7 @@ tickets, real Google Chrome watching with sound.
 Needs: the app running, the board on USB + WiFi and paired with this computer,
 HIDFI_PIN in the environment.
 Run: HIDFI_PIN=... python3 companion/tests/sound_live.py [board-url] [computer name]
+     SPEAKER=0 plays nothing audible (the speaker tone is skipped, and said so).
 """
 import os, subprocess, sys, time
 from playwright.sync_api import sync_playwright
@@ -91,7 +92,11 @@ with sync_playwright() as p:
     time.sleep(0.5)
     t2 = time.time() * 1000
     cpu = companion_cpu()
-    play(600, 1.5, spk, 0.03).wait()
+    # SPEAKER=0: nothing audible (someone asleep nearby) - the virtual device's tone
+    # above already crosses the whole path; the speaker case is reported as skipped.
+    speaker = os.environ.get("SPEAKER", "1") != "0"
+    if speaker:
+        play(600, 1.5, spk, 0.03).wait()
     time.sleep(1.0)
     s = pg.evaluate("__snd")
     base = [x["rms"] for x in s if x["at"] < base_end]
@@ -100,7 +105,10 @@ with sync_playwright() as p:
     tone2 = [x for x in s if x["at"] >= t2 and abs(x["hz"] - 600) < 15 and x["rms"] > max(0.002, 5 * floor)]
     check("a tone on a non-default output (virtual device) arrives at 1 kHz", len(tone1) > 40,
           f"{len(tone1)} of {len([x for x in s if t1 <= x['at'] < t2])} samples, level {max((x['rms'] for x in tone1), default=0):.3f} over a floor of {floor:.4f}")
-    check("a quiet tone on the speakers arrives at 600 Hz", len(tone2) > 15, f"{len(tone2)} samples")
+    if speaker:
+        check("a quiet tone on the speakers arrives at 600 Hz", len(tone2) > 15, f"{len(tone2)} samples")
+    else:
+        print("skip a quiet tone on the speakers (SPEAKER=0: nothing audible)")
     if tone1:
         check("from starting the tone to hearing it on the dashboard", True,
               f"{tone1[0]['at'] - t1:.0f} ms (includes ffmpeg and CoreAudio starting the tone)")
