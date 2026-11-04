@@ -56,6 +56,21 @@ included.
 - Order: needing the person first, then live, online, connecting, offline;
   stable within each.
 
+### Recovery mode
+
+A board whose BOOT was held 8 seconds shows a recovery panel in its card
+([RECOVERY_MODE.md](RECOVERY_MODE.md)): the time left (counted down by the page),
+the WiFi name, whether an access PIN is set, and what resetting it does to stored
+passwords. Buttons: show the WiFi password, a new one (typed twice), reset the
+access PIN (ERASE typed only when the vault would be erased), close. The page sends
+`rec:{"mac","op","value"?,"erase"?}`; the app checks it (`recovery::parse_msg`,
+`admit`: a board in recovery now, that answered, and idle) and answers that page
+alone (`recDone`): macOS and Windows by wry, Linux as the reply to a POST to `/rec`
+(same token, Host and Origin checks as `/act`). The password is never in the model,
+the log or the store; the page drops it on Hide, after a minute, or when recovery
+closes. Serial work runs on the recovery thread, never the service loop; a port is
+opened per action and closed again (another tool may want it).
+
 ### Selecting
 
 - Click a card: it alone is selected. Cmd/Ctrl-click: add or remove. Shift-click:

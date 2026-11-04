@@ -399,3 +399,99 @@ Feature: The Companion's window - a card per board
     Given the person asked for reduced motion
     When the app shows "one-live"
     Then nothing on the page moves
+
+  # ---- recovery mode: BOOT held 8 s on a board (docs/RECOVERY_MODE.md) ----
+
+  Scenario Outline: "<state>" fits a <width> px window
+    Given the window is <width> px wide
+    When the app shows "<state>"
+    Then nothing scrolls sideways and no text is cut off
+    And every button is inside its card or panel and at least 34 px tall
+    And the page reported no error
+
+    Examples:
+      | state           | width |
+      | recovery-open   | 380   |
+      | recovery-open   | 1280  |
+      | recovery-erases | 380   |
+      | recovery-asking | 600   |
+      | recovery-failed | 380   |
+
+  Scenario: A board in recovery mode says so, with what can be done
+    When the app shows "recovery-open"
+    Then the card "HID-Fi 09F7C8" shows "Recovery mode is open"
+    And the card "HID-Fi 09F7C8" shows "Closes by itself in 4:47"
+    And the card "HID-Fi 09F7C8" shows "access PIN set"
+    And the card "HID-Fi 09F7C8" does not show "k7m2"
+
+  Scenario: Asking the board, and a link that is not in recovery
+    When the app shows "recovery-asking"
+    Then the card "HID-Fi 09F7C8" shows "Asking the board"
+    And the card "HID-Fi 09F7C8" has no button "Show WiFi password"
+    When the app shows "recovery-failed"
+    Then the card "HID-Fi 09F7C8" shows "This board is not in recovery mode."
+
+  Scenario: The WiFi password is shown only when asked, and hidden again
+    When the app shows "recovery-open"
+    And I click "Show WiFi password" on "HID-Fi 09F7C8"
+    Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"reveal"}
+    And the card "HID-Fi 09F7C8" does not show "k7m2-x9qp-4tre"
+    When the app answers {"mac":"DCB4D909F7C8","op":"reveal","ok":true,"ssid":"ESP32-HID-09F7C8","password":"k7m2-x9qp-4tre","open":false}
+    Then the card "HID-Fi 09F7C8" shows "k7m2-x9qp-4tre"
+    When I click "Hide" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" does not show "k7m2-x9qp-4tre"
+
+  Scenario: A new WiFi password, typed twice
+    When the app shows "recovery-open"
+    And I click "New WiFi password" on "HID-Fi 09F7C8"
+    And I type "a-new-pass-1" into "New WiFi password (8 to 63 characters)" on "HID-Fi 09F7C8"
+    And I type "a-new-pass-2" into "Type it again" on "HID-Fi 09F7C8"
+    And I click "Set the new password" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" shows "They did not match. Nothing changed."
+    And the app is not asked for recovery
+    When I type "a-new-pass-1" into "Type it again" on "HID-Fi 09F7C8"
+    And I click "Set the new password" on "HID-Fi 09F7C8"
+    Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"set_password","value":"a-new-pass-1"}
+    When the app answers {"mac":"DCB4D909F7C8","op":"set_password","ok":true,"text":"Done. Join 'ESP32-HID-09F7C8' with the new password."}
+    Then the card "HID-Fi 09F7C8" shows "Done. Join"
+
+  Scenario: A WiFi password the radio cannot use is never sent
+    When the app shows "recovery-open"
+    And I click "New WiFi password" on "HID-Fi 09F7C8"
+    And I type "short" into "New WiFi password (8 to 63 characters)" on "HID-Fi 09F7C8"
+    And I type "short" into "Type it again" on "HID-Fi 09F7C8"
+    And I click "Set the new password" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" shows "A WiFi password needs 8 to 63 characters"
+    And the app is not asked for recovery
+    When I click "Cancel" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" has no button "Set the new password"
+
+  Scenario: Resetting the PIN keeps a vault that has its own vault PIN
+    When the app shows "recovery-open"
+    And I click "Reset access PIN" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" has no field "Type ERASE to reset the PIN and erase them"
+    When I type "1357" into "New 4 digit access PIN, or empty to turn the PIN off" on "HID-Fi 09F7C8"
+    And I click "Reset the PIN" on "HID-Fi 09F7C8"
+    Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"reset_pin","value":"1357","erase":false}
+
+  Scenario: An unguarded vault is erased only after ERASE is typed
+    When the app shows "recovery-erases"
+    And I click "Reset access PIN" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" shows "WILL BE ERASED"
+    When I type "12a4" into "New 4 digit access PIN, or empty to turn the PIN off" on "HID-Fi 09F7C8"
+    And I click "Reset the PIN" on "HID-Fi 09F7C8"
+    Then the card "HID-Fi 09F7C8" shows "A PIN is four digits. Nothing changed."
+    And the app is not asked for recovery
+    When I type "1357" into "New 4 digit access PIN, or empty to turn the PIN off" on "HID-Fi 09F7C8"
+    And I type "ERASE" into "Type ERASE to reset the PIN and erase them" on "HID-Fi 09F7C8"
+    And I click "Reset the PIN" on "HID-Fi 09F7C8"
+    Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"reset_pin","value":"1357","erase":true}
+    When the app answers {"mac":"DCB4D909F7C8","op":"reset_pin","ok":false,"text":"2 stored password(s) WILL BE ERASED - they were guarded by the access PIN. Type ERASE to go ahead."}
+    Then the card "HID-Fi 09F7C8" shows "Type ERASE to go ahead"
+
+  Scenario: Closing recovery mode
+    When the app shows "recovery-open"
+    And I click "Close recovery mode" on "HID-Fi 09F7C8"
+    Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"close"}
+    When the app shows "one-online"
+    Then the window reads "HID-Fi"

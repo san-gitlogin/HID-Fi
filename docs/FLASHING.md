@@ -235,6 +235,11 @@ USB serial port, or name it.
 
 ### Forgot the WiFi password or the access PIN?
 
+On a board with no COM port, open **recovery mode** first: hold BOOT for 8
+seconds and let go ([RECOVERY_MODE.md](RECOVERY_MODE.md)). The tool below finds
+the board in recovery mode by itself and uses it before any COM port; the HID-Fi
+Companion offers the same steps in its window.
+
 Plug the board's **COM** port into any computer and run:
 
 ```powershell
@@ -402,7 +407,11 @@ $boot0 = "$env:LOCALAPPDATA\Arduino15\packages\esp32\hardware\esp32\3.3.11\tools
 
 Step 3 matters: `--after hard-reset` on the JTAG port pulses an RTS line that
 path does not have, so the board would stay in the bootloader and no keyboard
-would appear. If step 2 fails with *Write timeout*, give COM14 a few more seconds
+would appear. With no CH343 at all (the HID-Fi Dongle, or the native USB alone), use
+`--after watchdog-reset` on the JTAG port instead: it restarts the chip through its
+own watchdog and the firmware comes back (proven on DA1A2C, 2026-11-04: back in
+1 s; `hard-reset` left it in the loader). Holding BOOT while plugging in is how a
+board without a COM port reaches that loader. If step 2 fails with *Write timeout*, give COM14 a few more seconds
 to enumerate after step 1 and run it again.
 
 > This writes the same four partitions the script does. **Never write

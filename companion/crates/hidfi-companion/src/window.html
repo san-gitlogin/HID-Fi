@@ -150,6 +150,17 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .upd .s{color:var(--fg3);font-size:.84em;font-variant-numeric:tabular-nums}
 .upd .t{color:var(--fg2);font-size:.88em;overflow-wrap:anywhere}
 .upd .acts{margin-top:4px}
+.rec{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;border:1px solid rgba(255,176,46,.32);background:rgba(255,176,46,.05)}
+.rec .h{display:flex;align-items:center;gap:8px;font-weight:620;font-size:.93em}
+.rec .h .ic{width:16px;height:16px;color:var(--warn)}
+.rec .s{color:var(--fg3);font-size:.84em;font-variant-numeric:tabular-nums}
+.rec .t{color:var(--fg2);font-size:.88em;overflow-wrap:anywhere}
+.rec .n{font-size:.88em;overflow-wrap:anywhere}.rec .n.good{color:var(--ok)}.rec .n.bad{color:#ff8a95}
+.rec .shown{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:10px;background:rgba(0,0,0,.22)}
+.rec .shown b{font:600 1.05em ui-monospace,"SF Mono",Menlo,Consolas,monospace;overflow-wrap:anywhere;user-select:all}
+.rec .form{display:flex;flex-direction:column;gap:6px}
+.rec input{min-height:var(--btn-h);padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--fg);font:inherit}
+.rec .acts{margin-top:4px}
 .zone{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);
   color:var(--fg3);font-size:.86em}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:var(--btn-h);padding:0 clamp(12px,1.1vw,16px);
@@ -303,12 +314,17 @@ function makeCard(c){
   const notes=el("div","cnotes");
   const upd=el("div","upd");const uh=el("div","h");const uic=icon("i-down");const ut=el("span");uh.append(uic,ut);
   const us=el("div","s");const ux=el("div","t");const uacts=el("div","acts");upd.append(uh,us,prog,ux,uacts);
+  // recovery mode (docs/RECOVERY_MODE.md): BOOT was held; what can be done over USB now
+  const rec=el("div","rec");rec.hidden=true;const rh=el("div","h");const rt=el("span");rh.append(icon("i-down"),rt);
+  const rs=el("div","s");const rx=el("div","t");const rn=el("div","n");const rshow=el("div","shown");rshow.hidden=true;
+  const rform=el("div","form");rform.hidden=true;const racts=el("div","acts");rec.append(rh,rs,rx,rn,rshow,rform,racts);
   const acts=el("div","acts");
   const more=el("button","btn more");more.dataset.role="more";more.setAttribute("aria-expanded","false");more.setAttribute("aria-label","Details");
   more.title="Details";more.appendChild(icon("i-chev"));
   const det=el("div","details");const inner=el("div");const dl=el("dl");const zone=el("div","zone");inner.append(dl,zone);det.appendChild(inner);
-  e.append(top,chips,line,code,notes,upd,acts,det);
-  const r={e,dot,nm,st,sep,ip,lat,lt,chips,line,code,digits,prog,bar,notes,upd,ut,us,ux,uacts,acts,more,dl,zone,sig:{}};
+  e.append(top,chips,line,code,notes,upd,rec,acts,det);
+  const r={e,dot,nm,st,sep,ip,lat,lt,chips,line,code,digits,prog,bar,notes,upd,ut,us,ux,uacts,acts,more,dl,zone,
+    rec,rt,rs,rx,rn,rshow,rform,racts,sig:{}};
   e.addEventListener("animationend",()=>e.classList.remove("enter"),{once:true});
   return r;
 }
@@ -337,6 +353,7 @@ function updateCard(r,c){
     r.prog.hidden=u.progress==null;if(u.progress!=null)r.bar.style.width=u.progress+"%";
     if(sig(u.actions)!==r.sig.uacts){r.sig.uacts=sig(u.actions);r.uacts.replaceChildren(...u.actions.map(a=>makeBtn(a)));}
     r.uacts.hidden=!u.actions.length;}
+  updateRec(r,c);
   const ns=c.notes||[];
   if(sig(ns)!==r.sig.notes){r.sig.notes=sig(ns);r.notes.replaceChildren(...ns.map(n=>el("div",null,n)));}
   // buttons: rebuilt only when they change, so focus stays put
@@ -455,6 +472,64 @@ function ask(title,body,yes,then,from){S.confirm=then;set($("dt"),title);const d
   set($("dyes"),yes);S.returnFocus=from||document.activeElement;$("scrim").classList.add("on");$("dno").focus();}
 function closeAsk(ok){$("scrim").classList.remove("on");const f=S.confirm;S.confirm=null;if(S.returnFocus&&S.returnFocus.isConnected)S.returnFocus.focus();if(ok&&f)f();}
 function act(id){send("act:"+id);}
+
+// ---- recovery mode: the answers come back to this page alone (recDone) ----
+const REC_ROLE=(b,role,label,kind)=>{const x=el("button","btn"+(kind?" "+kind:""),label);x.dataset.role=role;return x;};
+function recSend(o){const m="rec:"+JSON.stringify(o);if(window.__hidfiRec)window.__hidfiRec(m);else send(m);}
+function recLeft(r){const s=Math.max(0,Math.round(((r.recUntil||0)-Date.now())/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
+function recForget(r){r.rshow.hidden=true;r.rshow.replaceChildren();clearTimeout(r.recHide);}
+function updateRec(r,c){
+  const v=c.recovery;r.rec.hidden=!v;
+  if(!v){if(r.sig.rec!=null){recForget(r);r.rform.hidden=true;r.rform.replaceChildren();r.recForm=null;}r.sig.rec=null;return;}
+  if(v.left_s!=null&&v.left_s!==r.recLeftSeen){r.recLeftSeen=v.left_s;r.recUntil=Date.now()+v.left_s*1000;}
+  set(r.rt,"Recovery mode is open");
+  set(r.rs,v.left_s==null?"Asking the board\u2026":"Closes by itself in "+recLeft(r)+" \u00b7 BOOT was held on this board");
+  const i=v.info;
+  set(r.rx,i?"WiFi "+i.ssid+(i.open?" (open)":"")+" \u00b7 access PIN "+(i.pin_set?"set":"not set")+" \u00b7 stored passwords: "+i.fate:"");r.rx.hidden=!i;
+  const n=r.recNote||(v.note?{good:v.note.good,text:v.note.text}:null);
+  set(r.rn,v.busy?"Working\u2026":n?n.text:"");r.rn.className="n"+(n&&!v.busy?(n.good?" good":" bad"):"");r.rn.hidden=!v.busy&&!n;
+  const k=sig([!!i,v.busy,i&&i.erases]);
+  if(k!==r.sig.rec){r.sig.rec=k;
+    r.racts.replaceChildren(...(i&&!v.busy?[REC_ROLE(r,"recshow","Show WiFi password","primary"),REC_ROLE(r,"recpass","New WiFi password"),
+      REC_ROLE(r,"recpin","Reset access PIN"),REC_ROLE(r,"recclose","Close recovery mode")]:[]));}
+}
+function recForm(r,kind){
+  r.recForm=kind;r.recNote=null;const f=r.rform;f.hidden=false;
+  const inp=(ph,type,id)=>{const x=document.createElement("input");x.type=type;x.placeholder=ph;x.dataset.recf=id;x.autocomplete="off";return x;};
+  if(kind==="pass")f.replaceChildren(inp("New WiFi password (8 to 63 characters)","password","a"),inp("Type it again","password","b"),
+    el("div","acts"));
+  else{const i=r.data.recovery&&r.data.recovery.info;const p=inp("New 4 digit access PIN, or empty to turn the PIN off","password","a");
+    p.inputMode="numeric";p.maxLength=4;f.replaceChildren(p,...(i&&i.erases?[el("div","t",i.fate),inp("Type ERASE to reset the PIN and erase them","text","e")]:[]),el("div","acts"));}
+  f.lastChild.append(kind==="pass"?REC_ROLE(r,"recpassgo","Set the new password","primary"):REC_ROLE(r,"recpingo","Reset the PIN","primary"),
+    REC_ROLE(r,"reccancel","Cancel"));
+  f.querySelector("input").focus();
+}
+function recClick(role,mac){
+  const r=S.cards.get(mac);if(!r)return;const field=id=>{const x=r.rform.querySelector('[data-recf="'+id+'"]');return x?x.value:"";};
+  if(role==="recshow"){r.recNote=null;recSend({mac,op:"reveal"});}
+  else if(role==="rechide")recForget(r);
+  else if(role==="recpass"||role==="recpin")recForm(r,role==="recpass"?"pass":"pin");
+  else if(role==="reccancel"){r.rform.hidden=true;r.rform.replaceChildren();r.recForm=null;}
+  else if(role==="recclose")recSend({mac,op:"close"});
+  else if(role==="recpassgo"){const a=field("a");
+    if(a!==field("b")){r.recNote={good:false,text:"They did not match. Nothing changed."};}
+    else if(new TextEncoder().encode(a).length<8||new TextEncoder().encode(a).length>63){r.recNote={good:false,text:"A WiFi password needs 8 to 63 characters. Nothing changed."};}
+    else recSend({mac,op:"set_password",value:a});}
+  else if(role==="recpingo"){const p=field("a");
+    if(p&&!/^\d{4}$/.test(p))r.recNote={good:false,text:"A PIN is four digits. Nothing changed."};
+    else recSend({mac,op:"reset_pin",value:p,erase:field("e")==="ERASE"});}
+  updateRec(r,r.data);
+}
+window.recDone=j=>{
+  const r=j&&S.cards.get(j.mac);if(!r)return;
+  if(j.op==="reveal"&&j.ok){recForget(r);
+    r.rshow.append(el("div","t","WiFi network "+j.ssid),j.open?el("div","t","No password: the network is open"):el("b",null,j.password),
+      REC_ROLE(r,"rechide","Hide"));r.rshow.hidden=false;r.recHide=setTimeout(()=>recForget(r),60000);r.recNote=null;}
+  else{r.recNote={good:!!j.ok,text:j.text||(j.ok?"Done.":"Nothing changed.")};
+    if(j.ok){r.rform.hidden=true;r.rform.replaceChildren();r.recForm=null;}}
+  updateRec(r,r.data);
+};
+setInterval(()=>{for(const r of S.cards.values())if(r.data&&r.data.recovery&&r.data.recovery.left_s!=null)set(r.rs,"Closes by itself in "+recLeft(r)+" \u00b7 BOOT was held on this board");},1000);
 function doBulk(kind,from){
   const cs=[...S.sel].map(m=>S.cards.get(m)).filter(Boolean).map(r=>r.data);
   const ids=cs.map(c=>(allActs(c).find(a=>a.bulk===kind)||{}).id).filter(Boolean);
@@ -482,12 +557,13 @@ document.addEventListener("click",e=>{
   const card=t.closest(".card");const mac=card&&card.dataset.mac;
   const mo=t.closest("[data-role=more]");if(mo&&mac){S.open.has(mac)?S.open.delete(mac):S.open.add(mac);updateCard(S.cards.get(mac),S.cards.get(mac).data);return;}
   const sb=t.closest("[data-role=sel]");if(sb&&mac){select(mac,e.shiftKey?"range":"toggle");return;}
+  const rb=t.closest("[data-role^=rec]");if(rb&&mac){recClick(rb.dataset.role,mac);return;}
   const a=t.closest("[data-act]");
   if(a){const id=a.dataset.act;
     if(a.dataset.confirm)ask("Forget this pairing?",a.dataset.confirm,"Forget",()=>act(id),a);
     else{act(id);if(id.startsWith("open"))toast("Opening the dashboard…");}
     return;}
-  if(card&&!t.closest("dd,.code")){select(mac,e.shiftKey?"range":(e.metaKey||e.ctrlKey)?"toggle":"one");card.focus();}
+  if(card&&!t.closest("dd,.code,.rec")){select(mac,e.shiftKey?"range":(e.metaKey||e.ctrlKey)?"toggle":"one");card.focus();}
 });
 document.addEventListener("keydown",e=>{
   if($("scrim").classList.contains("on")){

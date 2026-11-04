@@ -136,6 +136,27 @@ its viewers at once; the other carries on.
   and a phone or two). A seventh waits and joins
   by itself when one closes.
 
+## Forgot the WiFi password or the access PIN
+
+A board without a COM port (the HID-Fi Dongle) is recovered here. Leave it plugged
+into this computer, hold its **BOOT** button for 8 seconds (a pin in the pinhole)
+and let go: it restarts in **recovery mode** ([RECOVERY_MODE.md](RECOVERY_MODE.md))
+and its card says *Recovery mode is open*, with the time left. From there:
+
+- **Show WiFi password** - shown in the card until you hide it (or a minute passes);
+  never saved by the Companion or written to its log.
+- **New WiFi password** - typed twice, 8 to 63 characters, read back from the board.
+- **Reset access PIN** - four digits, or empty to turn it off. Stored passwords are
+  kept if the vault has its own vault PIN; otherwise the card says how many will be
+  erased and asks you to type ERASE first.
+- **Close recovery mode** - the board restarts normally. It also closes by itself 5
+  minutes after the last action, and when it is unplugged.
+
+The same steps work from a terminal: `./flash_esp.sh --recover` (macOS, Linux) or
+`.\flash_esp.ps1 -Recover` (Windows). Linux: if the card says the serial port
+cannot be opened, add yourself to the `dialout` group (`sudo usermod -aG dialout
+$USER`), log out and in.
+
 ## When something is not right
 
 | What you see | What to do |

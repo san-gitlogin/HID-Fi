@@ -1,3 +1,4 @@
+import json
 """Steps for features/window.feature: the Companion's window, driven as a
 person would, in Chromium and WebKit (conftest.py)."""
 import copy
@@ -370,6 +371,48 @@ def _details_state(win, name, how):
     is_open = "open" in (c.get_attribute("class") or "").split()
     assert is_open == (how == "open")
     assert c.locator("[data-role=more]").get_attribute("aria-expanded") == ("true" if is_open else "false")
+
+
+# ---- recovery mode ----
+
+@when(parsers.re(r"the app answers (?P<j>\{.*\})$"))
+def _rec_answer(win, j):
+    win.page.evaluate("j => window.recDone(j)", json.loads(j))
+
+
+@when(parsers.parse('I type "{text}" into "{placeholder}" on "{name}"'))
+def _type_into(win, text, placeholder, name):
+    f = card(win, name).get_by_placeholder(placeholder, exact=True)
+    assert f.count() == 1, f"{f.count()} fields {placeholder!r} on {name}"
+    f.fill(text)
+
+
+@then(parsers.re(r"the app is asked for recovery (?P<j>\{.*\})$"))
+def _rec_asked(win, j):
+    got = [m for m in new_sent(win) if m.startswith("rec:")]
+    assert [json.loads(m[4:]) for m in got] == [json.loads(j)], got
+
+
+@then("the app is not asked for recovery")
+def _rec_not_asked(win):
+    got = [m for m in new_sent(win) if m.startswith("rec:")]
+    assert not got, got
+
+
+@then(parsers.parse('the card "{name}" does not show "{text}"'))
+def _not_shows(win, name, text):
+    t = card(win, name).inner_text()
+    assert text not in t, f"{text!r} is shown: {t!r}"
+
+
+@then(parsers.parse('the card "{name}" has no button "{label}"'))
+def _no_button(win, name, label):
+    assert card(win, name).get_by_role("button", name=label, exact=True).count() == 0
+
+
+@then(parsers.parse('the card "{name}" has no field "{placeholder}"'))
+def _no_field(win, name, placeholder):
+    assert card(win, name).get_by_placeholder(placeholder, exact=True).count() == 0
 
 
 # ---- then: what the app is asked ----

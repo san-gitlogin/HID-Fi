@@ -589,6 +589,29 @@ are tested at three levels, and each row of its two tables has a test:
   recovery case, the typed ERASE (and anything else refusing), the WiFi password
   typed twice, several boards, a device that is not a HID-Fi board, firmware older
   than v3.10. The PowerShell half needs `pwsh` (Windows CI has it).
+- **Recovery mode** ([RECOVERY_MODE.md](RECOVERY_MODE.md)), the press that opens a
+  serial link on a board's own USB:
+  - `tests/board/test_recovery_mode_hw.py` (`--board`, the board's COM **and** native
+    USB on this computer): BOOT is pressed by the COM port itself (DTR raised, RTS low
+    holds GPIO0 down without a reset), so every case runs unattended. A normal boot
+    has no link and USB descriptors byte-identical in and out of recovery (macOS,
+    from the IORegistry - nothing is asked of the board); 2.6 s and 5 s holds open
+    nothing; 8 s says "ready" while held and opens on release; the link answers as
+    the COM port, stays silent without DTR, carries no log, survives 50 opens at
+    every baud (the 1200 baud "touch" included); `recovery_exit`, a reset and 5 idle
+    minutes each close it.
+  - `tests/unit/test_recover.py` (the recovery-mode section): both tools find a
+    board in recovery by asking, use it before a COM port, never open the ROM
+    loader, keep the ERASE rule, close recovery when done (`--keep-open`), and say
+    what to press when nothing is found; DTR low on COM, raised on the link.
+  - `tests/unit/test_ota_logic.py` (`recovery` rows): when a restart into recovery
+    would cost an update; four planted bugs.
+  - `ownership.feature`: the press explained in both sheets; a board entering
+    recovery mode says so once.
+  - The Companion: `recovery.rs` unit tests (a fake board on a fake port: DTR, the
+    summary never holding a secret, the ERASE rule, the worker), the loopback `/rec`
+    route's defences (`opener.rs`), and `window.feature`'s recovery scenarios in
+    Chromium and WebKit, under the window's coverage contract.
 - **Hardware** - `tests/board/test_ownership_hw.py`, with `--board` and, for the
   network parts, `--board-url ws://<board's home-network IP>:81`. It only ever uses
   a temporary PIN on a board that has none, removes it, and never prints the WiFi

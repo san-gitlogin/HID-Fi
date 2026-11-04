@@ -336,6 +336,37 @@ pub fn all() -> Vec<(&'static str, View)> {
     v.name = "<script>window.__pwned=1</script>Mac".into();
     states.push(("markup", v));
 
+    // Recovery mode (docs/RECOVERY_MODE.md): BOOT held 8 s on the board.
+    let info = |stored: usize, vault_pin: bool| crate::recovery::Info {
+        mac: bb.into(),
+        firmware: "hid_fi_v4.3".into(),
+        left_s: 287,
+        ssid: "ESP32-HID-09F7C8".into(),
+        open: false,
+        generated: true,
+        pin_set: true,
+        stored,
+        vault_pin,
+    };
+    let rec = |info: Option<crate::recovery::Info>, busy: bool, note: Option<(bool, String)>| {
+        let mut v = view(vec![b(bb, found("192.168.0.103"), Status::Online, Some(14), 0)]);
+        v.recovery = vec![crate::recovery::RecView {
+            mac: bb.into(),
+            closes: info.as_ref().map(|_| std::time::Instant::now() + std::time::Duration::from_secs(287)),
+            info,
+            busy,
+            note,
+        }];
+        v
+    };
+    states.push(("recovery-open", rec(Some(info(0, true)), false, None)));
+    states.push(("recovery-erases", rec(Some(info(2, false)), false, None)));
+    states.push(("recovery-asking", rec(None, true, None)));
+    states.push((
+        "recovery-failed",
+        rec(None, false, Some((false, crate::recovery::RecError::NotInRecovery.text()))),
+    ));
+
     states
 }
 
@@ -347,6 +378,14 @@ pub fn golden() -> String {
         .map(|(name, v)| {
             let mut j = super::model(&v).json;
             j["computer"]["version"] = "TEST".into();
+            // Recovery mode's countdown is the clock's; the page only needs a value.
+            if let Some(bs) = j["boards"].as_array_mut() {
+                for b in bs {
+                    if b["recovery"]["left_s"].is_number() {
+                        b["recovery"]["left_s"] = 287.into();
+                    }
+                }
+            }
             format!("{name}\t{j}\n")
         })
         .collect()

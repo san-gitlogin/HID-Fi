@@ -7,6 +7,45 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased - recovery mode (no COM port needed)
+
+Recovery of a forgotten WiFi password or access PIN no longer needs the COM
+cable, so a board with one USB port - the HID-Fi Dongle - can be recovered.
+Recovery is still USB only, and holding the board is still the proof.
+
+### Firmware
+
+- **Recovery mode.** Hold BOOT for 8 seconds and let go: the board restarts once
+  with a serial link on its own USB beside the keyboard and mouse, for 5 minutes
+  after its last command (`recovery_exit`, a reset or unplugging close it sooner).
+  The press changes nothing by itself. The link answers commands only - never the
+  log, which carries the WiFi password at boot - and opens with DTR raised. At 8 s
+  the board says `{"event":"recovery","state":"ready"}` (amber, three blinks) or
+  refuses while a restart would cost an update (red, twice). `status` reports
+  `recovery` and `recovery_left_s`. A normal boot is unchanged: its USB descriptors
+  are byte-identical. docs/RECOVERY_MODE.md.
+
+### Tools
+
+- `./flash_esp.sh --recover` and `.\flash_esp.ps1 -Recover` find a board in recovery
+  mode by asking it, use it before any COM port (opening a COM port resets the
+  board), close recovery when done (`--keep-open` / `-KeepOpen`), and say exactly
+  what to press when no board is found.
+
+### Companion
+
+- A board in recovery mode gets a recovery panel in its card: show the WiFi
+  password, set a new one, reset the access PIN (ERASE typed only when stored
+  passwords would go), close. The password is never in the app's model, log or
+  store. macOS, Windows and Linux.
+
+### Dashboard
+
+- The *Forgot the PIN* and *PIN, passwords and recovery* sheets explain recovery
+  without a COM port, and a board entering recovery mode says so once.
+
+---
+
 ## v4.2.2 - 2026-10-31
 
 A fix release for the Companion on macOS. The firmware is unchanged apart from
