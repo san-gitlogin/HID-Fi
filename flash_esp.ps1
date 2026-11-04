@@ -73,6 +73,7 @@ param(
     [string]$RecoverSetPassword,
     [string]$RecoverResetPin,
     [switch]$EraseVault,
+    [switch]$KeepOpen,
     [switch]$Compile,
     [switch]$Erase,
     [switch]$Force,
@@ -200,7 +201,7 @@ function New-PortInfo($port, [int]$vid, [int]$pid_, $serial, $desc) {
         'other'        { "$desc ($($key.ToLower()))" }
         default        { 'not a USB device' }
     }
-    [pscustomobject]@{ Port = $port; Serial = $(if ($serial) { $serial } else { '?' }); Kind = $kind; What = $what }
+    [pscustomobject]@{ Port = $port; Serial = $(if ($serial) { $serial } else { '?' }); Kind = $kind; What = $what; Desc = "$desc" }
 }
 
 function Show-Port($p) { "$($p.Port)  serial $($p.Serial)  $($p.What)" }
@@ -382,14 +383,30 @@ function Test-Firmware([string]$p) {
 }
 
 # ---------------------------------------------------------------- recovery
-# Over the USB COM cable only: holding the board is ownership. The same choices,
-# words and safeguards as tools/recover.py (used by flash_esp.sh).
-function Open-Board([string]$p) {
+# Over USB only: holding the board is ownership - its COM cable, or recovery mode
+# (BOOT held 8 s and let go: a serial link on the board's own USB for 5 minutes,
+# docs/RECOVERY_MODE.md). The same choices, words and safeguards as tools/recover.py
+# (used by flash_esp.sh).
+$RecoveryHelp = @(
+    'No COM cable? Open recovery mode on the board''s own USB port instead:',
+    '  1. Leave the board plugged into this computer.',
+    '  2. Hold its BOOT button for 8 seconds (on the dongle: a pin in the pinhole), then let go.',
+    '  3. It restarts with recovery open for 5 minutes. Run this again.'
+)
+
+function Open-Board([string]$p, [bool]$recovery = $false) {
     $sp = New-Object System.IO.Ports.SerialPort $p, 115200, 'None', 8, 'One'
-    $sp.DtrEnable = $false; $sp.RtsEnable = $false      # DTR/RTS drive the board's reset
+    # On the COM cable DTR/RTS drive the board's reset and BOOT: both stay low. On the
+    # recovery link DTR is raised: the board's USB serial only answers a host that has.
+    $sp.DtrEnable = $false; $sp.RtsEnable = $false
     $sp.ReadTimeout = 400; $sp.NewLine = "`n"
     $sp.Open()
-    $settle = if ($env:HIDFI_RECOVER_SETTLE) { [double]$env:HIDFI_RECOVER_SETTLE } else { 2.5 }
+    if ($recovery) {
+        # Raised after Open: the tests' fake ports are pseudo-terminals, which have no
+        # modem lines (pyserial ignores that error the same way). A real port must take it.
+        try { $sp.DtrEnable = $true } catch { if (-not $env:HIDFI_FAKE_PORTS) { $sp.Close(); throw } }
+    }
+    $settle = if ($env:HIDFI_RECOVER_SETTLE) { [double]$env:HIDFI_RECOVER_SETTLE } elseif ($recovery) { 0.2 } else { 2.5 }
     Start-Sleep -Milliseconds ([int]($settle * 1000))
     $sp.DiscardInBuffer()
     return $sp
@@ -405,6 +422,33 @@ function Send-Board($sp, [hashtable]$body, [double]$timeout = 6) {
         if ($null -ne $d.status -and -not $d.event) { return $d }
     }
     throw "no answer to $($body.cmd)"
+}
+
+# The boards in recovery mode: Espressif native ports that answer status with
+# "recovery": true. Never guessed from a name or an ID: the ROM loader has the same
+# VID:PID and answers no JSON.
+function Get-RecoveryLinks($ports) {
+    @($ports | Where-Object { $_.Kind -eq 'esp-native' -and $_.Desc -notmatch 'JTAG' } | ForEach-Object {
+        $p = $_
+        $sp = $null
+        try {
+            $sp = Open-Board $p.Port $true
+            $st = Send-Board $sp @{ cmd = 'status' } 1.5
+            if ($st.recovery -eq $true) {
+                [pscustomobject]@{ Port = $p.Port; Serial = $(if ($st.mac) { ($st.mac -replace ':', '') } else { $p.Serial }); Kind = 'hidfi-recovery'; What = 'HID-Fi board in recovery mode'; Desc = $p.Desc }
+            }
+        } catch { }
+        finally { if ($sp) { $sp.Close() } }
+    })
+}
+
+function Close-Recovery($sp, [bool]$recovery) {
+    if (-not $recovery) { return }
+    if ($KeepOpen) { Say '   Recovery mode stays open (it closes by itself 5 minutes after the last command).'; return }
+    try {
+        $r = Send-Board $sp @{ cmd = 'recovery_exit' }
+        if ($r.reply -eq 'recovery_exit') { Say '   Recovery mode closed: the board restarts normally.' }
+    } catch { Say '   Recovery mode did not answer the close; it closes by itself within 5 minutes.' }
 }
 
 function Get-VaultFate($vl) {
@@ -476,8 +520,30 @@ function Reset-AccessPin($sp, $vl, [string]$new, [bool]$eraseOk, [bool]$interact
 
 function Invoke-Recover {
     Say ''
-    Say '== HID-Fi recovery (USB COM cable)'
-    $sel = Select-Boards (Get-Ports)
+    Say '== HID-Fi recovery (USB)'
+    $ports = Get-Ports
+    # A board in recovery mode first: opening a COM port resets the board, which would close it.
+    $namedCom = $Port -and @($ports | Where-Object { $_.Port -eq $Port -and $_.Kind -eq 'hidfi' }).Count
+    $rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }
+    if ($Serial -and -not $Port) { $rec = @($rec | Where-Object { $_.Serial.ToLower().StartsWith(($Serial -replace ':', '').ToLower()) }) }
+    if ($Port -and -not $namedCom) { $rec = @($rec | Where-Object { $_.Port -eq $Port }) }
+    $isRec = $false
+    if ($rec.Count -gt 1 -and -not $Port) {
+        Say "   $($rec.Count) boards are in recovery mode, so none was picked:"
+        $i = 0; $rec | ForEach-Object { $i++; Say "     $i. $($_.Port)  MAC $($_.Serial)" }
+        if (-not $env:CI -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+            $ans = Read-Host "   Which board? [1-$($rec.Count), Enter = none]"
+            if ($ans -match '^\d+$' -and [int]$ans -ge 1 -and [int]$ans -le $rec.Count) { $rec = @($rec[[int]$ans - 1]) }
+            else { Say '   Nothing chosen, nothing changed.'; return 10 }
+        } else { Say '   Pick one with -Port <port> or -Serial <its MAC>.'; return 10 }
+    }
+    if ($rec.Count -eq 1) {
+        $isRec = $true
+        Say "   A board in recovery mode: $($rec[0].Port) (MAC $($rec[0].Serial))"
+        $sel = @{ Targets = @($rec[0]); Candidates = @(); Lines = @(); Code = 0 }
+    } else {
+        $sel = Select-Boards $ports
+    }
     $sel.Lines | ForEach-Object { Say "   $_" }
     if ($sel.Code -eq 10 -and $sel.Candidates.Count -and -not $env:CI -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
         $ans = Read-Host "   Which board? [1-$($sel.Candidates.Count), Enter = none]"
@@ -485,10 +551,11 @@ function Invoke-Recover {
             $sel.Targets = @($sel.Candidates[[int]$ans - 1]); $sel.Code = 0
         } else { Say '   Nothing chosen, nothing changed.'; return 10 }
     }
+    if ($sel.Code -eq 4) { Say ''; $RecoveryHelp | ForEach-Object { Say "   $_" } }
     if ($sel.Code -ne 0) { return $sel.Code }
     $b = $sel.Targets[0]
-    Say "   Board on $($b.Port) (serial $($b.Serial))"
-    try { $sp = Open-Board $b.Port }
+    Say "   Board on $($b.Port) (serial $($b.Serial))$(if ($isRec) { ' - recovery mode' })"
+    try { $sp = Open-Board $b.Port $isRec }
     catch { Say "   Could not open $($b.Port): $($_.Exception.Message)"; Say '   Close anything else using it (Arduino Serial Monitor, PuTTY) and try again.'; return 1 }
     try {
         $st = Send-Board $sp @{ cmd = 'status' }
@@ -523,8 +590,12 @@ function Invoke-Recover {
                   return (Reset-AccessPin $sp $vl $p.Trim() $false $true) }
             default { Say '   Nothing changed.'; return 0 }
         }
-    } catch { Say "   The board did not answer ($_). Is the cable in the board's COM port?"; return 1 }
-    finally { $sp.Close() }
+    } catch {
+        if ($isRec) { Say "   The board did not answer ($_). Recovery mode may have just closed: hold BOOT 8 s again." }
+        else { Say "   The board did not answer ($_). Is the cable in the board's COM port?" }
+        return 1
+    }
+    finally { try { Close-Recovery $sp $isRec } finally { $sp.Close() } }
 }
 
 # ---------------------------------------------------------------- run

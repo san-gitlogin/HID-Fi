@@ -48,7 +48,8 @@ def board(tmp_path):
 
 
 PS_FLAGS = {"--show-password": "-RecoverShow", "--set-password": "-RecoverSetPassword",
-            "--reset-pin": "-RecoverResetPin", "--erase-vault": "-EraseVault", "--port": "-Port", "--serial": "-Serial"}
+            "--reset-pin": "-RecoverResetPin", "--erase-vault": "-EraseVault", "--port": "-Port", "--serial": "-Serial",
+            "--keep-open": "-KeepOpen"}
 
 
 def run(tool, ports, *args, stdin=None):
@@ -283,3 +284,181 @@ def test_older_firmware_is_told_to_update_first(board, tool):
     fb, ports = board(sim_with(pin="4826"), drop={"ap_password"})
     code, out = run(tool, ports, "--reset-pin", "1357")
     assert code == 1 and "older than v3.10" in out and fb.sim.pin == "4826", out
+
+
+# ---- recovery mode: no COM cable (docs/RECOVERY_MODE.md) ------------------------------------
+# A board in recovery mode shows its native USB as a serial port: Espressif's VID:PID,
+# its MAC as the serial number. The tools prove it by asking (status "recovery": true),
+# use it before any COM port (opening a COM port resets the board, closing recovery),
+# and close recovery when done.
+MAC_A, MAC_B = "DCB4D909F7C8", "B81F3FDA1A2C"
+
+
+@pytest.fixture
+def rec(tmp_path):
+    from support.board_sim import BoardSim
+    from support.fake_serial import FakeSerialBoard
+    made = []
+
+    def make(boards):
+        """boards: [("recovery", sim, mac) | ("com", sim, serial) | ("rom", None, mac) | ("jtag", sim, mac)]"""
+        ports = []
+        for kind, sim, ident in boards:
+            if kind == "rom":                                  # answers nothing: a ROM loader, another firmware
+                ports.append({"device": "/dev/does-not-exist-rom", "vid": 0x303A, "pid": 0x1001, "serial": ident,
+                              "description": "ESP32S3_DEV"})
+                made.append(None)
+                continue
+            if kind != "com":                                  # a real link's serial number IS the board's MAC
+                sim.mac = ":".join(ident[i:i + 2] for i in range(0, 12, 2))
+            fb = FakeSerialBoard(sim)
+            made.append(fb)
+            if kind == "com":
+                ports.append({"device": fb.path, "vid": 0x1A86, "pid": 0x55D3, "serial": ident})
+            else:
+                ports.append({"device": fb.path, "vid": 0x303A, "pid": 0x1001, "serial": ident,
+                              "description": "USB JTAG/serial debug unit" if kind == "jtag" else "ESP32S3_DEV"})
+        f = tmp_path / "ports.json"
+        f.write_text(json.dumps(ports), encoding="utf-8")
+        return made, str(f)
+    yield make
+    for fb in made:
+        if fb:
+            fb.close()
+
+
+def in_recovery(**kw):
+    s = sim_with(**kw)
+    s.enter_recovery()
+    return s
+
+
+def cmds(fb):
+    return [b.get("cmd") for b in fb.seen]
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_recovery_mode_shows_the_wifi_password_without_a_com_cable(rec, tool):
+    (fb,), ports = rec([("recovery", in_recovery(), MAC_A)])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 0 and "k7m2-x9qp-4tre" in out and "recovery mode" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_recovery_mode_is_closed_when_the_tool_is_done(rec, tool):
+    (fb,), ports = rec([("recovery", in_recovery(), MAC_A)])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 0 and cmds(fb)[-1] == "recovery_exit" and "Recovery mode closed" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_keep_open_leaves_recovery_mode_open(rec, tool):
+    (fb,), ports = rec([("recovery", in_recovery(), MAC_A)])
+    code, out = run(tool, ports, "--show-password", "--keep-open")
+    assert code == 0 and "recovery_exit" not in cmds(fb) and fb.sim.recovery and "stays open" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_recovery_mode_resets_the_pin_keeping_a_guarded_vault(rec, tool):
+    sim = in_recovery(pin="4826", vault=dict(VAULT), vault_pin="2468")
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--reset-pin", "1357")
+    assert code == 0 and sim.pin == "1357" and sim.vault, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_recovery_mode_never_erases_an_unguarded_vault_without_saying_so(rec, tool):
+    sim = in_recovery(pin="4826", vault=dict(VAULT))
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--reset-pin", "1357")
+    assert code == 1 and sim.pin == "4826" and sim.vault and "WILL BE ERASED" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_recovery_mode_sets_a_new_wifi_password(rec, tool):
+    sim = in_recovery()
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--set-password", "a-new-pass-1")
+    assert code == 0 and sim.ap_pass == "a-new-pass-1", out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_a_board_in_recovery_is_used_before_a_com_port(rec, tool):
+    """Opening the COM port would reset the board and close recovery: it is never touched."""
+    (r, c), ports = rec([("recovery", in_recovery(), MAC_A), ("com", sim_with(), "RCV1")])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 0 and cmds(r) and not cmds(c), out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_a_named_com_port_is_used_as_named(rec, tool):
+    (r, c), ports = rec([("recovery", in_recovery(), MAC_A), ("com", sim_with(), "RCV1")])
+    code, out = run(tool, ports, "--port", c.path, "--show-password")
+    assert code == 0 and cmds(c) and not cmds(r), out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_an_espressif_port_that_does_not_answer_is_not_a_board_in_recovery(rec, tool):
+    (_,), ports = rec([("rom", None, MAC_A)])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 4 and "Hold its BOOT button for 8 seconds" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_the_rom_loader_is_never_opened(rec, tool):
+    (j,), ports = rec([("jtag", in_recovery(), MAC_A)])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 4 and not cmds(j), out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_a_running_board_without_recovery_does_not_count(rec, tool):
+    (n,), ports = rec([("recovery", sim_with(), MAC_A)])     # answers, but "recovery": false
+    code, out = run(tool, ports, "--show-password")
+    assert code == 4 and cmds(n) == ["status"], out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_with_no_board_it_says_what_to_press(rec, tool):
+    _, ports = rec([])
+    code, out = run(tool, ports, "--show-password")
+    assert code == 4 and "No COM cable?" in out and "Hold its BOOT button for 8 seconds" in out, out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_two_boards_in_recovery_are_never_guessed_between(rec, tool):
+    (a, b), ports = rec([("recovery", in_recovery(pin="4826"), MAC_A), ("recovery", in_recovery(pin="4826"), MAC_B)])
+    code, out = run(tool, ports, "--reset-pin", "1357")
+    assert code == 10 and a.sim.pin == b.sim.pin == "4826", out
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_the_mac_picks_one_board_in_recovery(rec, tool):
+    (a, b), ports = rec([("recovery", in_recovery(), MAC_A), ("recovery", in_recovery(), MAC_B)])
+    code, out = run(tool, ports, "--serial", MAC_B[:6], "--show-password")
+    assert code == 0 and cmds(b) and "recovery_exit" not in cmds(a), out
+
+
+def test_the_com_port_is_opened_with_its_lines_low_and_the_recovery_link_with_dtr_up(monkeypatch):
+    """DTR on the COM cable is BOOT held; the recovery link answers only with DTR up."""
+    import serial
+    sys.path.insert(0, str(ROOT / "tools"))
+    import recover
+    seen = []
+
+    class FakeSerial:
+        def __init__(self):
+            self.port = self.baudrate = self.timeout = None
+            self.dtr = self.rts = None
+
+        def open(self):
+            seen.append((self.dtr, self.rts))
+
+        def reset_input_buffer(self):
+            pass
+
+    monkeypatch.setattr(serial, "Serial", FakeSerial)
+    monkeypatch.setenv("HIDFI_RECOVER_SETTLE", "0")
+    recover.BoardLink("/dev/com", recovery=False)
+    recover.BoardLink("/dev/rec", recovery=True)
+    assert seen == [(False, False), (True, False)]

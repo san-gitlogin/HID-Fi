@@ -4,10 +4,15 @@
     .\\flash_esp.ps1 -Recover            (Windows - the same, in PowerShell)
     python3 tools/recover.py            (directly)
 
-Recovery works only over the board's USB COM cable, on purpose. Over WiFi
-nobody can read the WiFi password or reset a PIN they do not know - not even the
-owner - because a stranger on the same network looks exactly like the owner
-there. Holding the board is what proves ownership.
+Recovery works only over USB, on purpose. Over WiFi nobody can read the WiFi
+password or reset a PIN they do not know - not even the owner - because a
+stranger on the same network looks exactly like the owner there. Holding the
+board is what proves ownership: its COM cable, or - on a board with no COM port,
+like the HID-Fi Dongle - recovery mode: BOOT held 8 seconds and let go, which
+restarts the board with a serial link on its own USB for 5 minutes
+(docs/RECOVERY_MODE.md). A board in recovery mode is used first: opening a COM
+port resets the board, which would close it. When done, the tool closes recovery
+mode again unless --keep-open is given.
 
 What it can do, from a menu (or one flag each, for scripts):
   show the board's WiFi name and password     --show-password
@@ -32,6 +37,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flash_ports as F  # noqa: E402
 
 VAULT_SAFE = "kept - the vault has its own vault PIN"
+ESP_NATIVE = (0x303A, 0x1001)   # a running HID-Fi's own USB - and the ROM's USB-Serial-JTAG: told apart by asking
+RECOVERY_HELP = (
+    "No COM cable? Open recovery mode on the board's own USB port instead:",
+    "  1. Leave the board plugged into this computer.",
+    "  2. Hold its BOOT button for 8 seconds (on the dongle: a pin in the pinhole), then let go.",
+    "  3. It restarts with recovery open for 5 minutes. Run this again.",
+)
 
 
 def say(*lines):
@@ -40,15 +52,19 @@ def say(*lines):
 
 
 class BoardLink:
-    """One serial session. DTR and RTS stay low: they drive the board's reset."""
+    """One serial session. On the COM cable DTR and RTS stay low: they drive the
+    board's reset and BOOT. On the recovery link DTR is raised: the board's USB
+    serial only answers a host that has raised it, and there it drives nothing."""
 
-    def __init__(self, device):
+    def __init__(self, device, recovery=False):
         import serial
+        self.recovery = recovery
         self.s = serial.Serial()
-        self.s.port, self.s.baudrate, self.s.dtr, self.s.rts, self.s.timeout = device, 115200, False, False, 0.3
+        self.s.port, self.s.baudrate, self.s.dtr, self.s.rts, self.s.timeout = device, 115200, recovery, False, 0.3
         self.s.open()
-        # Opening the port can restart the board on some systems; let it finish.
-        time.sleep(float(os.environ.get("HIDFI_RECOVER_SETTLE", "2.5")))
+        # Opening the COM port can restart the board on some systems; let it finish.
+        # The recovery link never restarts the board.
+        time.sleep(float(os.environ.get("HIDFI_RECOVER_SETTLE", "0.2" if recovery else "2.5")))
         self.s.reset_input_buffer()
 
     def cmd(self, body, timeout=6.0):
@@ -70,12 +86,60 @@ class BoardLink:
         self.s.close()
 
 
+def recovery_links(ports, timeout=1.5):
+    """The boards in recovery mode: Espressif native ports that answer `status`
+    with "recovery": true. Never guessed from a name or an ID: the ROM loader has the
+    same VID:PID and answers no JSON, another ESP32 project answers something else."""
+    found = []
+    for p in F.one_per_device(ports):
+        if (p.vid, p.pid) != ESP_NATIVE or "jtag" in (p.description or "").lower():
+            continue
+        try:
+            link = BoardLink(p.device, recovery=True)
+        except Exception:
+            continue
+        try:
+            if link.cmd({"cmd": "status"}, timeout=timeout).get("recovery") is True:
+                found.append(p)
+        except (TimeoutError, ValueError):
+            pass
+        finally:
+            link.close()
+    return found
+
+
 def pick_board(args):
+    """(port, is_recovery_link, code)."""
     try:
         ports = F.list_ports()
     except ImportError:
         say("pyserial is not installed: pip install pyserial")
-        return None, 12
+        return None, False, 12
+    named_com = args.port and any(p.device == args.port and p.kind == "hidfi" for p in ports)
+    rec = [] if named_com else recovery_links(ports)
+    if args.port and not named_com:
+        hit = [p for p in rec if p.device == args.port]
+        if hit:
+            return hit[0], True, 0
+    elif not args.port:
+        if args.serial:
+            want = args.serial.replace(":", "").lower()
+            rec = [p for p in rec if (p.serial or "").replace(":", "").lower().startswith(want)]
+        if len(rec) == 1:
+            say(f"A board in recovery mode: {rec[0].device} (MAC {rec[0].serial or '?'})")
+            return rec[0], True, 0
+        if len(rec) > 1:
+            say(f"{len(rec)} boards are in recovery mode, so none was picked:")
+            for i, p in enumerate(rec):
+                say(f"  {i + 1}. {p.device}  MAC {p.serial or '?'}")
+            if sys.stdin.isatty() and not os.environ.get("CI"):
+                ans = input(f"   Which board? [1-{len(rec)}, Enter = none]: ").strip()
+                if ans.isdigit() and 1 <= int(ans) <= len(rec):
+                    return rec[int(ans) - 1], True, 0
+                say("Nothing chosen, nothing changed.")
+            else:
+                say("Pick one with --port <port> or --serial <its MAC>.")
+            return None, False, 10
     targets, lines, code = F.choose(ports, args.port, args.serial)
     for l in lines:
         say(l)
@@ -83,12 +147,30 @@ def pick_board(args):
         cands = targets
         ans = input(f"   Which board? [1-{len(cands)}, Enter = none]: ").strip()
         if ans.isdigit() and 1 <= int(ans) <= len(cands):
-            return cands[int(ans) - 1], 0
+            return cands[int(ans) - 1], False, 0
         say("Nothing chosen, nothing changed.")
-        return None, 10
+        return None, False, 10
+    if code == 4:
+        print()
+        say(*RECOVERY_HELP)
     if code:
-        return None, code
-    return targets[0], 0
+        return None, False, code
+    return targets[0], False, 0
+
+
+def close_recovery(link, keep_open):
+    """A recovery link is closed when the tool is done: the board restarts normally."""
+    if not link.recovery:
+        return
+    if keep_open:
+        say("Recovery mode stays open (it closes by itself 5 minutes after the last command).")
+        return
+    try:
+        r = link.cmd({"cmd": "recovery_exit"})
+        if r.get("reply") == "recovery_exit":
+            say("Recovery mode closed: the board restarts normally.")
+    except TimeoutError:
+        say("Recovery mode did not answer the close; it closes by itself within 5 minutes.")
 
 
 def summary(link):
@@ -202,22 +284,23 @@ def menu(link, st, ap, vl, entries):
 
 
 def main(argv=None):
-    ap_ = argparse.ArgumentParser(description="Recover a HID-Fi board over its USB COM cable.")
+    ap_ = argparse.ArgumentParser(description="Recover a HID-Fi board over USB: its COM cable, or recovery mode.")
     ap_.add_argument("--port", default=os.environ.get("HIDFI_PORT") or None)
     ap_.add_argument("--serial", default=os.environ.get("HIDFI_SERIAL") or None)
     ap_.add_argument("--show-password", action="store_true")
     ap_.add_argument("--set-password")
     ap_.add_argument("--reset-pin")
     ap_.add_argument("--erase-vault", action="store_true", help="allow a PIN reset to erase an unguarded vault")
+    ap_.add_argument("--keep-open", action="store_true", help="leave recovery mode open when done (it closes itself after 5 minutes)")
     a = ap_.parse_args(argv)
 
-    print("== HID-Fi recovery (USB COM cable)")
-    board, code = pick_board(a)
+    print("== HID-Fi recovery (USB)")
+    board, rec, code = pick_board(a)
     if code:
         return code
-    say(f"Board on {board.device} (serial {board.serial or '?'})")
+    say(f"Board on {board.device} (serial {board.serial or '?'})" + (" - recovery mode" if rec else ""))
     try:
-        link = BoardLink(board.device)
+        link = BoardLink(board.device, recovery=rec)
     except Exception as e:
         say(f"Could not open {board.device}: {e}",
             "Close anything else using it (Arduino Serial Monitor, another terminal) and try again.")
@@ -239,10 +322,14 @@ def main(argv=None):
             return 1
         return menu(link, st, ap, vl, entries)
     except TimeoutError as e:
-        say(f"The board did not answer ({e}). Is the COM cable in the board's COM port?")
+        say(f"The board did not answer ({e})." + (" Recovery mode may have just closed: hold BOOT 8 s again."
+                                                if link.recovery else " Is the COM cable in the board's COM port?"))
         return 1
     finally:
-        link.close()
+        try:
+            close_recovery(link, a.keep_open)
+        finally:
+            link.close()
 
 
 if __name__ == "__main__":

@@ -31,8 +31,26 @@ curl -X POST http://192.168.4.1/api/command \
 | `auth` | `token` | Authenticates this WebSocket client |
 | `set_auth` | `token`, `old`, `ap_password` | Sets the PIN; empty string disables it. Over WiFi, the **first** PIN also needs `ap_password`, the board's own WiFi password |
 | `ap_password` | — | **USB only.** The board's WiFi name and password: `{"ssid", "password", "open", "generated"}`. Over WiFi it answers `{"status":"error","reply":"usb_only"}` |
+| `recovery_exit` | — | Closes recovery mode: `{"status":"ok","reply":"recovery_exit","restart":true}`, then the board restarts into a normal boot. Not in recovery mode: `{"status":"error","reply":"not_in_recovery","message":"Recovery mode is not open"}`. Over WiFi it is gated like any command (access PIN, home-network lock) |
 
 HTTP requests may instead carry `token` inline in the body of any command.
+
+### Recovery mode: the serial link on the native USB
+
+A board with no COM port (the HID-Fi Dongle) gets the serial link that recovery
+needs from **recovery mode** ([RECOVERY_MODE.md](RECOVERY_MODE.md)): hold BOOT for
+8 seconds, then let go. At 8 s the board broadcasts
+`{"event":"recovery","state":"ready"}` (the light blinks amber three times), or
+`{"event":"recovery","state":"refused","why":"verifying"|"busy"}` while an update is
+proving itself or installing (red, twice; letting go then does nothing). On release
+it restarts once, and its native USB carries a CDC serial link beside HID: same
+VID:PID (`303a:1001`), its MAC as the serial number. Lines on that link are
+answered exactly as on the COM port (no PIN, USB-only commands allowed) - and
+**only** answered: nothing is printed there unasked. The host must raise DTR to get
+replies (the board's USB serial only writes to a host that has). The link closes 5
+minutes after its last command, on `recovery_exit`, on any reset, or when the board
+loses power. Meanwhile `status` says `"recovery": true` and `"recovery_left_s"`
+(seconds until it closes); otherwise `"recovery": false`.
 
 **The first PIN over WiFi** (no PIN set yet, `token` not empty) is refused with
 `{"status":"error","reply":"ap_password_required","message":...}` unless
@@ -616,6 +634,7 @@ the same text back - a round-trip check for a transport.
 ```json
 {
   "firmware": "hid_fi_v3.6",
+  "recovery": false,
   "uptime_sec": 412,
   "free_heap": 200932,
   "heap_floor": 188104,

@@ -38,6 +38,7 @@ READ_ONLY = [
     {"cmd": "macro_save", "slot": 32, "steps": ["text x"]}, {"cmd": "macro_save", "slot": 0, "steps": []},
     {"cmd": "system", "action": "bogus"},
     {"cmd": "ap_password"},                                  # USB only: shape compared, never printed
+    {"cmd": "recovery_exit"},                                # not in recovery (opening COM resets it): not_in_recovery
     # Actions for agents: the lists, and refusals that press nothing.
     {"cmd": "actions"}, {"cmd": "actions", "keys": True}, {"cmd": "do", "a": "definitely_not_an_action"},
     {"cmd": "open"}, {"cmd": "steps", "s": []}, {"cmd": "steps", "s": ["dance"]},

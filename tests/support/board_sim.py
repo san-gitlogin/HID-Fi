@@ -128,6 +128,10 @@ class BoardSim:
         self.nvs_free_entries = 373  # what storage_info reports free; a test lowers it to fill the store
         self.ui = ""
         self.firmware = firmware
+        # Recovery mode (docs/RECOVERY_MODE.md): opened by BOOT held 8 s and let go,
+        # which restarts the board with a serial link on its native USB. Scenarios
+        # open it with enter_recovery(); any restart closes it, as the one-shot flag does.
+        self.recovery, self.recovery_until = False, 0.0
         self.host_manual = None
         self.host_detected = detected or host_os
         self.usb_mounted = True       # False: the USB port is in no computer (only COM, or a charger)
@@ -255,6 +259,8 @@ class BoardSim:
             "ap_pass_default": self.ap_pass == "hid12345",
             "wiggle_active": self.wiggle is not None, "wiggle_mode": self.wiggle["mode"] if self.wiggle else "idle",
             "led_on": False, "boot_button": "released",
+            "recovery": self.recovery,
+            **({"recovery_left_s": max(0, int(self.recovery_until - self.now() + 0.999))} if self.recovery else {}),
             **self.comp.counts(),
             **self.ota_fields(),
         }
@@ -555,10 +561,16 @@ class BoardSim:
             s["open"] = False
             s["ws"].close(code=1006, reason="board restarted")   # code given: Playwright needs it
 
+    def enter_recovery(self, window_s=300):
+        """BOOT held 8 s and let go: the restart into recovery mode."""
+        self.reboot()
+        self.recovery, self.recovery_until = True, self.now() + window_s
+
     def reboot(self):
         if self.refuse_after_reboot:   # stuck in the bootloader, or a bad cable
             self.refusing = True
         self.boots += 1
+        self.recovery = False          # the flag is read and cleared at boot: a restart closes recovery
         self.t0 = self.now()
         # Pairing requests live in RAM (hid_fi/companion.h); pairings are in NVS.
         self.comp.pending = []
@@ -1269,6 +1281,12 @@ class BoardSim:
             self.host_manual = table[os_]
             return OK("host_os_set", host_os=self.host_os(), host_os_source="manual" if self.host_manual else "auto",
                       host_os_detected=self.host_detected)
+        if c == "recovery_exit":
+            if not self.recovery:
+                return E("Recovery mode is not open", reply="not_in_recovery")
+            self.recovery = False                       # recoveryClosing: status says so at once
+            self.later(0.3, self.reboot)
+            return OK("recovery_exit", restart=True)
         if c == "ap_password":
             if transport != "serial":
                 return E("The WiFi password is only shown over the USB cable.", reply="usb_only")

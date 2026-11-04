@@ -309,6 +309,24 @@ RTC_NOINIT_ATTR uint32_t rtcFaultSecs;
 #define NET_FAULT_MAGIC 0x4E46A17Cu
 #define NET_FAULT_SSID  "hidfi-test-no-such-network"
 
+// ---- Recovery mode (docs/RECOVERY_MODE.md) -----------------------------------
+// Recovery is USB only. On the COM cable it always works; on a board with no COM
+// port (the HID-Fi Dongle) the native USB port carries HID only - so holding BOOT
+// for 8 s, then letting go, restarts the board once with a serial link added
+// beside HID. That press is the proof of holding the board; it changes nothing by
+// itself. The link answers commands only (never the log, which carries the WiFi
+// password at boot) and closes 5 minutes after its last command, on
+// recovery_exit, or when the board loses power (RTC memory does not survive it).
+RTC_NOINIT_ATTR uint32_t rtcRecoveryMagic;
+#define RECOVERY_MAGIC   0x52454356u       // "RECV"
+#define RECOVERY_HOLD_MS 8000UL
+#define RECOVERY_IDLE_MS (5UL * 60UL * 1000UL)
+USBCDC*  recoverySerial  = nullptr;        // exists only on a recovery boot
+bool     recoveryBoot    = false;
+uint32_t recoveryLastAt  = 0;              // millis() of its last command, or of the boot
+bool     recoveryClosing = false;          // a restart out of it is under way
+Print*   replySerial     = nullptr;        // where a serial reply goes: the COM port, or the link that asked
+
 // ---- Power ------------------------------------------------------------------
 // Nearly all of this board's draw is the radio, not the processor: roughly
 // 100-120 mA with WiFi awake against 30-40 mA with modem sleep on. CPU frequency
@@ -871,6 +889,94 @@ uint8_t hidKeyFor(const char* name);
 static void broadcastJson(const JsonDocument& doc);
 #include "ota.h"
 
+// ==================== RECOVERY MODE ====================
+// Why the board will not open recovery now, or nullptr. A restart while a new
+// firmware proves itself rolls it back, and one mid-install wastes the download:
+// the same two refusals as a cable update (ota.h, download_mode).
+const char* recoveryRefusal() {
+    if (otaPendingVerify()) return "verifying";
+    if (otaBusy() || job.step == OTA_STEP_READY) return "busy";
+    return nullptr;
+}
+
+void recoveryBlink(uint8_t r, uint8_t g, uint8_t b, int times, int onMs, int offMs) {
+    ledBlinkR = r; ledBlinkG = g; ledBlinkB = b;
+    ledBlinkOnMs = onMs; ledBlinkOffMs = offMs;
+    ledBlinkRemaining = times;
+    ledBlinkPhaseOn = true;
+    ledBlinkLast = millis();
+    ledApply(r, g, b);
+}
+
+// BOOT reached 8 s: say whether letting go will open recovery.
+void recoveryHoldReached(const char* why) {
+    StaticJsonDocument<160> doc;
+    doc["event"] = "recovery";
+    doc["state"] = why ? "refused" : "ready";
+    if (why) doc["why"] = why;
+    broadcastJson(doc);
+    if (why) recoveryBlink(255, 0, 0, 2, 400, 250);       // red, twice: not now
+    else     recoveryBlink(255, 110, 0, 3, 150, 150);     // amber, three quick: let go
+    COM_SERIAL.printf("[REC] BOOT held 8 s: %s\n", why ? why : "letting go opens recovery");
+}
+
+// BOOT let go after 8 s: restart once with the recovery link. Nothing stays held.
+void recoveryEnter() {
+    rtcRecoveryMagic = RECOVERY_MAGIC;
+    Keyboard.releaseAll();
+    hidMouseButtons(0x07, 0, 1);
+    COM_SERIAL.println("[REC] Restarting into recovery");
+    pendingRestartAt = millis() + 100;
+}
+
+// Leave recovery: a restart into a normal boot, after any reply has left.
+void recoveryClose(const char* why) {
+    recoveryClosing = true;
+    COM_SERIAL.printf("[REC] Closing (%s): restarting without the recovery link\n", why);
+    Keyboard.releaseAll();
+    hidMouseButtons(0x07, 0, 1);
+    pendingRestartAt = millis() + 300;
+}
+
+// From loop(): the recovery link's lines, read without blocking (half a line
+// never stalls the pointer path), one command per pass as on the COM port.
+void recoveryTick() {
+    static String line;
+    static bool overflow = false;
+    while (recoverySerial->available() > 0) {
+        int c = recoverySerial->read();
+        if (c < 0) break;
+        if (c == '\n') {
+            line.trim();
+            replySerial = recoverySerial;
+            if (overflow) recoverySerial->println("{\"status\":\"error\",\"message\":\"Line too long\"}");
+            else if (line.length() > 0) processCommand(line, SRC_SERIAL);
+            replySerial = &COM_SERIAL;
+            recoveryLastAt = millis();
+            line = "";
+            overflow = false;
+            break;
+        }
+        if (overflow) continue;
+        if (line.length() >= SERIAL_LINE_MAX) { overflow = true; line = ""; continue; }
+        line += (char)c;
+    }
+    if (!recoveryClosing && millis() - recoveryLastAt >= RECOVERY_IDLE_MS && !recoveryRefusal())
+        recoveryClose("idle");
+}
+
+void handleRecoveryExit() {
+    StaticJsonDocument<192> doc;
+    if (!recoveryBoot) {
+        doc["status"] = "error"; doc["reply"] = "not_in_recovery";
+        doc["message"] = "Recovery mode is not open";
+    } else {
+        if (!recoveryClosing) recoveryClose("asked");
+        doc["status"] = "ok"; doc["reply"] = "recovery_exit"; doc["restart"] = true;
+    }
+    sendJson(doc);
+}
+
 // ==================== SETUP ====================
 void setup() {
     COM_SERIAL.begin(115200);
@@ -889,6 +995,13 @@ void setup() {
     COM_SERIAL.println("========================================");
 
     otaBoot();      // which slot runs; whether a new firmware must still prove itself
+
+    // One-shot: cleared before anything else runs, so a crash or a reset in this
+    // boot comes back normally. Never on a boot that must still prove an update.
+    recoveryBoot = (rtcRecoveryMagic == RECOVERY_MAGIC) && !otaPendingVerify();
+    rtcRecoveryMagic = 0;
+    replySerial = &COM_SERIAL;
+    if (recoveryBoot) COM_SERIAL.println("[REC] Recovery boot: a serial link joins HID on the native USB for 5 minutes");
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOpenedAt[i] = 0; }
 
@@ -929,6 +1042,14 @@ void setup() {
     Consumer.begin();
     SystemCtl.begin();
     if (gamepadEnabled) { Gamepad = new USBHIDGamepad(); Gamepad->begin(); }
+    if (recoveryBoot) {
+        recoverySerial = new USBCDC(0);
+        // The core's CDC restarts into the ROM loader on an esptool-style DTR/RTS
+        // pattern or a 1200 baud "touch" - and opening a port pulses those lines.
+        recoverySerial->enableReboot(false);
+        recoverySerial->begin(115200);
+        recoveryLastAt = millis();
+    }
     USB.begin();
     delay(2000);  // PC needs time to enumerate the USB HID device
     hidReady = true;
@@ -936,6 +1057,7 @@ void setup() {
 
     // Initialize on-board RGB LED (WS2812 on GPIO48; requires the 'RGB' pad bridged)
     ledApply(0, 0, 0);
+    if (recoveryBoot) ledApply(40, 16, 0);
     
     // Initialize WiFi (auto-connect if credentials saved)
     setupWifi();
@@ -1019,6 +1141,7 @@ void loop() {
             processCommand(line, SRC_SERIAL);
         }
     }
+    if (recoverySerial) recoveryTick();     // only on a recovery boot: one pointer test otherwise
 
     SEC_END(0)
     if (wifiEnabled) {
@@ -1046,6 +1169,8 @@ void loop() {
     static bool lastButtonState = HIGH;
     static unsigned long btnDownAt = 0;
     static bool btnHoldDone = false;
+    static bool btnRecoveryDone = false;     // 8 s reached in this hold
+    static bool btnRecoveryArmed = false;    // ...and letting go will open recovery
     if (millis() - lastBtnPoll >= 20) {
         lastBtnPoll = millis();
         bool currentState = digitalRead(BOOT_BUTTON);
@@ -1053,6 +1178,18 @@ void loop() {
         if (currentState == LOW && lastButtonState == HIGH) {
             btnDownAt = millis();
             btnHoldDone = false;
+            btnRecoveryDone = false;
+            btnRecoveryArmed = false;
+        }
+        if (currentState == LOW && !btnRecoveryDone && millis() - btnDownAt >= RECOVERY_HOLD_MS) {
+            btnRecoveryDone = true;
+            const char* why = recoveryRefusal();
+            btnRecoveryArmed = !why;
+            recoveryHoldReached(why);
+        }
+        if (currentState == HIGH && lastButtonState == LOW && btnRecoveryArmed) {
+            btnRecoveryArmed = false;
+            recoveryEnter();
         }
         if (currentState == LOW && !btnHoldDone && millis() - btnDownAt >= 2000) {
             btnHoldDone = true;   // fires once per hold, not every poll
@@ -2169,7 +2306,7 @@ void processCommand(const String& line, CmdSource src) {
     const char* cmd = inDoc["cmd"] | "unknown";
     if (!otaQueryOnly(cmd)) lastHidAt = millis();
     if (!fromWifi || verboseLog) {
-        COM_SERIAL.printf("%s cmd=%s\n", fromWifi ? "[WIFI]" : "[UART]", cmd);
+        COM_SERIAL.printf("%s cmd=%s\n", fromWifi ? "[WIFI]" : (replySerial != &COM_SERIAL ? "[REC]" : "[UART]"), cmd);
     }
 
     // Exposure gate. Joining a home network changes who can reach this board in a
@@ -2454,6 +2591,9 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "screen_ticket") == 0) {
         handleScreenTicket(inDoc);
     }
+    else if (strcmp(cmd, "recovery_exit") == 0) {
+        handleRecoveryExit();
+    }
     else {
         StaticJsonDocument<256> doc;
         doc["status"] = "error";
@@ -2475,7 +2615,8 @@ void sendJson(const JsonDocument& doc) {
     lastJsonResponse = output;        // buffer for the WiFi reply
     // Echo only what the serial user asked for. A ~70 byte line costs ~6 ms at
     // 115200, which would otherwise be paid on every WiFi pointer command.
-    if (cmdSource == SRC_SERIAL || verboseLog) COM_SERIAL.println(output);
+    if (cmdSource == SRC_SERIAL) replySerial->println(output);   // the COM port, or the recovery link that asked
+    else if (verboseLog) COM_SERIAL.println(output);
 }
 
 // Taken by value: WebSocketsServer::sendTXT wants a non-const String&.
@@ -3145,7 +3286,8 @@ void handlePing(bool fromWifi) {
     
     String output;
     serializeJson(doc, output);
-    if (!fromWifi || verboseLog) COM_SERIAL.println(output);
+    if (!fromWifi) replySerial->println(output);
+    else if (verboseLog) COM_SERIAL.println(output);
     
     if (fromWifi) replyRaw(output);
 }
@@ -3170,6 +3312,12 @@ static uint8_t wsDevices() {
 
 void buildStatusDoc(JsonDocument& doc) {
     doc["status"] = "ok";
+    const bool recOpen = recoveryBoot && !recoveryClosing;
+    doc["recovery"] = recOpen;
+    if (recOpen) {
+        uint32_t idle = millis() - recoveryLastAt;
+        doc["recovery_left_s"] = (idle >= RECOVERY_IDLE_MS) ? 0 : (RECOVERY_IDLE_MS - idle + 999) / 1000;
+    }
     otaStatusFields(doc);
     otaJobFields(doc);
 #ifdef HIDFI_TEST_LOOP_STATS
@@ -3300,7 +3448,8 @@ void handleDeviceStatus(bool fromWifi) {
     
     String output;
     serializeJson(doc, output);
-    if (!fromWifi || verboseLog) COM_SERIAL.println(output);
+    if (!fromWifi) replySerial->println(output);
+    else if (verboseLog) COM_SERIAL.println(output);
     
     if (fromWifi) replyRaw(output);
 }
