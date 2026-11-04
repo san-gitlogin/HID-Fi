@@ -22,6 +22,24 @@ def check(name, cond, detail=""):
     global ok
     ok &= bool(cond); print(("ok  " if cond else "FAIL"), name, detail, flush=True)
 
+# The service serves every board on USB, as the app does: with a second board plugged
+# in (an owner's), it would be asked to pair too. Refuse unless one is named (hw_app
+# then sees only that one). load_all.py once asked the owner's board, 2026-11-05.
+def espressif_boards():
+    if sys.platform != "darwin":
+        return []
+    out = subprocess.run(["ioreg", "-p", "IOUSB", "-l", "-w0"], capture_output=True, text=True).stdout
+    macs = set()
+    for dev in out.split("+-o ")[1:]:
+        ven = re.search(r'"idVendor" = (\d+)', dev)
+        ser = re.search(r'"USB Serial Number" = "([0-9A-Fa-f:]{12,17})"', dev)
+        if ven and int(ven.group(1)) == 0x303A and ser:
+            macs.add(ser.group(1).replace(":", "").upper())
+    return sorted(macs)
+
+
+if len(espressif_boards()) > 1 and not os.environ.get("HIDFI_ONLY_BOARD"):
+    sys.exit("more than one board on USB: set HIDFI_ONLY_BOARD to the test board's MAC")
 app = subprocess.Popen([str(ROOT / "target/release/examples/hw_app"), tempfile.mkdtemp(prefix="hidfi-hw-")],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 lines = queue.Queue(); latest = {}

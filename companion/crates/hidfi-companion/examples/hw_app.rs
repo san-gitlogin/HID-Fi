@@ -3,14 +3,33 @@
 //! permission is needed). For companion/tests/hardware.py. Test tool only.
 //!
 //! args: STORE_DIR        stdout: one JSON line per change; stdin: "quit"
+//! HIDFI_ONLY_BOARD=<MAC>: see only that board on USB. The service serves every
+//! board plugged in, as the app does; with the owner's board plugged in too, a test
+//! would otherwise ask that board to pair (2026-11-05: load_all.py did, once).
 
+use hidfi_agent::env::UsbList;
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
+use hidfi_core::discovery::UsbDevice;
 use hidfi_companion::service::{self, Cmd, Env};
 use hidfi_companion::store::Store;
 use hidfi_stream::pattern::FakeDisplays;
 use std::io::BufRead;
 use std::sync::Arc;
 use std::time::Duration;
+
+/// The real listing with every other Espressif board left out.
+struct OnlyBoard(String);
+
+impl UsbList for OnlyBoard {
+    fn list(&self) -> Vec<UsbDevice> {
+        let mine = |d: &UsbDevice| {
+            d.serial
+                .as_deref()
+                .is_some_and(|s| s.replace(':', "").eq_ignore_ascii_case(&self.0))
+        };
+        NusbList.list().into_iter().filter(|d| d.vid != 0x303A || mine(d)).collect()
+    }
+}
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -25,7 +44,10 @@ fn main() {
     // HIDFI_DISPLAYS=n pretends to have n displays; stdin "unplug-display <id>" pulls one.
     let fake = FakeDisplays::from_env(1280, 720);
     let env = Env {
-        usb: Box::new(NusbList),
+        usb: match std::env::var("HIDFI_ONLY_BOARD") {
+            Ok(m) => Box::new(OnlyBoard(m.replace(':', ""))),
+            Err(_) => Box::new(NusbList),
+        },
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
         browse: Box::new(MdnsBrowse::start()),
         source: {

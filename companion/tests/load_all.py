@@ -14,8 +14,10 @@ pointer's answer time while all of it runs, every page error, and the board's
 memory before and after. The board is left as found (the test computer unpaired).
 
 Needs the access PIN in HIDFI_PIN (never written anywhere by this script).
+With two boards plugged in it refuses to start unless HIDFI_ONLY_BOARD names the
+test board's MAC: the service would otherwise ask the other board to pair too.
 Run: cargo build --release -p hidfi-companion --example hw_app
-     HIDFI_PIN=... python3 companion/tests/load_all.py [board-url]     (HOLD_S=60, HW_APP=path)
+     HIDFI_PIN=... HIDFI_ONLY_BOARD=<MAC> python3 companion/tests/load_all.py [board-url]   (HOLD_S=60, HW_APP=path)
 """
 import json, os, pathlib, queue, re, statistics, struct, subprocess, sys, tempfile, threading, time, urllib.request
 
@@ -26,6 +28,30 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PIN = os.environ.get("HIDFI_PIN") or sys.exit("set HIDFI_PIN")
 HOLD = float(os.environ.get("HOLD_S", "60"))
 HW_APP = os.environ.get("HW_APP") or str(ROOT / "target/release/examples/hw_app")
+ONLY = os.environ.get("HIDFI_ONLY_BOARD", "")
+
+
+def espressif_boards():
+    """Every HID-Fi (Espressif) board on this computer's USB, by MAC."""
+    if sys.platform != "darwin":
+        return []
+    out = subprocess.run(["ioreg", "-p", "IOUSB", "-l", "-w0"], capture_output=True, text=True).stdout
+    macs = set()
+    for dev in out.split("+-o ")[1:]:                 # one block per USB device
+        ven = re.search(r'"idVendor" = (\d+)', dev)
+        ser = re.search(r'"USB Serial Number" = "([0-9A-Fa-f:]{12,17})"', dev)
+        if ven and int(ven.group(1)) == 0x303A and ser:
+            macs.add(ser.group(1).replace(":", "").upper())
+    return sorted(macs)
+
+
+# The service serves every board on USB, as the app does: with a second board
+# plugged in (an owner's), it would be asked to pair. Refuse unless one is named.
+_boards = espressif_boards()
+if len(_boards) > 1 and not ONLY:
+    sys.exit(f"{len(_boards)} boards on USB: set HIDFI_ONLY_BOARD to the test board's MAC")
+if ONLY and ONLY.replace(":", "").upper() not in _boards and _boards:
+    sys.exit("HIDFI_ONLY_BOARD is not on this computer's USB")
 ok = True
 
 
@@ -187,6 +213,10 @@ try:
                 pages.append(q)
             wait_app(lambda v: v["watching"] == 6, 15, "six viewers")
             big = pages[1]
+            # The bar fades after a few idle seconds; a moving pointer brings it back.
+            big.mouse.move(400, 300)
+            big.mouse.move(420, 320)
+            big.wait_for_function("!document.querySelector('.watchwrap').classList.contains('idle')", timeout=5000)
             big.click("#watchFs")
             big.wait_for_function("!!document.fullscreenElement", timeout=5000)
             check("the 1920x1080 screen went fullscreen through its own button", True)
