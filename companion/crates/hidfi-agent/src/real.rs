@@ -75,7 +75,9 @@ impl UsbList for NusbList {
                 let mut rec = Vec::new();
                 let out = it
                     .map(|d| {
-                        if d.vendor_id() == 0x303A && d.interfaces().any(|i| CDC.contains(&i.class())) {
+                        if d.vendor_id() == 0x303A
+                            && d.interfaces().any(|i| CDC.contains(&i.class()))
+                        {
                             if let Some(m) = d.serial_number().and_then(Mac::parse) {
                                 rec.push(m);
                             }

@@ -588,9 +588,15 @@ mod tests {
         let msg = r#"rec:{"mac":"DCB4D909F7C8","op":"reveal"}"#;
         let (code, body) = req(o.port, "POST", &rec, "", msg);
         assert_eq!(code, 200);
-        assert!(body.contains("DCB4D909F7C8"), "the app's own answer comes back: {body}");
+        assert!(
+            body.contains("DCB4D909F7C8"),
+            "the app's own answer comes back: {body}"
+        );
         // Another site gets nothing, even knowing the path; nor does a GET, or no token.
-        assert_eq!(req(o.port, "POST", &rec, "Origin: http://evil.example\r\n", msg).0, 404);
+        assert_eq!(
+            req(o.port, "POST", &rec, "Origin: http://evil.example\r\n", msg).0,
+            404
+        );
         assert_eq!(req(o.port, "GET", &rec, "", "").0, 404);
         assert_eq!(req(o.port, "POST", "/rec", "", msg).0, 404);
     }

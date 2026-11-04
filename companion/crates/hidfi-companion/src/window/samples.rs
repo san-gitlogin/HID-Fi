@@ -349,10 +349,18 @@ pub fn all() -> Vec<(&'static str, View)> {
         vault_pin,
     };
     let rec = |info: Option<crate::recovery::Info>, busy: bool, note: Option<(bool, String)>| {
-        let mut v = view(vec![b(bb, found("192.168.0.103"), Status::Online, Some(14), 0)]);
+        let mut v = view(vec![b(
+            bb,
+            found("192.168.0.103"),
+            Status::Online,
+            Some(14),
+            0,
+        )]);
         v.recovery = vec![crate::recovery::RecView {
             mac: bb.into(),
-            closes: info.as_ref().map(|_| std::time::Instant::now() + std::time::Duration::from_secs(287)),
+            closes: info
+                .as_ref()
+                .map(|_| std::time::Instant::now() + std::time::Duration::from_secs(287)),
             info,
             busy,
             note,
@@ -364,7 +372,11 @@ pub fn all() -> Vec<(&'static str, View)> {
     states.push(("recovery-asking", rec(None, true, None)));
     states.push((
         "recovery-failed",
-        rec(None, false, Some((false, crate::recovery::RecError::NotInRecovery.text()))),
+        rec(
+            None,
+            false,
+            Some((false, crate::recovery::RecError::NotInRecovery.text())),
+        ),
     ));
 
     states

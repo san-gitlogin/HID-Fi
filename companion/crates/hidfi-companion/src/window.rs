@@ -250,9 +250,10 @@ fn rec_card(v: &View, mac: &str) -> Value {
     let Some(r) = v.recovery.iter().find(|r| r.mac == mac) else {
         return Value::Null;
     };
-    let left = r
-        .closes
-        .map(|c| c.saturating_duration_since(std::time::Instant::now()).as_secs());
+    let left = r.closes.map(|c| {
+        c.saturating_duration_since(std::time::Instant::now())
+            .as_secs()
+    });
     json!({
         "left_s": left, "busy": r.busy,
         "note": r.note.as_ref().map(|(good, text)| json!({"good": good, "text": text})),

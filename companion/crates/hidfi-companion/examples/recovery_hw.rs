@@ -15,7 +15,11 @@ fn main() {
     let t0 = Instant::now();
     let _ = usb.list();
     let macs = usb.recovery_macs();
-    println!("listing took {:?}; boards in recovery mode: {:?}", t0.elapsed(), macs.iter().map(|m| m.hex()).collect::<Vec<_>>());
+    println!(
+        "listing took {:?}; boards in recovery mode: {:?}",
+        t0.elapsed(),
+        macs.iter().map(|m| m.hex()).collect::<Vec<_>>()
+    );
     let Some(mac) = macs.first().copied() else {
         println!("none - hold BOOT 8 s first");
         std::process::exit(2);
@@ -48,10 +52,17 @@ fn main() {
         let _ = rt.send(x);
     });
     match rr.recv_timeout(Duration::from_secs(10)) {
-        Ok(Reply::Shown { password, .. }) => println!("reveal: a password came back: {} ({:?})", password.is_some(), t2.elapsed()),
+        Ok(Reply::Shown { password, .. }) => println!(
+            "reveal: a password came back: {} ({:?})",
+            password.is_some(),
+            t2.elapsed()
+        ),
         other => println!("reveal: {other:?}"),
     }
-    println!("view holds no password: {}", !format!("{:?}", state.lock().unwrap()).contains("password"));
+    println!(
+        "view holds no password: {}",
+        !format!("{:?}", state.lock().unwrap()).contains("password")
+    );
     if !keep {
         let (ct, cr) = mpsc::channel();
         w.act(mac, Op::Close, move |x| {
