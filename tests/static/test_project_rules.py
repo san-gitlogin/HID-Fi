@@ -319,3 +319,18 @@ def test_the_scenario_name_rule_sees_a_repeat():
     text = ('Feature: f\n  Scenario Outline: "<state>" fits a <width> px window\n  Scenario: B\n'
             '  Scenario Outline: <state> fits a <width> px window!\n  Example: B\n  Scenario: C\n')
     assert [n for _, _, n in scenario_name_clashes(text)] == ["state_fits_a_width_px_window", "b"]
+
+
+def test_a_serial_line_is_one_write():
+    """println(text) is two writes, and the update worker logs from the other core:
+    its line once landed between a reply and its "\\r\\n", joining them so the host
+    parsed neither (3 of 1230 echo replies lost across six update checks, on hardware).
+    A built line (JSON) goes out through serialLine(); ota.h, which runs on the
+    worker, never uses println at all."""
+    ino = paths.INO.read_text(encoding="utf-8")
+    built = [f"hid_fi.ino:{ino.count(chr(10), 0, m.start()) + 1}: {m.group(0)}"
+             for m in re.finditer(r"(?:COM_SERIAL|replySerial|recoverySerial)\s*(?:\.|->)\s*println\(\s*(?![\"')]|F\()[^;]*", ino)]
+    ota = (paths.SKETCH / "ota.h").read_text(encoding="utf-8")
+    worker = [f"ota.h:{ota.count(chr(10), 0, m.start()) + 1}" for m in re.finditer(r"\bprintln\s*\(", ota)]
+    assert not built and not worker, "use serialLine() / one print with \\r\\n:\n" + "\n".join(built + worker)
+    assert "void serialLine(Print& p, const String& line)" in ino and "p.write(" in ino

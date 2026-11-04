@@ -105,7 +105,7 @@ void otaBoot() {
                       ota.why.length() ? " - " : "", ota.why.c_str());
 #ifdef HIDFI_TEST_CRASH_AT_BOOT
     if (ota.pending) {
-        COM_SERIAL.println("[OTA] test build: crashing before the self-test");
+        COM_SERIAL.print("[OTA] test build: crashing before the self-test\r\n");
         delay(100);
         abort();
     }
@@ -629,7 +629,7 @@ void otaService() {
     if (job.step == OTA_STEP_READY &&
         otaMayApply(job.applyAsked, otaAutoSecurity, job.security,
                     millis() - lastHidAt < OTA_IDLE_BEFORE_RESTART_MS, ota.pending)) {
-        COM_SERIAL.println("[OTA] restarting into the new version");
+        COM_SERIAL.print("[OTA] restarting into the new version\r\n");
         Keyboard.releaseAll();
         hidMouseButtons(0x07, 0, 1);
         delay(100);
@@ -917,7 +917,7 @@ static void compOta(const JsonDocument& in, uint32_t ip) {
 // Companion writes, and clears the flag, over that port.
 void otaDownloadModeTick() {
     if (!otaDownloadModeAt || (long)(millis() - otaDownloadModeAt) < 0) return;
-    COM_SERIAL.println("[OTA] restarting into the ROM loader for a cable update");
+    COM_SERIAL.print("[OTA] restarting into the ROM loader for a cable update\r\n");
     Keyboard.releaseAll();
     hidMouseButtons(0x07, 0, 1);
     delay(100);

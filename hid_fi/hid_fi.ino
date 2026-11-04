@@ -129,6 +129,7 @@ static bool usbWakeHost() {
 // ==================== SERIAL PORT ====================
 HardwareSerial ComSerial(0);  // UART0 (TX=GPIO43, RX=GPIO44) → CH343 COM port
 #define COM_SERIAL ComSerial
+void serialLine(Print& p, const String& line);   // a whole line in one write (defined by sendJson)
 
 // ==================== USB HID ====================
 // Composite HID: keyboard + ONE mouse + consumer control + system control,
@@ -632,7 +633,7 @@ void announceHostOs() {
     serializeJson(doc, out);
     // Push it so an open dashboard reskins immediately rather than on its next poll.
     if (wifiEnabled) webSocket.broadcastTXT(out);
-    COM_SERIAL.println(out);
+    serialLine(COM_SERIAL, out);
 }
 
 // Back to waiting for a host. Baselines the counters so only the next
@@ -1743,7 +1744,7 @@ static void broadcastJson(const JsonDocument& doc) {
     String out;
     serializeJson(doc, out);
     if (wifiEnabled) webSocket.broadcastTXT(out);
-    COM_SERIAL.println(out);
+    serialLine(COM_SERIAL, out);
 }
 
 // On the network: either a join just finished, or the address changed under us.
@@ -2607,14 +2608,27 @@ void processCommand(const String& line, CmdSource src) {
 }
 
 // ==================== RESPONSE HELPERS ====================
+// A line and its end in ONE write. println() is two (the text, then "\r\n"), and
+// the update worker on the other core logs too: its line could land between them,
+// joining a reply to "[OTA] ..." so the host could parse neither (measured: 3 of
+// 1230 echo replies across six update checks). One write is one uart lock, the same
+// bytes on the wire. A copy, so the caller's text (often a WiFi reply too) is untouched.
+void serialLine(Print& p, const String& line) {
+    String l;
+    l.reserve(line.length() + 2);
+    l += line;
+    l += "\r\n";
+    p.write((const uint8_t*)l.c_str(), l.length());
+}
+
 void sendJson(const JsonDocument& doc) {
     String output;
     serializeJson(doc, output);
     lastJsonResponse = output;        // buffer for the WiFi reply
     // Echo only what the serial user asked for. A ~70 byte line costs ~6 ms at
     // 115200, which would otherwise be paid on every WiFi pointer command.
-    if (cmdSource == SRC_SERIAL) replySerial->println(output);   // the COM port, or the recovery link that asked
-    else if (verboseLog) COM_SERIAL.println(output);
+    if (cmdSource == SRC_SERIAL) serialLine(*replySerial, output);   // the COM port, or the recovery link that asked
+    else if (verboseLog) serialLine(COM_SERIAL, output);
 }
 
 // Taken by value: WebSocketsServer::sendTXT wants a non-const String&.
@@ -3284,8 +3298,8 @@ void handlePing(bool fromWifi) {
     
     String output;
     serializeJson(doc, output);
-    if (!fromWifi) replySerial->println(output);
-    else if (verboseLog) COM_SERIAL.println(output);
+    if (!fromWifi) serialLine(*replySerial, output);
+    else if (verboseLog) serialLine(COM_SERIAL, output);
     
     if (fromWifi) replyRaw(output);
 }
@@ -3446,8 +3460,8 @@ void handleDeviceStatus(bool fromWifi) {
     
     String output;
     serializeJson(doc, output);
-    if (!fromWifi) replySerial->println(output);
-    else if (verboseLog) COM_SERIAL.println(output);
+    if (!fromWifi) serialLine(*replySerial, output);
+    else if (verboseLog) serialLine(COM_SERIAL, output);
     
     if (fromWifi) replyRaw(output);
 }
@@ -3900,7 +3914,7 @@ void updateWiggle() {
         evt["elapsed_sec"] = elapsed;
         String out;
         serializeJson(evt, out);
-        COM_SERIAL.println(out);
+        serialLine(COM_SERIAL, out);
         return;
     }
 
