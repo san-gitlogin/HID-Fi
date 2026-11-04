@@ -3,6 +3,7 @@
 #   irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-windows.ps1 | iex
 #   .\install-windows.ps1 -Uninstall
 #   .\install-windows.ps1 -From .\hidfi-companion.exe      (a build of your own)
+#   .\install-windows.ps1 -Yes      (no question: for scripts; a person is asked first)
 #
 # Updating is running it again: it closes the running app, replaces it and
 # starts the new one - no need to quit from the tray first. Starting a newer
@@ -16,8 +17,12 @@
 # tray menu can turn off). Viewers connect to this computer, so Windows
 # Firewall needs one rule: Windows asks for administrator approval once, for
 # that rule only, for Private networks only.
+#
+# Before it changes anything it says who publishes the app, where it comes from and
+# what it will do, and asks. It also lists the app in Settings > Apps, with HID-Fi's
+# icon and publisher and an Uninstall button that works offline.
 [CmdletBinding()]
-param([switch]$Uninstall, [string]$From)
+param([switch]$Uninstall, [string]$From, [switch]$Yes)
 
 $ErrorActionPreference = 'Stop'
 $Repo = 'san-gitlogin/HID-Fi'
@@ -25,6 +30,9 @@ $Dir = Join-Path $env:LOCALAPPDATA 'Programs\HID-Fi Companion'
 $Exe = Join-Path $Dir 'hidfi-companion.exe'
 $Lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'HID-Fi Companion.lnk'
 $Rule = 'HID-Fi Companion'
+$AppKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HID-Fi Companion'
+$Publisher = 'HID-Fi'
+$Site = "https://github.com/$Repo"
 
 function Set-FirewallRule([bool]$Add) {
     $cmd = if ($Add) {
@@ -56,6 +64,7 @@ if ($Uninstall) {
     Remove-Item -Force -ErrorAction SilentlyContinue $Lnk
     Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'HID-Fi Companion' -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Dir
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $AppKey
     [void](Set-FirewallRule $false)
     Write-Host 'Removed HID-Fi Companion.'
     Write-Host "Its settings and pairing are in $env:APPDATA\HID-Fi Companion - delete that folder to forget the pairing,"
@@ -64,6 +73,33 @@ if ($Uninstall) {
 }
 
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'HID-Fi Companion needs 64-bit Windows.' }
+
+# Consent first: nothing is written before a person says yes (or -Yes, for scripts).
+$what = if ($From) { "your own build: $From" } else { "the latest release from $Site/releases (its SHA-256 checksum is checked)" }
+Write-Host ''
+Write-Host 'HID-Fi Companion' -ForegroundColor Cyan
+Write-Host "  Publisher: $Publisher   ($Site)"
+Write-Host "  Installs:  $what"
+Write-Host ''
+Write-Host '  It will:'
+Write-Host "   - put the app in $Dir, for you only (no administrator needed for this)"
+Write-Host '   - add it to the Start menu, and to Settings > Apps to remove it later'
+Write-Host '   - start it now and when you sign in (its tray menu turns that off)'
+Write-Host '   - ask Windows once for administrator approval for one firewall rule, so viewers'
+Write-Host '     on your Private (home) network can connect - you may say no'
+Write-Host ''
+Write-Host '  It shows this computer''s screen only on a dashboard you pair, after you tap Pair.'
+Write-Host '  License: PolyForm Noncommercial 1.0.0 - free for personal, non-commercial use:'
+Write-Host "           $Site/blob/main/LICENSE.md"
+Write-Host ''
+if (-not $Yes) {
+    if (-not [Environment]::UserInteractive) { throw 'No one to ask: run it again with -Yes to install without the question.' }
+    $answer = Read-Host 'Install HID-Fi Companion? [Y/n]'
+    if ($null -eq $answer -or ($answer.Trim() -ne '' -and $answer.Trim() -notmatch '^(y|yes)$')) {
+        Write-Host 'Not installed. Nothing was changed.'
+        return
+    }
+}
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("hidfi-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
@@ -99,6 +135,35 @@ $s.TargetPath = $Exe
 $s.WorkingDirectory = $Dir
 $s.Description = "Shows this computer's screen on the HID-Fi dashboard"
 $s.Save()
+
+# Settings > Apps (and Control Panel's Programs): HID-Fi's icon, publisher and
+# version from the .exe itself, and an Uninstall button. That button runs a copy of
+# the uninstall steps kept beside the app, so removing it needs no download.
+$Unins = Join-Path $Dir 'uninstall.ps1'
+@"
+# Removes HID-Fi Companion for this user (Settings > Apps > Uninstall runs this).
+`$ErrorActionPreference = 'Continue'
+Get-Process -Name 'hidfi-companion' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 800
+Remove-Item -Force -ErrorAction SilentlyContinue '$Lnk'
+Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'HID-Fi Companion' -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$AppKey'
+try { Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', 'netsh advfirewall firewall delete rule name="$Rule"' } catch {}
+Set-Location `$env:TEMP
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$Dir'
+"@ | Set-Content -Encoding UTF8 -LiteralPath $Unins
+$info = (Get-Item -LiteralPath $Exe).VersionInfo
+New-Item -Force -Path $AppKey | Out-Null
+$props = @{
+    DisplayName = 'HID-Fi Companion'; DisplayIcon = "$Exe,0"; Publisher = $Publisher
+    DisplayVersion = "$($info.ProductVersion)"; InstallLocation = $Dir
+    URLInfoAbout = $Site; HelpLink = "$Site/blob/main/docs/COMPANION.md"
+    Comments = "Shows this computer's screen on the HID-Fi dashboard"
+    UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Unins`""
+}
+foreach ($k in $props.Keys) { Set-ItemProperty -Path $AppKey -Name $k -Value $props[$k] }
+foreach ($k in 'NoModify', 'NoRepair') { Set-ItemProperty -Path $AppKey -Name $k -Value 1 -Type DWord }
+Set-ItemProperty -Path $AppKey -Name 'EstimatedSize' -Type DWord -Value ([int]((Get-Item -LiteralPath $Exe).Length / 1KB))
 
 # The version, from the app itself. A tray app has no console, so its output is
 # only seen through a redirected file (seen: '& $Exe --version' printed nothing).

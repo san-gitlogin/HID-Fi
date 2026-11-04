@@ -28,8 +28,9 @@ dashboard's **Screen** tab.
 1. Download `HID-Fi-Companion-…-macos.dmg` from the
    [latest release](https://github.com/san-gitlogin/HID-Fi/releases/latest).
 2. Open it and drag **HID-Fi Companion** to **Applications**. Open it from there.
-3. Its window opens and walks you through three steps. It lives in the menu bar
-   (no Dock icon) and starts at login.
+3. Its window opens and walks you through three steps. While the window is open
+   the app has a Dock icon (and a place in Cmd-Tab); close the window and it lives
+   in the menu bar only. It starts at login.
 
 **The window** shows this computer (its sound switches, *Check for updates*) and
 a card for each board: *Online*, *Live* (someone is watching through it), *Needs
@@ -64,6 +65,13 @@ In **PowerShell** (Start, type *PowerShell*):
 ```powershell
 irm https://raw.githubusercontent.com/san-gitlogin/HID-Fi/main/companion/package/install-windows.ps1 | iex
 ```
+
+Before it changes anything the installer shows who publishes the app (HID-Fi),
+where the download comes from (the latest release, checksum checked), what it will
+do and the licence, and asks **Install HID-Fi Companion? [Y/n]** - Enter or *y*
+installs, *n* changes nothing. (Scripts pass `-Yes`.) The app then has HID-Fi's
+icon in the Start menu, its window's title bar and the taskbar, and is listed in
+**Settings, Apps, Installed apps** with its publisher and version.
 
 Windows asks for administrator approval **once**, to let viewers on your home
 network connect (a firewall rule for Private networks only). The icon appears by
@@ -189,7 +197,8 @@ the installer instead.
 ## Remove
 
 - macOS: Quit from the menu bar, delete the app from Applications.
-- Windows: `.\install-windows.ps1 -Uninstall` (or run the install line with `-Uninstall`).
+- Windows: **Settings, Apps, Installed apps**, *HID-Fi Companion*, **...**, **Uninstall**
+  (needs no download), or `.\install-windows.ps1 -Uninstall`.
 - Linux: `sh install-linux.sh --uninstall`.
 
 Then remove the computer on the dashboard's Screen tab.

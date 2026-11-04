@@ -55,6 +55,59 @@ enum Phase {
     Setup(usize, Instant),
     /// Ask for the window; wait until it is on screen and in front.
     Asked(usize, Instant, Instant),
+    /// Last: what the OS shows for the app with the window open (0), then closed (1).
+    Dock(u8, Instant),
+}
+
+/// How LaunchServices - what the Dock and Cmd-Tab follow - sees this app:
+/// "Foreground" is in the Dock, "UIElement" is menu bar only.
+#[cfg(target_os = "macos")]
+fn app_type() -> String {
+    let out = std::process::Command::new("lsappinfo")
+        .args([
+            "info",
+            "-only",
+            "ApplicationType",
+            &std::process::id().to_string(),
+        ])
+        .output();
+    let text = out
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    text.rsplit('=')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_matches('"')
+        .to_string()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn app_type() -> String {
+    String::new()
+}
+
+/// Windows: whether the window has a title-bar (small) and a taskbar (big) icon of
+/// its own; without them Windows drew a blank, generic one.
+#[cfg(windows)]
+fn icons(w: &Window) -> (bool, bool) {
+    use tao::platform::windows::WindowExtWindows;
+    #[link(name = "user32")]
+    extern "system" {
+        fn SendMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> isize;
+    }
+    const WM_GETICON: u32 = 0x007F;
+    unsafe {
+        (
+            SendMessageW(w.hwnd(), WM_GETICON, 0, 0) != 0,
+            SendMessageW(w.hwnd(), WM_GETICON, 1, 0) != 0,
+        )
+    }
+}
+
+#[cfg(not(windows))]
+fn icons(_: &Window) -> (bool, bool) {
+    (false, false)
 }
 
 fn shown(w: &Window) -> bool {
@@ -92,6 +145,7 @@ pub fn run(out: &str) {
         e
     };
     let mut panel: Option<Panel> = None;
+    let mut in_dock = false;
     let mut other: Option<Window> = None;
     let mut phase: Option<Phase> = None;
     let mut results: Vec<serde_json::Value> = Vec::new();
@@ -131,6 +185,7 @@ pub fn run(out: &str) {
         let step = match &ph {
             Phase::Setup(i, _) => format!("setup {i}"),
             Phase::Asked(i, ..) => format!("asked {i}"),
+            Phase::Dock(stage, _) => format!("dock {stage}"),
         };
         if last_step.as_deref() != Some(step.as_str()) {
             eprintln!("{:>6} ms  {step}", started.elapsed().as_millis());
@@ -139,10 +194,8 @@ pub fn run(out: &str) {
         phase = Some(match ph {
             Phase::Setup(i, since) => {
                 let Some(&way) = WAYS.get(i) else {
-                    let _ = std::fs::write(&out, serde_json::Value::from(results.clone()).to_string());
-                    panel = None;
                     other = None;
-                    *flow = ControlFlow::Exit;
+                    phase = Some(Phase::Dock(0, Instant::now()));
                     return;
                 };
                 // Every case but the first starts from a window on screen.
@@ -231,6 +284,28 @@ pub fn run(out: &str) {
                     Phase::Asked(i, at, last)
                 }
             }
+            // The OS's own answer, after a moment for it to update.
+            Phase::Dock(stage, since) => {
+                if stage == 0 && panel.is_none() {
+                    let _ = open(target, &mut panel);
+                }
+                if since.elapsed() < Duration::from_millis(800) {
+                    Phase::Dock(stage, since)
+                } else if stage == 0 {
+                    let (small, big) = panel.as_ref().map_or((false, false), |p| icons(p.window()));
+                    results.push(serde_json::json!({"way": "Dock", "window": "open", "app_type": app_type(),
+                                                    "icon_small": small, "icon_big": big}));
+                    panel = None; // closed, as CloseRequested does in desktop.rs
+                    Phase::Dock(1, Instant::now())
+                } else {
+                    results.push(serde_json::json!({"way": "Dock", "window": "closed", "app_type": app_type()}));
+                    let _ = std::fs::write(&out, serde_json::Value::from(results.clone()).to_string());
+                    *flow = ControlFlow::Exit;
+                    return;
+                }
+            }
         });
+        // As desktop.rs does once per pass: the Dock follows the window.
+        panel::dock(target, panel.is_some(), &mut in_dock);
     });
 }

@@ -45,4 +45,31 @@ mod tests {
             assert!(w >= 22 && w == h);
         }
     }
+
+    /// The Windows app icon (build.rs puts it in the .exe as icon 1): every size
+    /// Windows asks for, each a real image of that size - Windows picks the closest,
+    /// and a missing small size is drawn blurry in the title bar and taskbar.
+    #[test]
+    fn the_windows_app_icon_has_every_size() {
+        let ico: &[u8] = include_bytes!("../assets/app.ico");
+        let u16_at = |o: usize| u16::from_le_bytes([ico[o], ico[o + 1]]) as usize;
+        let u32_at = |o: usize| u32::from_le_bytes(ico[o..o + 4].try_into().unwrap()) as usize;
+        assert_eq!((u16_at(0), u16_at(2)), (0, 1), "an .ico file");
+        let mut sizes = Vec::new();
+        for i in 0..u16_at(4) {
+            let d = 6 + 16 * i;
+            let side = if ico[d] == 0 { 256 } else { ico[d] as u32 };
+            let (len, at) = (u32_at(d + 8), u32_at(d + 12));
+            let dec = png::Decoder::new(std::io::Cursor::new(&ico[at..at + len]));
+            let info = dec.read_info().expect("each size is a PNG").info().clone();
+            assert_eq!(
+                (info.width, info.height),
+                (side, side),
+                "the image is the size it claims"
+            );
+            sizes.push(side);
+        }
+        sizes.sort();
+        assert_eq!(sizes, [16, 20, 24, 32, 40, 48, 64, 256]);
+    }
 }

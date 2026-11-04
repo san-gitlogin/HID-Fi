@@ -53,7 +53,21 @@ if not out.exists():
 rep = json.loads(out.read_text(encoding="utf-8"))
 want = ["NotOpen", "Minimized", "Hidden", "Behind"] + (["AppHidden"] if sys.platform == "darwin" else []) + [
     "Closed", "Minimized"]
+dock = [x for x in rep if x["way"] == "Dock"]
+rep = [x for x in rep if x["way"] != "Dock"]
 check("every way was tried", [x["way"] for x in rep] == want, [x["way"] for x in rep])
+# The app's own icon while its window is open: the Dock on macOS (it was a menu-bar
+# app all the time, so an open window had no Dock icon), the title bar and taskbar
+# on Windows (a blank, generic icon looked untrustworthy). Gone from the Dock again
+# once the window closes: the menu bar is home.
+check("the Dock/icon check ran (window open, then closed)", [d.get("window") for d in dock] == ["open", "closed"], dock)
+if len(dock) == 2:
+    if sys.platform == "darwin":
+        check("macOS: the open window puts the app in the Dock", dock[0]["app_type"] == "Foreground", dock[0])
+        check("macOS: closed, the app is back to the menu bar only", dock[1]["app_type"] == "UIElement", dock[1])
+    if os.name == "nt":
+        check("Windows: the window has HID-Fi's title-bar and taskbar icons", dock[0]["icon_small"] and dock[0]["icon_big"],
+              dock[0])
 for x in rep:
     if "error" in x:
         check(f"{x['way']}: set up", False, x["error"])
