@@ -13,6 +13,12 @@
 #   companion/tests/windows/vm.sh sync [x64|arm64]  # tests + Windows build into C:\hidfi
 #   companion/tests/windows/vm.sh desktop "cmd"   # run in the logged-on desktop
 #     (SSH sessions have no desktop: screen capture only works from there)
+#   HIDFI_WIN_VM_USB=1 companion/tests/windows/vm.sh up   # able to take a real USB device:
+#   companion/tests/windows/vm.sh usb add hostbus=0,hostport=1 | usb remove
+#     (pick the device by bus and port, never vid:pid - two boards share one; macOS
+#     gets it back on remove or down. QEMU's -daemonize forks, and macOS aborts a
+#     forked process that then opens USB, so this way QEMU starts in its own session
+#     instead of forking.)
 #
 # Needs: qemu (brew install qemu), in $HIDFI_WIN_VM_HOME/iso:
 #   Win11_arm64_en-us.iso  - Microsoft's official Windows 11 ARM64 image
@@ -50,20 +56,27 @@ EOF
 
 running() { [ -f "$S/qemu.pid" ] && kill -0 "$(cat "$S/qemu.pid")" 2>/dev/null; }
 
-qemu() { # qemu [extra args...]
+qemu() { # qemu [extra args...]: in the background
   command -v qemu-system-aarch64 >/dev/null || die "qemu is not installed (brew install qemu)"
-  qemu-system-aarch64 \
-    -name hidfi-win -M virt,highmem=on -accel hvf -cpu host -smp 4 -m "${HIDFI_WIN_VM_RAM:-6144}" \
-    -drive if=pflash,format=raw,readonly=on,file="$FW" \
-    -drive if=pflash,format=raw,file="$VM/efivars.fd" \
-    -device ramfb -device qemu-xhci -device usb-kbd -device usb-tablet \
-    -drive if=none,id=sys,file="$VM/disk.qcow2",format=qcow2,cache=writeback \
-    -device nvme,drive=sys,serial=hidfi-sys \
-    -netdev user,id=n0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 -device virtio-net-pci,netdev=n0 \
-    -monitor unix:"$S/monitor.sock",server,nowait \
-    ${HIDFI_WIN_AUDIO:+-audiodev none,id=snd0 -device intel-hda -device hda-duplex,audiodev=snd0} \
-    -vnc 127.0.0.1:5 -display none -daemonize -pidfile "$S/qemu.pid" \
+  local a=(
+    -name hidfi-win -M virt,highmem=on -accel hvf -cpu host -smp 4 -m "${HIDFI_WIN_VM_RAM:-6144}"
+    -drive if=pflash,format=raw,readonly=on,file="$FW"
+    -drive if=pflash,format=raw,file="$VM/efivars.fd"
+    -device ramfb -device qemu-xhci -device usb-kbd -device usb-tablet
+    -drive if=none,id=sys,file="$VM/disk.qcow2",format=qcow2,cache=writeback
+    -device nvme,drive=sys,serial=hidfi-sys
+    -netdev user,id=n0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 -device virtio-net-pci,netdev=n0
+    -monitor unix:"$S/monitor.sock",server,nowait
+    ${HIDFI_WIN_AUDIO:+-audiodev none,id=snd0 -device intel-hda -device hda-duplex,audiodev=snd0}
+    -vnc 127.0.0.1:5 -display none -pidfile "$S/qemu.pid"
     "$@"
+  )
+  if [ -z "${HIDFI_WIN_VM_USB:-}" ]; then qemu-system-aarch64 "${a[@]}" -daemonize; return; fi
+  rm -f "$S/qemu.pid"
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    qemu-system-aarch64 "${a[@]}" </dev/null >/dev/null &
+  for _ in $(seq 1 20); do [ -s "$S/qemu.pid" ] && return 0; sleep 0.5; done
+  die "qemu did not start (see $VM/qemu.log)"
 }
 
 CDS=()
@@ -134,6 +147,17 @@ case "${1:-}" in
     ssh_vm "Stop-Computer -Force" >/dev/null 2>&1 || monitor system_powerdown >/dev/null
     for _ in $(seq 1 60); do running || { echo "stopped"; exit 0; }; sleep 2; done
     monitor quit >/dev/null 2>&1 || true; echo "stopped (forced)"
+    ;;
+  usb) # usb add <hostbus=..,hostport=..> | usb remove
+    running || die "not running"
+    case "${2:-}" in
+      add) [[ "${3:-}" == hostbus=*,host* ]] || die "usb add hostbus=N,hostport=P (never vid:pid)"
+           monitor "device_add usb-host,${3},id=passthru" | tr -d '\033' | grep -iE "error|fail" && die "not attached"
+           sleep 1; running || die "the VM stopped attaching it (see $VM/qemu.log)"
+           monitor "info usb" | grep -a "passthru" || die "not attached" ;;
+      remove) monitor "device_del passthru" >/dev/null; echo "given back to macOS" ;;
+      *) die "usb add hostbus=N,hostport=P | usb remove" ;;
+    esac
     ;;
   status)
     if running; then echo "running (pid $(cat "$S/qemu.pid"))"; ssh_vm "exit 0" >/dev/null 2>&1 && echo "ssh: ok" || echo "ssh: not yet"; else echo "stopped"; fi
