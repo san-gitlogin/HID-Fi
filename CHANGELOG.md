@@ -24,6 +24,11 @@ Recovery is still USB only, and holding the board is still the proof.
   refuses while a restart would cost an update (red, twice). `status` reports
   `recovery` and `recovery_left_s`. A normal boot is unchanged: its USB descriptors
   are byte-identical. docs/RECOVERY_MODE.md.
+- **A serial reply is never lost to a log line.** A reply and its line end were two
+  writes, and the update check logs from the other core: when the two met, the log
+  landed inside the reply and the computer could read neither (3 of 1230 replies
+  across six update checks). Each line is now one write - the same bytes. Found by
+  the heap-under-load test; it predates recovery mode.
 
 ### Tools
 

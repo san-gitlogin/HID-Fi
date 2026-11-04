@@ -1,8 +1,9 @@
 # Recovery mode: recovery over the one USB port
 
-Status: **design, not built.** Every claim marked ▢ is unproven until the test
-named next to it passes on a real board; ✔ marks what is already proven, with
-where. This file is the spec the code and the tests are written from.
+Status: **built** (firmware, tools, Companion, dashboard). Every claim marked ▢ is
+unproven until the test named next to it passes on a real board; ✔ marks what is
+proven, with where; ◐ is proven in part, and says which part is not. This file is
+the spec the code and the tests are written from.
 
 ## Why
 
@@ -75,20 +76,39 @@ Software, no board (`python tests/run.py`):
   in logs or the store.
 - Dashboard BDD: every changed text and any new control has a scenario.
 
-Hardware (board tier, test board 09F7C8 on COM + USB, never DA1A2C):
-- H0 the COM port's DTR/RTS hold GPIO0 low without a reset (`status` reads
-  `boot_button: pressed`), so BOOT presses can be automated. ▢
-- H1 normal boot: descriptors identical to the baseline from the current firmware.
-- H2 hold 8 s and release: restart, recovery boot. Hold 2 s / 5 s: no recovery.
-- H3 recovery boot: CDC present with the MAC serial, handshake, HID types and
-  moves, WiFi up, recover.py show / set / reset over native USB only, restored after.
-- H4 window: expires after 5 min idle, `recovery_exit`, both back to no CDC.
-- H5 power cycle in recovery: normal boot.
-- H6 every other button behaviour unchanged (tap test, 2 s access point).
-- H7 macOS, Windows (VM), Linux: the recovery boot enumerates, HID still works,
-  no driver prompt.
-- H8 Companion end to end on each OS.
-- H9 soak: 50 press-to-recovery-to-exit cycles, no failure, timings recorded.
+Hardware (board tier, test board 09F7C8 on COM + USB, never DA1A2C;
+`tests/board/test_recovery_mode_hw.py` unless named):
+- H0 ✔ the COM port's DTR/RTS hold GPIO0 low without a reset (`status` reads
+  `boot_button: pressed`), so BOOT presses can be automated.
+- H1 ✔ normal boot: USB descriptors byte-identical to v4.2.2's (macOS IORegistry).
+- H2 ✔ hold 8.6 s and release: `ready` while held, restart, recovery boot. Holds of
+  2.6 s and 5 s open nothing.
+- H3 ◐ recovery boot: the link has the MAC as its serial, answers the handshake,
+  `./flash_esp.sh --recover` shows the password over it (0.6 s), the HID report
+  descriptor is unchanged, and WiFi, HID and a pointer move over the link hold on
+  every cycle of H9. Not done on hardware: set / reset over the link (proven against
+  the board model, `tests/unit/test_recover.py`).
+- H4 ✔ the window closes after 300 s idle (measured 300.3 s), on `recovery_exit`,
+  and on a reset; each time the link is gone and the next boot is normal.
+- H5 ◐ an EN reset in recovery boots normally. A real unplug was not done (no
+  hands here); the flag is read once and cleared first thing at every boot, so it
+  cannot survive either. After a power cut that RTC memory is undefined: a chance
+  match is 1 in 2^32, and would open only the 5-minute link, which changes nothing.
+- H6 ◐ the tap and the 2 s access-point hold are unchanged in the code (the
+  button change is pure insertion), and 2.6 s / 5 s holds open nothing. Not done on
+  hardware: a tap types "HID OK" and Enter into whatever has focus, so it is not
+  run unattended.
+- H7 ◐ macOS ✔ (HID unchanged, the link, no prompt). Windows 11 (VM, the board
+  passed through from a Mac): the recovery boot enumerates as a USB composite device
+  and `flash_esp.ps1` runs under Windows PowerShell 5.1; the CDC driver bound to a
+  real link is ▢ - without root, macOS keeps the device's interfaces (finding 27).
+  Linux ▢ with a real board.
+- H8 ◐ the Companion's own code on macOS against the board: the USB listing sees
+  the link in 4.7 ms, handshake 279 ms, show password, close
+  (`examples/recovery_hw.rs`). The window's panel: every state in Chromium, WebKit,
+  macOS WKWebView and Windows WebView2. Windows and Linux against a real link ▢.
+- H9 soak: 50 press-to-recovery-to-exit cycles, no failure, timings recorded
+  (`tests/board/recovery_soak.py`).
 
 ## Found while mapping (2026-11-04)
 

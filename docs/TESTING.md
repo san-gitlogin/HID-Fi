@@ -600,6 +600,9 @@ are tested at three levels, and each row of its two tables has a test:
     the COM port, stays silent without DTR, carries no log, survives 50 opens at
     every baud (the 1200 baud "touch" included); `recovery_exit`, a reset and 5 idle
     minutes each close it.
+  - `tests/board/recovery_soak.py COM-PORT [cycles]` (test board only, run by hand):
+    50 full cycles - press, "ready", the link, status and a pointer move over it
+    (WiFi and HID still up), `recovery_exit`, a normal boot - with each step's timing.
   - `tests/unit/test_recover.py` (the recovery-mode section): both tools find a
     board in recovery by asking, use it before a COM port, never open the ROM
     loader, keep the ERASE rule, close recovery when done (`--keep-open`), and say
@@ -839,6 +842,7 @@ The Rust app has its own tests, listed in `companion/README.md`:
 | Linux (Docker) | `companion/tests/linux/run.sh` | build + tests on Linux, the app without a tray, real X11 capture + OpenH264 on two monitors |
 | Windows | the manual `companion.yml` workflow | build, tests, capture and encoding on a real Windows runner |
 | board | `HIDFI_PIN=... python3 companion/tests/hardware.py`, `board_pages.py` | the real board: pairing, six viewers, eight pages, "board is full" |
+| board | `HIDFI_PIN=... python3 companion/tests/load_all.py` | the real board on its heaviest day, held for a minute: six viewers (one in real fullscreen), a 60 Hz trackpad and keystrokes over WiFi, status polling - each screen's frame rate and longest freeze, the pointer's answer time, page errors, the board's memory |
 | Mac + board | `HIDFI_PIN=... python3 companion/tests/multi_monitor_mac.py <vdisplay>` | real monitors on a one-screen Mac (virtual displays): each, two at once, the wall, pop-outs, unplugging |
 
 The dashboard side (Screen tab, wall, watch mode) is in `tests/ui/bdd/features/screen.feature`, run by the ui tier.
