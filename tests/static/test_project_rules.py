@@ -334,3 +334,34 @@ def test_a_serial_line_is_one_write():
     worker = [f"ota.h:{ota.count(chr(10), 0, m.start()) + 1}" for m in re.finditer(r"\bprintln\s*\(", ota)]
     assert not built and not worker, "use serialLine() / one print with \\r\\n:\n" + "\n".join(built + worker)
     assert "void serialLine(Print& p, const String& line)" in ino and "p.write(" in ino
+
+
+COUNT_USE = re.compile(r"\$([A-Za-z_]\w*)\.Count\b")
+
+
+def ps_count_without_array(text):
+    """Variables whose .Count is read but that are assigned something other than @(...)."""
+    bad = []
+    for name in sorted(set(COUNT_USE.findall(text))):
+        for m in re.finditer(r"\$" + name + r"\s*=(?!=)\s*([^\n]*)", text):
+            if not m.group(1).strip().startswith("@("):
+                bad.append(f"line {text.count(chr(10), 0, m.start()) + 1}: ${name} = {m.group(1).strip()[:60]}")
+    return bad
+
+
+def test_powershell_counts_only_arrays():
+    """Windows PowerShell 5.1 - what every Windows has - unwraps a one-item result to a
+    single object, and a single PSCustomObject there has no .Count (PowerShell 7 gives
+    it one, so every test passed). flash_esp.ps1 -Recover read one board in recovery
+    mode as none on a real Windows 11. So a variable whose .Count is read is always
+    assigned @(...)."""
+    found = []
+    for rel in ("flash_esp.ps1", "companion/package/install-windows.ps1"):
+        found += [f"{rel} {b}" for b in ps_count_without_array((paths.REPO / rel).read_text(encoding="utf-8"))]
+    assert not found, "wrap in @(...):\n" + "\n".join(found)
+
+
+def test_the_powershell_count_rule_sees_the_bug():
+    old = "$rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }\nif ($rec.Count -eq 1) { }\n"
+    assert ps_count_without_array(old) and not ps_count_without_array(old.replace(
+        "$rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }", "$rec = @(if (-not $namedCom) { Get-RecoveryLinks $ports })"))

@@ -98,15 +98,19 @@ Hardware (board tier, test board 09F7C8 on COM + USB, never DA1A2C;
   button change is pure insertion), and 2.6 s / 5 s holds open nothing. Not done on
   hardware: a tap types "HID OK" and Enter into whatever has focus, so it is not
   run unattended.
-- H7 ◐ macOS ✔ (HID unchanged, the link, no prompt). Windows 11 (VM, the board
-  passed through from a Mac): the recovery boot enumerates as a USB composite device
-  and `flash_esp.ps1` runs under Windows PowerShell 5.1; the CDC driver bound to a
-  real link is ▢ - without root, macOS keeps the device's interfaces (finding 27).
-  Linux ▢ with a real board.
-- H8 ◐ the Companion's own code on macOS against the board: the USB listing sees
-  the link in 4.7 ms, handshake 279 ms, show password, close
-  (`examples/recovery_hw.rs`). The window's panel: every state in Chromium, WebKit,
-  macOS WKWebView and Windows WebView2. Windows and Linux against a real link ▢.
+- H7 ◐ macOS ✔ (HID unchanged, the link, no prompt). Windows 11 ✔ (ARM64 VM, the
+  board passed through from a Mac with QEMU as root, which takes every interface
+  from macOS): in recovery Windows binds its own USB serial driver (COM3) beside five
+  working HID devices, no prompt, none failed; `flash_esp.ps1 -Recover` under Windows
+  PowerShell 5.1 finds the board, shows the password and closes or keeps it open
+  (`companion/tests/windows/recovery_vm.ps1`). That run found a 5.1-only bug - one
+  board in recovery read as none, because a single result there has no `.Count` -
+  fixed, with a static rule for both PowerShell scripts. Linux ▢ with a real board:
+  the Linux test VM (colima) cannot take a USB device.
+- H8 ◐ the Companion's own code against the real link: macOS (USB listing 4.7 ms,
+  handshake 279 ms) and Windows 11 (0.7 ms, 263 ms): show password - never in the
+  view - and close (`examples/recovery_hw.rs`). The window's panel: every state in
+  Chromium, WebKit, macOS WKWebView and Windows WebView2. Linux against a real link ▢.
 - H9 soak: 50 press-to-recovery-to-exit cycles, no failure, timings recorded
   (`tests/board/recovery_soak.py`).
 

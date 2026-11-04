@@ -17,9 +17,11 @@ Say ("   keyboard/mouse/HID entries working: {0}" -f $hid.Count)
 
 Say '== flash_esp.ps1 -Recover -RecoverShow -KeepOpen (Windows port listing, .NET serial)'
 $out = & powershell -NoProfile -ExecutionPolicy Bypass -File C:/hidfi/flash_esp.ps1 -Recover -RecoverShow -KeepOpen 2>&1 | Out-String
-Say ("   found recovery mode: {0}" -f ($out -match 'recovery mode'))
-Say ("   showed a password line: {0}" -f ($out -match 'Password:\s+\S'))
-Say ("   kept open as asked: {0}" -f ($out -match 'stays open'))
+# The tool's own success lines, never words its help text also contains (an early
+# version matched "recovery mode" in the help and reported a failure as found).
+Say ("   found the board in recovery mode: {0}" -f ($out -match 'A board in recovery mode: COM\d+'))
+Say ("   showed a password line: {0}" -f ($out -match '(?m)^\s*Password:\s+\S'))
+Say ("   kept open as asked: {0}" -f ($out -match 'Recovery mode stays open'))
 
 Say '== the Companion''s own code (recovery_hw.exe): detection, handshake, reveal, close'
 & C:/hidfi/companion/target/release/examples/recovery_hw.exe 2>&1 | ForEach-Object { Say "   $_" }

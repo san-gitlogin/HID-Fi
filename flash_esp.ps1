@@ -524,7 +524,9 @@ function Invoke-Recover {
     $ports = Get-Ports
     # A board in recovery mode first: opening a COM port resets the board, which would close it.
     $namedCom = $Port -and @($ports | Where-Object { $_.Port -eq $Port -and $_.Kind -eq 'hidfi' }).Count
-    $rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }
+    # Always an array: Windows PowerShell 5.1 unwraps one result to a single object,
+    # which has no .Count there - one board in recovery mode then read as none.
+    $rec = @(if (-not $namedCom) { Get-RecoveryLinks $ports })
     if ($Serial -and -not $Port) { $rec = @($rec | Where-Object { $_.Serial.ToLower().StartsWith(($Serial -replace ':', '').ToLower()) }) }
     if ($Port -and -not $namedCom) { $rec = @($rec | Where-Object { $_.Port -eq $Port }) }
     $isRec = $false
