@@ -9,9 +9,9 @@
 
 use hidfi_agent::env::UsbList;
 use hidfi_agent::real::{MdnsBrowse, NusbList, UreqHttp};
-use hidfi_core::discovery::UsbDevice;
 use hidfi_companion::service::{self, Cmd, Env};
 use hidfi_companion::store::Store;
+use hidfi_core::discovery::UsbDevice;
 use hidfi_stream::pattern::FakeDisplays;
 use std::io::BufRead;
 use std::sync::Arc;
@@ -27,7 +27,11 @@ impl UsbList for OnlyBoard {
                 .as_deref()
                 .is_some_and(|s| s.replace(':', "").eq_ignore_ascii_case(&self.0))
         };
-        NusbList.list().into_iter().filter(|d| d.vid != 0x303A || mine(d)).collect()
+        NusbList
+            .list()
+            .into_iter()
+            .filter(|d| d.vid != 0x303A || mine(d))
+            .collect()
     }
 }
 
