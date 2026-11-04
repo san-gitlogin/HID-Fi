@@ -27,6 +27,8 @@ getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 png = "0.18.1"
 hidfi-flash = { path = "../hidfi-flash", features = ["serial"] }
+# The recovery link (src/recovery.rs): the same version and features hidfi-flash uses.
+serialport = { version = "4.10.1", default-features = false }
 
 # Releases come from GitHub over HTTPS, with each system's own crypto - as the
 # screen stream already does (str0m: apple-crypto, wincrypto, aws-lc-rs):

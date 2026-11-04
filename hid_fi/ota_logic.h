@@ -185,6 +185,17 @@ enum OtaStep {
     OTA_STEP_READY,           // switched; the new version starts at the next restart
 };
 
+// Recovery mode (docs/RECOVERY_MODE.md) restarts the board. Refused while that
+// would cost an update: a pending self-test (it would roll back), or a download,
+// verify, switch or ready update (a ready one would start, and then must prove
+// itself). A check only fetches a manifest: a restart drops it, the next runs later.
+inline const char* otaRecoveryRefusal(bool pending_verify, OtaStep step) {
+    if (pending_verify) return "verifying";
+    if (step == OTA_STEP_DOWNLOADING || step == OTA_STEP_VERIFYING) return "busy";
+    if (step == OTA_STEP_SWITCHING || step == OTA_STEP_READY) return "busy";
+    return nullptr;
+}
+
 enum OtaCancel {
     OTA_CANCEL_NOTHING = 0,   // nothing to undo
     OTA_CANCEL_STOP,          // stop; the inactive slot is ignored (esp_ota_abort)

@@ -63,6 +63,7 @@ fn view(boards: Vec<BoardView>) -> View {
             ..UpdView::default()
         },
         remembered: vec![],
+        recovery: vec![],
     }
 }
 

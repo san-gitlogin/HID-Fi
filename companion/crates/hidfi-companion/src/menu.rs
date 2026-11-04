@@ -902,6 +902,7 @@ mod tests {
             updates: Default::default(),
             sound: Default::default(),
             remembered: vec![],
+            recovery: vec![],
         }
     }
     fn found() -> BoardState {

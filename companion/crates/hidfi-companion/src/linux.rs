@@ -193,12 +193,14 @@ fn notify(body: &str) {
 fn serve_window(handle: &Handle, tx: Sender<Ask>) -> Option<Arc<Mutex<Instant>>> {
     let o = act::opener()?;
     let polled = Arc::new(Mutex::new(Instant::now() - IDLE_WINDOW));
-    let (v1, v2, h, p) = (
+    let (v1, v2, v3, h, p) = (
+        handle.view.clone(),
         handle.view.clone(),
         handle.view.clone(),
         handle.health.clone(),
         polled.clone(),
     );
+    let rec_worker = handle.recovery.clone();
     let tx = Mutex::new(tx);
     o.set_window(WindowLink {
         model: Box::new(move || {
@@ -226,6 +228,26 @@ fn serve_window(handle: &Handle, tx: Sender<Ask>) -> Option<Arc<Mutex<Instant>>>
         polled: Box::new(move || {
             *p.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
             h.set_active(true);
+        }),
+        // Recovery mode: the same parse and check as the window on macOS and Windows;
+        // the answer is this request's reply, so the password reaches only this page.
+        rec: Box::new(move |msg| {
+            use hidfi_companion::recovery::{admit, parse_msg, reply_json};
+            let no = |t: &str| serde_json::json!({"ok": false, "text": t}).to_string();
+            let Some(m) = parse_msg(msg) else {
+                return no("Not a recovery action.");
+            };
+            let ok = admit(&v3.lock().unwrap_or_else(|e| e.into_inner()).recovery, &m);
+            let Some(w) = rec_worker.as_ref().filter(|_| ok) else {
+                return no("This board is not in recovery mode now.");
+            };
+            let (tx, rx) = std::sync::mpsc::channel();
+            let asked = m.clone();
+            w.act(m.mac, m.op, move |r| {
+                let _ = tx.send(reply_json(&asked, &r));
+            });
+            rx.recv_timeout(Duration::from_secs(25))
+                .unwrap_or_else(|_| no("The board did not answer."))
         }),
     });
     handle.on_change(move || o.changed());

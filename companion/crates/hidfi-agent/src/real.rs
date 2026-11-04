@@ -1,7 +1,7 @@
 //! The real world: HTTP with ureq, USB listing with nusb, mDNS with mdns-sd.
 
 use crate::env::{Browse, Http, NetError, UsbList};
-use hidfi_core::discovery::UsbDevice;
+use hidfi_core::discovery::{Mac, UsbDevice};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -61,22 +61,44 @@ impl Http for UreqHttp {
 
 pub struct NusbList;
 
+/// What the last listing saw in recovery mode (recovery_macs).
+static RECOVERY: Mutex<Vec<Mac>> = Mutex::new(Vec::new());
+
+/// USB class codes of a CDC serial link: communications, and its data interface.
+const CDC: [u8; 2] = [0x02, 0x0A];
+
 impl UsbList for NusbList {
     fn list(&self) -> Vec<UsbDevice> {
         use nusb::MaybeFuture;
         match nusb::list_devices().wait() {
-            Ok(it) => it
-                .map(|d| UsbDevice {
-                    vid: d.vendor_id(),
-                    pid: d.product_id(),
-                    serial: d.serial_number().map(str::to_string),
-                })
-                .collect(),
+            Ok(it) => {
+                let mut rec = Vec::new();
+                let out = it
+                    .map(|d| {
+                        if d.vendor_id() == 0x303A && d.interfaces().any(|i| CDC.contains(&i.class())) {
+                            if let Some(m) = d.serial_number().and_then(Mac::parse) {
+                                rec.push(m);
+                            }
+                        }
+                        UsbDevice {
+                            vid: d.vendor_id(),
+                            pid: d.product_id(),
+                            serial: d.serial_number().map(str::to_string),
+                        }
+                    })
+                    .collect();
+                *RECOVERY.lock().unwrap_or_else(|e| e.into_inner()) = rec;
+                out
+            }
             Err(e) => {
                 log::warn!("could not list USB devices: {e}");
                 Vec::new()
             }
         }
+    }
+
+    fn recovery_macs(&self) -> Vec<Mac> {
+        RECOVERY.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

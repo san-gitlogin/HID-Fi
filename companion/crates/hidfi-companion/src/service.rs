@@ -97,6 +97,9 @@ pub struct View {
     pub updates: crate::updates::center::UpdView,
     /// Paired with this computer, not plugged in here (shown as offline).
     pub remembered: Vec<Remembered>,
+    /// Boards in recovery mode on this computer's USB (docs/RECOVERY_MODE.md).
+    /// Never a secret: a revealed password goes only to the window that asked.
+    pub recovery: Vec<crate::recovery::RecView>,
 }
 
 pub enum Cmd {
@@ -121,6 +124,8 @@ pub struct Handle {
     /// Latency: the window turns it on while it is open.
     pub health: crate::health::Health,
     notify: Notify,
+    /// Recovery mode's worker (None when the app was started without ports).
+    pub recovery: Option<crate::recovery::Worker>,
 }
 
 /// Called whenever the view changes, so a window can sleep until then instead
@@ -154,6 +159,8 @@ pub struct Env {
     pub sound: Option<hidfi_stream::audio::Opener>,
     /// Asks each board `/api/ping` while a window is open; None: no latency.
     pub probe: Option<crate::health::Probe>,
+    /// Recovery mode's ports (the real ones in the app); None: no recovery worker.
+    pub recovery: Option<Box<dyn crate::recovery::Ports>>,
 }
 
 /// What the tray and window show about sound.
@@ -215,6 +222,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         },
         updates: Default::default(),
         remembered: Vec::new(),
+        recovery: Vec::new(),
     }));
     // Sound: one capture for every viewer, only while someone listens.
     let sound_settings = hidfi_stream::audio::Settings::new(state.share_sound, state.share_mic);
@@ -335,6 +343,24 @@ pub fn start(store: Store, env: Env) -> Handle {
             },
         );
     }
+    // Recovery mode: its own thread does every serial read and write, so the
+    // service (and screen sharing) never waits on a port.
+    let recovery = env.recovery.take().map(|ports| {
+        let state: Arc<Mutex<Vec<crate::recovery::RecView>>> = Arc::default();
+        let (v2, n2, s2) = (view.clone(), notify.clone(), state.clone());
+        crate::recovery::Worker::start(ports, state, move || {
+            let now = s2.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let mut v = v2.lock().unwrap_or_else(|e| e.into_inner());
+            if v.recovery != now {
+                v.recovery = now;
+                drop(v);
+                if let Some(f) = n2.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    f();
+                }
+            }
+        })
+    });
+    let rec = recovery.clone();
     let v = view.clone();
     let n = notify.clone();
     let h = health.clone();
@@ -356,6 +382,7 @@ pub fn start(store: Store, env: Env) -> Handle {
                 upd_tx,
                 (sound_settings, hub),
                 h,
+                rec,
             )
         })
         .expect("spawning the service thread");
@@ -365,6 +392,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         watchers,
         health,
         notify,
+        recovery,
     }
 }
 
@@ -395,6 +423,7 @@ fn run(
         Option<Arc<hidfi_stream::audio::AudioHub>>,
     ),
     health: crate::health::Health,
+    recovery: Option<crate::recovery::Worker>,
 ) {
     let mut id = [0u8; 16];
     let _ = hex::decode_to_slice(&state.id, &mut id);
@@ -453,6 +482,9 @@ fn run(
         // What is on this computer's USB now. A board that left stops at once;
         // its pairing stays on disk for when it comes back.
         let on_usb = hidfi_core::discovery::usb_macs(&env.usb.list());
+        if let Some(w) = &recovery {
+            w.present(env.usb.recovery_macs()); // from that same listing; repeats are ignored
+        }
         let gone: Vec<Mac> = here
             .keys()
             .filter(|m| !on_usb.contains(m))

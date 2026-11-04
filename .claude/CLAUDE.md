@@ -110,7 +110,9 @@ diagnose from the USB device list rather than from serial noise you are causing.
 17. **Ownership rules are fixed.** The board's WiFi password never travels over
     WiFi (`ap_password` is USB only). The first access PIN over WiFi needs that
     password. Recovery of a forgotten PIN or WiFi password is USB only - never add
-    a WiFi or button path. Lockout is per device. Read "Ownership, PINs and
+    a WiFi path, and no button may recover or erase anything. The one button use
+    is recovery mode (docs/RECOVERY_MODE.md): BOOT held 8 s opens a USB session and
+    changes nothing by itself. Lockout is per device. Read "Ownership, PINs and
     recovery" in AGENTS.md before touching auth, PINs, the vault or the access
     point.
 18. **Flashing for a person: show the WiFi password once, then forget it.** After

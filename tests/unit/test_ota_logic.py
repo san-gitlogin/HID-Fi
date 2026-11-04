@@ -218,6 +218,24 @@ def test_when_a_ready_update_may_restart_the_board(bench, given, want):
     assert ask(bench, [f"mayapply {given}"]) == [want]
 
 
+# pending_verify step (0 idle, 1 checking, 2 downloading, 3 verifying, 4 switching, 5 ready)
+RECOVERY = [
+    ("0 0", "ok"),                        # nothing in progress: recovery mode opens
+    ("0 1", "ok"),                        # only a check (a manifest): a restart drops it - seen on 09F7C8
+    ("0 2", "busy"),                      # writing the other slot: do not waste it
+    ("0 3", "busy"),                      # hashing what was written
+    ("0 4", "busy"),                      # the one otadata write
+    ("0 5", "busy"),                      # ready: a restart would start the new firmware
+    ("1 0", "verifying"),                 # a new firmware proving itself: a restart rolls it back
+    ("1 1", "verifying"),
+]
+
+
+@pytest.mark.parametrize("given, want", RECOVERY)
+def test_when_recovery_mode_may_restart_the_board(bench, given, want):
+    assert ask(bench, [f"recovery {given}"]) == [want]
+
+
 # Commands that press, type or move something - a restart under them would be
 # a key typed by nobody. None may be counted as a mere query.
 HID_COMMANDS = ["key_down", "key_up", "key_release_all", "press", "type", "unlock", "lock", "mouse_move",
@@ -264,7 +282,7 @@ def test_every_planted_bug_is_caught(tmp_path):
     src = LOGIC.read_text(encoding="utf-8")
     muts = json.loads((HERE / "ota_mutations.json").read_text(encoding="utf-8"))["mutations"]
     tables = [("caninstall", INSTALL), ("cancel", CANCEL), ("resume", RESUME), ("shouldcheck", CHECK),
-              ("mayapply", APPLY)]
+              ("mayapply", APPLY), ("recovery", RECOVERY)]
     lines = ([f"version {t}" for t, _ in VERSIONS] + [f"compare {a} {b}" for a, b, _ in COMPARE]
              + [f"selftest {g}" for g, _ in SELFTEST] + [f"outcome {g}" for g, _ in OUTCOMES] + ["restart 1", "restart 0"]
              + [f"{op} {g}" for op, rows in tables for g, _ in rows] + [f"delay {a}" for a in (1, 2, 6, 20)]

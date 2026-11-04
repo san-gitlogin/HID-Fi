@@ -15,6 +15,8 @@ pub enum Click {
     Action(String),
     /// Put this on the clipboard (a MAC, an address).
     Copy(String),
+    /// A recovery-mode action (docs/RECOVERY_MODE.md): checked by recovery::admit.
+    Recovery(crate::recovery::RecMsg),
     Close,
 }
 
@@ -22,6 +24,9 @@ pub enum Click {
 pub fn parse(msg: &str) -> Option<Click> {
     if msg == "close" {
         return Some(Click::Close);
+    }
+    if msg.starts_with("rec:") {
+        return crate::recovery::parse_msg(msg).map(Click::Recovery);
     }
     if let Some(t) = msg.strip_prefix("copy:") {
         // What the page copies is a MAC or an address: short, plain.
@@ -72,6 +77,14 @@ impl Panel {
 
     pub fn id(&self) -> WindowId {
         self.window.id()
+    }
+
+    /// A recovery action's answer, to this page only (it may hold the WiFi password
+    /// the person asked to see: never logged, never in the model).
+    pub fn rec_done(&self, json: &str) {
+        let _ = self
+            .view
+            .evaluate_script(&format!("window.recDone&&window.recDone({json})"));
     }
 
     pub fn render(&self, json: &str) {

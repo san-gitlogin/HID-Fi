@@ -337,7 +337,11 @@ every release, and an end of support will be announced here first.
 the board's WiFi password - that is what stops a stranger on the same network from
 claiming the board. Wrong PINs lock out only the phone that typed them.
 
-**Recovery needs the board in hand.** Plug its **COM** port into any computer and run:
+**Recovery needs the board in hand.** Plug its **COM** port into any computer. A
+board without one (the HID-Fi Dongle) opens **recovery mode** instead: leave it
+plugged in, hold **BOOT** for 8 seconds (a pin in the pinhole), then let go - it
+restarts with a serial link on its own USB for 5 minutes
+([docs/RECOVERY_MODE.md](docs/RECOVERY_MODE.md)). Then use the HID-Fi Companion, or run:
 
 ```powershell
 .\flash_esp.ps1 -Recover        # Windows
@@ -369,7 +373,7 @@ be recovered over WiFi - not by a stranger, and not by you.
 | A neighbour in WiFi range | Nothing: the password is unique to your board |
 | Many devices guessing together | 20 wrong PINs from the home network lock it out for 10 minutes. The board's own WiFi and the cable keep working |
 | Someone who connects and never signs in | Disconnected after 20 seconds, so they cannot hold every connection |
-| A child pressing buttons on the board | Nothing: no button resets or erases anything |
+| A child pressing buttons on the board | Nothing: no button resets or erases anything. Holding BOOT for 8 seconds only opens recovery mode for 5 minutes, which changes nothing by itself, and an open dashboard says so |
 | Someone who takes the board | Can recover it, like anyone holding a house key. Keep it where you would keep one |
 
 Full detail, including what this does not protect against: [SECURITY.md](SECURITY.md).

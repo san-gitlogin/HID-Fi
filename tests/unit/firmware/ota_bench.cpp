@@ -59,6 +59,10 @@ int main() {
         } else if (op == "restart") {
             int p; in >> p;
             std::printf("%d\n", otaRestartAllowed(p != 0) ? 1 : 0);
+        } else if (op == "recovery") {
+            int p, st; in >> p >> st;
+            const char* r = otaRecoveryRefusal(p != 0, (OtaStep)st);
+            std::printf("%s\n", r ? r : "ok");
         } else if (op == "caninstall") {
             std::string v, m, chip, running; unsigned long size, slot; int down;
             in >> v >> m >> chip >> size >> down >> running >> slot;

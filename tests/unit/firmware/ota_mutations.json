@@ -150,6 +150,26 @@
       "name": "a status poll counts as use",
       "find": "        \"status\", \"ping\", \"echo\",",
       "replace": "        \"ping\", \"echo\","
+    },
+    {
+      "name": "recovery ignores a pending self-test",
+      "find": "if (pending_verify) return \"verifying\";",
+      "replace": ""
+    },
+    {
+      "name": "recovery cuts a download",
+      "find": "if (step == OTA_STEP_DOWNLOADING || step == OTA_STEP_VERIFYING) return \"busy\";",
+      "replace": "if (step == OTA_STEP_VERIFYING) return \"busy\";"
+    },
+    {
+      "name": "recovery starts a ready update",
+      "find": "if (step == OTA_STEP_SWITCHING || step == OTA_STEP_READY) return \"busy\";",
+      "replace": "if (step == OTA_STEP_SWITCHING) return \"busy\";"
+    },
+    {
+      "name": "recovery refused during a mere check",
+      "find": "    if (pending_verify) return \"verifying\";\n    if (step",
+      "replace": "    if (pending_verify) return \"verifying\";\n    if (step == OTA_STEP_CHECKING) return \"busy\";\n    if (step"
     }
   ]
 }

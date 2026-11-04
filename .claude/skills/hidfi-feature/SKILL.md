@@ -100,7 +100,8 @@ anything (open it at that size, take a screenshot). Then:
 ## 5b. Anything touching PINs, passwords, the vault or the access point
 
 Read AGENTS.md, "Ownership, PINs and recovery", first. Those rules are fixed: do
-not add a WiFi or button path to recovery, never send the board's WiFi password
+not add a WiFi path to recovery, let no button recover or erase anything (recovery
+mode only opens a USB session: docs/RECOVERY_MODE.md), never send the board's WiFi password
 over WiFi, keep the per-device lockout. Add a row to the ownership tables in
 SECURITY.md and README, and a scenario for it in
 `tests/ui/bdd/features/ownership.feature`. Hardware tests use a temporary PIN on a

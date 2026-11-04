@@ -43,6 +43,7 @@ fn view(boards: Vec<BoardView>) -> View {
         sound: SoundView::default(),
         updates: UpdView::default(),
         remembered: vec![],
+        recovery: vec![],
     }
 }
 

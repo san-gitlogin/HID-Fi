@@ -890,13 +890,11 @@ static void broadcastJson(const JsonDocument& doc);
 #include "ota.h"
 
 // ==================== RECOVERY MODE ====================
-// Why the board will not open recovery now, or nullptr. A restart while a new
-// firmware proves itself rolls it back, and one mid-install wastes the download:
-// the same two refusals as a cable update (ota.h, download_mode).
+// Why the board will not open recovery now, or nullptr: not while a restart would
+// cost an update (ota_logic.h says which steps). A mere check is no reason - the
+// board checks soon after joining WiFi, just when someone may be pressing BOOT.
 const char* recoveryRefusal() {
-    if (otaPendingVerify()) return "verifying";
-    if (otaBusy() || job.step == OTA_STEP_READY) return "busy";
-    return nullptr;
+    return otaRecoveryRefusal(otaPendingVerify(), job.step);   // ota_logic.h, unit-tested
 }
 
 void recoveryBlink(uint8_t r, uint8_t g, uint8_t b, int times, int onMs, int offMs) {

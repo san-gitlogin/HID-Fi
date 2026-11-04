@@ -1801,7 +1801,7 @@ main::after{height:var(--flpad,0px)}
             <div class="tx"><b id="apAdviceTitle"></b><span id="apAdviceText" style="white-space:normal"></span></div>
           </div>
           <button class="btn ok blk" id="btnAp">Change access point</button>
-          <p class="hint" style="margin-top:10px">This password is also the proof of ownership asked for when the first access PIN is set over your home network, so keep it to yourself. Forgot it? Plug the board's COM cable into a computer and run the recovery tool - holding the board is what makes you its owner. Leaving the password blank keeps the one already set, so you can rename the network without retyping it. Removing the password is a separate, deliberate choice &mdash; that is what the toggle is for. Emoji and accents work in the name, because a network name is raw bytes; the limit is 32 <b>bytes</b> though, and one emoji uses four. The access point restarts the moment you apply, so this phone will drop and you will have to reconnect.</p>
+          <p class="hint" style="margin-top:10px">This password is also the proof of ownership asked for when the first access PIN is set over your home network, so keep it to yourself. Forgot it? Recover it over USB with the board in hand - its COM cable, or on a board without one, recovery mode (BOOT held 8 seconds) - using the recovery tool or the HID-Fi Companion. Holding the board is what makes you its owner. Leaving the password blank keeps the one already set, so you can rename the network without retyping it. Removing the password is a separate, deliberate choice &mdash; that is what the toggle is for. Emoji and accents work in the name, because a network name is raw bytes; the limit is 32 <b>bytes</b> though, and one emoji uses four. The access point restarts the moment you apply, so this phone will drop and you will have to reconnect.</p>
         </div>
 
         <div class="card">
@@ -2377,13 +2377,18 @@ function askPin(){
     });
 }
 let PIN_ASK=null;
-// Recovery lives on the USB cable only: holding the board is ownership. Both
-// sheets say exactly what to run, for whichever computer is at hand.
+// Recovery mode open: someone held BOOT for 8 seconds. Said once when it opens,
+// so an owner who did not do it knows the board was in someone's hands.
+let REC_OPEN=false;
+// Recovery lives on USB only: holding the board is ownership - its COM cable, or
+// recovery mode on a board without one (docs/RECOVERY_MODE.md). Both sheets say
+// exactly what to do, for whichever computer is at hand.
 const RECOVER_CMD={win:'.\\flash_esp.ps1 -Recover',mac:'./flash_esp.sh --recover',linux:'./flash_esp.sh --recover'};
 function recoverSteps(){
-  return '<h4>On a computer, with the board\'s COM cable plugged in</h4><ul>'+
-    '<li>Plug the board\'s <b>COM</b> port into any computer - the one it types into is fine.</li>'+
-    '<li>Open a terminal in the HID-Fi folder and run:<br>Windows <code>'+esc(RECOVER_CMD.win)+'</code><br>'+
+  return '<h4>On a computer, with the board in hand</h4><ul>'+
+    '<li><b>With a COM port:</b> plug the board\'s <b>COM</b> port into any computer - the one it types into is fine.</li>'+
+    '<li id="recPress"><b>Without one</b> (the HID-Fi Dongle): leave it plugged in, hold <b>BOOT</b> for 8 seconds (a pin in the pinhole), then let go. It restarts with recovery mode open on its own USB for 5 minutes.</li>'+
+    '<li>Then open the <b>HID-Fi Companion</b> on that computer, which offers recovery for the board, or open a terminal in the HID-Fi folder and run:<br>Windows <code>'+esc(RECOVER_CMD.win)+'</code><br>'+
       'macOS or Linux <code>'+esc(RECOVER_CMD.mac)+'</code></li>'+
     '<li>It finds the board by itself and offers: show this board\'s WiFi password, set a new one, or reset the access PIN.</li></ul>';
 }
@@ -2407,7 +2412,7 @@ function secInfo(){
     '<h4>Where you are decides what is needed</h4><ul>'+
     '<li><b>On the board\'s own WiFi</b> - only people you gave its password to can be here.</li>'+
     '<li><b>On your home network</b> - every device on it can reach the board, so nothing works until an access PIN is set, and setting the first one needs the board\'s WiFi password.</li>'+
-    '<li><b>On the USB COM cable</b> - holding the board makes you its owner. Recovery happens only here.</li></ul>'+
+    '<li><b>Over USB</b> - the COM cable, or recovery mode (BOOT held 8 seconds) on a board without one. Holding the board makes you its owner. Recovery happens only here.</li></ul>'+
     '<h4>If you forget something</h4><ul>'+
     '<li><b>The WiFi password</b> - sign in over your home network and change it in Settings, or read it with the recovery tool over USB. Stored passwords are kept.</li>'+
     '<li><b>The access PIN</b> - reset it with the recovery tool over USB. Stored passwords are kept if the vault has its own vault PIN; otherwise they are erased.</li>'+
@@ -4814,6 +4819,11 @@ function applyStatus(d){
       ' \u00b7 control requests \u00d7'+(d.usb_ctrl_reqs|0)+
       ' \u00b7 '+d.detect_phase+' \u2192 '+(d.host_os_detected||'?')+
       (d.usb_str_seq?' \u00b7 indices '+d.usb_str_seq:'');
+  }
+  if(d.recovery!==undefined){
+    const r=d.recovery===true;
+    if(r&&!REC_OPEN)toast('Recovery mode is open on this board\'s USB - BOOT was held. It closes in '+Math.max(1,Math.ceil((d.recovery_left_s|0)/60))+' min');
+    REC_OPEN=r;
   }
   if(d.unicode_mac!==undefined)paintUni(d);
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;

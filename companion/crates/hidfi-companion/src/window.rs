@@ -243,6 +243,25 @@ fn button(id: String, label: &str, a: &Action, first: bool, board: Option<&str>)
            "bulk": bulk_of(a), "confirm": confirm})
 }
 
+/// A board in recovery mode (docs/RECOVERY_MODE.md): what its card's recovery panel
+/// shows. Never a secret - the WiFi password is fetched only when the person asks,
+/// and goes to the page alone, not into this model.
+fn rec_card(v: &View, mac: &str) -> Value {
+    let Some(r) = v.recovery.iter().find(|r| r.mac == mac) else {
+        return Value::Null;
+    };
+    let left = r
+        .closes
+        .map(|c| c.saturating_duration_since(std::time::Instant::now()).as_secs());
+    json!({
+        "left_s": left, "busy": r.busy,
+        "note": r.note.as_ref().map(|(good, text)| json!({"good": good, "text": text})),
+        "info": r.info.as_ref().map(|i| json!({
+            "ssid": i.ssid, "open": i.open, "pin_set": i.pin_set, "stored": i.stored,
+            "vault_pin": i.vault_pin, "fate": i.vault_fate(), "erases": i.stored > 0 && !i.vault_pin})),
+    })
+}
+
 pub fn model(v: &View) -> Window {
     let mut acts: Vec<(String, Action)> = Vec::new();
     let mut add = |id: String, a: Action| {
@@ -381,6 +400,7 @@ pub fn model(v: &View) -> Window {
             "viewers": b.viewers, "here": true,
             "paired": matches!(b.session, Status::Online | Status::Reconnecting),
             "actions": buttons, "details": details,
+            "recovery": rec_card(v, &b.mac),
         });
         cards.push((rank(state), b.mac.clone(), card));
     }

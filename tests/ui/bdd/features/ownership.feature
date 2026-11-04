@@ -119,6 +119,7 @@ Feature: Who owns the board - the first PIN, recovery, and someone else trying
     And the explanation covers "If you forget something"
     And the explanation covers "If someone else tries"
     And the explanation shows both recovery commands
+    And the explanation says recovery works over USB with or without a COM port
     When I tap the "#siDone" control
     Then no dialog is open
 
@@ -138,6 +139,7 @@ Feature: Who owns the board - the first PIN, recovery, and someone else trying
     And I tap the "#btnPinForgot" control
     Then the dialog "Forgot the access PIN" is open
     And the explanation shows both recovery commands
+    And the explanation shows how to open recovery mode without a COM cable
     And the explanation covers "What happens to stored passwords"
     When I tap the "#fpDone" control
     Then no dialog is open
@@ -199,3 +201,20 @@ Feature: Who owns the board - the first PIN, recovery, and someone else trying
     Then the board closed that connection
     When I enter the PIN "4826"
     Then the dashboard is signed in
+
+  # ---- recovery mode (docs/RECOVERY_MODE.md) ---------------------------------------
+
+  Scenario: A board in recovery mode says so, once
+    Given the dashboard is open
+    When BOOT is held on the board for 8 seconds and let go
+    Then I see the message "Recovery mode is open on this board's USB"
+    When 4 seconds pass on the board
+    Then the recovery-mode message was shown once
+
+  Scenario: Recovery mode closing again says nothing more
+    Given the dashboard is open
+    When BOOT is held on the board for 8 seconds and let go
+    Then I see the message "Recovery mode is open on this board's USB"
+    When recovery mode closes on the board
+    And 4 seconds pass on the board
+    Then the recovery-mode message was shown once

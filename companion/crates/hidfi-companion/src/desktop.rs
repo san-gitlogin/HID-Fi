@@ -114,6 +114,8 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
         });
     }
     let (click_tx, click_rx) = std::sync::mpsc::channel::<Click>();
+    // Recovery actions answer from their own thread; the page gets them here.
+    let (rec_tx, rec_rx) = std::sync::mpsc::channel::<String>();
     let mut panel: Option<Panel> = None;
     // What the window shows now (its JSON): redrawn only when that changes.
     let mut drawn: Option<String> = None;
@@ -230,6 +232,18 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                     auto.dismissed(&view);
                 }
                 Click::Copy(t) => act::copy(&t),
+                // Only for a board in recovery mode now, that answered and is idle.
+                Click::Recovery(m) => match &handle.recovery {
+                    Some(w) if hidfi_companion::recovery::admit(&view.recovery, &m) => {
+                        let (tx, wake) = (rec_tx.clone(), proxy.clone());
+                        let asked = m.clone();
+                        w.act(m.mac, m.op, move |r| {
+                            let _ = tx.send(hidfi_companion::recovery::reply_json(&asked, &r));
+                            let _ = wake.send_event(());
+                        });
+                    }
+                    _ => log::info!("window: recovery for {} no longer applies", m.mac.hex()),
+                },
                 // By id, in the model of this moment: a button that is gone does nothing.
                 Click::Action(id) => match window::model(&view).action(&id) {
                     Some(a) => act.push(a.clone()),
@@ -239,6 +253,11 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
         }
         for a in act {
             act::run(&handle, a);
+        }
+        while let Ok(j) = rec_rx.try_recv() {
+            if let Some(p) = panel.as_ref() {
+                p.rec_done(&j);
+            }
         }
 
         // The window: opened when asked, or by itself when there is something

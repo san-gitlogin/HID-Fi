@@ -48,6 +48,9 @@ pub struct WindowLink {
     pub act: Box<dyn Fn(&str) + Send + Sync>,
     /// A page asked for the state: someone is looking (latency on).
     pub polled: Box<dyn Fn() + Send + Sync>,
+    /// A recovery-mode action (`rec:{...}`), answered with its JSON - to this page
+    /// only; it may carry the WiFi password the person asked to see.
+    pub rec: Box<dyn Fn(&str) -> String + Send + Sync>,
 }
 
 #[derive(Default)]
@@ -226,7 +229,7 @@ fn window_route(
 ) -> Option<Reply> {
     let rest = path.strip_prefix('/')?.strip_prefix(token)?;
     let (p, query) = rest.split_once('?').unwrap_or((rest, ""));
-    if !matches!(p, "/window" | "/state" | "/act") {
+    if !matches!(p, "/window" | "/state" | "/act" | "/rec") {
         return None;
     }
     let nf = ("404 Not Found", "text/plain", "Not found".to_string());
@@ -272,6 +275,7 @@ fn window_route(
             (link.act)(body.trim());
             ("200 OK", "text/plain", "ok".into())
         }
+        ("POST", "/rec") => ("200 OK", "application/json", (link.rec)(body.trim())),
         _ => nf,
     })
 }
@@ -280,6 +284,7 @@ fn window_route(
 /// content comes from `/state` as it changes.
 const BROWSER: &str = r#"(()=>{const base=location.pathname.replace(/\/window$/,"");let v=-1,gone=false;
 window.__hidfiSend=m=>{fetch(base+"/act",{method:"POST",body:m,headers:{"Content-Type":"text/plain"}}).catch(()=>{});};
+window.__hidfiRec=m=>{fetch(base+"/rec",{method:"POST",body:m,headers:{"Content-Type":"text/plain"}}).then(r=>r.json()).then(j=>window.recDone&&window.recDone(j)).catch(()=>window.recDone&&window.recDone({ok:false,text:"HID-Fi Companion did not answer."}));};
 const off=()=>{if(gone)return;gone=true;document.title="HID-Fi Companion is not running";
   document.body.replaceChildren(Object.assign(document.createElement("p"),{textContent:"HID-Fi Companion is not running. Start it, then open this window from its tray icon.",style:"padding:24px;color:#a3b2bf"}));};
 (async()=>{for(;;){try{const r=await fetch(base+"/state?v="+v,{cache:"no-store"});
@@ -527,6 +532,7 @@ mod tests {
             polled: Box::new(move || {
                 p.fetch_add(1, Ordering::SeqCst);
             }),
+            rec: Box::new(|m| format!("{{\"echo\":{}}}", serde_json::Value::String(m.to_string()))),
         });
         let base = o
             .window_url()
@@ -573,6 +579,20 @@ mod tests {
         let (_, body) = w.join().unwrap();
         assert!(body.contains(r#"{"v":1,"#), "{body}");
         assert!(t.elapsed() >= Duration::from_millis(300) && t.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_recovery_action_is_answered_only_to_this_page() {
+        let (o, _, _, base) = window_server();
+        let rec = format!("{base}/rec");
+        let msg = r#"rec:{"mac":"DCB4D909F7C8","op":"reveal"}"#;
+        let (code, body) = req(o.port, "POST", &rec, "", msg);
+        assert_eq!(code, 200);
+        assert!(body.contains("DCB4D909F7C8"), "the app's own answer comes back: {body}");
+        // Another site gets nothing, even knowing the path; nor does a GET, or no token.
+        assert_eq!(req(o.port, "POST", &rec, "Origin: http://evil.example\r\n", msg).0, 404);
+        assert_eq!(req(o.port, "GET", &rec, "", "").0, 404);
+        assert_eq!(req(o.port, "POST", "/rec", "", msg).0, 404);
     }
 
     #[test]

@@ -567,7 +567,18 @@ Rules:
   Serial requires nothing.
 - Never add a way to reset or recover a PIN or the WiFi password over WiFi. Not
   with the WiFi password, not with a code, not with a button. Recovery is USB only:
-  `tools/recover.py` and `flash_esp.ps1 -Recover`.
+  `tools/recover.py`, `flash_esp.ps1 -Recover` and the HID-Fi Companion, over the
+  COM cable or **recovery mode** (docs/RECOVERY_MODE.md).
+- Recovery mode is the one place a button touches recovery, and only this way
+  (agreed with the owner, 2026-11-04): BOOT held 8 s and let go **opens a USB
+  session** - a CDC link on the native port until 5 minutes after its last command.
+  The press itself never changes, shows or erases anything; every change still
+  needs a computer, the tool and the typed ERASE. The link answers commands only
+  (never `COM_SERIAL` output: the boot banner prints the WiFi password), never
+  opens while an update is pending or installing, and never exists on a normal
+  boot (byte-identical USB descriptors - `tests/board/test_recovery_mode_hw.py`).
+  Tools open it with DTR raised (the core's CDC only writes to a host that has)
+  and a COM port with DTR and RTS low (there DTR held is BOOT pressed).
 - Never add a physical-button reset or erase. A child pressing BOOT must not cost
   anyone their vault.
 - A PIN reset without the old PIN erases the vault unless a vault PIN is set

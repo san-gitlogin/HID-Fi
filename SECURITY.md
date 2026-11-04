@@ -11,8 +11,10 @@ straight description of what it does and does not protect.
    v3.10). The flasher prints it. A neighbour cannot guess it.
 2. **Set a 4-digit access PIN** in Settings. Over your home network the first PIN
    needs the board's WiFi password, so nobody else on that network can claim it.
-3. **Recovery is over the USB cable only** - `.\flash_esp.ps1 -Recover` or
-   `./flash_esp.sh --recover`. Holding the board is what proves you own it.
+3. **Recovery is over USB only** - `.\flash_esp.ps1 -Recover`,
+   `./flash_esp.sh --recover` or the HID-Fi Companion. Holding the board is what
+   proves you own it: its COM cable, or on a board without one (the HID-Fi
+   Dongle) **recovery mode** - BOOT held 8 seconds and let go.
 
 ---
 
@@ -63,7 +65,8 @@ sends the old PIN so the vault is kept.
 
 There is no way to recover a forgotten WiFi password or access PIN over WiFi -
 not for a stranger, and not for the owner, because on a network the two look
-identical. The recovery tool talks to the board over its COM cable:
+identical. The recovery tool (and the HID-Fi Companion) talks to the board over a
+serial link on USB: its COM cable, or recovery mode on a board without one:
 
 - **Show the WiFi password** (`ap_password`, a serial-only command).
 - **Set a new WiFi password** (`ap_configure` over serial).
@@ -74,6 +77,24 @@ identical. The recovery tool talks to the board over its COM cable:
 
 No button on the board resets or erases anything. A child, or anyone who does not
 know the board, cannot lose your stored passwords by pressing BOOT.
+
+**Recovery mode** ([docs/RECOVERY_MODE.md](docs/RECOVERY_MODE.md)) is how a board
+with no COM port gets that serial link. Holding BOOT for 8 seconds and letting go
+restarts the board once with a serial link on its own USB, beside the keyboard and
+mouse. The press **opens a USB session; it changes, shows and erases nothing by
+itself** - every change still needs a computer, the tool and, for an unguarded
+vault, a typed ERASE. The link:
+
+- answers only what it is asked (the board's log, which carries the WiFi password
+  at boot, never goes there);
+- closes 5 minutes after its last command, when the tool is done, on any reset,
+  and when the board loses power;
+- does not open while an update is proving itself or installing (a restart then
+  would roll the update back);
+- is never there on a normal boot, so no program on the computer the board is
+  plugged into can reach it unless someone held BOOT in the last few minutes;
+- is announced on an open dashboard ("Recovery mode is open on this board's USB"),
+  so an owner who did not press BOOT knows the board was in someone's hands.
 
 ### If you forget something
 
@@ -94,7 +115,8 @@ know the board, cannot lose your stored passwords by pressing BOOT.
 | In WiFi range | Nothing: the password is unique to the board |
 | Many devices guessing together | 20 wrong PINs from the home network in 10 minutes lock the home network out for 10 minutes. The board's own WiFi and the USB cable are never locked out |
 | Connects and never signs in | Disconnected after 20 seconds, so connections cannot be held open to keep you out |
-| Malware on the PC the board is plugged into | It already controls that PC. Through the cable it could reset the PIN; the vault survives if it has a vault PIN |
+| Malware on the PC the board is plugged into | It already controls that PC. Through a COM cable it could reset the PIN; the vault survives if it has a vault PIN. On a board without one it can do nothing until someone holds BOOT for 8 seconds, and then only for 5 minutes |
+| Holds BOOT for 8 seconds | Opens recovery mode for 5 minutes: nothing changes by itself, it still needs a computer and the tool, and an open dashboard says so. They hold the board, which is already total control (next row) |
 | Holds the board | Can recover it, and can read its flash with standard tools - see "What this does not protect against" |
 
 ---

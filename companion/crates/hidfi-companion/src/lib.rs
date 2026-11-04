@@ -10,6 +10,7 @@ pub mod opener;
 pub mod panel;
 #[cfg(target_os = "macos")]
 pub mod permissions;
+pub mod recovery;
 pub mod service;
 pub mod soundcheck;
 pub mod store;

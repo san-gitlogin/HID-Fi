@@ -2,7 +2,7 @@
 //! fakes - every network failure can be staged - and against the real thing in
 //! the app. Real implementations live in `real.rs`.
 
-use hidfi_core::discovery::UsbDevice;
+use hidfi_core::discovery::{Mac, UsbDevice};
 use std::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +33,13 @@ pub trait UsbList: Send + Sync {
     /// Devices on this computer's USB. An OS error is an empty list: the agent
     /// then reports "no board plugged in", which is what the user can act on.
     fn list(&self) -> Vec<UsbDevice>;
+    /// Boards in recovery mode (docs/RECOVERY_MODE.md), as seen by the last
+    /// `list()`: an Espressif device whose serial is a MAC, with a CDC interface
+    /// beside HID. Read from that same listing - nothing is opened, nothing extra
+    /// enumerated. Fakes have none.
+    fn recovery_macs(&self) -> Vec<Mac> {
+        Vec::new()
+    }
 }
 
 pub trait Browse: Send + Sync {

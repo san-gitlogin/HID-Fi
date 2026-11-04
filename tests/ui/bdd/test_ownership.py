@@ -141,6 +141,41 @@ def both_commands(ctx):
     assert ".\\flash_esp.ps1 -Recover" in t and "./flash_esp.sh --recover" in t, t
 
 
+@then("the explanation shows how to open recovery mode without a COM cable")
+def press_steps(ctx):
+    t = ctx["ui"].text("recPress")
+    assert "BOOT" in t and "8 seconds" in t and "pinhole" in t, t
+    assert "HID-Fi Companion" in ctx["ui"].text("sheetin")
+
+
+@then("the explanation says recovery works over USB with or without a COM port")
+def over_usb(ctx):
+    t = ctx["ui"].text("sheetin")
+    assert "Over USB" in t and "recovery mode (BOOT held 8 seconds)" in t, t
+
+
+@when("BOOT is held on the board for 8 seconds and let go")
+def boot_held(ctx):
+    # Count every recovery notice the page shows (toasts remove themselves after 2.3 s).
+    ctx["ui"].page.evaluate("""() => { window.__recSeen = 0;
+      new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+        if ((n.innerText || '').includes('Recovery mode is open')) window.__recSeen++; })))
+      .observe(document.getElementById('toasts'), {childList: true}); }""")
+    ctx["sim"].enter_recovery()          # the restart into recovery mode: the page reconnects
+
+
+@when("recovery mode closes on the board")
+def rec_closes(ctx):
+    ctx["sim"].recovery = False
+    ctx["sim"].reboot()
+
+
+@then("the recovery-mode message was shown once")
+def shown_once(ctx):
+    seen = ctx["ui"].page.evaluate("window.__recSeen")
+    assert seen == 1, seen
+
+
 @then(parsers.parse("the password advice {shows}"))
 def advice(ctx, shows):
     ui = ctx["ui"]
