@@ -117,7 +117,8 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
     // Recovery actions answer from their own thread; the page gets them here.
     let (rec_tx, rec_rx) = std::sync::mpsc::channel::<String>();
     let mut panel: Option<Panel> = None;
-    // What the window shows now (its JSON): redrawn only when that changes.
+    let mut in_dock = false; // macOS: the window open shows the app in the Dock (panel::dock)
+                             // What the window shows now (its JSON): redrawn only when that changes.
     let mut drawn: Option<String> = None;
     // The window comes forward by itself once per new thing to do.
     let mut auto = menu::AutoOpen::default();
@@ -288,6 +289,9 @@ pub fn run(handle: Handle, mut state: State, store_for_settings: Store, first_ru
                 Err(e) => log::warn!("window: {e}"),
             }
         }
+
+        // Every way the window opens or closes above ends here.
+        panel::dock(target, panel.is_some(), &mut in_dock);
 
         // Redraw only when what is shown has changed.
         if shown.as_ref() != Some(&m) {

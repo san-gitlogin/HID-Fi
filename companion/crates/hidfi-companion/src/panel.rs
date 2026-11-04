@@ -61,6 +61,7 @@ impl Panel {
             .with_min_inner_size(LogicalSize::new(380.0, 480.0))
             .build(target)
             .map_err(|e| e.to_string())?;
+        app_icon(&window);
         let view = WebViewBuilder::new()
             .with_html(PAGE)
             .with_background_color((7, 9, 15, 255))
@@ -115,6 +116,57 @@ impl Panel {
     pub fn window(&self) -> &Window {
         &self.window
     }
+}
+
+/// Windows: the title bar and the taskbar button show HID-Fi's icon - icon 1 in
+/// the .exe (build.rs, assets/app.ico) - at this display's sizes, so Windows picks
+/// the closest drawn size. Without it the running app had a blank, generic icon.
+/// macOS and Linux take the app's icon from the bundle and the desktop entry.
+fn app_icon(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::dpi::PhysicalSize;
+        use tao::platform::windows::{IconExtWindows, WindowExtWindows};
+        use tao::window::Icon;
+        let px = |logical: f64| {
+            let n = (logical * window.scale_factor()).round() as u32;
+            Some(PhysicalSize::new(n, n))
+        };
+        match (
+            Icon::from_resource(1, px(16.0)),
+            Icon::from_resource(1, px(32.0)),
+        ) {
+            (Ok(small), Ok(big)) => {
+                window.set_window_icon(Some(small));
+                window.set_taskbar_icon(Some(big));
+            }
+            (a, b) => log::warn!("app icon: {:?} {:?}", a.err(), b.err()),
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
+/// macOS: a Dock icon (and a place in Cmd-Tab) while the window is open, none
+/// while the app lives only in the menu bar. Called with whether the window is
+/// open now; does nothing unless that changed. Before this the app was a menu-bar
+/// app all the time, so its open window had no Dock icon at all.
+pub fn dock<T: 'static>(target: &EventLoopWindowTarget<T>, open: bool, shown: &mut bool) {
+    if open == *shown {
+        return;
+    }
+    *shown = open;
+    #[cfg(target_os = "macos")]
+    {
+        use tao::platform::macos::{ActivationPolicy, EventLoopWindowTargetExtMacOS};
+        target.set_activation_policy_at_runtime(if open {
+            ActivationPolicy::Regular
+        } else {
+            ActivationPolicy::Accessory
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = target;
 }
 
 /// The window, asked for ("Open HID-Fi Companion...", the app opened again,
