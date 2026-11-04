@@ -283,3 +283,39 @@ def test_the_version_number_has_the_release_format():
     s = re.search(r'#define\s+FW_SERIES\s+"([^"]+)"', firmware.ino_text())
     assert s and s.group(1) == firmware.fw_series(), \
         f"FW_SERIES {s and s.group(1)} is not the MAJOR.MINOR of {v}"
+
+
+SCENARIO_TITLE = re.compile(r"^\s*(?:Scenario Outline|Scenario Template|Scenario|Example):\s*(.+?)\s*$", re.M)
+
+
+def scenario_name_clashes(text):
+    """Pairs of titles in one feature file that become the same pytest-bdd test."""
+    from pytest_bdd.scenario import make_python_name
+    seen, clashes = {}, []
+    for title in SCENARIO_TITLE.findall(text):
+        name = make_python_name(title)
+        if name in seen:
+            clashes.append((seen[name], title, name))
+        seen[name] = title
+    return clashes
+
+
+def test_no_two_scenarios_in_a_feature_share_a_test_name():
+    """pytest-bdd names each scenario's test from its title, punctuation and <params>
+    dropped. Two titles that come out the same make one test function, and the later
+    one silently replaces the earlier: a recovery outline titled like the window's
+    layout outline once took 44 layout cases down to its own 10, with every run green.
+    Read from the text: pytest-bdd's own parser keys scenarios by title, so it has
+    already dropped an exact repeat."""
+    pytest.importorskip("pytest_bdd", reason="pytest-bdd is installed with the ui tier")
+    found = [f"{p.relative_to(paths.TESTS)}: {a!r} and {b!r} are both test_{n}"
+             for p in sorted(paths.TESTS.rglob("*.feature"))
+             for a, b, n in scenario_name_clashes(p.read_text(encoding="utf-8"))]
+    assert not found, "\n".join(found)
+
+
+def test_the_scenario_name_rule_sees_a_repeat():
+    pytest.importorskip("pytest_bdd", reason="pytest-bdd is installed with the ui tier")
+    text = ('Feature: f\n  Scenario Outline: "<state>" fits a <width> px window\n  Scenario: B\n'
+            '  Scenario Outline: <state> fits a <width> px window!\n  Example: B\n  Scenario: C\n')
+    assert [n for _, _, n in scenario_name_clashes(text)] == ["state_fits_a_width_px_window", "b"]

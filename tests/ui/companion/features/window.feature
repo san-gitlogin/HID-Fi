@@ -37,6 +37,11 @@ Feature: The Companion's window - a card per board
       | fifty            | 380   |
       | fifty            | 1280  |
       | markup           | 380   |
+      | recovery-open    | 380   |
+      | recovery-open    | 1280  |
+      | recovery-erases  | 380   |
+      | recovery-asking  | 600   |
+      | recovery-failed  | 380   |
 
   Scenario Outline: The grid uses the width it has
     Given the window is <width> px wide
@@ -401,21 +406,6 @@ Feature: The Companion's window - a card per board
     Then nothing on the page moves
 
   # ---- recovery mode: BOOT held 8 s on a board (docs/RECOVERY_MODE.md) ----
-
-  Scenario Outline: "<state>" fits a <width> px window
-    Given the window is <width> px wide
-    When the app shows "<state>"
-    Then nothing scrolls sideways and no text is cut off
-    And every button is inside its card or panel and at least 34 px tall
-    And the page reported no error
-
-    Examples:
-      | state           | width |
-      | recovery-open   | 380   |
-      | recovery-open   | 1280  |
-      | recovery-erases | 380   |
-      | recovery-asking | 600   |
-      | recovery-failed | 380   |
 
   Scenario: A board in recovery mode says so, with what can be done
     When the app shows "recovery-open"
