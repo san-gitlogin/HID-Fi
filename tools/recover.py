@@ -99,7 +99,9 @@ def recovery_links(ports, timeout=1.5):
         except Exception:
             continue
         try:
-            if link.cmd({"cmd": "status"}, timeout=timeout).get("recovery") is True:
+            st = link.cmd({"cmd": "status"}, timeout=timeout)
+            # A link a paired computer opened for its own factory reset is not ours.
+            if st.get("recovery") is True and st.get("recovery_kind") != "reset":
                 found.append(p)
         except (TimeoutError, ValueError):
             pass
@@ -257,6 +259,32 @@ def reset_pin(link, vl, entries, new, erase_ok, interactive):
     return 0
 
 
+FACTORY_LOSES = ("the access PIN and every setting", "its home WiFi networks", "stored passwords (the vault)",
+                 "macros and saved PCs", "paired computers")
+
+
+def factory_reset(link, ap, yes, interactive):
+    """docs/FACTORY_RESET.md: everything a person set up goes; the board's own WiFi
+    name and password and its firmware stay. Asked first unless --yes."""
+    say("FACTORY RESET - everything on this board will be erased:", *("  - " + x for x in FACTORY_LOSES),
+        "It keeps its own WiFi name, the WiFi password it came with, and its firmware.")
+    if not yes:
+        if not interactive:
+            say("Not erased: add --yes to factory reset without being asked.")
+            return 1
+        if input("   Type yes to erase everything on this board: ").strip().lower() != "yes":
+            say("Nothing changed.")
+            return 1
+    r = link.cmd({"cmd": "factory_reset", "confirm": True})
+    if r.get("reply") != "factory_reset":
+        say(f"Not erased: {r.get('message') or r.get('reply') or 'the board refused'}. Nothing changed.")
+        return 1
+    link.recovery = False          # it restarts: there is no recovery mode left to close
+    ssid = (ap or {}).get("ssid") or "its own WiFi"
+    say(f"Erased. The board is restarting as new: join {ssid} again to set it up.")
+    return 0
+
+
 def menu(link, st, ap, vl, entries):
     say(f"Board: {st.get('firmware')}  WiFi: {ap.get('ssid')}  access PIN: {'set' if st.get('auth_set') else 'not set'}",
         f"Stored passwords: {vault_fate(vl, entries)}")
@@ -266,8 +294,9 @@ def menu(link, st, ap, vl, entries):
     print("   1  Show this board's WiFi name and password")
     print("   2  Set a new WiFi password")
     print("   3  Reset the access PIN (or turn it off)")
-    print("   4  Quit")
-    choice = input("   Choose 1-4: ").strip()
+    print("   4  Factory reset: erase everything on the board")
+    print("   5  Quit")
+    choice = input("   Choose 1-5: ").strip()
     if choice == "1":
         return show_password(ap, st)
     if choice == "2":
@@ -279,6 +308,8 @@ def menu(link, st, ap, vl, entries):
     if choice == "3":
         p = input("   New 4 digit access PIN, or Enter to turn the PIN off: ").strip()
         return reset_pin(link, vl, entries, p, False, True)
+    if choice == "4":
+        return factory_reset(link, ap, False, True)
     say("Nothing changed.")
     return 0
 
@@ -292,6 +323,8 @@ def main(argv=None):
     ap_.add_argument("--reset-pin")
     ap_.add_argument("--erase-vault", action="store_true", help="allow a PIN reset to erase an unguarded vault")
     ap_.add_argument("--keep-open", action="store_true", help="leave recovery mode open when done (it closes itself after 5 minutes)")
+    ap_.add_argument("--factory-reset", action="store_true", help="erase everything a person set up (docs/FACTORY_RESET.md)")
+    ap_.add_argument("--yes", action="store_true", help="with --factory-reset: do not ask")
     a = ap_.parse_args(argv)
 
     print("== HID-Fi recovery (USB)")
@@ -317,8 +350,10 @@ def main(argv=None):
             return set_password(link, ap, a.set_password)
         if a.reset_pin is not None:
             return reset_pin(link, vl, entries, a.reset_pin, a.erase_vault, False)
+        if a.factory_reset:
+            return factory_reset(link, ap, a.yes, sys.stdin.isatty())
         if not sys.stdin.isatty():
-            say("No choice given. Use --show-password, --set-password or --reset-pin, or run it in a terminal.")
+            say("No choice given. Use --show-password, --set-password, --reset-pin or --factory-reset, or run it in a terminal.")
             return 1
         return menu(link, st, ap, vl, entries)
     except TimeoutError as e:

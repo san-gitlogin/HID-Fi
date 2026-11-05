@@ -37,7 +37,7 @@
     password, or reset the PIN - over the USB COM cable only, which is what
     proves the board is yours. Stored passwords are kept if the vault has its
     own vault PIN; otherwise you are told first and asked to type ERASE.
-    For scripts: -RecoverShow, -RecoverSetPassword <new>, -RecoverResetPin <1234|off>
+    For scripts: -RecoverShow, -RecoverSetPassword <new>, -RecoverResetPin <1234|off>, -FactoryReset [-Yes]
     with -EraseVault.
 
 .EXAMPLE
@@ -74,6 +74,8 @@ param(
     [string]$RecoverResetPin,
     [switch]$EraseVault,
     [switch]$KeepOpen,
+    [switch]$FactoryReset,
+    [switch]$Yes,
     [switch]$Compile,
     [switch]$Erase,
     [switch]$Force,
@@ -434,7 +436,7 @@ function Get-RecoveryLinks($ports) {
         try {
             $sp = Open-Board $p.Port $true
             $st = Send-Board $sp @{ cmd = 'status' } 1.5
-            if ($st.recovery -eq $true) {
+            if ($st.recovery -eq $true -and $st.recovery_kind -ne 'reset') {   # a paired computer's own reset link is not ours
                 [pscustomobject]@{ Port = $p.Port; Serial = $(if ($st.mac) { ($st.mac -replace ':', '') } else { $p.Serial }); Kind = 'hidfi-recovery'; What = 'HID-Fi board in recovery mode'; Desc = $p.Desc }
             }
         } catch { }
@@ -518,6 +520,27 @@ function Reset-AccessPin($sp, $vl, [string]$new, [bool]$eraseOk, [bool]$interact
     return 0
 }
 
+# docs/FACTORY_RESET.md: everything a person set up goes; the board's own WiFi name
+# and password and its firmware stay. Asked first unless -Yes.
+function Invoke-FactoryReset($sp, $ap, [bool]$yes, [bool]$interactive) {
+    Say '   FACTORY RESET - everything on this board will be erased:'
+    foreach ($x in 'the access PIN and every setting', 'its home WiFi networks', 'stored passwords (the vault)', 'macros and saved PCs', 'paired computers') { Say "     - $x" }
+    Say '   It keeps its own WiFi name, the WiFi password it came with, and its firmware.'
+    if (-not $yes) {
+        if (-not $interactive) { Say '   Not erased: add -Yes to factory reset without being asked.'; return 1 }
+        if ((Read-Host '   Type yes to erase everything on this board').Trim().ToLower() -ne 'yes') { Say '   Nothing changed.'; return 1 }
+    }
+    $r = Send-Board $sp @{ cmd = 'factory_reset'; confirm = $true }
+    if ($r.reply -ne 'factory_reset') {
+        $why = if ($r.message) { $r.message } elseif ($r.reply) { $r.reply } else { 'the board refused' }
+        Say "   Not erased: $why. Nothing changed."; return 1
+    }
+    $script:FactoryDone = $true          # it restarts: no recovery mode left to close
+    $ssid = if ($ap -and $ap.ssid) { $ap.ssid } else { 'its own WiFi' }
+    Say "   Erased. The board is restarting as new: join $ssid again to set it up."
+    return 0
+}
+
 function Invoke-Recover {
     Say ''
     Say '== HID-Fi recovery (USB)'
@@ -571,7 +594,8 @@ function Invoke-Recover {
         if ($RecoverShow) { return (Show-ApPassword $ap $st) }
         if ($ScriptArgs.ContainsKey('RecoverSetPassword')) { return (Set-ApPassword $sp $ap $RecoverSetPassword) }
         if ($ScriptArgs.ContainsKey('RecoverResetPin')) { return (Reset-AccessPin $sp $vl $RecoverResetPin ([bool]$EraseVault) $false) }
-        if ([Console]::IsInputRedirected) { Say '   No choice given. Use -RecoverShow, -RecoverSetPassword or -RecoverResetPin, or run it in a console.'; return 1 }
+        if ($FactoryReset) { return (Invoke-FactoryReset $sp $ap ([bool]$Yes) (-not [Console]::IsInputRedirected)) }
+        if ([Console]::IsInputRedirected) { Say '   No choice given. Use -RecoverShow, -RecoverSetPassword, -RecoverResetPin or -FactoryReset, or run it in a console.'; return 1 }
         $pinState = if ($st.auth_set) { 'set' } else { 'not set' }
         Say "   Board: $($st.firmware)  WiFi: $($ap.ssid)  access PIN: $pinState"
         Say "   Stored passwords: $((Get-VaultFate $vl).Text)"
@@ -581,8 +605,9 @@ function Invoke-Recover {
         Say '   1  Show this board''s WiFi name and password'
         Say '   2  Set a new WiFi password'
         Say '   3  Reset the access PIN (or turn it off)'
-        Say '   4  Quit'
-        $c = Read-Host '   Choose 1-4'
+        Say '   4  Factory reset: erase everything on the board'
+        Say '   5  Quit'
+        $c = Read-Host '   Choose 1-5'
         switch ($c) {
             '1' { return (Show-ApPassword $ap $st) }
             '2' { $a = Read-Host '   New WiFi password (8-63 characters)'; $b2 = Read-Host '   Type it again'
@@ -590,6 +615,7 @@ function Invoke-Recover {
                   return (Set-ApPassword $sp $ap $a) }
             '3' { $p = Read-Host '   New 4 digit access PIN, or Enter to turn the PIN off'
                   return (Reset-AccessPin $sp $vl $p.Trim() $false $true) }
+            '4' { return (Invoke-FactoryReset $sp $ap $false $true) }
             default { Say '   Nothing changed.'; return 0 }
         }
     } catch {
@@ -597,7 +623,7 @@ function Invoke-Recover {
         else { Say "   The board did not answer ($_). Is the cable in the board's COM port?" }
         return 1
     }
-    finally { try { Close-Recovery $sp $isRec } finally { $sp.Close() } }
+    finally { try { if (-not $script:FactoryDone) { Close-Recovery $sp $isRec } } finally { $sp.Close() } }
 }
 
 # ---------------------------------------------------------------- run
@@ -605,7 +631,8 @@ Say ''
 Say 'ESP32-S3 USB-HID firmware flasher'
 Say '---------------------------------'
 
-if ($Recover -or $RecoverShow -or $ScriptArgs.ContainsKey('RecoverSetPassword') -or $ScriptArgs.ContainsKey('RecoverResetPin')) {
+$script:FactoryDone = $false
+if ($Recover -or $RecoverShow -or $FactoryReset -or $ScriptArgs.ContainsKey('RecoverSetPassword') -or $ScriptArgs.ContainsKey('RecoverResetPin')) {
     exit (Invoke-Recover)
 }
 

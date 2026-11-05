@@ -49,7 +49,7 @@ def board(tmp_path):
 
 PS_FLAGS = {"--show-password": "-RecoverShow", "--set-password": "-RecoverSetPassword",
             "--reset-pin": "-RecoverResetPin", "--erase-vault": "-EraseVault", "--port": "-Port", "--serial": "-Serial",
-            "--keep-open": "-KeepOpen"}
+            "--keep-open": "-KeepOpen", "--factory-reset": "-FactoryReset", "--yes": "-Yes"}
 
 
 def run(tool, ports, *args, stdin=None):
@@ -462,3 +462,39 @@ def test_the_com_port_is_opened_with_its_lines_low_and_the_recovery_link_with_dt
     recover.BoardLink("/dev/com", recovery=False)
     recover.BoardLink("/dev/rec", recovery=True)
     assert seen == [(False, False), (True, False)]
+
+
+# ---- factory reset (docs/FACTORY_RESET.md) -------------------------------------------------------
+@pytest.mark.parametrize("tool", TOOLS)
+def test_factory_reset_over_recovery_mode_erases_and_keeps_the_boards_own_wifi(rec, tool):
+    import time
+    sim = in_recovery(pin="4826", vault=dict(VAULT))
+    sim.ap_ssid, sim.ap_pass = "Renamed", "chosen-by-me"
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--factory-reset", "--yes")
+    assert code == 0 and "Erased." in out and "FACTORY RESET" in out, out
+    assert {"cmd": "factory_reset", "confirm": True} in fb.seen
+    assert "recovery_exit" not in cmds(fb)                       # it restarted: nothing left to close
+    time.sleep(0.7)
+    sim.tick()
+    assert sim.pin is None and not sim.vault and (sim.ap_ssid, sim.ap_pass) == (sim.ap_ssid_own, sim.ap_genpw)
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_factory_reset_unattended_without_yes_changes_nothing(rec, tool):
+    sim = in_recovery(pin="4826", vault=dict(VAULT))
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--factory-reset")
+    assert code == 1 and "add" in out and "Yes" in out.replace("--yes", "Yes").replace("-Yes", "Yes"), out
+    assert "factory_reset" not in cmds(fb) and sim.pin == "4826" and sim.vault
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_a_link_a_paired_computer_opened_for_its_reset_is_not_recovery_mode(rec, tool):
+    sim = sim_with(pin="4826")
+    sim.open_reset_link("a" * 32, "b" * 32)
+    (fb,), ports = rec([("recovery", sim, MAC_A)])
+    code, out = run(tool, ports, "--show-password")
+    assert code != 0 and "k7m2-x9qp-4tre" not in out, out
+    assert "ap_password" not in cmds(fb)                         # it was never asked
+
