@@ -328,6 +328,27 @@ uint32_t recoveryLastAt  = 0;              // millis() of its last command, or o
 bool     recoveryClosing = false;          // a restart out of it is under way
 Print*   replySerial     = nullptr;        // where a serial reply goes: the COM port, or the link that asked
 
+// Factory reset (docs/FACTORY_RESET.md). A paired computer's signed request does not
+// erase anything: it restarts the board with the USB link open for 60 s and a one-use
+// token, and the erase must come down that cable signed over the token - a paired
+// computer elsewhere on the network cannot send down a cable it is not on. That link
+// answers status, factory_reset and recovery_exit only.
+#define RESET_MAGIC      0x52535450u       // "RSTP": a paired-reset boot
+#define RESET_IDLE_MS    60000UL
+RTC_NOINIT_ATTR uint8_t rtcResetPc[16];
+RTC_NOINIT_ATTR uint8_t rtcResetTok[16];
+bool     resetBoot    = false;             // this boot's link was opened by a paired computer, for a reset only
+bool     resetTokLive = false;             // its token is unused
+uint8_t  resetPc[16], resetTok[16];
+// A computer that is not paired may ask; a person approves on the dashboard (PIN).
+struct ResetRequest {
+    uint8_t  state;                        // 0 none, 1 waiting, 2 declined, 3 approved
+    uint8_t  id[16];
+    char     name[33];
+    uint32_t ip, at;
+} resetReq = {};
+#define RESET_REQ_MS 120000UL              // forgotten 120 s after its computer stops asking
+
 // ---- Power ------------------------------------------------------------------
 // Nearly all of this board's draw is the radio, not the processor: roughly
 // 100-120 mA with WiFi awake against 30-40 mA with modem sleep on. CPU frequency
@@ -960,7 +981,7 @@ void recoveryTick() {
         if (line.length() >= SERIAL_LINE_MAX) { overflow = true; line = ""; continue; }
         line += (char)c;
     }
-    if (!recoveryClosing && millis() - recoveryLastAt >= RECOVERY_IDLE_MS && !recoveryRefusal())
+    if (!recoveryClosing && millis() - recoveryLastAt >= (resetBoot ? RESET_IDLE_MS : RECOVERY_IDLE_MS) && !recoveryRefusal())
         recoveryClose("idle");
 }
 
@@ -974,6 +995,171 @@ void handleRecoveryExit() {
         doc["status"] = "ok"; doc["reply"] = "recovery_exit"; doc["restart"] = true;
     }
     sendJson(doc);
+}
+
+// ==================== FACTORY RESET ====================
+// docs/FACTORY_RESET.md. Kept: the board's own name and WiFi password (ap_genpw), and
+// the update journal. Erased: everything a person set up.
+
+// Nothing set up: no PIN, no home network, no paired computer, nothing stored.
+bool boardIsFresh() {
+    return authToken.length() == 0 && netCount == 0 && compPairedCount() == 0 && vaultCount() == 0;
+}
+
+void factoryWipe() {
+    static const char* const gone[] = {"vault", "macros", "pcprof", "compan", "hid_cfg"};
+    for (const char* ns : gone) { preferences.begin(ns, false); preferences.clear(); preferences.end(); }
+    preferences.begin("wifi_cfg", false);
+    String gen = preferences.getString("ap_genpw", "");
+    preferences.clear();
+    if (gen.length() >= 8) {                        // the board's own password is its password again
+        preferences.putString("ap_genpw", gen);
+        preferences.putBool("ap_gen", true);
+        preferences.putString("ap_pass", gen);
+    }
+    preferences.end();
+    preferences.begin("ota", false);                // the choices only: the journal stays
+    preferences.remove("auto"); preferences.remove("autosec"); preferences.remove("src");
+    preferences.end();
+    COM_SERIAL.print("[RESET] Factory reset: settings, PIN, networks, vault, macros and pairings erased\r\n");
+}
+
+static void factoryReply(const char* reply, const char* message) {
+    StaticJsonDocument<256> d;
+    d["status"] = "error"; d["reply"] = reply; d["message"] = message;
+    sendJson(d);
+}
+
+// {"cmd":"factory_reset","confirm":true} over USB (COM, or recovery mode opened with
+// the pinhole) or over WiFi behind the PIN gate; {"cmd":"factory_reset","proof":hex}
+// on a paired-reset link. An approved request names itself with "request".
+void handleFactoryReset(const JsonDocument& in) {
+    const char* why = recoveryRefusal();
+    if (why) { factoryReply(why, "Not while an update is being installed or checked after a restart"); return; }
+    const bool onResetLink = cmdSource == SRC_SERIAL && resetBoot && replySerial == recoverySerial;
+    if (onResetLink) {
+        uint8_t proof[32], want[32];
+        int pi = compFindPaired(resetPc);
+        char msg[96], idh[33], tokh[33];
+        comp_hex(resetPc, 16, idh); comp_hex(resetTok, 16, tokh);
+        snprintf(msg, sizeof(msg), "factory_reset|%s|%s", idh, tokh);
+        bool ok = resetTokLive && pi >= 0 && comp_hex_parse(in["proof"] | "", proof, 32) &&
+                  comp_hmac(compPaired[pi].key, msg, want) == 0 && comp_ct_equal(want, proof, 32);
+        resetTokLive = false;                        // one try, right or wrong
+        if (!ok) { factoryReply("bad_proof", "This computer could not prove it is paired with the board"); return; }
+    } else if (!(in["confirm"] | false)) {
+        factoryReply("confirm_needed", "Send \"confirm\": true - everything on the board will be erased");
+        return;
+    }
+    bool approvedRequest = false;
+    if (cmdSource != SRC_SERIAL && resetReq.state == 1) {
+        uint8_t rid[16];
+        if (comp_hex_parse(in["request"] | "", rid, 16) && comp_ct_equal(rid, resetReq.id, 16)) {
+            resetReq.state = 3;
+            approvedRequest = true;
+        }
+    }
+    factoryWipe();
+    StaticJsonDocument<160> d;
+    d["status"] = "ok"; d["reply"] = "factory_reset"; d["restart"] = true;
+    sendJson(d);
+    Keyboard.releaseAll();
+    hidMouseButtons(0x07, 0, 1);
+    recoveryClosing = true;                          // a reset link must not stay open for another try
+    // An approved request: long enough for the asking computer, which polls once a
+    // second, to see "approved" - afterwards the board is off its home network.
+    pendingRestartAt = millis() + (approvedRequest ? 2500 : 500);
+}
+
+void handleFactoryResetDecline(const JsonDocument& in) {
+    uint8_t rid[16];
+    StaticJsonDocument<160> d;
+    if (resetReq.state == 1 && comp_hex_parse(in["request"] | "", rid, 16) && comp_ct_equal(rid, resetReq.id, 16)) {
+        resetReq.state = 2;
+        d["status"] = "ok"; d["reply"] = "factory_reset_decline";
+    } else {
+        d["status"] = "error"; d["reply"] = "no_request"; d["message"] = "No such request is waiting";
+    }
+    sendJson(d);
+}
+
+// POST /api/companion {op:"reset", id, chal, mac}: a paired computer asks; proof as
+// for updates, HMAC-SHA256 over "reset|" id "|" chal. The board then restarts with
+// the paired-reset link and gives the computer the token it must sign over the cable.
+static void compReset(const JsonDocument& in, uint32_t) {
+    uint8_t id[16], chal[16], mac[32], want[32];
+    const char* ch = in["chal"] | "";
+    if (!comp_hex_parse(in["id"] | "", id, 16) || !comp_hex_parse(ch, chal, 16) || !comp_hex_parse(in["mac"] | "", mac, 32)) {
+        compRefuse(400, "bad_request", "Malformed reset request"); return;
+    }
+    int i = compFindPaired(id);
+    if (i < 0) { compRefuse(404, "unknown_pc", "This computer is not paired"); return; }
+    CompPaired& c = compPaired[i];
+    if (!compChalTake(c, chal)) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
+    char msg[96], idh[33];
+    comp_hex(id, 16, idh);
+    snprintf(msg, sizeof(msg), "reset|%s|%s", idh, ch);
+    if (comp_hmac(c.key, msg, want) != 0 || !comp_ct_equal(want, mac, 32)) {
+        compRefuse(401, "bad_mac", "The reset request's proof is wrong"); return;
+    }
+    const char* why = recoveryRefusal();
+    if (why) { compRefuse(409, why, "Not now"); return; }
+    uint8_t tok[16];
+    esp_fill_random(tok, 16);
+    memcpy(rtcResetPc, id, 16); memcpy(rtcResetTok, tok, 16);
+    rtcRecoveryMagic = RESET_MAGIC;
+    char tokh[33]; comp_hex(tok, 16, tokh);
+    comp_wipe(tok, 16);
+    JsonDocument d;
+    d["status"] = "ok"; d["token"] = tokh;
+    compReply(200, d);
+    Keyboard.releaseAll();
+    hidMouseButtons(0x07, 0, 1);
+    COM_SERIAL.print("[RESET] A paired computer asked: restarting with the USB link for 60 s\r\n");
+    pendingRestartAt = millis() + 300;
+}
+
+// {op:"reset_request", name}: a computer that is not paired asks; the dashboard shows
+// it, and a person approves with the PIN. One at a time.
+static void compResetRequest(const JsonDocument& in, uint32_t ip) {
+    const char* name = in["name"] | "";
+    size_t n = strlen(name);
+    bool plain = n > 0 && n <= 32;
+    for (size_t k = 0; plain && k < n; k++) plain = (uint8_t)name[k] >= 0x20 && name[k] != 0x7F;
+    if (!plain) { compRefuse(400, "bad_request", "A name of 1 to 32 printable characters"); return; }
+    if (resetReq.state == 1 && millis() - resetReq.at < RESET_REQ_MS && resetReq.ip != ip) {
+        compRefuse(409, "busy", "Another computer is already asking"); return;
+    }
+    resetReq.state = 1; resetReq.ip = ip; resetReq.at = millis();
+    esp_fill_random(resetReq.id, 16);
+    memcpy(resetReq.name, name, n); resetReq.name[n] = 0;
+    char idh[33]; comp_hex(resetReq.id, 16, idh);
+    StaticJsonDocument<160> ev;
+    ev["event"] = "factory_reset_request"; ev["name"] = resetReq.name; ev["request"] = idh;
+    broadcastJson(ev);
+    JsonDocument d;
+    d["status"] = "ok"; d["request"] = idh;
+    compReply(200, d);
+}
+
+// {op:"reset_request_status", request}: waiting, declined, approved or unknown. The
+// asking computer polls it, which keeps the request alive.
+static void compResetRequestStatus(const JsonDocument& in, uint32_t ip) {
+    uint8_t rid[16];
+    const char* st = "unknown";
+    if (comp_hex_parse(in["request"] | "", rid, 16) && resetReq.state && comp_ct_equal(rid, resetReq.id, 16)) {
+        if (resetReq.state == 1 && millis() - resetReq.at >= RESET_REQ_MS) resetReq.state = 0;
+        if (resetReq.state == 1 && resetReq.ip == ip) resetReq.at = millis();
+        st = resetReq.state == 1 ? "pending" : resetReq.state == 2 ? "declined" : resetReq.state == 3 ? "approved" : "unknown";
+    }
+    JsonDocument d;
+    d["status"] = "ok"; d["state"] = st;
+    compReply(200, d);
+}
+
+// From loop(): a request nobody asks about any more is forgotten.
+void resetRequestTick() {
+    if (resetReq.state == 1 && millis() - resetReq.at >= RESET_REQ_MS) resetReq.state = 0;
 }
 
 // ==================== SETUP ====================
@@ -997,10 +1183,20 @@ void setup() {
 
     // One-shot: cleared before anything else runs, so a crash or a reset in this
     // boot comes back normally. Never on a boot that must still prove an update.
-    recoveryBoot = (rtcRecoveryMagic == RECOVERY_MAGIC) && !otaPendingVerify();
-    rtcRecoveryMagic = 0;
+    {
+        const uint32_t magic = rtcRecoveryMagic;
+        recoveryBoot = (magic == RECOVERY_MAGIC || magic == RESET_MAGIC) && !otaPendingVerify();
+        resetBoot = recoveryBoot && magic == RESET_MAGIC;
+        if (resetBoot) {
+            memcpy(resetPc, rtcResetPc, 16); memcpy(resetTok, rtcResetTok, 16);
+            resetTokLive = true;
+        }
+        memset(rtcResetPc, 0, 16); memset(rtcResetTok, 0, 16);
+        rtcRecoveryMagic = 0;
+    }
     replySerial = &COM_SERIAL;
-    if (recoveryBoot) COM_SERIAL.println("[REC] Recovery boot: a serial link joins HID on the native USB for 5 minutes");
+    if (resetBoot) COM_SERIAL.println("[REC] Factory-reset boot: a paired computer may erase this board over USB for 60 s");
+    else if (recoveryBoot) COM_SERIAL.println("[REC] Recovery boot: a serial link joins HID on the native USB for 5 minutes");
 
     for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOpenedAt[i] = 0; }
 
@@ -1140,7 +1336,8 @@ void loop() {
             processCommand(line, SRC_SERIAL);
         }
     }
-    if (recoverySerial) recoveryTick();     // only on a recovery boot: one pointer test otherwise
+    if (recoverySerial) recoveryTick();
+    resetRequestTick();     // only on a recovery boot: one pointer test otherwise
 
     SEC_END(0)
     if (wifiEnabled) {
@@ -2303,6 +2500,13 @@ void processCommand(const String& line, CmdSource src) {
     }
     
     const char* cmd = inDoc["cmd"] | "unknown";
+    // A link opened by a paired computer's request (not by the pinhole) erases only:
+    // never the WiFi password, a PIN reset or anything else physical access allows.
+    if (!fromWifi && resetBoot && replySerial == recoverySerial &&
+        strcmp(cmd, "status") && strcmp(cmd, "ping") && strcmp(cmd, "factory_reset") && strcmp(cmd, "recovery_exit")) {
+        factoryReply("not_allowed", "This link was opened for a factory reset only");
+        return;
+    }
     if (!otaQueryOnly(cmd)) lastHidAt = millis();
     if (!fromWifi || verboseLog) {
         COM_SERIAL.printf("%s cmd=%s\n", fromWifi ? "[WIFI]" : (replySerial != &COM_SERIAL ? "[REC]" : "[UART]"), cmd);
@@ -2485,6 +2689,12 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "ap_password") == 0) {
         handleApPassword();
+    }
+    else if (strcmp(cmd, "factory_reset") == 0) {
+        handleFactoryReset(inDoc);
+    }
+    else if (strcmp(cmd, "factory_reset_decline") == 0) {
+        handleFactoryResetDecline(inDoc);
     }
     else if (strcmp(cmd, "set_verbose") == 0) {
         handleSetVerbose(inDoc);
@@ -3328,7 +3538,18 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["recovery"] = recOpen;
     if (recOpen) {
         uint32_t idle = millis() - recoveryLastAt;
-        doc["recovery_left_s"] = (idle >= RECOVERY_IDLE_MS) ? 0 : (RECOVERY_IDLE_MS - idle + 999) / 1000;
+        const uint32_t win = resetBoot ? RESET_IDLE_MS : RECOVERY_IDLE_MS;
+        doc["recovery_left_s"] = (idle >= win) ? 0 : (win - idle + 999) / 1000;
+        doc["recovery_kind"] = resetBoot ? "reset" : "button";
+    }
+    doc["fresh"] = boardIsFresh();
+    if (resetReq.state == 1) {
+        JsonObject r = doc["reset_request"].to<JsonObject>();
+        r["name"] = resetReq.name;
+        char rid[33]; comp_hex(resetReq.id, 16, rid);
+        r["request"] = rid;                          // approving or declining still needs the PIN
+        uint32_t age = millis() - resetReq.at;
+        r["left_s"] = age >= RESET_REQ_MS ? 0 : (RESET_REQ_MS - age + 999) / 1000;
     }
     otaStatusFields(doc);
     otaJobFields(doc);

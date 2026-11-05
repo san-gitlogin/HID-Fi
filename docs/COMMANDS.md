@@ -32,6 +32,8 @@ curl -X POST http://192.168.4.1/api/command \
 | `set_auth` | `token`, `old`, `ap_password` | Sets the PIN; empty string disables it. Over WiFi, the **first** PIN also needs `ap_password`, the board's own WiFi password |
 | `ap_password` | — | **USB only.** The board's WiFi name and password: `{"ssid", "password", "open", "generated"}`. Over WiFi it answers `{"status":"error","reply":"usb_only"}` |
 | `recovery_exit` | — | Closes recovery mode: `{"status":"ok","reply":"recovery_exit","restart":true}`, then the board restarts into a normal boot. Not in recovery mode: `{"status":"error","reply":"not_in_recovery","message":"Recovery mode is not open"}`. Over WiFi it is gated like any command (access PIN, home-network lock) |
+| `factory_reset` | `confirm`, or `proof`; `request` | Erases everything a person set up - the access PIN and every setting, home networks, a custom board WiFi name or password, the vault, macros, saved PCs, paired computers, the auto-update choices - and keeps the board's own name and the WiFi password it made for itself, and the update journal ([FACTORY_RESET.md](FACTORY_RESET.md)). `{"status":"ok","reply":"factory_reset","restart":true}`, then the board restarts as new. `"confirm": true` is required over USB (COM, or recovery mode opened with the pinhole) and over WiFi, where it sits behind the PIN gate like any command; on a link a paired computer opened (`"recovery_kind":"reset"`) it takes `"proof"` instead - HMAC-SHA256 with that computer's pairing key over `factory_reset|<id>|<token>`, one try. `"request"` approves a waiting request from a computer that is not paired. Errors: `confirm_needed`, `bad_proof`, `verifying` / `busy` (an update needs the board), `not_allowed` |
+| `factory_reset_decline` | `request` | Declines a waiting factory-reset request: `{"status":"ok","reply":"factory_reset_decline"}`, or `{"status":"error","reply":"no_request"}` |
 
 HTTP requests may instead carry `token` inline in the body of any command.
 
@@ -51,6 +53,16 @@ replies (the board's USB serial only writes to a host that has). The link closes
 minutes after its last command, on `recovery_exit`, on any reset, or when the board
 loses power. Meanwhile `status` says `"recovery": true` and `"recovery_left_s"`
 (seconds until it closes); otherwise `"recovery": false`.
+
+A **paired-reset link** is the same link opened without the pinhole, for one job: a
+paired computer's signed `POST /api/companion {op:"reset"}` restarts the board with it
+for 60 s (`"recovery_kind":"reset"`), and the erase must come down it with `proof`
+(see `factory_reset`). That link answers only `status`, `ping`, `factory_reset` and
+`recovery_exit`; anything else is `{"status":"error","reply":"not_allowed"}`.
+`status` always carries `"fresh"` (no PIN, no home network, no paired computer,
+nothing in the vault) and, while a computer that is not paired waits for approval,
+`"reset_request": {"name": ..., "left_s": ...}`; the dashboard is also sent
+`{"event":"factory_reset_request","name":...,"request":...}`.
 
 **The first PIN over WiFi** (no PIN set yet, `token` not empty) is refused with
 `{"status":"error","reply":"ap_password_required","message":...}` unless

@@ -177,7 +177,54 @@ class CompanionBoard:
             return self._beat(b, ip)
         if op == "ota":
             return self._ota(b, ip)
+        if op == "reset":
+            return self._reset(b)
+        if op == "reset_request":
+            return self._reset_request(b, ip)
+        if op == "reset_request_status":
+            return self._reset_request_status(b, ip)
         return self._refuse(400, "bad_request", "Unknown op")
+
+    # ---- factory reset (hid_fi.ino compReset / compResetRequest) ----
+    def _reset(self, b):
+        if not (hex_ok(b.get("id"), 16) and hex_ok(b.get("chal"), 16) and hex_ok(b.get("mac"), 32)):
+            return self._refuse(400, "bad_request", "Malformed reset request")
+        c = self._find_paired(b["id"])
+        if not c:
+            return self._refuse(404, "unknown_pc", "This computer is not paired")
+        if not self._take_chal(c, b["chal"]):
+            return self._refuse(401, "stale_chal", "Ask for a new challenge")
+        if not hmac.compare_digest(mac(c["key"], f'reset|{b["id"]}|{b["chal"]}'), b["mac"]):
+            return self._refuse(401, "bad_mac", "The reset request's proof is wrong")
+        o = self.sim.ota
+        if o.get("state") == "pending_verify":
+            return self._refuse(409, "verifying", "Not now")
+        if o.get("step") in ("downloading", "verifying", "switching", "ready"):
+            return self._refuse(409, "busy", "Not now")
+        token = os.urandom(16).hex()
+        self.sim.later(0.3, lambda: self.sim.open_reset_link(b["id"], token))
+        return 200, {"status": "ok", "token": token}
+
+    def _reset_request(self, b, ip):
+        name = b.get("name")
+        if not (isinstance(name, str) and 0 < len(name.encode()) <= 32 and all(ord(ch) >= 0x20 and ch != "\x7f" for ch in name)):
+            return self._refuse(400, "bad_request", "A name of 1 to 32 printable characters")
+        if self.sim._reset_waiting() and self.sim.reset_req["ip"] != ip:
+            return self._refuse(409, "busy", "Another computer is already asking")
+        rid = os.urandom(16).hex()
+        self.sim.reset_req = {"id": rid, "name": name, "ip": ip, "at": self.sim.now(), "state": "waiting"}
+        self.sim._push({"event": "factory_reset_request", "name": name, "request": rid})
+        return 200, {"status": "ok", "request": rid}
+
+    def _reset_request_status(self, b, ip):
+        r = self.sim.reset_req
+        st = "unknown"
+        if r and b.get("request") == r["id"]:
+            waiting = self.sim._reset_waiting()
+            if waiting and r["ip"] == ip:
+                r["at"] = self.sim.now()
+            st = "pending" if waiting else {"declined": "declined", "approved": "approved"}.get(r["state"], "unknown")
+        return 200, {"status": "ok", "state": st}
 
     def _hello(self, b, ip):
         name = b.get("name", "")
@@ -442,6 +489,24 @@ class FakeApp:
             return r
         m = mac(self.key, f"ota|{self.id}|{act}|{url}|{r['chal']}")
         return self._call(op="ota", id=self.id, act=act, url=url, chal=r["chal"], mac=m)[1]
+
+    def reset(self):
+        """A factory reset request (hid_fi.ino compReset): proven like an update."""
+        _, r = self._call(op="chal", id=self.id)
+        if r.get("status") != "ok":
+            return r
+        m = mac(self.key, f"reset|{self.id}|{r['chal']}")
+        return self._call(op="reset", id=self.id, chal=r["chal"], mac=m)[1]
+
+    def reset_proof(self, token):
+        """What this computer sends down the cable: HMAC over the board's one-use token."""
+        return mac(self.key, f"factory_reset|{self.id}|{token}")
+
+    def reset_request(self):
+        return self._call(op="reset_request", name=self.name)[1]
+
+    def reset_request_status(self, request):
+        return self._call(op="reset_request_status", request=request)[1]
 
     def beat(self):
         _, r = self._call(op="chal", id=self.id)

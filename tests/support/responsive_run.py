@@ -73,6 +73,8 @@ SHEET_STATES = [
     ("sheet join", f"joinWifi('{SSID32}')"),
     ("sheet security info", "secInfo()"),
     ("sheet forgot pin", "forgotPin(false)"),
+    ("sheet factory reset", "frSheet(null)"),
+    ("sheet factory reset asked", f"frSheet({{name:'{LONG[:32]}',request:'{'a' * 32}'}})"),
     ("sheet dashboards", "showDashboards()"),
     ("sheet lost board", "MDNS_NAME='esp-hid-da1a2c';wsUp=false;lostAt=1;lostTold=false;lostHelp();wsUp=true"),
     ("sheet wake failed", "go('power');document.querySelector('[data-sys=\"wake\"]').click()"),

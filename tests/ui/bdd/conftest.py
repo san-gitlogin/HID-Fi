@@ -122,23 +122,23 @@ def plugged_into(ctx, os_):
 
 @given(parsers.parse("the dashboard is open on a {device}"))
 def open_on(ctx, browser, device):
-    ctx["ui"] = Dashboard(browser, ctx["sim"], device=device, answers=ctx["answers"], init=ctx["init"]).open()
+    ctx["ui"] = Dashboard(browser, ctx["sim"], device=device, answers=ctx["answers"], init=ctx["init"], clock=ctx.get("clock", False)).open()
 
 
 @given("the dashboard is open")
 def open_default(ctx, browser):
-    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"]).open()
+    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"], clock=ctx.get("clock", False)).open()
 
 
 @given(parsers.parse('the dashboard is opened at "#{hash_}"'))
 def open_at(ctx, browser, hash_):
-    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"]).open(hash_)
+    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"], clock=ctx.get("clock", False)).open(hash_)
 
 
 @given(parsers.parse('the dashboard is open and signed in with "{pin}"'))
 def open_signed_in(ctx, browser, pin):
     ctx["sim"].pin = pin
-    ui = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"])
+    ui = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"], clock=ctx.get("clock", False))
     ui.page.goto(ui.sim.URL)
     ui.page.wait_for_selector("#sheet.on .pinbox", timeout=8000)
     _enter_pin(ui, pin)

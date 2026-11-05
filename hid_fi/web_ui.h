@@ -878,6 +878,9 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 /* ---------------- lists / logs ---------------- */
 .list{display:flex;flex-direction:column;gap:7px}
 .item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--r2);background:var(--surface2);border:1px solid var(--line)}
+.frchk{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;font-size:14px;line-height:1.4;cursor:pointer}
+.frchk input{width:22px;height:22px;flex:none;margin:0;accent-color:var(--bad)}
+.frbig{width:100%;min-height:52px;font-size:16px}
 .warnbox{background:color-mix(in srgb,var(--bad) 12%,var(--surface2));border-color:color-mix(in srgb,var(--bad) 38%,var(--line));margin-bottom:12px}
 .item .tx{flex:1;min-width:0}
 .item .tx b{display:block;font-size:13.5px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1902,6 +1905,12 @@ main::after{height:var(--flpad,0px)}
           <p class="hint" style="margin-top:10px">Nothing is downloaded or installed until you say so. The new version goes in beside the one that runs, and is kept only after it has started properly &mdash; otherwise the board goes back to the one before by itself. Your settings, PINs, passwords, macros, tiles and pairings stay.</p>
         </div>
 
+        <div class="card span" id="frCard">
+          <div class="ch"><svg class="ic"><use href="#i-trash"/></svg><h2>Factory reset</h2></div>
+          <p class="hint" style="margin:0">Puts the board back as new. It erases the access PIN and every setting, your home WiFi networks, stored passwords, macros, saved PCs and paired computers. It keeps its own WiFi name, the WiFi password it came with, and its firmware.</p>
+          <div class="row" style="margin-top:12px"><button class="btn sm bad" id="btnFactory">Factory reset&hellip;</button></div>
+        </div>
+
         <div class="card span colophon">
           <svg class="mark" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-logo"/></svg>
           <div class="name">HID&#8209;Fi</div>
@@ -2068,6 +2077,7 @@ function connect(){
     // Pushed by the board rather than answering anything, so it takes no slot.
     if(m.event){if(m.event==='host_os')applyHostOs(m.host_os,m.host_os_source,m.host_os_detected);
       else if(m.event==='sta_online'){if(m.mdns)MDNS_NAME=m.mdns;noteHomeIp(m.ip);refresh();}
+      else if(m.event==='factory_reset_request')frAsk({name:m.name,request:m.request});
       else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
       else if(m.event==='companion_pending'){toast((m.name||'A computer')+' wants to share its screen','ok');scrList();}
       else if(m.event==='companion_online')scrList();
@@ -2495,7 +2505,11 @@ function sheet(title,html,onOpen){
   $('sheet').classList.add('on');
   if(onOpen)onOpen();
 }
-function closeSheet(){$('sheet').classList.remove('on');}
+function closeSheet(){
+  if(typeof frStop==='function'&&frStop())toast('Cancelled - nothing was changed');
+  $('sheet').classList.remove('on');
+  if(typeof frWaiting!=='undefined'&&frWaiting){const r=frWaiting;frWaiting=null;setTimeout(()=>frAsk(r),250);}
+}
 $('sheet').addEventListener('click',e=>{if(e.target===$('sheet'))closeSheet();});
 
 // =====================================================================
@@ -4582,6 +4596,68 @@ function vaultWipe(){
 }
 
 // =====================================================================
+//  factory reset (docs/FACTORY_RESET.md)
+// =====================================================================
+// A plain warning, a checkbox and a 10 s countdown with one large Cancel - never a
+// word to type (harder for some people, no safer). `req` approves a computer that is
+// not paired; the board checks the PIN like every other command.
+const FR_LOSE=['The access PIN and every setting','Your home WiFi networks','Stored passwords (the vault)','Macros and saved PCs','Paired computers (screen sharing)'];
+let frTimer=null, frShown='', frWaiting=null;
+// A request never covers another dialog (the PIN prompt above all): it waits, and
+// opens when that one closes.
+function frAsk(req){
+  if(!req||!req.request||frShown===req.request)return;
+  if($('sheet').classList.contains('on')){frWaiting=req;return;}
+  frSheet(req);
+}
+function frStop(){if(frTimer){clearInterval(frTimer);frTimer=null;return true;}return false;}
+function frSheet(req){
+  frStop();
+  if(req)frShown=req.request;
+  const who=req?'<p class="hint" style="margin:0 0 10px"><b>'+esc(req.name)+'</b> asks to factory reset this board. Approve only if that is you.</p>':'';
+  sheet(req?'Factory reset requested':'Factory reset', who+
+    '<div class="item warnbox"><span class="dot bad"></span><div class="tx"><b>Everything on this board will be erased</b>'+
+    '<span style="white-space:normal">'+FR_LOSE.map(esc).join(' &middot; ')+'</span></div></div>'+
+    '<p class="hint" style="margin:0">It keeps its own WiFi name'+(AP_SSID?' ('+esc(AP_SSID)+')':'')+', the WiFi password it came with, and its firmware. Afterwards, join that WiFi again to set it up.</p>'+
+    '<label class="frchk"><input type="checkbox" id="frOk"> <span>I understand everything on this board will be erased</span></label>'+
+    '<p class="hint" id="frMsg" role="status" aria-live="polite" style="margin:6px 0 0"></p>'+
+    '<div class="row" id="frBtns" style="margin-top:12px">'+
+    (req?'<button class="btn sm" id="frNo">Decline</button>':'<button class="btn sm" id="frCancel">Cancel</button>')+
+    '<button class="btn bad" id="frGo" disabled>'+(req?'Approve and reset':'Factory reset')+'</button></div>', ()=>{
+      $('frOk').onchange=()=>{$('frGo').disabled=!$('frOk').checked;};
+      $('frGo').onclick=()=>frCountdown(req);
+      if($('frCancel'))$('frCancel').onclick=closeSheet;
+      if($('frNo'))$('frNo').onclick=()=>send({cmd:'factory_reset_decline',request:req.request},r=>{
+        toast(r&&r.status==='ok'?'Declined - nothing was changed':'That request is no longer waiting');closeSheet();});
+    });
+}
+function frCountdown(req){
+  let n=10;
+  $('frOk').disabled=true;
+  $('frBtns').innerHTML='<button class="btn frbig" id="frStop">Cancel ('+n+')</button>';
+  $('frMsg').textContent='Erasing in '+n+' seconds. Tap Cancel to stop - nothing has changed yet.';
+  $('frStop').onclick=()=>{frStop();toast('Cancelled - nothing was changed');closeSheet();};
+  $('frStop').focus();
+  frTimer=setInterval(()=>{
+    n--;
+    if(n>0){$('frStop').textContent='Cancel ('+n+')';$('frMsg').textContent='Erasing in '+n+' seconds. Tap Cancel to stop - nothing has changed yet.';return;}
+    frStop();
+    $('frBtns').innerHTML='';
+    $('frMsg').textContent='Erasing...';
+    const body={cmd:'factory_reset',confirm:true};
+    if(req)body.request=req.request;
+    send(body,r=>{
+      if(r&&r.reply==='factory_reset'){
+        $('frMsg').innerHTML='<b>Erased.</b> The board is restarting as new. Join its WiFi'+(AP_SSID?' <b>'+esc(AP_SSID)+'</b>':'')+' again to set it up.';
+      }else{
+        $('frMsg').textContent='Nothing was changed: '+((r&&r.message)||'the board did not answer');
+        $('frBtns').innerHTML='<button class="btn sm" onclick="closeSheet()">Close</button>';
+      }
+    });
+  },1000);
+}
+
+// =====================================================================
 //  saved PCs
 // =====================================================================
 // Names come back from the board, passwords never do. Unlocking sends the slot
@@ -4822,9 +4898,12 @@ function applyStatus(d){
   }
   if(d.recovery!==undefined){
     const r=d.recovery===true;
-    if(r&&!REC_OPEN)toast('Recovery mode is open on this board\'s USB - BOOT was held. It closes in '+Math.max(1,Math.ceil((d.recovery_left_s|0)/60))+' min');
+    if(r&&!REC_OPEN)toast(d.recovery_kind==='reset'
+      ?'A paired computer is factory resetting this board over its USB cable'
+      :'Recovery mode is open on this board\'s USB - BOOT was held. It closes in '+Math.max(1,Math.ceil((d.recovery_left_s|0)/60))+' min');
     REC_OPEN=r;
   }
+  if(d.reset_request)frAsk(d.reset_request);
   if(d.unicode_mac!==undefined)paintUni(d);
   if(d.pointer_mode)$('ptrMode').textContent=d.pointer_mode;
   // Screen sharing: counts only. A change means a computer came, went or asked
@@ -5304,6 +5383,7 @@ function bindAll(){
   };
   $('btnTestHid').onclick=()=>send({cmd:'test_hid'});
   $('btnSecInfo').onclick=secInfo;
+  $('btnFactory').onclick=()=>frSheet(null);
   $('btnPinForgot').onclick=()=>forgotPin(false);
   $('pinProofEye').onclick=()=>{
     const p=$('pinProofPw'), show=p.type==='password';

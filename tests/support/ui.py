@@ -84,7 +84,7 @@ def _script_len():
 
 
 class Dashboard:
-    def __init__(self, browser, sim, device="phone", html=None, answers=None, init=(), ip=None):
+    def __init__(self, browser, sim, device="phone", html=None, answers=None, init=(), ip=None, clock=False):
         self.browser, self.sim, self.device = browser, sim, device
         d = DEVICES[device]
         extra = {"user_agent": d["ua"]} if d.get("ua") else {}
@@ -96,6 +96,8 @@ class Dashboard:
         self.default_answer = True
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.on("dialog", self._dialog)
+        if clock:                        # the page's timers can be fast-forwarded (page.clock.run_for)
+            self.page.clock.install()
         self.page.add_init_script(RECORD_JS)
         for js in init:                  # what this browser is, before the page runs
             self.page.add_init_script(js)

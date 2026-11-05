@@ -381,6 +381,9 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
 }
 
 static void compOta(const JsonDocument& in, uint32_t ip);   // updates, in ota.h
+static void compReset(const JsonDocument& in, uint32_t ip);              // factory reset, in hid_fi.ino
+static void compResetRequest(const JsonDocument& in, uint32_t ip);
+static void compResetRequestStatus(const JsonDocument& in, uint32_t ip);
 
 // webServer has already buffered the body; this refuses an oversized one before
 // any further copy or parse.
@@ -413,6 +416,9 @@ void handleCompanionHttp() {
     else if (!strcmp(op, "chal"))   compChal(in);
     else if (!strcmp(op, "beat"))   compBeat(in, ip);
     else if (!strcmp(op, "ota"))    compOta(in, ip);        // hid_fi/ota.h
+    else if (!strcmp(op, "reset"))  compReset(in, ip);      // docs/FACTORY_RESET.md
+    else if (!strcmp(op, "reset_request")) compResetRequest(in, ip);
+    else if (!strcmp(op, "reset_request_status")) compResetRequestStatus(in, ip);
     else compRefuse(400, "bad_request", "Unknown op");
 }
 

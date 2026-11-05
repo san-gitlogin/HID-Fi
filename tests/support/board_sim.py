@@ -132,6 +132,12 @@ class BoardSim:
         # which restarts the board with a serial link on its native USB. Scenarios
         # open it with enter_recovery(); any restart closes it, as the one-shot flag does.
         self.recovery, self.recovery_until = False, 0.0
+        # Factory reset (docs/FACTORY_RESET.md): a paired computer's signed request opens
+        # the link for 60 s with a one-use token (reset_boot); the erase must come down
+        # the link. A computer that is not paired may ask; the dashboard approves.
+        self.reset_boot, self.reset_pc, self.reset_tok, self.reset_tok_live = False, None, None, False
+        self.reset_req = None              # {"id", "name", "ip", "at", "state": waiting|declined|approved}
+        self.wiped = 0                     # factory resets done
         self.host_manual = None
         self.host_detected = detected or host_os
         self.usb_mounted = True       # False: the USB port is in no computer (only COM, or a charger)
@@ -140,6 +146,7 @@ class BoardSim:
         # v3.10: a board that was never given a password makes its own at first start.
         self.ap_ssid, self.ap_pass, self.ap_open = "ESP32-HID-DA1A2C", "k7m2-x9qp-4tre", False
         self.ap_genpw = self.ap_pass       # the password this board made (apGenPassword)
+        self.ap_ssid_own = self.ap_ssid    # its own name, which a factory reset gives back
         self.peer = None                   # who is asking: an IP, or None for USB serial
         self.outbox = []                   # every text frame sent to a page
         self.dropped_unsigned = 0
@@ -260,7 +267,12 @@ class BoardSim:
             "wiggle_active": self.wiggle is not None, "wiggle_mode": self.wiggle["mode"] if self.wiggle else "idle",
             "led_on": False, "boot_button": "released",
             "recovery": self.recovery,
-            **({"recovery_left_s": max(0, int(self.recovery_until - self.now() + 0.999))} if self.recovery else {}),
+            **({"recovery_left_s": max(0, int(self.recovery_until - self.now() + 0.999)),
+                "recovery_kind": "reset" if self.reset_boot else "button"} if self.recovery else {}),
+            "fresh": self.fresh(),
+            **({"reset_request": {"name": self.reset_req["name"], "request": self.reset_req["id"],
+                                  "left_s": max(0, int(self.reset_req["at"] + 120 - self.now() + 0.999))}}
+               if self._reset_waiting() else {}),
             **self.comp.counts(),
             **self.ota_fields(),
         }
@@ -566,11 +578,48 @@ class BoardSim:
         self.reboot()
         self.recovery, self.recovery_until = True, self.now() + window_s
 
+    def fresh(self):
+        """Nothing set up (hid_fi.ino boardIsFresh): no PIN, no home network, no
+        paired computer, nothing in the vault."""
+        return not self.pin and not self.nets and not self.comp.paired and not self.vault
+
+    def _reset_waiting(self):
+        r = self.reset_req
+        if r and r["state"] == "waiting" and self.now() - r["at"] >= 120:
+            r["state"] = "gone"
+        return bool(r) and r["state"] == "waiting"
+
+    def factory_wipe(self):
+        """factoryWipe(): everything a person set up; the board's own name and
+        WiFi password, and the update journal, stay."""
+        self.pin, self.vault_pin = None, ""
+        self.vault, self.pcs, self.macros, self.ui = {}, {}, {}, ""
+        self.comp.paired = []
+        self.nets = []
+        self.sta = {"phase": "idle", "ssid": "", "ip": "", "error": "", "ip_mode": "dhcp", "since": 0.0, "want_ip": ""}
+        self.host_manual = None
+        self.unicode = {"mac": False, "linux": False}
+        self.power_mode, self.ap_auto_off = "balanced", False
+        self.pointer_mode, self.gamepad, self.verbose, self.ap_share = "relative", False, False, False
+        self.ap_ssid = self.ap_ssid_own
+        if len(self.ap_genpw) >= 8:
+            self.ap_pass, self.ap_open = self.ap_genpw, False
+        self.ota["auto"], self.ota["auto_security"] = True, False
+        self.wiped += 1
+
+    def open_reset_link(self, pc_id, token, window_s=60):
+        """compReset accepted: the restart into the paired-reset link."""
+        self.reboot()
+        self.recovery, self.recovery_until = True, self.now() + window_s
+        self.reset_boot, self.reset_pc, self.reset_tok, self.reset_tok_live = True, pc_id, token, True
+
     def reboot(self):
         if self.refuse_after_reboot:   # stuck in the bootloader, or a bad cable
             self.refusing = True
         self.boots += 1
         self.recovery = False          # the flag is read and cleared at boot: a restart closes recovery
+        self.reset_boot, self.reset_tok_live = False, False
+        self.reset_req = None          # RAM only
         self.t0 = self.now()
         # Pairing requests live in RAM (hid_fi/companion.h); pairings are in NVS.
         self.comp.pending = []
@@ -723,9 +772,11 @@ class BoardSim:
                 ev["prev_ip"] = self.net["prev_ip"]
         self._push(ev)
 
-    def handle(self, b, transport="serial", sock=None, ip=None):
+    def handle(self, b, transport="serial", sock=None, ip=None, link=False):
+        """link: the serial arrives on the native USB recovery link, not the COM port."""
         self.tick()
         with self.lock:
+            self.via_link = link and transport == "serial"
             self.peer = ip if transport != "serial" else None
             self.cmd_count += 1
             self._tick_sta()
@@ -828,6 +879,8 @@ class BoardSim:
                     "message": "Set an access PIN before using this board over your home network. "
                                "Every device on that network can reach it, not just people in radio range."}
 
+        if getattr(self, "via_link", False) and self.reset_boot and c not in ("status", "ping", "factory_reset", "recovery_exit"):
+            return E("This link was opened for a factory reset only", reply="not_allowed")
         if c == "status":
             return self.status()
         if c in ("companion_list", "companion_pair", "companion_unpair", "screen_ticket"):
@@ -1287,6 +1340,35 @@ class BoardSim:
             self.recovery = False                       # recoveryClosing: status says so at once
             self.later(0.3, self.reboot)
             return OK("recovery_exit", restart=True)
+        if c == "factory_reset":
+            o = self.ota
+            if o.get("state") == "pending_verify":
+                return E("Not while an update is being installed or checked after a restart", reply="verifying")
+            if o.get("step") in ("downloading", "verifying", "switching", "ready"):
+                return E("Not while an update is being installed or checked after a restart", reply="busy")
+            if getattr(self, "via_link", False) and self.reset_boot:
+                from support.companion_sim import mac as _mac
+                pc = next((x for x in self.comp.paired if x["id"] == self.reset_pc), None)
+                good = self.reset_tok_live and pc is not None and \
+                    b.get("proof") == _mac(pc["key"], f"factory_reset|{self.reset_pc}|{self.reset_tok}")
+                self.reset_tok_live = False
+                if not good:
+                    return E("This computer could not prove it is paired with the board", reply="bad_proof")
+            elif b.get("confirm") is not True:
+                return E('Send "confirm": true - everything on the board will be erased', reply="confirm_needed")
+            approved = transport != "serial" and self._reset_waiting() and b.get("request") == self.reset_req["id"]
+            if approved:
+                self.reset_req["state"] = "approved"
+            # As the firmware: storage is erased now, but what the board runs with (the
+            # PIN in RAM, the pairings it loaded) holds until the restart 0.5 s later.
+            self.recovery = False
+            self.later(2.5 if approved else 0.5, lambda: (self.factory_wipe(), self.reboot()))
+            return OK("factory_reset", restart=True)
+        if c == "factory_reset_decline":
+            if self._reset_waiting() and b.get("request") == self.reset_req["id"]:
+                self.reset_req["state"] = "declined"
+                return OK("factory_reset_decline")
+            return E("No such request is waiting", reply="no_request")
         if c == "ap_password":
             if transport != "serial":
                 return E("The WiFi password is only shown over the USB cable.", reply="usb_only")

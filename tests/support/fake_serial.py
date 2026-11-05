@@ -19,8 +19,9 @@ import tty
 
 
 class FakeSerialBoard:
-    def __init__(self, sim, drop=()):
-        self.sim, self.drop = sim, set(drop)
+    def __init__(self, sim, drop=(), link=False):
+        """link: this port is the board's native USB recovery link, not its COM port."""
+        self.sim, self.drop, self.link = sim, set(drop), link
         self.master, self.slave = pty.openpty()
         tty.setraw(self.slave)
         self.path = os.ttyname(self.slave)
@@ -58,7 +59,7 @@ class FakeSerialBoard:
                 if body.get("cmd") in self.drop:
                     self._send({"status": "error", "message": "Unknown command", "cmd": body.get("cmd")})
                     continue
-                for r in self.sim.handle(body, "serial"):
+                for r in self.sim.handle(body, "serial", link=self.link):
                     self._send(r)
 
     def _send(self, obj):

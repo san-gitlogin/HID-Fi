@@ -311,7 +311,7 @@ def rec(tmp_path):
                 continue
             if kind != "com":                                  # a real link's serial number IS the board's MAC
                 sim.mac = ":".join(ident[i:i + 2] for i in range(0, 12, 2))
-            fb = FakeSerialBoard(sim)
+            fb = FakeSerialBoard(sim, link=kind != "com")
             made.append(fb)
             if kind == "com":
                 ports.append({"device": fb.path, "vid": 0x1A86, "pid": 0x55D3, "serial": ident})
