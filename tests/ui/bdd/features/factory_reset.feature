@@ -20,6 +20,14 @@ Feature: Factory reset - the board as new, without a pin in a pinhole
     When I tick "I understand everything on this board will be erased"
     Then the factory-reset button is enabled
 
+  Scenario: Cancel before starting closes it, and nothing is sent
+    Given the dashboard is open and signed in with "4826"
+    When I open the "Settings" tab
+    And I tap the "#btnFactory" control
+    And I tap the "#frCancel" control
+    Then no dialog is open
+    And the board does not receive "factory_reset"
+
   Scenario: The countdown can be cancelled, and nothing is sent
     Given the dashboard is open and signed in with "4826"
     When I open the "Settings" tab
