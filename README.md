@@ -471,10 +471,21 @@ it says otherwise.
 | Router hands it a new address | Rejoins, notices, and tells any open dashboard | Its `.local` name, or `python3 tools/hidfi.py find` |
 | Router is off when the board starts | Keeps trying until the router is up | As above |
 | Home network gone for a while | Its own WiFi stays up - and comes back on its own if you had switched it off | Join `ESP32-HID-...`, open `http://192.168.4.1/` |
-| You take it to another home | It remembers up to five networks, like a phone, and joins whichever is in range - no setup when you come back | Settings lists the saved networks |
+| You take it to another home | It remembers up to five networks, like a phone. When it is not on one, it joins the **strongest saved network in range**; once on one it stays there until it drops (it does not hop to a stronger one) - no setup when you come back | Settings lists the saved networks |
+| You take it somewhere new | It keeps its own WiFi up and keeps looking. Add the new WiFi once - see **A new place** below | The Companion on that computer shows these steps too |
 | Somewhere none of them reach | Its own WiFi stays smooth: it looks for a saved network every 30 s, then every 2 min | Join its own WiFi as usual |
 | You forgot the address | - | Settings on the board's own WiFi, `hidfi.py find`, or `./flash_esp.sh --recover` over USB |
 | A phone on the board's own WiFi has no internet | That is normal: the board is not a router | Better: stay on home WiFi and use the board's name. Or switch on **Share the home internet** (Settings, off by default) |
+
+**A new place** (a network the board has never seen):
+
+1. On your phone, join the board's own WiFi, `ESP32-HID-XXXXXX` (the last six
+   characters of its MAC; the Companion shows the exact name), with the board's WiFi
+   password. Forgot it? Recovery mode shows it.
+2. Open `http://192.168.4.1`, then **Settings, Home network**, and choose the new WiFi.
+3. That is all: the board joins it and remembers it, and the Companion on a computer
+   on that WiFi finds the board by itself. With several saved networks in range it
+   joins the strongest.
 
 A dashboard opened at an address that stopped answering says all of this itself.
 Every row is rehearsed on a real board by `tests/board/test_home_network.py`.

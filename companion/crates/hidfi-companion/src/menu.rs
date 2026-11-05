@@ -49,6 +49,32 @@ pub enum Action {
     FactoryClear(String),
 }
 
+/// The board's own WiFi name (`ESP32-HID-` and the last six digits of its MAC) for
+/// a board that is plugged in but not on this computer's WiFi - the name a person
+/// joins on their phone to reach its dashboard.
+pub fn own_wifi(v: &View) -> String {
+    v.boards
+        .iter()
+        .find(|b| b.board == BoardState::NotOnNetwork)
+        .map(|b| format!("ESP32-HID-{}", &b.mac[b.mac.len().saturating_sub(6)..]))
+        .unwrap_or_else(|| "ESP32-HID-...".into())
+}
+
+/// What to do when the board is plugged in here but not on this computer's WiFi -
+/// a new place, say. Each step in order, with the names to look for: saying only
+/// "is it on this computer's WiFi?" left people stuck at the one thing they could
+/// not see - how to reach the dashboard when the board is not on their network.
+pub fn not_on_network_steps(v: &View) -> Vec<String> {
+    vec![
+        "Not on this computer's WiFi. To add this WiFi to the board:".into(),
+        format!("1. On your phone, join the board's own WiFi {}", own_wifi(v)),
+        "2. Open http://192.168.4.1, then Settings, Home network, and choose this computer's WiFi".into(),
+        "It remembers up to five networks and joins the strongest one in range; this computer finds it by itself. \
+         Forgot its WiFi password? Recovery mode shows it."
+            .into(),
+    ]
+}
+
 /// This OS's likely reason a board on USB cannot be reached, besides the board
 /// not being on the same WiFi - the one a user cannot guess.
 pub fn net_hint() -> Option<&'static str> {
@@ -256,10 +282,7 @@ pub(crate) fn model_one(v: &View, mac: Option<&str>) -> Model {
         }
         BoardState::NotOnNetwork => {
             icon = Icon::Attention;
-            lines.push("HID-Fi is plugged in, but this computer cannot reach it".into());
-            lines.push(
-                "Is the board on this computer's WiFi? Dashboard: Settings, Home network".into(),
-            );
+            lines.extend(not_on_network_steps(v));
             if let Some(h) = net_hint() {
                 lines.push(h.into());
                 actions.push((
@@ -667,8 +690,9 @@ fn steps_one(v: &View) -> Steps {
             "Plug the board's USB port (not the one marked COM) into this computer.".to_string()
         }
         BoardState::NotOnNetwork => format!(
-            "Plugged in, but not reachable. Is the board on this computer's WiFi? Dashboard, \
-             Settings, Home network.{}",
+            "Plugged in, but not on this computer's WiFi. On your phone, join the board's own WiFi {}, \
+             open http://192.168.4.1, then Settings, Home network, and choose this computer's WiFi.{}",
+            own_wifi(v),
             net_hint().map(|h| format!(" {h}.")).unwrap_or_default()
         ),
         BoardState::Found { url, .. } => format!(

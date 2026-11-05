@@ -189,6 +189,7 @@ there.
 
 | What you see | What to do |
 |---|---|
+| *Not on this computer's WiFi* (a new place, or a WiFi the board has never joined) | The card shows the steps with the board's own WiFi name: on your phone join `ESP32-HID-XXXXXX`, open `http://192.168.4.1`, Settings, Home network, choose this computer's WiFi. The board remembers it; this computer finds it by itself |
 | "Set an access PIN to share screens" | Dashboard, Settings, Access PIN |
 | "… is not reachable" | Start HID-Fi Companion on that computer: macOS from Applications (it lives in the menu bar), Windows from the Start menu (its icon sits by the clock), Linux from the applications menu |
 | The app says "HID-Fi is plugged in, but this computer cannot reach it" | Is the board on the same WiFi as the computer? Dashboard, Settings, Home network. On macOS, if you chose Don't Allow when it asked to find devices on your network: System Settings, Privacy & Security, Local Network, switch on HID-Fi Companion (the app's "Open network settings…" button opens Privacy & Security; choose Local Network there - macOS has no direct link to it). On Windows, set the WiFi to Private |

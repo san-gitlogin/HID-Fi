@@ -491,9 +491,22 @@ pub fn model(v: &View) -> Window {
         if let Some(h) = menu::net_hint() {
             add("net-settings".into(), Action::OpenNetworkSettings);
             a.push(json!({"id": "net-settings", "label": "Open network settings", "kind": ""}));
-            banners.push(json!({"id": "network", "tone": "info", "title": "A board cannot be reached",
-                "text": format!("It is plugged in but not answering on the network. Is it on this computer's WiFi (dashboard: Settings, Home network)? {h}."),
-                "actions": a}));
+            let off = v
+                .boards
+                .iter()
+                .filter(|b| b.board == BoardState::NotOnNetwork)
+                .count();
+            let (title, text) = if off == 1 {
+                ("A board is not on this computer's WiFi".to_string(), format!(
+                    "On your phone, join the board's own WiFi {}, open http://192.168.4.1, then Settings, \
+                     Home network, and choose this computer's WiFi. {h}.", menu::own_wifi(v)))
+            } else {
+                (
+                    format!("{off} boards are not on this computer's WiFi"),
+                    format!("Each card shows the steps, with that board's own WiFi name. {h}."),
+                )
+            };
+            banners.push(json!({"id": "network", "tone": "info", "title": title, "text": text, "actions": a}));
         }
     }
     let mut cl = Vec::new();
