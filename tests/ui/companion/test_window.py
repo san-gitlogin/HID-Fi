@@ -609,3 +609,79 @@ def _calm(win):
                s.transitionDuration.split(',').some(d => parseFloat(d) > 0);
       }).map(e => e.className || e.tagName).slice(0, 5)""")
     assert not moving, moving
+
+
+# ---- factory reset (docs/FACTORY_RESET.md) ----
+
+@given("the window's clock can be fast-forwarded")
+def _fr_clock(win):
+    import time
+    win.clock_at = time.time()
+
+
+@when(parsers.parse("{n:d} seconds pass in the window"))
+def _fr_pass(win, n):
+    win.page.clock.run_for(n * 1000)
+
+
+def _dialog(win):
+    return win.page.locator("#frscrim")
+
+
+@then(parsers.parse('the factory-reset dialog reads "{text}"'))
+def _fr_reads(win, text):
+    assert _dialog(win).is_visible(), "the factory-reset dialog is not open"
+    assert text in _dialog(win).inner_text(), _dialog(win).inner_text()
+
+
+@then("the factory-reset dialog is closed")
+def _fr_closed(win):
+    assert not _dialog(win).is_visible()
+
+
+@when(parsers.parse('I tick "{label}" in the dialog'))
+def _fr_tick(win, label):
+    _dialog(win).get_by_label(label).check()
+
+
+@when(parsers.parse('I click "{label}" in the dialog'))
+def _fr_click(win, label):
+    _dialog(win).get_by_role("button", name=label, exact=True).click()
+
+
+@when("I click the dialog's background")
+def _fr_bg(win):
+    win.page.locator("#frscrim").click(position={"x": 5, "y": 5})
+
+
+@then(parsers.parse('the dialog has the button "{label}"'))
+def _fr_has(win, label):
+    assert _dialog(win).get_by_role("button", name=label, exact=True).count() == 1
+
+
+@then(parsers.parse('the dialog has no button "{label}"'))
+def _fr_has_not(win, label):
+    assert _dialog(win).get_by_role("button", name=label, exact=True).count() == 0
+
+
+@then(parsers.parse('the dialog\'s "{label}" cannot be clicked'))
+def _fr_disabled(win, label):
+    assert _dialog(win).get_by_role("button", name=label, exact=True).is_disabled()
+
+
+@then(parsers.parse('the app is sent "{msg}"'))
+def _fr_sent(win, msg):
+    assert msg in win.sent, win.sent
+
+
+@then(parsers.parse('the app is not sent "{msg}"'))
+def _fr_not_sent(win, msg):
+    assert msg not in win.sent, win.sent
+
+
+@then(parsers.re(r'the step "(?P<label>[^"]+)" (?P<how>is done|is under way|is to come|failed)'))
+def _fr_step(win, label, how):
+    want = {"is done": "done", "is under way": "doing", "is to come": "todo", "failed": "failed"}[how]
+    li = _dialog(win).locator(".frsteps li", has_text=label)
+    assert li.count() == 1 and li.get_attribute("data-s") == want, (label, li.get_attribute("data-s") if li.count() else None)
+

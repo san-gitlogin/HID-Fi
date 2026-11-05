@@ -38,6 +38,9 @@ pub enum RecError {
     WouldErase(usize),
     /// The board answered but did not take it: nothing changed.
     NotTaken,
+    /// A link a paired computer opened for a factory reset (docs/FACTORY_RESET.md):
+    /// not recovery mode, and not this panel's to use.
+    ResetLink,
 }
 
 impl RecError {
@@ -58,6 +61,7 @@ impl RecError {
                 "{n} stored password(s) WILL BE ERASED - they were guarded by the access PIN. Type ERASE to go ahead."
             ),
             RecError::NotTaken => "The board did not take it. Nothing changed.".into(),
+            RecError::ResetLink => "This board's USB link was opened for a factory reset.".into(),
         }
     }
 }
@@ -172,6 +176,9 @@ pub fn info<P: Port>(link: &mut Link<P>) -> Result<Info, RecError> {
     let st = link.cmd(&json!({"cmd": "status"}), Duration::from_millis(1500))?;
     if st["recovery"] != true {
         return Err(RecError::NotInRecovery);
+    }
+    if st["recovery_kind"] == "reset" {
+        return Err(RecError::ResetLink);
     }
     let ap = ok(link.cmd(&json!({"cmd": "ap_password"}), T)?)?;
     let vl = ok(link.cmd(&json!({"cmd": "vault_list"}), T)?)?;
@@ -440,6 +447,10 @@ fn run(
                                 Err(e) => rv.note = Some((false, e.text())),
                             }
                         }
+                        // A factory-reset link is not recovery mode: no panel for it.
+                        if matches!(r, Err(RecError::ResetLink)) {
+                            v.retain(|rv| rv.mac != m.hex());
+                        }
                     });
                 }
                 present = now;
@@ -599,6 +610,8 @@ mod tests {
         inbuf: Vec<u8>,
         seen: Vec<String>,
         ignore_ap_configure: bool,
+        /// A link a paired computer opened for a factory reset.
+        reset_link: bool,
     }
 
     impl FakeBoard {
@@ -614,6 +627,7 @@ mod tests {
                 out: VecDeque::new(),
                 inbuf: Vec::new(),
                 seen: Vec::new(),
+                reset_link: false,
                 ignore_ap_configure: false,
             }
         }
@@ -630,7 +644,8 @@ mod tests {
             let r = match c.as_str() {
                 "status" => json!({"status": "ok", "reply": "status", "recovery": self.recovery,
                                    "recovery_left_s": 287, "mac": "DC:B4:D9:09:F7:C8",
-                                   "firmware": "hid_fi_v4.3", "auth_set": !self.pin.is_empty()}),
+                                   "firmware": "hid_fi_v4.3", "auth_set": !self.pin.is_empty(),
+                                   "recovery_kind": if self.reset_link { "reset" } else { "button" }}),
                 "ap_password" => {
                     json!({"status": "ok", "reply": "ap_password", "ssid": "ESP32-HID-09F7C8",
                                         "password": if self.open_ap { "" } else { &self.ap_pass },
@@ -826,6 +841,17 @@ mod tests {
             ));
             assert!(b.seen.is_empty(), "nothing is sent for {bad}");
         }
+    }
+
+    #[test]
+    fn a_factory_reset_link_is_not_recovery_mode() {
+        let mut b = FakeBoard::new();
+        b.reset_link = true;
+        let mut l = Link::new(&mut b).unwrap();
+        assert_eq!(info(&mut l), Err(RecError::ResetLink));
+        drop(l);
+        // It never asked that link for the WiFi password.
+        assert_eq!(b.seen, ["status"]);
     }
 
     #[test]

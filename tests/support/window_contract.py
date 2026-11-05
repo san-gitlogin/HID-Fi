@@ -60,6 +60,7 @@ def inventory():
     inv = {"card", "copy", "#bclear", "#dyes", "#dno"}
     inv |= {f"role:{r}" for r in re.findall(r'dataset\.role="(\w+)"', html)}
     inv |= {f"role:{r}" for r in re.findall(r'REC_ROLE\(r,"(\w+)"', html)}   # recovery mode's buttons
+    inv |= {f"role:{r}" for r in re.findall(r'frBtn\("(\w+)"', html)}        # factory reset's dialog
     inv |= {f"filter:{k}" for k in re.findall(r'\["(\w+)","[^"]+"\]', html.split("const FILTERS=")[1].split(";")[0])}
     inv |= {f"bulk:{k}" for k in re.findall(r'\["(\w+)","[^"]+","\w*"\]', html.split("const kinds=")[1].split(";")[0])}
     inv |= {f"act:{a}" for a in re.findall(r'data-act="([\w-]+)"', html)}

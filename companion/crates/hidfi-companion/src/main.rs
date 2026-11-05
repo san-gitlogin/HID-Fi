@@ -160,6 +160,10 @@ fn main() {
         // A board on the same WiFi answers a ping in milliseconds; 2 s is "not answering".
         probe: Some(hidfi_companion::health::tcp_probe(Duration::from_secs(2))),
         recovery: Some(Box::new(hidfi_companion::recovery::RealPorts)),
+        factory: Some((
+            Box::new(hidfi_companion::factory::RealNet::default()),
+            Box::new(hidfi_companion::recovery::RealPorts),
+        )),
     };
     let store_for_settings = Store::open(store.dir().to_path_buf()).expect("same folder");
     // Not paired yet: the window opens by itself to say what to do.

@@ -50,6 +50,8 @@ fn id_of(a: &Action) -> String {
         Action::Forget(m) => with("forget", m),
         Action::OpenNetworkSettings => "net-settings".into(),
         Action::AllowMicrophone => "allow-mic".into(),
+        Action::FactoryReset(m) => format!("reset:{m}"),
+        Action::FactoryClear(m) => format!("reset-clear:{m}"),
         Action::Sound {
             system: Some(_), ..
         } => "sound-system".into(),
@@ -142,7 +144,7 @@ fn state_of(b: &BoardView) -> (&'static str, &'static str) {
 /// connecting, offline; not plugged in last.
 fn rank(state: &str) -> u8 {
     match state {
-        "attention" => 0,
+        "recovery" | "attention" => 0,
         "live" => 1,
         "online" => 2,
         "connecting" => 3,
@@ -263,6 +265,32 @@ fn rec_card(v: &View, mac: &str) -> Value {
     })
 }
 
+/// Factory reset (docs/FACTORY_RESET.md): which way it would go for this board now,
+/// in a sentence a person can check before starting, and the reset that is running
+/// or has just finished. Never a secret.
+fn factory_card(v: &View, mac: &str, reachable: bool, paired: bool) -> Value {
+    let in_recovery = v.recovery.iter().any(|r| r.mac == mac && r.info.is_some());
+    let path = if !in_recovery && !reachable {
+        "none"
+    } else {
+        crate::factory::choose(in_recovery, reachable, paired).as_str()
+    };
+    let how = match path {
+        "recovery" => "Recovery mode is open, so the erase goes down this board's USB link.",
+        "paired" => "This computer is paired with the board and it is plugged in here, so the erase goes down this USB cable. Nothing else is needed.",
+        "request" => "This computer is not paired with the board, so its dashboard will ask you to approve, with the access PIN.",
+        _ => "This computer cannot reach the board on the network. Join the board's own WiFi and use Settings, Factory reset in its dashboard, or hold its button for 8 seconds for recovery mode.",
+    };
+    let job = v.factory.iter().find(|r| r.mac == mac).map(|r| {
+        json!({
+            "path": r.path.as_str(),
+            "steps": r.steps.iter().map(|(l, s)| json!({"label": l, "state": s.as_str()})).collect::<Vec<_>>(),
+            "note": r.note, "result": r.result, "left_s": r.left_s,
+        })
+    });
+    json!({"path": path, "how": how, "job": job})
+}
+
 pub fn model(v: &View) -> Window {
     let mut acts: Vec<(String, Action)> = Vec::new();
     let mut add = |id: String, a: Action| {
@@ -304,6 +332,19 @@ pub fn model(v: &View) -> Window {
             lines.remove(0)
         };
         let (state, label) = state_of(b);
+        // A board in recovery mode, or being factory reset, says so on its card
+        // and comes first: which board it is must be clear at a glance among many.
+        let (state, label) = if v
+            .factory
+            .iter()
+            .any(|r| r.mac == b.mac && r.result.is_none())
+        {
+            ("recovery", "Factory reset")
+        } else if v.recovery.iter().any(|r| r.mac == b.mac) {
+            ("recovery", "Recovery mode")
+        } else {
+            (state, label)
+        };
         // The card's buttons: the next steps; the update's own in its panel;
         // forgetting, rarely wanted and not undone, under Details.
         let (mut buttons, mut upd_buttons, mut forget) = (Vec::new(), Vec::new(), None);
@@ -402,7 +443,17 @@ pub fn model(v: &View) -> Window {
             "paired": matches!(b.session, Status::Online | Status::Reconnecting),
             "actions": buttons, "details": details,
             "recovery": rec_card(v, &b.mac),
+            "factory": factory_card(v, &b.mac, url.is_some(),
+                                    matches!(b.session, Status::Online | Status::Reconnecting)),
         });
+        add(
+            format!("reset:{}", b.mac),
+            Action::FactoryReset(b.mac.clone()),
+        );
+        add(
+            format!("reset-clear:{}", b.mac),
+            Action::FactoryClear(b.mac.clone()),
+        );
         cards.push((rank(state), b.mac.clone(), card));
     }
     for r in &v.remembered {
@@ -419,6 +470,7 @@ pub fn model(v: &View) -> Window {
         "total": cards.len(),
         "online": count(&["online", "live"]),
         "attention": count(&["attention"]),
+        "recovery": count(&["recovery"]),
         "offline": count(&["offline", "away"]),
         "connecting": count(&["connecting"]),
     });

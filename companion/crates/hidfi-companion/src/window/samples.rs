@@ -64,6 +64,7 @@ fn view(boards: Vec<BoardView>) -> View {
         },
         remembered: vec![],
         recovery: vec![],
+        factory: vec![],
     }
 }
 
@@ -378,6 +379,76 @@ pub fn all() -> Vec<(&'static str, View)> {
             Some((false, crate::recovery::RecError::NotInRecovery.text())),
         ),
     ));
+
+    // Two boards, one in recovery mode: which one must be clear at a glance.
+    let mut v = rec(Some(info(0, true)), false, None);
+    v.boards
+        .insert(0, b(a, found("192.168.0.104"), Status::Online, Some(12), 0));
+    states.push(("recovery-two-boards", v));
+
+    // Factory reset (docs/FACTORY_RESET.md): which way it would go, and a reset running.
+    use crate::factory::{Path, ResetView, StepState::*};
+    let one = |status: Status, board: BoardState| view(vec![b(bb, board, status, Some(14), 0)]);
+    states.push((
+        "factory-paired",
+        one(Status::Online, found("192.168.0.103")),
+    ));
+    states.push((
+        "factory-request",
+        one(Status::PairingExpired, found("192.168.0.103")),
+    ));
+    states.push((
+        "factory-unreachable",
+        one(Status::Connecting, BoardState::NotOnNetwork),
+    ));
+    let job = |path: Path,
+               steps: &[(&'static str, crate::factory::StepState)],
+               note: &str,
+               result: Option<bool>,
+               left: Option<u64>| {
+        let mut v = one(
+            if path == Path::Paired {
+                Status::Online
+            } else {
+                Status::PairingExpired
+            },
+            found("192.168.0.103"),
+        );
+        v.factory = vec![ResetView {
+            mac: bb.into(),
+            path,
+            steps: steps.to_vec(),
+            note: note.into(),
+            result,
+            left_s: left,
+        }];
+        v
+    };
+    states.push((
+        "factory-running",
+        job(
+            Path::Paired,
+            &[
+                ("Asking the board", Done),
+                ("Restarting with its USB link", Done),
+                ("Erasing over USB", Doing),
+                ("Restarting as new", Todo),
+            ],
+            "",
+            None,
+            None,
+        ),
+    ));
+    states.push(("factory-waiting", job(Path::Request, &[("Asking the board", Done),
+        ("Waiting for approval on your phone", Doing), ("Erasing and restarting as new", Todo)],
+        "Open the board's dashboard on your phone: it asks you to approve \"Studio PC\". Nothing changes until you do.",
+        None, Some(95))));
+    states.push(("factory-done", job(Path::Paired, &[("Asking the board", Done), ("Restarting with its USB link", Done),
+        ("Erasing over USB", Done), ("Restarting as new", Done)],
+        "Erased. The board restarted as new: join its WiFi ESP32-HID-09F7C8 again to set it up.", Some(true), None)));
+    states.push(("factory-failed", job(Path::Paired, &[("Asking the board", Failed), ("Restarting with its USB link", Todo),
+        ("Erasing over USB", Todo), ("Restarting as new", Todo)],
+        "An update is running on the board. Try again when it has finished. Nothing was changed.", Some(false), None)));
 
     states
 }

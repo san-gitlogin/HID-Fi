@@ -44,6 +44,7 @@ fn view(boards: Vec<BoardView>) -> View {
         updates: UpdView::default(),
         remembered: vec![],
         recovery: vec![],
+        factory: vec![],
     }
 }
 

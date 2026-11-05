@@ -42,6 +42,13 @@ Feature: The Companion's window - a card per board
       | recovery-erases  | 380   |
       | recovery-asking  | 600   |
       | recovery-failed  | 380   |
+      | recovery-two-boards | 380 |
+      | recovery-two-boards | 1280 |
+      | factory-running  | 380   |
+      | factory-waiting  | 380   |
+      | factory-done     | 380   |
+      | factory-failed   | 380   |
+      | factory-unreachable | 380 |
 
   Scenario Outline: The grid uses the width it has
     Given the window is <width> px wide
@@ -485,3 +492,117 @@ Feature: The Companion's window - a card per board
     Then the app is asked for recovery {"mac":"DCB4D909F7C8","op":"close"}
     When the app shows "one-online"
     Then the window reads "HID-Fi"
+
+  # ---- which board is in recovery mode, among several ----
+
+  Scenario: A board in recovery mode says so on its card and comes first
+    When the app shows "recovery-two-boards"
+    Then the first card is "HID-Fi 09F7C8"
+    And the card "HID-Fi 09F7C8" reads "Recovery mode"
+    And the card "HID-Fi 0A0BB8" reads "Online"
+    And the window reads "1 in recovery mode"
+
+  # ---- factory reset (docs/FACTORY_RESET.md) ----
+
+  Scenario: Factory reset asks first: what goes, what stays, which way, and a box to tick
+    Given the window's clock can be fast-forwarded
+    When the app shows "factory-paired"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "Everything on this board will be erased"
+    And the factory-reset dialog reads "Stored passwords (the vault)"
+    And the factory-reset dialog reads "It keeps its own WiFi name"
+    And the factory-reset dialog reads "the erase goes down this USB cable"
+    And the dialog's "Factory reset" cannot be clicked
+    When I tick "I understand everything on this board will be erased" in the dialog
+    And I click "Factory reset" in the dialog
+    Then the dialog has the button "Cancel (10)"
+    When 10 seconds pass in the window
+    Then the app is sent "act:reset:DCB4D909F7C8"
+
+  Scenario: The countdown can be cancelled, and nothing is sent
+    Given the window's clock can be fast-forwarded
+    When the app shows "factory-paired"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    And I tick "I understand everything on this board will be erased" in the dialog
+    And I click "Factory reset" in the dialog
+    And 3 seconds pass in the window
+    Then the dialog has the button "Cancel (7)"
+    When I click "Cancel (7)" in the dialog
+    Then the window reads "Cancelled - nothing was changed"
+    When 10 seconds pass in the window
+    Then the app is not sent "act:reset:DCB4D909F7C8"
+    And the factory-reset dialog is closed
+
+  Scenario: Escape cancels the countdown too
+    Given the window's clock can be fast-forwarded
+    When the app shows "factory-paired"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    And I tick "I understand everything on this board will be erased" in the dialog
+    And I click "Factory reset" in the dialog
+    And I press "Escape"
+    And 10 seconds pass in the window
+    Then the app is not sent "act:reset:DCB4D909F7C8"
+    And the factory-reset dialog is closed
+
+  Scenario: A computer that is not paired says the phone will ask
+    When the app shows "factory-request"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "its dashboard will ask you to approve, with the access PIN"
+    When I click "Cancel" in the dialog
+    Then the factory-reset dialog is closed
+
+  Scenario: A board this computer cannot reach says where else to go, and cannot be started
+    When the app shows "factory-unreachable"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "Settings, Factory reset in its dashboard"
+    And the dialog has no button "Factory reset"
+
+  Scenario: A reset that runs shows its steps, in the dialog and on the card
+    When the app shows "factory-running"
+    Then the card "HID-Fi 09F7C8" reads "Factory reset"
+    And the card "HID-Fi 09F7C8" shows "Factory reset: Erasing over USB"
+    When I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the step "Restarting with its USB link" is done
+    And the step "Erasing over USB" is under way
+    And the step "Restarting as new" is to come
+    When I click "Hide - it carries on" in the dialog
+    Then the factory-reset dialog is closed
+
+  Scenario: Waiting for the phone says what to do and how long is left
+    When the app shows "factory-waiting"
+    And I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "1:35 left to approve"
+    And the factory-reset dialog reads "Nothing changes until you do"
+
+  Scenario: The result says what happened, and Done clears it
+    When the app shows "factory-done"
+    Then the card "HID-Fi 09F7C8" shows "Factory reset: erased"
+    When I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "join its WiFi ESP32-HID-09F7C8 again"
+    When I click "Done" in the dialog
+    Then the app is sent "act:reset-clear:DCB4D909F7C8"
+    And the factory-reset dialog is closed
+
+  Scenario: A refused reset says nothing was changed
+    When the app shows "factory-failed"
+    Then the card "HID-Fi 09F7C8" shows "Factory reset: nothing was changed"
+    When I open the details of "HID-Fi 09F7C8"
+    And I click "Factory reset…" on "HID-Fi 09F7C8"
+    Then the step "Asking the board" failed
+    And the factory-reset dialog reads "Nothing was changed"
+
+  Scenario: Recovery mode's panel offers factory reset too
+    When the app shows "recovery-open"
+    And I click "Factory reset" on "HID-Fi 09F7C8"
+    Then the factory-reset dialog reads "Recovery mode is open, so the erase goes down this board's USB link"
+    When I click the dialog's background
+    Then the factory-reset dialog is closed
+

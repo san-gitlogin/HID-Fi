@@ -40,7 +40,7 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .sub{color:var(--fg3);font-size:.86em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .counts{display:flex;gap:6px;flex-wrap:wrap}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--idle);flex:0 0 8px}
-.dot.online{background:var(--ok)}.dot.live{background:var(--acc)}.dot.attention{background:var(--warn)}
+.dot.online{background:var(--ok)}.dot.live{background:var(--acc)}.dot.attention{background:var(--warn)}.dot.recovery{background:var(--warn);box-shadow:0 0 0 3px rgba(255,176,46,.25)}
 .dot.offline{background:var(--bad)}.dot.connecting{background:var(--acc2)}.dot.away{background:transparent;border:1.5px solid var(--idle)}
 
 /* ---- this computer ---- */
@@ -90,6 +90,7 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   transition:border-color .18s var(--ease),box-shadow .18s var(--ease),transform .18s var(--ease),opacity .18s;min-width:0}
 .card:hover{border-color:var(--line2)}
 .card[data-state="attention"]{border-color:rgba(255,176,46,.32)}
+.card[data-state="recovery"]{border-color:rgba(255,176,46,.6);background:rgba(255,176,46,.05)}
 .card[data-state="live"]{border-color:rgba(0,210,255,.30)}
 .card[data-state="away"]{opacity:.78;background:rgba(255,255,255,.025)}
 .card[aria-selected="true"]{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 0 0 5px rgba(0,210,255,.14)}
@@ -109,7 +110,7 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .statusline .ip{color:var(--fg3);overflow:hidden;text-overflow:ellipsis}
 .st{font-weight:600}
 .card[data-state="online"] .st{color:var(--ok)}.card[data-state="live"] .st{color:var(--acc)}
-.card[data-state="attention"] .st{color:var(--warn)}.card[data-state="offline"] .st{color:var(--bad)}
+.card[data-state="attention"] .st{color:var(--warn)}.card[data-state="recovery"] .st{color:var(--warn)}.card[data-state="offline"] .st{color:var(--bad)}
 .card[data-state="connecting"] .st{color:#7fb2ff}.card[data-state="away"] .st{color:var(--fg3)}
 .card[data-state="live"] .name .dot{box-shadow:0 0 0 0 rgba(0,210,255,.6);animation:pulse 2s infinite}
 .card[data-state="connecting"] .name .dot{animation:blink 1.2s infinite}
@@ -209,8 +210,23 @@ dd span{min-width:0}
   transition:transform .26s var(--ease),opacity .2s;z-index:5}
 #bulk.on{transform:translate(-50%,0);opacity:1}
 #bulk .count{font-weight:620;margin-right:6px;white-space:nowrap}
-#scrim{position:fixed;inset:0;background:rgba(3,6,10,.62);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
-#scrim.on{display:flex}
+#scrim,#frscrim{position:fixed;inset:0;background:rgba(3,6,10,.62);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+#scrim.on,#frscrim.on{display:flex}
+/* ---- factory reset (docs/FACTORY_RESET.md) ---- */
+.frline{margin-top:8px;font-size:.9em;color:var(--fg2)}
+.frline.good{color:var(--ok)}.frline.bad{color:var(--bad)}
+.frwarn{margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,93,108,.45);background:rgba(255,93,108,.08)}
+.frwarn b{color:var(--fg)}.frwarn ul{margin:6px 0 0 18px}
+.frchk{display:flex;gap:10px;align-items:flex-start;margin-top:14px;cursor:pointer;color:var(--fg)}
+.frchk input{width:20px;height:20px;flex:none;margin:1px 0 0;accent-color:var(--bad)}
+.frsteps{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:10px}
+.frsteps li{display:flex;gap:10px;align-items:center;color:var(--fg2)}
+.frsteps li i{width:16px;height:16px;border-radius:50%;border:2px solid var(--line2);flex:none}
+.frsteps li[data-s=doing]{color:var(--fg)}.frsteps li[data-s=doing] i{border-color:var(--acc);animation:blink 1s infinite}
+.frsteps li[data-s=done] i{background:var(--ok);border-color:var(--ok)}
+.frsteps li[data-s=failed]{color:var(--bad)}.frsteps li[data-s=failed] i{background:var(--bad);border-color:var(--bad)}
+.frnote{margin-top:12px;color:var(--fg)}
+.btn.frbig{width:100%;min-height:48px;font-size:1.02em}
 .dialog{width:min(440px,100%);border-radius:16px;border:1px solid var(--line2);background:#0f151f;padding:20px;box-shadow:0 30px 70px -20px #000;
   animation:enter .2s var(--ease)}
 .dialog h3{font-size:1.08em;font-weight:650}
@@ -256,6 +272,8 @@ dd span{min-width:0}
   <button class="btn" id="bclear">Clear</button></div>
 <div id="scrim"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dt"><h3 id="dt"></h3><div id="dbody"></div>
   <div class="acts"><button class="btn" id="dno">Cancel</button><button class="btn danger" id="dyes">Confirm</button></div></div></div>
+<div id="frscrim"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="frt"><h3 id="frt"></h3>
+  <div id="frbody" aria-live="polite"></div><div class="acts" id="fracts"></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -286,7 +304,8 @@ window.__S=S;  // tests read the page's own state
 const LABEL={online:"Online",live:"Live",attention:"Needs you",offline:"Offline",connecting:"Connecting",away:"Not plugged in"};
 const FILTERS=[["all","All"],["attention","Needs you"],["online","Online"],["offline","Offline"]];
 const inFilter=(c,f)=>f==="all"||(f==="online"?(c.state==="online"||c.state==="live"):
-  f==="offline"?(c.state==="offline"||c.state==="away"||c.state==="connecting"):c.state===f);
+  f==="offline"?(c.state==="offline"||c.state==="away"||c.state==="connecting"):
+  f==="attention"?(c.state==="attention"||c.state==="recovery"):c.state===f);
 
 function latClass(l){if(!l||l.ms==null)return "none";if(l.failing>=2)return "poor";return l.ms<50?"good":l.ms<150?"fair":"poor";}
 function latText(l){if(!l)return "-";if(l.failing>=2)return "No reply";if(l.ms==null)return "Measuring";return l.ms+" ms";}
@@ -318,13 +337,17 @@ function makeCard(c){
   const rec=el("div","rec");rec.hidden=true;const rh=el("div","h");const rt=el("span");rh.append(icon("i-down"),rt);
   const rs=el("div","s");const rx=el("div","t");const rn=el("div","n");const rshow=el("div","shown");rshow.hidden=true;
   const rform=el("div","form");rform.hidden=true;const racts=el("div","acts");rec.append(rh,rs,rx,rn,rshow,rform,racts);
+  const frl=el("div","frline");frl.hidden=true;   // a factory reset that runs, or has just finished
   const acts=el("div","acts");
   const more=el("button","btn more");more.dataset.role="more";more.setAttribute("aria-expanded","false");more.setAttribute("aria-label","Details");
   more.title="Details";more.appendChild(icon("i-chev"));
-  const det=el("div","details");const inner=el("div");const dl=el("dl");const zone=el("div","zone");inner.append(dl,zone);det.appendChild(inner);
-  e.append(top,chips,line,code,notes,upd,rec,acts,det);
+  const det=el("div","details");const inner=el("div");const dl=el("dl");const zone=el("div","zone");
+  const frz=el("div","zone");frz.hidden=true;const frb=el("button","btn danger","Factory reset\u2026");frb.dataset.role="frstart";
+  frz.append(el("span",null,"Puts the board back as new."),frb);
+  inner.append(dl,zone,frz);det.appendChild(inner);
+  e.append(top,chips,line,code,notes,upd,rec,frl,acts,det);
   const r={e,dot,nm,st,sep,ip,lat,lt,chips,line,code,digits,prog,bar,notes,upd,ut,us,ux,uacts,acts,more,dl,zone,
-    rec,rt,rs,rx,rn,rshow,rform,racts,sig:{}};
+    rec,rt,rs,rx,rn,rshow,rform,racts,frl,frz,sig:{}};
   e.addEventListener("animationend",()=>e.classList.remove("enter"),{once:true});
   return r;
 }
@@ -354,6 +377,7 @@ function updateCard(r,c){
     if(sig(u.actions)!==r.sig.uacts){r.sig.uacts=sig(u.actions);r.uacts.replaceChildren(...u.actions.map(a=>makeBtn(a)));}
     r.uacts.hidden=!u.actions.length;}
   updateRec(r,c);
+  updateFr(r,c);
   const ns=c.notes||[];
   if(sig(ns)!==r.sig.notes){r.sig.notes=sig(ns);r.notes.replaceChildren(...ns.map(n=>el("div",null,n)));}
   // buttons: rebuilt only when they change, so focus stays put
@@ -401,14 +425,16 @@ window.render=m=>{
     if(b.text)body.appendChild(el("p",null,b.text));if(b.actions.length){const a=el("div","acts");for(const x of b.actions)a.appendChild(makeBtn(x));body.appendChild(a);}
     d.appendChild(body);return d;}));}
   // counts and filter
-  const s=m.summary;const counts=[];if(s.attention)counts.push(["attention",s.attention+" need"+(s.attention===1?"s":"")+" you"]);
+  const s=m.summary;const counts=[];
+  if(s.recovery)counts.push(["recovery",s.recovery+" in recovery mode"]);
+  if(s.attention)counts.push(["attention",s.attention+" need"+(s.attention===1?"s":"")+" you"]);
   if(s.online)counts.push(["online",s.online+" online"]);if(s.offline)counts.push(["offline",s.offline+" offline"]);
   if(s.connecting)counts.push(["connecting",s.connecting+" connecting"]);
   const ck=sig(counts);if($("counts").dataset.sig!==ck){$("counts").dataset.sig=ck;
     $("counts").replaceChildren(...counts.map(([k,x])=>{const p=el("span","pill");p.append(el("i","dot "+k),el("span",null,x));return p;}));}
   const many=m.boards.length>=4;$("filter").hidden=!many;if(!many)S.filter="all";
   const fk=sig([many,S.filter,s]);if($("filter").dataset.sig!==fk){$("filter").dataset.sig=fk;
-    $("filter").replaceChildren(...FILTERS.map(([k,l])=>{const n=k==="all"?s.total:k==="online"?s.online:k==="offline"?s.offline+s.connecting:s.attention;
+    $("filter").replaceChildren(...FILTERS.map(([k,l])=>{const n=k==="all"?s.total:k==="online"?s.online:k==="offline"?s.offline+s.connecting:s.attention+(s.recovery||0);
       const b=el("button",null,l+" "+n);b.dataset.filter=k;b.setAttribute("aria-pressed",S.filter===k?"true":"false");return b;}));}
   set($("boards-h"),m.boards.length===1?"1 board":m.boards.length+" boards");
   $("toolbar").hidden=m.boards.length===0;
@@ -491,7 +517,7 @@ function updateRec(r,c){
   const k=sig([!!i,v.busy,i&&i.erases]);
   if(k!==r.sig.rec){r.sig.rec=k;
     r.racts.replaceChildren(...(i&&!v.busy?[REC_ROLE(r,"recshow","Show WiFi password","primary"),REC_ROLE(r,"recpass","New WiFi password"),
-      REC_ROLE(r,"recpin","Reset access PIN"),REC_ROLE(r,"recclose","Close recovery mode")]:[]));}
+      REC_ROLE(r,"recpin","Reset access PIN"),REC_ROLE(r,"recfactory","Factory reset","danger"),REC_ROLE(r,"recclose","Close recovery mode")]:[]));}
 }
 function recForm(r,kind){
   r.recForm=kind;r.recNote=null;const f=r.rform;f.hidden=false;
@@ -504,6 +530,69 @@ function recForm(r,kind){
     REC_ROLE(r,"reccancel","Cancel"));
   f.querySelector("input").focus();
 }
+// ---- factory reset (docs/FACTORY_RESET.md) ----
+// A plain warning, a checkbox and a 10 s countdown with one large Cancel - never a
+// word to type. Nothing is sent until the countdown ends; then the app's own steps
+// show here as they happen, and the result says what changed (or that nothing did).
+const FR={mac:null,timer:null,n:0,sent:false};
+const FR_LOSE=["The access PIN and every setting","Its home WiFi networks","Stored passwords (the vault)","Macros and saved PCs","Paired computers (screen sharing)"];
+function frData(){const r=S.cards.get(FR.mac);return r&&r.data&&r.data.factory;}
+function frOpen(mac){FR.mac=mac;FR.sent=false;frStop();frRender(true);S.returnFocus=document.activeElement;$("frscrim").classList.add("on");
+  const f=$("frscrim").querySelector("input,button");if(f)f.focus();}
+function frStop(){if(FR.timer){clearInterval(FR.timer);FR.timer=null;return true;}return false;}
+function frClose(){if(frStop())toast("Cancelled - nothing was changed");$("frscrim").classList.remove("on");
+  if(S.returnFocus&&S.returnFocus.isConnected)S.returnFocus.focus();}
+function frBtn(role,label,kind){const b=el("button","btn"+(kind?" "+kind:""),label);b.dataset.role=role;return b;}
+function frRender(fresh){
+  const f=frData();if(!f){frClose();return;}
+  const body=$("frbody"),acts=$("fracts"),name=S.cards.get(FR.mac).data.name;
+  if(f.job){frSteps(f.job,name);return;}
+  if(FR.sent){set($("frt"),"Factory reset: "+name);body.replaceChildren(el("p",null,"Starting\u2026"));acts.replaceChildren();return;}
+  if(FR.timer||!fresh&&body.dataset.view==="ask")return;      // keep the person's checkbox and countdown
+  set($("frt"),"Factory reset: "+name);body.dataset.view="ask";
+  const w=el("div","frwarn");const ul=el("ul");for(const x of FR_LOSE)ul.appendChild(el("li",null,x));
+  w.append(el("b",null,"Everything on this board will be erased"),ul);
+  const keep=el("p",null,"It keeps its own WiFi name, the WiFi password it came with, and its firmware.");
+  const how=el("p",null,f.how);
+  const lab=el("label","frchk");const cb=el("input");cb.type="checkbox";cb.dataset.role="frok";
+  lab.append(cb,el("span",null,"I understand everything on this board will be erased"));
+  body.replaceChildren(w,keep,how,...(f.path==="none"?[]:[lab]));
+  const go=frBtn("frgo","Factory reset","danger");go.disabled=true;
+  cb.addEventListener("change",()=>{go.disabled=!cb.checked;});
+  acts.replaceChildren(frBtn("frcancel","Cancel"),...(f.path==="none"?[]:[go]));}
+function frCountdown(){
+  FR.n=10;const cb=$("frbody").querySelector("[data-role=frok]");if(cb)cb.disabled=true;
+  const stop=frBtn("frstop","Cancel ("+FR.n+")","frbig");$("fracts").replaceChildren(stop);stop.focus();
+  const say=el("p","frnote","Erasing in "+FR.n+" seconds. Cancel stops it - nothing has changed yet.");$("frbody").appendChild(say);
+  FR.timer=setInterval(()=>{FR.n--;
+    if(FR.n>0){set(stop,"Cancel ("+FR.n+")");set(say,"Erasing in "+FR.n+" seconds. Cancel stops it - nothing has changed yet.");return;}
+    frStop();FR.sent=true;act("reset:"+FR.mac);frRender();},1000);}
+function frSteps(j,name){
+  set($("frt"),"Factory reset: "+name);$("frbody").dataset.view="steps";
+  const key=sig([j.steps.map(x=>x.state),j.note,j.left_s,j.result]);
+  if($("frbody").dataset.sig!==key){$("frbody").dataset.sig=key;     // redrawn only when it changed
+    const ul=el("ul","frsteps");for(const x of j.steps){const li=el("li");li.dataset.s=x.state;li.append(el("i"),el("span",null,x.label));ul.appendChild(li);}
+    const kids=[ul];
+    if(j.left_s!=null&&j.result==null)kids.push(el("p",null,Math.floor(j.left_s/60)+":"+String(j.left_s%60).padStart(2,"0")+" left to approve"));
+    if(j.note)kids.push(el("p","frnote",j.note));
+    $("frbody").replaceChildren(...kids);}
+  const want=j.result==null?"run":"end";
+  if($("fracts").dataset.v!==want){$("fracts").dataset.v=want;
+    $("fracts").replaceChildren(j.result==null?frBtn("frhide","Hide - it carries on"):frBtn("frdone","Done","primary"));}}
+function updateFr(r,c){
+  const f=c.factory;r.frz.hidden=!f;
+  const j=f&&f.job;r.frl.hidden=!j;
+  if(j){const cur=(j.steps.find(s=>s.state==="doing")||{}).label;
+    r.frl.className="frline"+(j.result===true?" good":j.result===false?" bad":"");
+    set(r.frl,j.result===true?"Factory reset: erased - it restarted as new":j.result===false?"Factory reset: nothing was changed":"Factory reset: "+(cur||"starting")+"\u2026");}
+  if(FR.mac===c.mac&&$("frscrim").classList.contains("on"))frRender();}
+function frClick(role){
+  if(role==="frstart")return;
+  if(role==="frcancel"||role==="frhide")frClose();
+  else if(role==="frgo")frCountdown();
+  else if(role==="frstop"){frStop();toast("Cancelled - nothing was changed");$("frscrim").classList.remove("on");}
+  else if(role==="frdone"){act("reset-clear:"+FR.mac);FR.sent=false;$("fracts").dataset.v="";$("frscrim").classList.remove("on");}}
+
 function recClick(role,mac){
   const r=S.cards.get(mac);if(!r)return;const field=id=>{const x=r.rform.querySelector('[data-recf="'+id+'"]');return x?x.value:"";};
   if(role==="recshow"){r.recNote=null;recSend({mac,op:"reveal"});}
@@ -511,6 +600,7 @@ function recClick(role,mac){
   else if(role==="recpass"||role==="recpin")recForm(r,role==="recpass"?"pass":"pin");
   else if(role==="reccancel"){r.rform.hidden=true;r.rform.replaceChildren();r.recForm=null;}
   else if(role==="recclose")recSend({mac,op:"close"});
+  else if(role==="recfactory")frOpen(mac);
   else if(role==="recpassgo"){const a=field("a");
     if(a!==field("b")){r.recNote={good:false,text:"They did not match. Nothing changed."};}
     else if(new TextEncoder().encode(a).length<8||new TextEncoder().encode(a).length>63){r.recNote={good:false,text:"A WiFi password needs 8 to 63 characters. Nothing changed."};}
@@ -550,6 +640,7 @@ async function copy(t){let ok=false;
 document.addEventListener("click",e=>{
   const t=e.target;
   if(t.closest("#scrim")){if(t.closest("#dyes"))closeAsk(true);else if(t.closest("#dno")||t.id==="scrim")closeAsk(false);return;}
+  if(t.closest("#frscrim")){const fb=t.closest("[data-role^=fr]");if(fb)frClick(fb.dataset.role);else if(t.id==="frscrim")frClose();return;}
   const cp=t.closest("[data-copy]");if(cp){copy(cp.dataset.copy);return;}
   const fb=t.closest("[data-filter]");if(fb){S.filter=fb.dataset.filter;window.render(S.m);return;}
   const bk=t.closest("[data-bulk]");if(bk){doBulk(bk.dataset.bulk,bk);return;}
@@ -557,6 +648,7 @@ document.addEventListener("click",e=>{
   const card=t.closest(".card");const mac=card&&card.dataset.mac;
   const mo=t.closest("[data-role=more]");if(mo&&mac){S.open.has(mac)?S.open.delete(mac):S.open.add(mac);updateCard(S.cards.get(mac),S.cards.get(mac).data);return;}
   const sb=t.closest("[data-role=sel]");if(sb&&mac){select(mac,e.shiftKey?"range":"toggle");return;}
+  const fs=t.closest("[data-role=frstart]");if(fs&&mac){frOpen(mac);return;}
   const rb=t.closest("[data-role^=rec]");if(rb&&mac){recClick(rb.dataset.role,mac);return;}
   const a=t.closest("[data-act]");
   if(a){const id=a.dataset.act;
@@ -566,6 +658,7 @@ document.addEventListener("click",e=>{
   if(card&&!t.closest("dd,.code,.rec")){select(mac,e.shiftKey?"range":(e.metaKey||e.ctrlKey)?"toggle":"one");card.focus();}
 });
 document.addEventListener("keydown",e=>{
+  if($("frscrim").classList.contains("on")){if(e.key==="Escape"){e.preventDefault();frClose();}return;}
   if($("scrim").classList.contains("on")){
     if(e.key==="Escape"){e.preventDefault();closeAsk(false);}
     else if(e.key==="Tab"){const f=[$("dno"),$("dyes")];const i=f.indexOf(document.activeElement);e.preventDefault();f[(i+1)%2].focus();}

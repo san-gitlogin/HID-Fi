@@ -43,6 +43,10 @@ pub enum Action {
     },
     /// The OS's own page for the Microphone permission.
     AllowMicrophone,
+    /// Factory reset this board (its MAC) - sent when the window's countdown ran out.
+    FactoryReset(String),
+    /// Close a finished factory reset's result.
+    FactoryClear(String),
 }
 
 /// This OS's likely reason a board on USB cannot be reached, besides the board
@@ -903,6 +907,7 @@ mod tests {
             sound: Default::default(),
             remembered: vec![],
             recovery: vec![],
+            factory: vec![],
         }
     }
     fn found() -> BoardState {

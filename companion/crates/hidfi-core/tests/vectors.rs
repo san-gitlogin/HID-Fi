@@ -39,6 +39,12 @@ fn compute() -> Value {
         "ota": {"id": id, "act": "from", "url": ota_url, "chal": ota_chal,
                 "msg": ota_message(id, "from", ota_url, &ota_chal),
                 "mac": hex::encode(ota_mac(&key, id, "from", ota_url, &ota_chal))},
+        // Factory reset (docs/FACTORY_RESET.md): the signed request, and the proof
+        // sent down the cable over the board's one-use token.
+        "reset": {"id": id, "chal": ota_chal, "msg": format!("reset|{id}|{ota_chal}"),
+                  "mac": hex::encode(reset_mac(&key, id, &ota_chal))},
+        "factory": {"id": id, "token": tn, "msg": format!("factory_reset|{id}|{tn}"),
+                    "proof": hex::encode(factory_proof(&key, id, &tn))},
     })
 }
 

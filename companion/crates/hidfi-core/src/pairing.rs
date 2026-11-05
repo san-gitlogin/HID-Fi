@@ -124,6 +124,17 @@ pub fn ota_mac(k: &PairKey, id: &str, act: &str, url: &str, chal: &str) -> [u8; 
     hmac(k, ota_message(id, act, url, chal).as_bytes())
 }
 
+/// The exact ASCII a factory reset request's proof covers (hid_fi.ino, compReset).
+pub fn reset_mac(k: &PairKey, id: &str, chal: &str) -> [u8; 32] {
+    hmac(k, format!("reset|{id}|{chal}").as_bytes())
+}
+
+/// What goes down the cable on the link the board opened: proof over its one-use
+/// token (hid_fi.ino, handleFactoryReset).
+pub fn factory_proof(k: &PairKey, id: &str, token: &str) -> [u8; 32] {
+    hmac(k, format!("factory_reset|{id}|{token}").as_bytes())
+}
+
 pub fn ticket(k: &PairKey, tn: &str, vn: &str) -> [u8; 32] {
     hmac(k, format!("tkt|{tn}|{vn}").as_bytes())
 }

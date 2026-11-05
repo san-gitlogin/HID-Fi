@@ -100,6 +100,9 @@ pub struct View {
     /// Boards in recovery mode on this computer's USB (docs/RECOVERY_MODE.md).
     /// Never a secret: a revealed password goes only to the window that asked.
     pub recovery: Vec<crate::recovery::RecView>,
+    /// Factory resets this computer is running or has just finished
+    /// (docs/FACTORY_RESET.md). Never a secret.
+    pub factory: Vec<crate::factory::ResetView>,
 }
 
 pub enum Cmd {
@@ -114,6 +117,10 @@ pub enum Cmd {
     },
     /// An update action (the person's consent is the click that sends it).
     Update(crate::updates::center::UpdCmd),
+    /// Factory reset this board (MAC): the window's countdown ran out.
+    FactoryReset(String),
+    /// Close a finished factory reset's result.
+    FactoryClear(String),
     Quit,
 }
 
@@ -161,6 +168,11 @@ pub struct Env {
     pub probe: Option<crate::health::Probe>,
     /// Recovery mode's ports (the real ones in the app); None: no recovery worker.
     pub recovery: Option<Box<dyn crate::recovery::Ports>>,
+    /// Factory reset's network and ports (the real ones in the app); None: none.
+    pub factory: Option<(
+        Box<dyn crate::factory::Net>,
+        Box<dyn crate::recovery::Ports>,
+    )>,
 }
 
 /// What the tray and window show about sound.
@@ -223,6 +235,7 @@ pub fn start(store: Store, env: Env) -> Handle {
         updates: Default::default(),
         remembered: Vec::new(),
         recovery: Vec::new(),
+        factory: Vec::new(),
     }));
     // Sound: one capture for every viewer, only while someone listens.
     let sound_settings = hidfi_stream::audio::Settings::new(state.share_sound, state.share_mic);
@@ -360,6 +373,32 @@ pub fn start(store: Store, env: Env) -> Handle {
             }
         })
     });
+    // Factory reset: its own thread too; it learns which links are on USB from the
+    // listing the service makes anyway.
+    let links: Arc<Mutex<Vec<Mac>>> = Arc::default();
+    let factory = env.factory.take().map(|(net, ports)| {
+        let state: Arc<Mutex<Vec<crate::factory::ResetView>>> = Arc::default();
+        let (v2, n2, s2) = (view.clone(), notify.clone(), state.clone());
+        let l2 = links.clone();
+        crate::factory::Worker::start(
+            net,
+            ports,
+            Arc::new(move || l2.lock().unwrap_or_else(|e| e.into_inner()).clone()),
+            state,
+            move || {
+                let now = s2.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                let mut v = v2.lock().unwrap_or_else(|e| e.into_inner());
+                if v.factory != now {
+                    v.factory = now;
+                    drop(v);
+                    if let Some(f) = n2.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                        f();
+                    }
+                }
+            },
+            crate::factory::Timing::default(),
+        )
+    });
     let rec = recovery.clone();
     let v = view.clone();
     let n = notify.clone();
@@ -383,6 +422,7 @@ pub fn start(store: Store, env: Env) -> Handle {
                 (sound_settings, hub),
                 h,
                 rec,
+                (factory, links),
             )
         })
         .expect("spawning the service thread");
@@ -424,6 +464,7 @@ fn run(
     ),
     health: crate::health::Health,
     recovery: Option<crate::recovery::Worker>,
+    (factory, links): (Option<crate::factory::Worker>, Arc<Mutex<Vec<Mac>>>),
 ) {
     let mut id = [0u8; 16];
     let _ = hex::decode_to_slice(&state.id, &mut id);
@@ -482,8 +523,17 @@ fn run(
         // What is on this computer's USB now. A board that left stops at once;
         // its pairing stays on disk for when it comes back.
         let on_usb = hidfi_core::discovery::usb_macs(&env.usb.list());
+        let rec_links = env.usb.recovery_macs(); // from that same listing
+        *links.lock().unwrap_or_else(|e| e.into_inner()) = rec_links.clone();
         if let Some(w) = &recovery {
-            w.present(env.usb.recovery_macs()); // from that same listing; repeats are ignored
+            // A board a factory reset is talking to is not recovery mode's to open.
+            let claimed = factory.as_ref().map(|f| f.claimed()).unwrap_or_default();
+            w.present(
+                rec_links
+                    .into_iter()
+                    .filter(|m| !claimed.contains(&m.hex()))
+                    .collect(),
+            ); // repeats are ignored
         }
         let gone: Vec<Mac> = here
             .keys()
@@ -738,6 +788,37 @@ fn run(
             Ok(Cmd::Update(c)) => {
                 if let Some(tx) = &upd_tx {
                     let _ = tx.send(c);
+                }
+            }
+            Ok(Cmd::FactoryReset(mac)) => {
+                if let (Some(f), Some(m)) = (&factory, Mac::parse(&mac)) {
+                    let in_recovery = view
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .recovery
+                        .iter()
+                        .any(|r| r.mac == m.hex() && r.info.is_some());
+                    let base = here
+                        .get(&m)
+                        .map(|h| h.url.clone())
+                        .filter(|u| !u.is_empty());
+                    let key = store.key_for(&m);
+                    let path = crate::factory::choose(in_recovery, base.is_some(), key.is_some());
+                    let hex = m.hex();
+                    f.run(crate::factory::Job {
+                        mac: m,
+                        path,
+                        base,
+                        id: state.id.clone(),
+                        key,
+                        name: state.name.clone(),
+                        ssid: format!("ESP32-HID-{}", &hex[6..]),
+                    });
+                }
+            }
+            Ok(Cmd::FactoryClear(mac)) => {
+                if let Some(f) = &factory {
+                    f.clear(&mac);
                 }
             }
             Ok(Cmd::Forget(mac)) => {

@@ -114,6 +114,12 @@ pub fn run(handle: &Handle, a: Action) {
         Action::Sound { system, mic } => {
             let _ = handle.tx.send(Cmd::Sound { system, mic });
         }
+        Action::FactoryReset(mac) => {
+            let _ = handle.tx.send(Cmd::FactoryReset(mac));
+        }
+        Action::FactoryClear(mac) => {
+            let _ = handle.tx.send(Cmd::FactoryClear(mac));
+        }
         Action::AllowMicrophone => {
             #[cfg(target_os = "macos")]
             open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");

@@ -52,6 +52,23 @@ pub enum Request {
         chal: String,
         mac: String,
     },
+    /// A factory reset asked by this paired computer (docs/FACTORY_RESET.md): the
+    /// board restarts with its USB link open and answers with a one-use token the
+    /// erase must be signed over, down that cable.
+    Reset {
+        id: String,
+        chal: String,
+        mac: String,
+    },
+    /// A factory reset asked by a computer that is not paired; the owner approves
+    /// on the dashboard, behind the PIN.
+    ResetRequest {
+        name: String,
+    },
+    /// How that request stands: pending, declined, approved or unknown.
+    ResetRequestStatus {
+        request: String,
+    },
 }
 
 impl Request {

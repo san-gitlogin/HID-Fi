@@ -2,6 +2,7 @@
 //! the system tests.
 
 pub mod browser;
+pub mod factory;
 pub mod handover;
 pub mod health;
 pub mod menu;
