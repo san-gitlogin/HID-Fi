@@ -25,6 +25,7 @@ ANDROID_UA = ("Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTM
               "Chrome/130.0 Mobile Safari/537.36")
 DEVICES = {
     "phone": {"width": 390, "height": 844, "touch": True},
+    "phone 2x": {"width": 390, "height": 844, "touch": True, "scale": 2},   # README screenshots
     "iPhone": {"width": 390, "height": 844, "touch": True, "ua": IPHONE_UA},
     "Android phone": {"width": 412, "height": 915, "touch": True, "ua": ANDROID_UA},
     "small phone": {"width": 320, "height": 568, "touch": True},
@@ -88,6 +89,8 @@ class Dashboard:
         self.browser, self.sim, self.device = browser, sim, device
         d = DEVICES[device]
         extra = {"user_agent": d["ua"]} if d.get("ua") else {}
+        if d.get("scale"):
+            extra["device_scale_factor"] = d["scale"]
         self.ctx = browser.new_context(viewport={"width": d["width"], "height": d["height"]},
                                        has_touch=d["touch"], is_mobile=d["touch"] and d["width"] < 900, **extra)
         self.page = self.ctx.new_page()

@@ -1,7 +1,7 @@
 # Factory reset: the board as new, from the Companion
 
-Status: **being built.** ▢ is unproven until the test next to it passes on a real
-board; ✔ is proven, with where.
+Status: **built** (firmware, dashboard, Companion, both recovery tools). ✔ is proven,
+with where; ▢ is not yet.
 
 ## What it does
 
@@ -69,10 +69,19 @@ while a request waits, `reset_request: {name, left_s}`.
 
 ## Tests
 
-- ▢ unit/sim: the wipe keeps exactly the kept keys; every proof rule; refusals.
-- ▢ dashboard BDD: Settings reset (warning, checkbox, countdown, cancel), approve and
-  decline a request.
-- ▢ Companion: the three flows against a model board; window states; both engines.
-- ▢ hardware (09F7C8, NVS saved first and written back after): each path erases and
-  keeps what it should; a paired-reset link refuses everything else; a request from a
-  computer that is not paired waits for the PIN.
+- ✔ model and tools: `tests/unit/test_factory_reset.py` (13: what goes and stays, every
+  proof, the one-try token, refusals, the request flow, and the Rust app's own HMAC
+  vectors reproduced byte for byte), `test_recover.py` (both tools, `--factory-reset`).
+- ✔ dashboard: `factory_reset.feature`, 9 scenarios; both sheets in the layout matrix.
+- ✔ Companion: `factory.rs` (12: each way, each refusal, claiming the link), 11 window
+  scenarios in Chromium and WebKit under the window's coverage contract.
+- ✔ test board 09F7C8, 2026-11-05, settings saved and written back after each erase
+  (`tests/board/factory_reset_hw.py`): COM with and without confirm; recovery mode from
+  a real BOOT hold; a request declined then approved with the PIN (the asker saw
+  *approved*); a computer paired for real erasing down its link - the link refused the
+  WiFi password, a PIN change and the vault, another key and a replayed proof, and
+  closed itself unused after 60 s. Every erase left the board fresh with its own name
+  and generated password.
+- ✔ the real Companion service, paired through the dashboard, reset the board the
+  paired way: every step done, 11.3 s from the click to the result
+  (`tests/board/factory_reset_companion_hw.py`).

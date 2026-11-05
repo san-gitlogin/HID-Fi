@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased - recovery mode (no COM port needed)
+## Unreleased - recovery mode and factory reset (no COM port needed)
 
 Recovery of a forgotten WiFi password or access PIN no longer needs the COM
 cable, so a board with one USB port - the HID-Fi Dongle - can be recovered.
@@ -30,8 +30,17 @@ Recovery is still USB only, and holding the board is still the proof.
   across six update checks). Each line is now one write - the same bytes. Found by
   the heap-under-load test; it predates recovery mode.
 
+- **Factory reset** (docs/FACTORY_RESET.md): erases everything a person set up and
+  keeps the board's own name, generated WiFi password and update journal. By whoever
+  can prove the board is theirs, and nobody else: `confirm` over USB (COM or recovery
+  mode), the access PIN on the dashboard, a paired computer whose erase must come down
+  its own USB cable (its signed request only opens the board's USB link for 60 s with
+  a one-use token), or a computer that is not paired asking and the owner approving
+  with the PIN. `status` gains `fresh`, `recovery_kind` and `reset_request`.
+
 ### Tools
 
+- `--recover --factory-reset [--yes]` / `-FactoryReset [-Yes]`, and a menu choice.
 - `./flash_esp.sh --recover` and `.\flash_esp.ps1 -Recover` find a board in recovery
   mode by asking it, use it before any COM port (opening a COM port resets the
   board), close recovery when done (`--keep-open` / `-KeepOpen`), and say exactly
@@ -54,8 +63,15 @@ Recovery is still USB only, and holding the board is still the proof.
   Settings, Apps with its icon, publisher and version, and Uninstall there works
   offline.
 
+- **Factory reset from the app**, with no pin in a pinhole: Details, Factory reset...
+  - warning, checkbox, a 10 s countdown with one large Cancel, then every step live and
+  a result that says what changed. A board in recovery mode or being reset says so on
+  its card (amber, first, counted in the header).
+
 ### Dashboard
 
+- Settings ends with **Factory reset**, and a request from a computer that is not
+  paired opens for approval (after the PIN prompt, never over it).
 - The *Forgot the PIN* and *PIN, passwords and recovery* sheets explain recovery
   without a COM port, and a board entering recovery mode says so once.
 

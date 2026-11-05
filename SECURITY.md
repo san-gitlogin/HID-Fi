@@ -96,6 +96,25 @@ vault, a typed ERASE. The link:
 - is announced on an open dashboard ("Recovery mode is open on this board's USB"),
   so an owner who did not press BOOT knows the board was in someone's hands.
 
+### Factory reset: everything erased, by its owner only
+
+A factory reset (docs/FACTORY_RESET.md) erases everything a person set up - the
+access PIN, every setting, home networks, the vault, macros, saved PCs, paired
+computers - and keeps the board's own name and generated WiFi password. It needs one
+of these, never less:
+
+- **USB**, with `confirm`: the COM cable, or recovery mode opened with the pinhole.
+- **The access PIN**, from a signed-in dashboard (Settings, or approving a request).
+- **A paired computer on the board's own USB.** Its signed request does not erase
+  anything: the board restarts with its USB link open for 60 seconds and a one-use
+  token, and the erase has to arrive down that cable, signed with the computer's
+  pairing key over the token. A paired computer elsewhere on the network - stolen, or
+  running someone else's code - cannot send down a cable it is not on. The link answers
+  nothing else that matters: not the WiFi password, not a PIN reset.
+
+A stranger holding the board can still factory reset it, as with any device; the
+vault's secrets go with the reset, never to them.
+
 ### If you forget something
 
 | Forgot | What to do | Stored passwords |
@@ -118,6 +137,7 @@ vault, a typed ERASE. The link:
 | Malware on the PC the board is plugged into | It already controls that PC. Through a COM cable it could reset the PIN; the vault survives if it has a vault PIN. On a board without one it can do nothing until someone holds BOOT for 8 seconds, and then only for 5 minutes |
 | Holds BOOT for 8 seconds | Opens recovery mode for 5 minutes: nothing changes by itself, it still needs a computer and the tool, and an open dashboard says so. They hold the board, which is already total control (next row) |
 | Holds the board | Can recover it, and can read its flash with standard tools - see "What this does not protect against" |
+| A paired computer elsewhere on the network | Cannot factory reset the board: the erase must come down the USB cable of the computer it is plugged into |
 
 ---
 

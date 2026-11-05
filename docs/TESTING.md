@@ -600,6 +600,18 @@ are tested at three levels, and each row of its two tables has a test:
     the COM port, stays silent without DTR, carries no log, survives 50 opens at
     every baud (the 1200 baud "touch" included); `recovery_exit`, a reset and 5 idle
     minutes each close it.
+  - **Factory reset** ([FACTORY_RESET.md](FACTORY_RESET.md)):
+    `tests/unit/test_factory_reset.py` (the model: every proof, what goes and what
+    stays, the one-try token, refusals, the request flow, the shared HMAC vectors);
+    `factory_reset.feature` (Settings and approving a request: warning, checkbox,
+    countdown, cancel, a request after the PIN prompt, never over it); the Companion's
+    `factory.rs` tests and `window.feature`'s factory and two-board scenarios;
+    `test_recover.py` (`--factory-reset`, both tools). On the test board, run by hand
+    with its settings saved first (esptool read-flash of nvs and nvs_ext) and written
+    back after every erase: `tests/board/factory_reset_hw.py` (COM, recovery mode, a
+    request approved with the PIN, a computer paired for real erasing down its own
+    link) and `tests/board/factory_reset_companion_hw.py` (the real service, paired
+    through the dashboard, resetting the board itself).
   - `tests/board/recovery_soak.py COM-PORT [cycles]` (test board only, run by hand):
     50 full cycles - press, "ready", the link, status and a pointer move over it
     (WiFi and HID still up), `recovery_exit`, a normal boot - with each step's timing.

@@ -71,6 +71,24 @@ the log or the store; the page drops it on Hide, after a minute, or when recover
 closes. Serial work runs on the recovery thread, never the service loop; a port is
 opened per action and closed again (another tool may want it).
 
+A board in recovery mode, or being factory reset, has the card state `recovery`:
+amber, labelled *Recovery mode* / *Factory reset*, first in the list, counted in the
+header ("1 in recovery mode") and under *Needs you* - with several boards, which one
+must be clear at a glance.
+
+### Factory reset
+
+Details, **Factory reset...** (and **Factory reset** in the recovery panel) opens its
+own dialog ([FACTORY_RESET.md](FACTORY_RESET.md)). The model gives each card
+`factory: {path, how, job}` - which way it would go now (`paired`, `request`,
+`recovery`, or `none` with where to go instead) and the reset that runs or has just
+finished (steps with `todo`/`doing`/`done`/`failed`, a note, the seconds left to
+approve, the result). The page asks first - what goes, what stays, a checkbox - then
+counts down 10 s on one large Cancel (Escape and the background cancel too) and only
+then sends `act:reset:<MAC>`; **Done** sends `act:reset-clear:<MAC>`. The work runs on
+the factory thread (`factory.rs`), which claims the board's USB link so recovery mode
+leaves it be.
+
 ### Selecting
 
 - Click a card: it alone is selected. Cmd/Ctrl-click: add or remove. Shift-click:

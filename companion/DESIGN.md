@@ -97,6 +97,18 @@ Every 20 s (1 s while a viewer is waiting):
 The board records the **source IP of the request** (not a claimed one), port, fp,
 tn and last-seen, in RAM only. It counts as online for 60 s after a beat.
 
+## Factory reset requests (docs/FACTORY_RESET.md)
+
+- `{op:"reset", id, chal, mac}`, `mac = HMAC-SHA256(K, "reset|" + id + "|" + chal)`
+  (vector "reset"): the board replies with a one-use `token` and restarts with its USB
+  link open for 60 s. The erase goes down that link:
+  `{"cmd":"factory_reset","proof": HMAC-SHA256(K, "factory_reset|" + id + "|" + token)}`
+  (vector "factory"). One try; that link answers nothing else that matters.
+- `{op:"reset_request", name}` from a computer that is not paired; the dashboard
+  approves (PIN) or declines; `{op:"reset_request_status", request}` says `pending`,
+  `declined`, `approved` (held 2.5 s before the restart so the asker sees it) or
+  `unknown`. Implemented in `crates/hidfi-companion/src/factory.rs`.
+
 ## Update requests (docs/OTA.md)
 
 The Companion acts on updates for the person at this computer with the same

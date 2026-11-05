@@ -354,12 +354,48 @@ restarts with a serial link on its own USB for 5 minutes
 It shows the WiFi password, sets a new one, or resets the access PIN. Nothing can
 be recovered over WiFi - not by a stranger, and not by you.
 
+In the **HID-Fi Companion**, a board in recovery mode says so on its own card -
+amber, **Recovery mode**, first in the list - with what you can do right there:
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/assets/screens/14-companion-recovery.png" width="260" alt="Two boards in the Companion, one in recovery mode"><br><b>Which board, at a glance</b><br><sub>The board in recovery mode comes first, says so, and offers its actions; the other board stays as it was</sub></td>
+<td align="center" width="50%"><img src="docs/assets/screens/17-factory-reset-dashboard.png" width="200" alt="Factory reset on the dashboard"><br><b>Factory reset on the dashboard</b><br><sub>Settings, Factory reset: what goes, a box to tick, then 10 seconds to cancel</sub></td>
+</tr>
+</table>
+
+### Factory reset
+
+Puts the board back as new: the access PIN and every setting, your home WiFi
+networks, stored passwords, macros, saved PCs and paired computers are erased. It
+keeps its own WiFi name, the WiFi password it came with, and its firmware. No pin in
+a pinhole for this - whatever you have proves the board is yours
+([docs/FACTORY_RESET.md](docs/FACTORY_RESET.md)):
+
+| You have | What you do |
+|---|---|
+| Your own computer (paired with the board) with the board plugged in | Companion: the board's card, Details, **Factory reset...** The erase goes down that USB cable |
+| Another computer, and you know the access PIN | Its Companion asks; your phone's dashboard shows the request - approve it. Or the dashboard's Settings, **Factory reset** |
+| Neither - PIN forgotten, no paired computer | Recovery mode (the pinhole, 8 seconds), then **Factory reset** in its panel, or `--recover --factory-reset` |
+
+Every way shows what will be erased and asks you to tick "I understand", then counts
+down 10 seconds with one large **Cancel**. Each step shows as it happens, and the end
+says what changed - or that nothing did.
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/assets/screens/15-companion-factory-reset.png" width="260" alt="Factory reset in the Companion"><br><b>Asked first</b><br><sub>What goes, what stays, and which way it will go</sub></td>
+<td align="center" width="50%"><img src="docs/assets/screens/16-companion-factory-waiting.png" width="260" alt="Factory reset waiting for approval"><br><b>Every step shown</b><br><sub>Here: waiting for you to approve on your phone</sub></td>
+</tr>
+</table>
+
 ### If you forget something
 
 | Forgot | What to do | Stored passwords |
 |---|---|---|
 | The WiFi password | Sign in over your home network and change it in Settings, or `-Recover` and show it | Kept |
 | The access PIN | `-Recover` → reset the access PIN | Kept if the vault has its own vault PIN, otherwise erased (you are told and asked to type ERASE first) |
+| Everything - you want it as new | Factory reset (above) | Erased |
 | Both | `-Recover`: show the WiFi password, then reset the PIN | As above |
 | The vault PIN | Keys → Passwords → *Forgotten it?*, with the access PIN | Erased - that is what a vault PIN is for |
 | Nothing - you moved the board, or updated its firmware | Nothing to do | Kept |
@@ -374,6 +410,7 @@ be recovered over WiFi - not by a stranger, and not by you.
 | Many devices guessing together | 20 wrong PINs from the home network lock it out for 10 minutes. The board's own WiFi and the cable keep working |
 | Someone who connects and never signs in | Disconnected after 20 seconds, so they cannot hold every connection |
 | A child pressing buttons on the board | Nothing: no button resets or erases anything. Holding BOOT for 8 seconds only opens recovery mode for 5 minutes, which changes nothing by itself, and an open dashboard says so |
+| A paired computer elsewhere on your network | Cannot factory reset the board: the erase must come down the USB cable of the computer it is plugged into |
 | Someone who takes the board | Can recover it, like anyone holding a house key. Keep it where you would keep one |
 
 Full detail, including what this does not protect against: [SECURITY.md](SECURITY.md).

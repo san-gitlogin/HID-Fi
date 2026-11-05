@@ -165,6 +165,26 @@ The same steps work from a terminal: `./flash_esp.sh --recover` (macOS, Linux) o
 cannot be opened, add yourself to the `dialout` group (`sudo usermod -aG dialout
 $USER`), log out and in.
 
+## Factory reset
+
+Details, **Factory reset...** on a board's card (or **Factory reset** in recovery
+mode's panel) puts the board back as new ([FACTORY_RESET.md](FACTORY_RESET.md)). The
+dialog lists what is erased and what stays, says which way it will go, and starts only
+after you tick *I understand* and a 10-second countdown runs out - **Cancel**, Escape or
+closing the dialog stops it. Then every step shows as it happens:
+
+- **This computer is paired and the board is plugged in here:** the board restarts with
+  its USB link and the erase goes down this cable. About 10 seconds; nothing else to do.
+- **This computer is not paired:** the board's dashboard asks you to approve, with the
+  access PIN. The dialog counts down the two minutes the request stays open.
+- **Recovery mode is open:** the erase goes down its link.
+- **The board is not reachable from here:** the dialog says where to go instead (its
+  dashboard's Settings, on its own WiFi, or recovery mode).
+
+The end says what happened: *Erased* and the WiFi to join, or *Nothing was changed* and
+why. A board being reset says so on its card, so you can close the dialog and watch it
+there.
+
 ## When something is not right
 
 | What you see | What to do |

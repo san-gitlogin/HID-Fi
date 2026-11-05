@@ -581,6 +581,18 @@ Rules:
   and a COM port with DTR and RTS low (there DTR held is BOOT pressed).
 - Never add a physical-button reset or erase. A child pressing BOOT must not cost
   anyone their vault.
+- **Factory reset** (docs/FACTORY_RESET.md; agreed with the owner, 2026-11-05) erases
+  everything a person set up and keeps the board's own name, generated WiFi password
+  and the update journal. Only these proofs, never fewer: `confirm` over USB (COM, or
+  recovery mode opened with the pinhole); `confirm` over WiFi behind the PIN gate; a
+  **paired computer** whose signed request (`op:"reset"`) only restarts the board with
+  its USB link open for 60 s and a one-use token - the erase must come **down that
+  cable** signed over the token, and that link answers `status`, `ping`,
+  `factory_reset` and `recovery_exit` only; or a computer that is not paired asking
+  (`op:"reset_request"`) and the owner approving on the dashboard with the PIN. Never
+  a network-only erase from a paired computer, never a ritual (no replug patterns -
+  the owner rejected them for people who cannot do them), and the confirmation is a
+  warning, a checkbox and a cancellable 10 s countdown, not a typed word.
 - A PIN reset without the old PIN erases the vault unless a vault PIN is set
   (`handleSetAuth`, `vaultGuardedByAccessPin`). Keep that. Recovery tools must say
   which will happen before changing anything, and require a typed ERASE (or
