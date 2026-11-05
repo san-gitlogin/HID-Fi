@@ -548,7 +548,9 @@ def shows_live(ctx, name):
     _wait(ui, lambda: ui.page.evaluate("document.getElementById('scrVideo').videoWidth > 0"),
           f'no picture; state {ui.page.evaluate("SCR.state + ` ` + SCR.why")}, msg {ui.page.inner_text("#scrMsg")!r}', tries=150)
     _wait(ui, lambda: name in ui.page.inner_text("#scrBadge"), f'#scrBadge reads {ui.page.inner_text("#scrBadge")!r}')
-    assert ui.page.inner_text("#scrMsg").strip() == ""
+    # The message clears on the update after the picture arrives - waited for, not
+    # read in the same instant (a busy CI runner landed between the two).
+    _wait(ui, lambda: ui.page.inner_text("#scrMsg").strip() == "", f'#scrMsg still reads {ui.page.inner_text("#scrMsg")!r}')
 
 
 @then(parsers.parse("the screen is zoomed to {pct:d}%"))

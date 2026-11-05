@@ -476,8 +476,10 @@ Feature: The Settings tab
     And I tap the "#btnAp" control
     Then "#apnew" is visible
     And "#apnewTry" contains "attempt"
-    When the board takes connections again
-    And I tap the "#apnewReload" control
+    # Reload while the board still refuses: once it takes connections the page
+    # reconnects by itself and hides the offer, so tapping after that was a race.
+    When I tap the "#apnewReload" control
+    And the board takes connections again
     Then the dashboard reconnects
     And "#apnew" is hidden
 
