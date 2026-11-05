@@ -33,6 +33,13 @@ impl UsbList for OnlyBoard {
             .filter(|d| d.vid != 0x303A || mine(d))
             .collect()
     }
+    fn recovery_macs(&self) -> Vec<hidfi_core::discovery::Mac> {
+        NusbList
+            .recovery_macs()
+            .into_iter()
+            .filter(|m| m.hex().eq_ignore_ascii_case(&self.0))
+            .collect()
+    }
 }
 
 fn main() {
@@ -67,7 +74,16 @@ fn main() {
         sound: None,
         probe: Some(hidfi_companion::health::tcp_probe(Duration::from_secs(2))),
         recovery: None,
-        factory: None,
+        // HIDFI_HW_FACTORY=1: the real factory reset (docs/FACTORY_RESET.md) - stdin
+        // "factory-reset <MAC>" starts it, as the window's countdown does.
+        factory: std::env::var_os("HIDFI_HW_FACTORY").map(|_| {
+            (
+                Box::new(hidfi_companion::factory::RealNet::default())
+                    as Box<dyn hidfi_companion::factory::Net>,
+                Box::new(hidfi_companion::recovery::RealPorts)
+                    as Box<dyn hidfi_companion::recovery::Ports>,
+            )
+        }),
     };
     let h = service::start(store, env);
     let view = h.view.clone();
@@ -78,6 +94,9 @@ fn main() {
             let line = serde_json::json!({
                 "board": format!("{:?}", v.board), "session": format!("{:?}", v.session),
                 "watching": v.watching, "port": v.port, "problem": v.problem,
+                "factory": v.factory.iter().map(|r| serde_json::json!({
+                    "mac": r.mac, "path": r.path.as_str(), "result": r.result, "note": r.note,
+                    "steps": r.steps.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
             })
             .to_string();
             if line != last {
@@ -88,6 +107,13 @@ fn main() {
         }
     });
     for line in std::io::stdin().lock().lines() {
+        if let Ok(Some(mac)) = line
+            .as_deref()
+            .map(|l| l.trim().strip_prefix("factory-reset "))
+        {
+            let _ = h.tx.send(Cmd::FactoryReset(mac.trim().to_string()));
+            continue;
+        }
         if matches!(line.as_deref().map(str::trim), Ok("quit") | Ok("") | Err(_)) {
             let _ = h.tx.send(Cmd::Quit);
             std::thread::sleep(Duration::from_millis(300));
