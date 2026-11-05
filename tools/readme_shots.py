@@ -14,7 +14,7 @@ from conftest import INIT, PAGE, URL, load_states  # noqa: E402  (the window tes
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 OUT = ROOT / "docs" / "assets" / "screens"
-VERSION = next(l.split('"')[1] for l in (ROOT / "companion" / "Cargo.toml").read_text().splitlines()
+VERSION = next(l.split('"')[1] for l in (ROOT / "companion" / "Cargo.toml").read_text(encoding="utf-8").splitlines()
                if l.startswith("version ="))
 W, H = 400, 760
 

@@ -170,7 +170,7 @@ def test_the_model_signs_exactly_as_the_app_does():
     """companion/vectors/pairing_v1.json is written by the Rust app's own code; the
     board model must reproduce both reset proofs byte for byte."""
     import json, pathlib
-    v = json.loads((pathlib.Path(__file__).resolve().parents[2] / "companion/vectors/pairing_v1.json").read_text())
+    v = json.loads((pathlib.Path(__file__).resolve().parents[2] / "companion/vectors/pairing_v1.json").read_text(encoding="utf-8"))
     key, r, f = bytes.fromhex(v["key"]), v["reset"], v["factory"]
     assert r["msg"] == f'reset|{r["id"]}|{r["chal"]}' and cs.mac(key, r["msg"]) == r["mac"]
     assert f["msg"] == f'factory_reset|{f["id"]}|{f["token"]}' and cs.mac(key, f["msg"]) == f["proof"]
