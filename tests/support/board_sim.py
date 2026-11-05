@@ -431,7 +431,8 @@ class BoardSim:
                     else self.sta["phase"] != "online"
                 if not ok:
                     return route.fulfill(status=403, json={"status": "error", "reply": "lan_locked",
-                                         "message": "Set an access PIN before scanning over your home network."})
+                                         "message": "Sign in with the access PIN to scan over your home network."
+                                         if self.pin else "Set an access PIN before scanning over your home network."})
             return route.fulfill(json=self._scan())
         if path.startswith("/api/companion") and req.method == "POST":
             with self.lock:

@@ -67,6 +67,8 @@
 */
 
 #include <ArduinoJson.h>
+#include <vector>
+#include "net_logic.h"      // which saved network to join (host-tested: tests/unit/test_net_logic.py)
 #include "USB.h"
 #include "USBHIDKeyboard.h"
 #include "USBHIDMouse.h"
@@ -2111,14 +2113,17 @@ void staSuperviseScan() {
     int16_t n = WiFi.scanComplete();
     if (n == WIFI_SCAN_RUNNING) return;
     staScanPending = false;
-    int best = -1, bestRssi = -1000;
-    for (int i = 0; n > 0 && i < netCount; i++) {
-        if (netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid)) continue;   // staged absence
-        if (netBad[i] || (netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0)) continue;
-        for (int k = 0; k < n; k++) {
-            if (WiFi.SSID(k) == netSsid[i] && WiFi.RSSI(k) > bestRssi) { best = i; bestRssi = WiFi.RSSI(k); }
-        }
+    // The choice itself is net_logic.h, the same header the host tests compile.
+    std::vector<String> names(n > 0 ? n : 0);
+    std::vector<NetSeen> seen(n > 0 ? n : 0);
+    for (int k = 0; k < n; k++) { names[k] = WiFi.SSID(k); seen[k] = {names[k].c_str(), (int)WiFi.RSSI(k)}; }
+    NetSaved saved[NET_MAX];
+    for (int i = 0; i < netCount; i++) {
+        bool staged = netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid);   // staged absence
+        bool cooling = netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0;
+        saved[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling};
     }
+    int best = netPickBest(saved, netCount, seen.data(), n > 0 ? n : 0);
     if (!staDownSince) staDownSince = millis();
     if (best < 0) {
         staAway = true;
@@ -2380,9 +2385,10 @@ void setupWebRoutes() {
     // GET /api/scan - scan WiFi networks
     webServer.on("/api/scan", HTTP_GET, []() {
         if (!scanAllowed()) {
-            webServer.send(403, "application/json",
-                "{\"status\":\"error\",\"reply\":\"lan_locked\",\"message\":\""
-                "Set an access PIN before scanning over your home network.\"}");
+            // With a PIN set it only needs that PIN (said "set a PIN", which it had).
+            webServer.send(403, "application/json", authToken.length()
+                ? "{\"status\":\"error\",\"reply\":\"lan_locked\",\"message\":\"Sign in with the access PIN to scan over your home network.\"}"
+                : "{\"status\":\"error\",\"reply\":\"lan_locked\",\"message\":\"Set an access PIN before scanning over your home network.\"}");
             return;
         }
         if (verboseLog) COM_SERIAL.println("[HTTP] GET /api/scan - scanning networks...");
