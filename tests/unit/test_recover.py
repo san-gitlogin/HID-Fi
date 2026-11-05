@@ -220,6 +220,18 @@ def test_menu_new_wifi_password_typed_twice_must_match(board):
     assert code == 0 and fb.sim.ap_pass == "same-password", out
 
 
+def test_menu_factory_reset_needs_yes(board):
+    import time
+    fb, ports = board(sim_with(pin="4826", vault=dict(VAULT)))
+    code, out = _menu(ports, ["4", "no"])
+    assert code == 1 and "Nothing changed" in out and fb.sim.pin == "4826" and fb.sim.vault, out
+    code, out = _menu(ports, ["4", "yes"])
+    assert code == 0 and "Erased." in out, out
+    time.sleep(0.7)
+    fb.sim.tick()
+    assert fb.sim.pin is None and not fb.sim.vault
+
+
 def _menu(ports, answers):
     """The tool reads its answers from a terminal; give it one and type them."""
     import pty
@@ -234,7 +246,7 @@ def _menu(ports, answers):
                             env=env, start_new_session=True)
     os.close(slave)
     out, i, end = b"", 0, time.time() + 60
-    prompts = (b"Choose 1-4", b"New 4 digit", b"Type ERASE", b"New WiFi password", b"Type it again")
+    prompts = (b"Choose 1-5", b"New 4 digit", b"Type ERASE", b"New WiFi password", b"Type it again", b"Type yes")
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.2)
         if not r:

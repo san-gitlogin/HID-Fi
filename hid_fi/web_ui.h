@@ -879,7 +879,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .list{display:flex;flex-direction:column;gap:7px}
 .item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--r2);background:var(--surface2);border:1px solid var(--line)}
 .frchk{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;font-size:14px;line-height:1.4;cursor:pointer}
-.frchk input{width:22px;height:22px;flex:none;margin:0;accent-color:var(--bad)}
+.frchk input{width:28px;height:28px;flex:none;margin:0;accent-color:var(--bad)}
 .frbig{width:100%;min-height:52px;font-size:16px}
 .warnbox{background:color-mix(in srgb,var(--bad) 12%,var(--surface2));border-color:color-mix(in srgb,var(--bad) 38%,var(--line));margin-bottom:12px}
 .item .tx{flex:1;min-width:0}
