@@ -847,9 +847,10 @@ mod tests {
     fn a_factory_reset_link_is_not_recovery_mode() {
         let mut b = FakeBoard::new();
         b.reset_link = true;
-        let mut l = Link::new(&mut b).unwrap();
-        assert_eq!(info(&mut l), Err(RecError::ResetLink));
-        drop(l);
+        {
+            let mut l = Link::new(&mut b).unwrap();
+            assert_eq!(info(&mut l), Err(RecError::ResetLink));
+        }
         // It never asked that link for the WiFi password.
         assert_eq!(b.seen, ["status"]);
     }
