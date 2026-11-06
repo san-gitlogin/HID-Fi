@@ -167,7 +167,15 @@ window.__hidfiState = async (name, enter, leave, waitFor) => {
   // A message from an earlier step (the sign-in's "Unlocked") would sit over the
   // top bar and read as covering it; messages are measured in their own state.
   if (name !== 'toast') document.querySelectorAll('#toasts .toast').forEach(t => t.remove());
-  const r = window.__hidfiProbe(name);
+  let r = window.__hidfiProbe(name);
+  // On a very large screen a slow machine can still be mid-fade when it is measured
+  // (CI: three different sheets read "nothing is drawn" on 2599x4160 to 7200x1449, never
+  // locally). Look again before saying so - a state that is never drawn still fails.
+  for (let i = 0; i < 6 && r.bad.some(b => b.endsWith('nothing is drawn for this state')); i++) {
+    await new Promise(res => setTimeout(res, 500));
+    await window.__hidfiSettle();
+    r = window.__hidfiProbe(name);
+  }
   if (leave) { (new Function(leave))(); await new Promise(r => setTimeout(r, 0)); await window.__hidfiSettle(); }
   return r;
 };"""
