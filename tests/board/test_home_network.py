@@ -257,7 +257,10 @@ def test_the_owners_network_is_saved_and_proven(board, home):
 
 def test_a_new_network_out_of_range_falls_back_to_one_that_works(board, home, request):
     before = [n["ssid"] for n in _saved(board)]
-    assert len(before) <= 3, "a fourth and fifth network would push the owner's out - not testing on this board"
+    if len(before) > 3:
+        # Refusing protects the owner's networks: adding two would push one of theirs
+        # out. A refusal is a skip, never a failure (docs/TESTING.md, "What the tests do").
+        pytest.skip(f"the board already has {len(before)} saved networks - two more would push the owner's out")
     try:
         r = board.cmd({"cmd": "wifi_configure", "ssid": FAKE, "password": "not-a-real-network-1"})
         assert r.get("reply") == "wifi_connecting", r
