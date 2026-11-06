@@ -19,6 +19,7 @@ import itertools
 import pytest
 
 from support import dashboard
+from support.legacy_wait import settle
 from support.board_sim import BoardSim
 
 pytestmark = pytest.mark.ui
@@ -66,36 +67,37 @@ def simulate(combo):
     return "".join(js)
 
 
-def page_for(browser, init):
-    ctx = browser.new_context(viewport={"width": W, "height": H}, has_touch=True, is_mobile=True, reduced_motion="reduce")
+def page_for(pages, init):
+    ctx = pages(viewport={"width": W, "height": H}, has_touch=True, is_mobile=True, reduced_motion="reduce")
     page = ctx.new_page()
     page.add_init_script(PIN_RTT + init)
     sim = BoardSim()
     sim.attach(page, dashboard.extract_html())
     page.goto(sim.URL)
-    page.wait_for_timeout(700)
+    page.wait_for_timeout(300)
+    settle(page)
     return ctx, page, sim
 
 
 _modern = {}
 
 
-def modern(browser):
+def modern(pages):
     if not _modern:
-        ctx, page, _ = page_for(browser, "")
+        ctx, page, _ = page_for(pages, "")
         for v in VIEWS:
             page.evaluate(f"go('{v}')")
-            page.wait_for_timeout(250)
+            settle(page)
             _modern[v] = page.evaluate(RECTS)
         ctx.close()
     return _modern
 
 
 @pytest.mark.parametrize("combo", COMBOS, ids=["+".join("no-" + f for f in lacking(c)) or "modern" for c in COMBOS])
-def test_every_combination(browser, combo):
-    base = modern(browser)
+def test_every_combination(pages, browser, combo):
+    base = modern(pages)
     miss = lacking(combo)
-    ctx, page, sim = page_for(browser, simulate(combo))
+    ctx, page, sim = page_for(pages, simulate(combo))
     layer = page.evaluate("window.__hidfiLegacy ? {pe: __hidfiLegacy.pe, fg: __hidfiLegacy.fg} : null")
     trigger = [f for f in miss if f != "flexgap"]
     assert (layer is not None) == bool(trigger), f"layer {'ran' if layer else 'did not run'} lacking {miss}"
@@ -105,7 +107,7 @@ def test_every_combination(browser, combo):
     bad = []
     for v in VIEWS:
         page.evaluate(f"go('{v}')")
-        page.wait_for_timeout(250)
+        settle(page)
         got = page.evaluate(RECTS)
         for k, r in base[v].items():
             o = got.get(k)

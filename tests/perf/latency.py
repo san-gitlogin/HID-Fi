@@ -48,6 +48,13 @@ def center(page, sel):
 
 def run(browser, rate, legacy, n=25, busy=0):
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+    try:
+        return _run(ctx, rate, legacy, n, busy)
+    finally:
+        ctx.close()      # a failed measurement must not leave its page open (CI ran out of memory that way)
+
+
+def _run(ctx, rate, legacy, n, busy):
     page = ctx.new_page()
     if legacy:
         page.add_init_script(LEGACY)
@@ -101,7 +108,6 @@ def run(browser, rate, legacy, n=25, busy=0):
         paints += page.evaluate("__lat.paint.splice(0)")
         page.evaluate("__lat.send.length=0")
     out["tab tap -> painted"] = paints
-    ctx.close()
     return out
 
 

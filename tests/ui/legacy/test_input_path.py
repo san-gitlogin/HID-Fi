@@ -9,6 +9,7 @@
 import pytest
 
 from support import dashboard
+from support.legacy_wait import settle
 from support.board_sim import BoardSim
 
 pytestmark = pytest.mark.ui
@@ -17,21 +18,22 @@ COUNT_FRAMES = """window.__raf=0;(function(){var r=window.requestAnimationFrame;
   window.requestAnimationFrame=function(f){window.__raf++;return r.call(window,f);};})();"""
 
 
-def open_page(browser, init="", gamepad=False):
-    ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+def open_page(pages, init="", gamepad=False):
+    ctx = pages(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
     page = ctx.new_page()
     page.add_init_script(init)
     sim = BoardSim()
     sim.gamepad = gamepad          # off until switched on (the board re-enumerates)
     sim.attach(page, dashboard.extract_html())
     page.goto(sim.URL)
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(300)
+    settle(page)
     return ctx, page, sim
 
 
 @pytest.mark.parametrize("tab", ["pad", "game", "keys"])
-def test_nothing_runs_while_nobody_touches(browser, tab):
-    ctx, page, _ = open_page(browser, COUNT_FRAMES)
+def test_nothing_runs_while_nobody_touches(pages, browser, tab):
+    ctx, page, _ = open_page(pages, COUNT_FRAMES)
     page.evaluate(f"go('{tab}')")
     page.wait_for_timeout(800)
     before = page.evaluate("__raf")
@@ -41,8 +43,8 @@ def test_nothing_runs_while_nobody_touches(browser, tab):
     assert frames == 0, f"{frames} frame callbacks in 2 s on an idle {tab} tab"
 
 
-def test_a_gamepad_tap_faster_than_a_frame_reaches_the_computer(browser):
-    ctx, page, sim = open_page(browser, gamepad=True)
+def test_a_gamepad_tap_faster_than_a_frame_reaches_the_computer(pages, browser):
+    ctx, page, sim = open_page(pages, gamepad=True)
     page.evaluate("go('game')")
     page.wait_for_timeout(500)
     n = len(sim.log)

@@ -16,6 +16,7 @@ import re
 import pytest
 
 from support import dashboard
+from support.legacy_wait import settle
 from support.board_sim import BoardSim
 
 pytestmark = pytest.mark.ui
@@ -46,31 +47,32 @@ VIEWS = ["pad", "screen", "keys", "short", "media", "game", "power", "setup"]
 SCREENS = [("ipad air", 768, 1024), ("iphone 5s", 320, 568), ("pi 7in", 800, 480)]
 
 
-def open_page(browser, w, h, init="", motion="reduce"):
-    ctx = browser.new_context(viewport={"width": w, "height": h}, has_touch=True, is_mobile=w < 900, reduced_motion=motion)
+def open_page(pages, w, h, init="", motion="reduce"):
+    ctx = pages(viewport={"width": w, "height": h}, has_touch=True, is_mobile=w < 900, reduced_motion=motion)
     page = ctx.new_page()
     page.add_init_script(PIN_RTT + init)
     sim = BoardSim()
     sim.attach(page, dashboard.extract_html())
     page.goto(sim.URL)
-    page.wait_for_timeout(700)
+    page.wait_for_timeout(300)
+    settle(page)
     return ctx, page, sim
 
 
-def test_a_current_browser_never_runs_the_layer(browser):
-    ctx, page, _ = open_page(browser, 390, 844)
+def test_a_current_browser_never_runs_the_layer(pages, browser):
+    ctx, page, _ = open_page(pages, 390, 844)
     assert page.evaluate("window.__hidfiLegacy === undefined")
     ctx.close()
 
 
 @pytest.mark.parametrize("name,w,h", SCREENS, ids=[s[0] for s in SCREENS])
-def test_every_tab_lays_out_exactly_as_the_modern_page(browser, name, w, h):
+def test_every_tab_lays_out_exactly_as_the_modern_page(pages, browser, name, w, h):
     got = {}
     for init in ("", IOS12):
-        ctx, page, _ = open_page(browser, w, h, init)
+        ctx, page, _ = open_page(pages, w, h, init)
         for v in VIEWS:
             page.evaluate(f"go('{v}')")
-            page.wait_for_timeout(250)
+            settle(page)
             got.setdefault(v, []).append(page.evaluate(RECTS))
             if init:
                 left = page.evaluate(NATIVE_GAP)
@@ -86,8 +88,8 @@ def test_every_tab_lays_out_exactly_as_the_modern_page(browser, name, w, h):
     assert not bad, f"{len(bad)} elements differ on {name}:\n  " + "\n  ".join(bad[:15])
 
 
-def test_what_is_left_of_the_stylesheet_ios12_can_read(browser):
-    ctx, page, _ = open_page(browser, 768, 1024, IOS12)
+def test_what_is_left_of_the_stylesheet_ios12_can_read(pages):
+    ctx, page, _ = open_page(pages, 768, 1024, IOS12)
     css = page.evaluate("__hidfiLegacy.css")
     ctx.close()
     for token in ("dvh", "svh", "clamp(", "color-mix(", ":is(", ":where("):
@@ -98,8 +100,8 @@ def test_what_is_left_of_the_stylesheet_ios12_can_read(browser):
     assert not [s for s in re.findall(r"([^{}]+)\{", css) if ":has(" in s and "," in s]
 
 
-def test_touches_alone_drive_the_pad_keys_and_buttons(browser):
-    ctx, page, sim = open_page(browser, 768, 1024, IOS12 + NO_POINTER)
+def test_touches_alone_drive_the_pad_keys_and_buttons(pages, browser):
+    ctx, page, sim = open_page(pages, 768, 1024, IOS12 + NO_POINTER)
     assert page.evaluate("typeof PointerEvent") == "undefined"
     cdp = ctx.new_cdp_session(page)
 
@@ -134,11 +136,11 @@ def test_touches_alone_drive_the_pad_keys_and_buttons(browser):
 
 
 @pytest.mark.parametrize("motion", ["reduce", "no-preference"])
-def test_the_layer_settles_on_an_idle_page(browser, motion):
-    ctx, page, _ = open_page(browser, 800, 480, IOS12, motion)
+def test_the_layer_settles_on_an_idle_page(pages, browser, motion):
+    ctx, page, _ = open_page(pages, 800, 480, IOS12, motion)
     for v in VIEWS[:4]:
         page.evaluate(f"go('{v}')")
-        page.wait_for_timeout(250)
+        settle(page)
     before = page.evaluate("__hidfiLegacy.runs")
     page.wait_for_timeout(3000)
     runs = page.evaluate("__hidfiLegacy.runs") - before
