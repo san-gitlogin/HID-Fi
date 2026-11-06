@@ -122,6 +122,62 @@ Feature: When the home network has a bad night
     Then a confirmation asking "will not join it again" was shown
     And the board does not receive "wifi_forget"
 
+  # ---- the network your devices use (docs/DECISIONS.md D-02) ------------------------
+
+  Scenario: Signing in over the home network marks it as where the board is used
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#savedNets" contains "you have used the board over this one"
+    And "#savedNets" contains "preferred"
+    And the board prefers "HomeNet"
+
+  Scenario: The network you use is marked, and another can be preferred
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the board is used over "HomeNet"
+    And the dashboard is open
+    And I will answer "no" to the next question
+    When I open the "Settings" tab
+    And I prefer the saved network "Bangalore"
+    Then a confirmation asking "moves there by itself when nobody is using it" was shown
+    And the board receives {"cmd": "wifi_prefer", "ssid": "Bangalore", "now": false}
+    And I see the message "the board moves there when nobody is using it here"
+    And the board prefers "Bangalore"
+
+  Scenario: Preferring a network and moving now
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the board is used over "HomeNet"
+    And the dashboard is open
+    And I will answer "yes" to the next question
+    When I open the "Settings" tab
+    And I prefer the saved network "Bangalore"
+    Then the board receives {"cmd": "wifi_prefer", "ssid": "Bangalore", "now": true}
+    And I see the message "Moving to Bangalore"
+
+  Scenario: The paired computer's network says so
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the paired computer uses "Bangalore"
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#savedNets" contains "your paired computer uses this one"
+    And the board prefers "Bangalore"
+
+  Scenario: A board nobody uses on one network tries the next, and says so
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And in the air "HomeNet" is strong and "Bangalore" is weaker
+    And the dashboard is open
+    When nobody uses the board on "HomeNet" for 5 minutes
+    Then I see the message "Nobody used the board on HomeNet - trying Bangalore"
+
+  Scenario: Back where it is used, it says so
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the board is used over "Bangalore"
+    And in the air "HomeNet" is strong and "Bangalore" is weaker
+    And the dashboard is open
+    When the board looks at whether to move
+    Then I see the message "Moving to the network it is used over: Bangalore"
+
   Scenario: Forgetting a network removes only that one
     Given the board has saved the networks "Bangalore, HomeNet"
     And the dashboard is open

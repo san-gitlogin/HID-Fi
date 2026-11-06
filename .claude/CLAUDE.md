@@ -137,6 +137,11 @@ diagnose from the USB device list rather than from serial noise you are causing.
 
 ## Expected working style
 
+**Read [`docs/DECISIONS.md`](../docs/DECISIONS.md) before changing a behaviour.**
+It says why things are the way they are, in the owner's words, and which tests hold
+each decision. A change that goes against an entry is a new entry that revises it,
+never a quietly edited test.
+
 Verify rather than assume — read the ESP32 core source or the vendor guide when
 behaviour is surprising. Several conclusions here came from discovering the core
 never calls a function it should. State plainly what could not be tested and why,

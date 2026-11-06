@@ -2116,7 +2116,7 @@ L.ms=Date.now()-t0;
             <div class="tx"><b id="joinTitle">Joining</b><span id="joinMsg" style="white-space:normal"></span></div>
           </div>
           <div class="bar" id="joinBar" style="display:none"><i></i></div>
-          <p class="hint" style="margin:12px 0 6px"><b>Saved networks</b> &mdash; the board joins whichever one is in range, like a phone. Up to five.</p>
+          <p class="hint" style="margin:12px 0 6px"><b>Saved networks</b> &mdash; up to five. The board joins the one you use it over (your paired computer's first), so it stays where your devices can reach it; the strongest only when it has nothing else to go on. <b>Prefer</b> another to move it there.</p>
           <div class="list" id="savedNets"></div>
           <button class="btn sm blk" id="btnScan" style="margin-top:12px">Scan networks</button>
           <div class="list" id="wifiList" style="margin-top:10px"></div>
@@ -2414,6 +2414,9 @@ function connect(){
       else if(m.event==='sta_online'){if(m.mdns)MDNS_NAME=m.mdns;noteHomeIp(m.ip);refresh();}
       else if(m.event==='factory_reset_request')frAsk({name:m.name,request:m.request});
       else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
+      // D-02: it moves to where it is used - never while someone signed in over the
+      // home network is on it, so this reaches pages on its own WiFi.
+      else if(m.event==='wifi_moving')toast((m.why==='looking'?'Nobody used the board on '+(m.from||'')+' - trying ':'Moving to the network it is used over: ')+(m.to||''),'ok');
       else if(m.event==='companion_pending'){toast((m.name||'A computer')+' wants to share its screen','ok');scrList();}
       else if(m.event==='companion_online')scrList();
       else if(m.event==='ota_progress'||m.event==='ota')otaEvent(m);
@@ -6003,8 +6006,9 @@ function joinWifi(ssid){
 // The board is never unreachable during a join because its own access point
 // stays up throughout, so we can keep asking it what is happening.
 let joinPoll=0;
-// Saved networks: the board remembers up to five and joins the strongest one in
-// range. Passwords never come back; only names and whether each has worked.
+// Saved networks: the board remembers up to five and joins the one it is used over
+// (docs/DECISIONS.md D-02). Passwords never come back; only names, whether each has
+// worked, and which one is preferred.
 function loadSavedNets(){
   send({cmd:'wifi_networks'},r=>{
     const l=$('savedNets');if(!l||!r||r.status!=='ok')return;
@@ -6012,9 +6016,25 @@ function loadSavedNets(){
     if(!n.length){l.innerHTML='<p class="hint">None yet. Scan below and pick your network.</p>';return;}
     l.innerHTML=n.map(x=>
       '<div class="item">'+ico('wifi')+'<div class="tx"><b>'+esc(x.ssid)+
+      (x.preferred?' <span class="tag">preferred</span>':'')+
       (x.current?' <span class="tag">connected</span>':'')+(x.static?' <span class="tag">fixed IP</span>':'')+'</b>'+
-      '<span>'+(x.refused?'the router refused the password - enter it again':x.proven?'has worked before':'not joined yet')+'</span></div>'+
+      '<span>'+(x.refused?'the router refused the password - enter it again':
+        x.computer?'your paired computer uses this one':x.used?'you have used the board over this one':
+        x.proven?'has worked before':'not joined yet')+'</span></div>'+
+      (x.preferred?'':'<button class="btn sm" data-prefer="'+esc(x.ssid)+'" aria-label="Prefer '+esc(x.ssid)+'">Prefer</button>')+
       '<button class="iconbtn" data-forget="'+esc(x.ssid)+'" aria-label="Forget '+esc(x.ssid)+'">'+ico('trash','ic-sm')+'</button></div>').join('');
+    l.querySelectorAll('[data-prefer]').forEach(b=>b.onclick=()=>{
+      const ssid=b.dataset.prefer, on=n.find(x=>x.current);
+      // Moving now takes the board away from this page until the phone is on that
+      // network too, so it is asked; otherwise it moves when nobody is using it here.
+      const now=!!on&&confirm('Move the board to "'+ssid+'" now?\n\nThis page loses it until your phone is on "'+ssid+
+        '" too. Cancel, and it moves there by itself when nobody is using it on "'+on.ssid+'".');
+      send({cmd:'wifi_prefer',ssid:ssid,now:now},r=>{
+        if(!r||r.status!=='ok'){toast((r&&r.message)||'Could not change it','bad');return;}
+        toast(r.on_it||!on?ssid+' is preferred':now?'Moving to '+ssid:ssid+' is preferred - the board moves there when nobody is using it here','ok');
+        loadSavedNets();refresh();
+      });
+    });
     l.querySelectorAll('[data-forget]').forEach(b=>b.onclick=()=>{
       const ssid=b.dataset.forget, cur=n.find(x=>x.ssid===ssid&&x.current);
       if(!confirm('Forget "'+ssid+'"? The board will not join it again unless you add it.'+

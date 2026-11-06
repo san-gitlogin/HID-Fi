@@ -514,14 +514,20 @@ things are checked instead:
 
 ### Saved networks
 
-The board remembers up to five networks, most recently used first, and joins
-the strongest one in range - like a phone.
+The board remembers up to five networks, most recently used first. It joins the
+one an owner device uses it over - a dashboard signed in over the home network, or
+the paired Companion, which ranks first - while that one is workable (-75 dBm or
+better). Otherwise, and on a board nobody has used over a network yet, it joins the
+strongest in range. Saved networks on one subnet (a router and its extender) count
+as one network, so the strongest of those wins. The rules and why:
+[DECISIONS.md](DECISIONS.md) D-02.
 
 | Command | Parameters | Reply |
 |---|---|---|
 | `wifi_configure` | `ssid`, `password`, optional fixed IP | adds the network (or updates it) at the front and joins it. With five saved, the oldest is forgotten |
-| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again). Never a password. `max`: 5 |
+| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first). Never a password. `max`: 5 |
 | `wifi_forget` | `ssid` | `wifi_forgotten` with `left`. Forgetting the connected one leaves it, and the board looks for another |
+| `wifi_prefer` | `ssid`, optional `now` | `wifi_prefer` with `on_it`. Makes it the preferred network, ranked as the paired computer's would be. The board moves there when nobody is using it on the network it is on, or at once with `now: true` |
 | `wifi_disconnect` | - | forgets every saved network |
 
 `status` adds `sta_known` (how many are saved), `sta_away` (none of them in
@@ -563,9 +569,20 @@ drives the radio.
 | `sta_down_s` | seconds without the home network, while it is away |
 | `sta_retry_in_s` | seconds to the next attempt |
 | `sta_reason` | why the router let the board go, e.g. `BEACON_TIMEOUT` (router gone) or `AUTH_FAIL` |
+| `wifi_preferred` | the saved network the board joins first, `""` while nobody has used it over one |
+| `wifi_choice` | why it is on this network: `preferred`, `strongest`, `coming_home` or `looking`; `""` while offline |
 
 Pushed to every open dashboard: `{"event":"sta_online","ip":...,"changed":true,"prev_ip":...,"mdns":...}`
 when the board is back (or at a new address), and `{"event":"ap_restored","why":"home network lost"}`.
+
+While online, the board checks every 2 minutes whether to move, and only when
+there is something to decide:
+- **Coming home:** it is off the preferred network, and that network is workable.
+- **Looking:** it is on a network nobody has used, nobody came within 5 minutes,
+  and another saved network it has not tried since starting is in range.
+
+It never moves while an owner device is using it. Before leaving it pushes
+`{"event":"wifi_moving","from":...,"to":...,"why":"coming_home"|"looking"}`.
 
 **Finding the board after its address changed.** It always answers at
 `http://esp-hid-XXXXXX.local/` (shown in Settings - bookmark that), it advertises

@@ -70,6 +70,13 @@ behaviour from its name.
 **Do not trust documentation over code.** If a doc and the source disagree, the
 source wins and the doc needs fixing.
 
+**Read [docs/DECISIONS.md](docs/DECISIONS.md) before changing a behaviour.** Each
+entry is a decision the owner made, why (often in their words), and the tests
+holding it. Going against one means adding an entry that revises it and pointing
+both at the tests, never quietly editing a test until it passes. The owner should
+not have to remember why something was built; this file does.
+`tests/static/test_decisions.py` fails if a named test disappears.
+
 ---
 
 ## Flashing

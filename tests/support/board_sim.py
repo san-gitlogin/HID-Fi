@@ -180,6 +180,10 @@ class BoardSim:
         # what is in range right now: ssid -> RSSI (a scenario sets it).
         self.nets = []                     # [{"ssid", "password", "proven", "static", "refused"}]
         self.air = {}
+        # D-02 (docs/DECISIONS.md): rows of self.nets may carry subnet, used, computer
+        # and tried - what the firmware remembers; use_count is its netUseCount.
+        self.use_count = 0
+        self.net_why = ""
         self.scans = 0
         self.away = False
         self.networks = [{"ssid": "HomeNet", "rssi": -48, "quality": "excellent", "channel": 6, "encryption": "WPA2"},
@@ -250,6 +254,8 @@ class BoardSim:
             **({"sta_retry_in_s": 3} if self.sta["phase"] == "reconnecting" else {}),
             **({"sta_reason": self.net["reason"]} if self.net["reason"] and not online else {}),
             "wifi_ssid": self.sta["ssid"] if online else "",
+            "wifi_preferred": (self.nets[self.net_preferred()]["ssid"] if self.net_preferred() is not None else ""),
+            "wifi_choice": self.net_why if online else "",
             "wifi_rssi": -48 if online else 0, "wifi_quality": "excellent" if online else "",
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
             "mac": self.mac, "ap_mac": "BA" + self.mac[2:], "ws_clients": sum(1 for k in self.sockets if k["open"]),
@@ -725,18 +731,96 @@ class BoardSim:
             row.update(proven=True, refused=False)
             self.nets.insert(0, row)
 
+    # ---- net_logic.h, the same rules (checked against it in tests/unit/test_net_logic.py)
+    WORKABLE, LOOK_S = -75, 300
+
+    def _users(self):
+        return [i for i, n in enumerate(self.nets) if n.get("used") or n.get("computer")]
+
+    def net_preferred(self):
+        """netPreferred(): the paired computer's network, else the one used most recently."""
+        u = self._users()
+        return max(u, key=lambda i: (bool(self.nets[i].get("computer")), self.nets[i].get("used", 0), -i)) if u else None
+
+    def _same(self, a, b):
+        return a == b or (self.nets[a].get("subnet", 0) != 0 and self.nets[a].get("subnet") == self.nets[b].get("subnet"))
+
+    def _best_of(self, p):
+        c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
+             if not n["refused"] and self._same(i, p) and n["ssid"] in self.air]
+        return (-max(c)[1], max(c)[0]) if c else (None, None)
+
+    def net_choose(self):
+        """netChoose(): (index, why) or (None, "")."""
+        p = self.net_preferred()
+        if p is not None:
+            i, r = self._best_of(p)
+            if i is not None and r >= self.WORKABLE:
+                return i, "preferred"
+        for allow_tried in (False, True):
+            c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
+                 if not n["refused"] and (allow_tried or not n.get("tried")) and n["ssid"] in self.air]
+            if c:
+                return -max(c)[1], "strongest"
+        return None, ""
+
+    def net_move(self, here_s, owner_now=False):
+        """netMoveFrom() for the network the board is on: (ssid it would move to, why) or (None, "")."""
+        cur = next((i for i, n in enumerate(self.nets) if n["ssid"] == self.sta["ssid"]), None)
+        if cur is None or owner_now:
+            return None, ""
+        p = self.net_preferred()
+        if p is not None and not self._same(cur, p):
+            i, r = self._best_of(p)
+            if i is not None and r >= self.WORKABLE:
+                return self.nets[i]["ssid"], "coming_home"
+        if any(self._same(i, cur) for i in self._users()) or here_s < self.LOOK_S:
+            return None, ""
+        c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
+             if not n["refused"] and not n.get("tried") and not self._same(i, cur) and n["ssid"] in self.air]
+        return (self.nets[-max(c)[1]]["ssid"], "looking") if c else (None, "")
+
+    def net_check(self, here_s, owner_now=False):
+        """netMaybeMove(): the look while online; moving tells the pages, then joins."""
+        to, why = self.net_move(here_s, owner_now)
+        if to is None:
+            return None
+        frm = self.sta["ssid"]
+        if why == "looking":
+            next(n for n in self.nets if n["ssid"] == frm)["tried"] = True
+        self._push({"event": "wifi_moving", "from": frm, "to": to, "why": why})
+        self.net_search()
+        return self.sta["ssid"]
+
+    def owner_here(self, computer=False):
+        """netOwnerHere(): an owner device reached the board over the network it is on."""
+        with self.lock:
+            if self.sta["phase"] != "online":
+                return
+            row = next((n for n in self.nets if n["ssid"] == self.sta["ssid"]), None)
+            if row is None:
+                return
+            if not row.get("used") or row.get("used") != self.use_count:
+                self.use_count += 1
+                row["used"] = self.use_count
+            if computer and not row.get("computer"):
+                for n in self.nets:
+                    n["computer"] = False
+                row["computer"] = True
+            row["tried"] = False
+
     def net_search(self):
-        """staSuperviseScan(): the strongest saved network in range, or away."""
+        """staSuperviseScan(): netChoose() over the saved networks in range, or away."""
         with self.lock:
             self.scans += 1
-            seen = [(self.air[n["ssid"]], -i, n) for i, n in enumerate(self.nets)
-                    if n["ssid"] in self.air and not n["refused"]]
-            if not seen:
+            i, why = self.net_choose()
+            if i is None:
                 self.away = True
                 self.sta.update(phase="reconnecting", ip="", error="No saved network in range.")
                 return None
             self.away = False
-            best = max(seen, key=lambda t: (t[0], t[1]))[2]
+            self.net_why = why
+            best = self.nets[i]
             ip = self.net["last_ip"] or "192.168.1.77"
         self.net_back(ip)
         with self.lock:
@@ -900,6 +984,8 @@ class BoardSim:
             if self._pin_check(b.get("token", "")):
                 if sock:
                     sock["authed"] = True
+                if transport != "serial" and self.peer and not str(self.peer).startswith("192.168.4."):
+                    self.owner_here()              # D-02: signed in over the home network
                 return OK("auth_ok")
             r = E("Wrong PIN", reply="auth_failed")
             if self.pin_locked():
@@ -1286,8 +1372,31 @@ class BoardSim:
                      "current": online and n["ssid"] == self.sta["ssid"]}
                 if n["refused"]:
                     o["refused"] = True
+                if n.get("used"):
+                    o["used"] = True
+                if n.get("computer"):
+                    o["computer"] = True
                 nets.append(o)
+            p = self.net_preferred()
+            if p is not None:
+                nets[p]["preferred"] = True
             return OK("wifi_networks", max=5, networks=nets)
+        if c == "wifi_prefer":
+            ssid = b.get("ssid", "")
+            row = next((n for n in self.nets if n["ssid"] == ssid), None)
+            if row is None:
+                return E("Not a saved network")
+            self.use_count += 1
+            row["used"] = self.use_count
+            for n in self.nets:
+                n["computer"] = n is row
+            row["tried"] = False
+            cur = next((i for i, n in enumerate(self.nets) if n["ssid"] == self.sta["ssid"]), None)
+            on_it = self.sta["phase"] == "online" and cur is not None and self._same(cur, self.nets.index(row))
+            if not on_it and b.get("now") and row["ssid"] in self.air:
+                self.sta.update(ssid=row["ssid"])
+                self.net_why = "preferred"
+            return OK("wifi_prefer", ssid=ssid, on_it=on_it)
         if c == "wifi_forget":
             ssid = b.get("ssid", "")
             row = next((n for n in self.nets if n["ssid"] == ssid), None)

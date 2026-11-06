@@ -311,6 +311,8 @@ class CompanionBoard:
             return self._refuse(401, "bad_mac", "The heartbeat proof is wrong")
         was = self.online(c)
         c.update(ip=ip, port=port, fp=b["fp"], tn=b["tn"], seen=self._now())
+        if not str(ip).startswith("192.168.4."):        # D-02: the paired computer anchors this network
+            self.sim.owner_here(computer=True)
         if not was:
             self.sim._push({"event": "companion_online", "name": c["name"]})
         return 200, {"status": "ok"}

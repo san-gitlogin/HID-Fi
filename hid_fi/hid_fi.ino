@@ -276,6 +276,15 @@ String   netSsid[NET_MAX], netPass[NET_MAX], netIp[NET_MAX], netGw[NET_MAX], net
 bool     netOk[NET_MAX];              // has been online with these credentials
 bool     netBad[NET_MAX];             // the router refused this new password: skip until re-entered
 uint32_t netCoolUntil[NET_MAX];       // a worked-before network refusing its password: rest until then
+// Where the board is used (docs/DECISIONS.md D-02, choices in net_logic.h):
+uint32_t netNet[NET_MAX];             // the subnet it was on when joined (address & mask); 0 never
+uint32_t netUsed[NET_MAX];            // when an owner device last reached the board over it; 0 never
+bool     netAnchor[NET_MAX];          // the paired computer last reached it over this one
+bool     netTried[NET_MAX];           // since start: joined, and no owner device came (not saved)
+uint32_t netUseCount = 0;             // the highest netUsed - "used" is a counter, not a clock
+int8_t   netWhy = NET_NONE;           // why the board chose the network it is on
+uint32_t netCheckAt = 0;              // the next look, while online, at whether to move
+bool     netMoveScan = false;         // that look's scan is in flight
 uint8_t  netCount = 0;
 int8_t   netCurrent = -1;             // the row being joined or joined
 bool     staScanPending = false;      // the supervisor started a scan and is waiting for it
@@ -793,6 +802,8 @@ const char* wlStatusStr(int s);
 void setupWebRoutes();
 void checkWifiConnection();
 void staCameOnline(const String& ip);
+void netOwnerHere(bool computer);
+void netMaybeMove();
 void onStaEvent(arduino_event_id_t event, arduino_event_info_t info);
 void staWentAway();
 void staScheduleRetry();
@@ -805,6 +816,7 @@ void netSave();
 void netLoad(const String& legacySsid, const String& legacyPass);
 void handleWifiNetworks();
 void handleWifiForget(const JsonDocument& inDoc);
+void handleWifiPrefer(const JsonDocument& inDoc);
 void handleNetFault(const JsonDocument& inDoc);
 void handleInternetShare(const JsonDocument& inDoc);
 void applyInternetShare();
@@ -1975,6 +1987,14 @@ void staCameOnline(const String& ip) {
     staLastIp = ip;
     staProven = true;
     staAway = false;
+    // Which network this is, by its subnet: a router and its extender share one (D-02).
+    bool netDirty = false;
+    if (netCurrent >= 0 && netCurrent < netCount) {
+        uint32_t sn = (uint32_t)WiFi.localIP() & (uint32_t)WiFi.subnetMask();
+        if (sn && sn != netNet[netCurrent]) { netNet[netCurrent] = sn; netDirty = true; }
+    }
+    netCheckAt = millis() + 120000;
+    netMoveScan = false;
     staScanPending = false;
     staBlindRound = 0;                     // a new outage counts its rounds from the start
     // The network that worked goes to the front, proven - as on a phone.
@@ -1983,7 +2003,9 @@ void staCameOnline(const String& ip) {
         netBad[netCurrent] = false;
         netToFront(netCurrent);
         netSave();
+        netDirty = false;
     }
+    if (netDirty) netSave();
     // mDNS answers on the new address, not the old one.
     if (changed && mdnsName.length()) {
         MDNS.end();
@@ -2089,8 +2111,10 @@ void checkWifiConnection() {
     if (up) {
         String ip = WiFi.localIP().toString();
         if (!wifiConnected || ip != wifiIP) staCameOnline(ip);
+        netMaybeMove();
         return;
     }
+    netMoveScan = false;
     if (wifiConnected) staWentAway();
     if (!netCount) return;
 
@@ -2105,6 +2129,86 @@ void checkWifiConnection() {
     staScans++;
 }
 
+// ---- where the board is used (docs/DECISIONS.md D-02) ------------------------
+// An owner device reached the board over the home network: a dashboard signed in
+// from it, or the paired Companion (computer). That network becomes the one the
+// board prefers. Saved only when it changes, so the flash is not worn by use.
+void netOwnerHere(bool computer) {
+    if (!wifiConnected || netCurrent < 0 || netCurrent >= netCount) return;
+    int i = netCurrent;
+    bool dirty = false;
+    if (!netUsed[i] || netUsed[i] != netUseCount) { netUsed[i] = ++netUseCount; dirty = true; }
+    if (computer && !netAnchor[i]) {
+        for (int k = 0; k < netCount; k++) netAnchor[k] = false;
+        netAnchor[i] = true;
+        dirty = true;
+    }
+    netTried[i] = false;
+    if (dirty) { netSave(); COM_SERIAL.printf("[NET] %s is where the board is used%s\n", netSsid[i].c_str(), computer ? " (the paired computer)" : ""); }
+}
+
+// Someone is using the board over the home network right now: a signed-in page
+// or the paired Companion. The board never moves away from them.
+bool netOwnerNow() {
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) if (wsAuthed[i] && wsFromLan[i] && webSocket.clientIsConnected(i)) return true;
+    return compOnlineCount() > 0;
+}
+
+void netKnown(NetKnown* k) {
+    for (int i = 0; i < netCount; i++) {
+        bool staged = netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid);   // staged absence
+        bool cooling = netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0;
+        k[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling, netNet[i], netUsed[i], netAnchor[i], netTried[i]};
+    }
+}
+
+const char* netWhyName(int why) {
+    switch (why) { case NET_PREFERRED: return "preferred"; case NET_STRONGEST: return "strongest";
+                   case NET_COMING_HOME: return "coming_home"; case NET_LOOKING: return "looking"; default: return ""; }
+}
+
+// While online: every 2 minutes, and only when there is something to decide - off
+// the preferred network, or on one nobody has used - scan, and move if net_logic.h
+// says so. Moving is forgetting the connection: the supervisor then chooses again
+// with netChoose(), exactly as after a drop.
+void netMaybeMove() {
+    if (netMoveScan) {
+        int16_t n = WiFi.scanComplete();
+        if (n == WIFI_SCAN_RUNNING) return;
+        netMoveScan = false;
+        if (n < 0 || netCurrent < 0 || netCurrent >= netCount) return;
+        std::vector<String> names(n);
+        std::vector<NetSeen> seen(n);
+        for (int s = 0; s < n; s++) { names[s] = WiFi.SSID(s); seen[s] = {names[s].c_str(), (int)WiFi.RSSI(s)}; }
+        NetKnown k[NET_MAX];
+        netKnown(k);
+        int why = NET_NONE;
+        int to = netMoveFrom(k, netCount, netCurrent, seen.data(), n, millis() - staOnlineSince, netOwnerNow(), &why);
+        WiFi.scanDelete();
+        if (to < 0) return;
+        if (why == NET_LOOKING) netTried[netCurrent] = true;
+        COM_SERIAL.printf("[NET] %s: leaving %s for %s\n", why == NET_LOOKING ? "Nobody came" : "Coming home",
+                          netSsid[netCurrent].c_str(), netSsid[to].c_str());
+        StaticJsonDocument<192> ev;
+        ev["event"] = "wifi_moving"; ev["from"] = netSsid[netCurrent]; ev["to"] = netSsid[to]; ev["why"] = netWhyName(why);
+        broadcastJson(ev);
+        WiFi.disconnect(false);
+        staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
+        return;
+    }
+    if (netCurrent < 0 || netCurrent >= netCount || (long)(millis() - netCheckAt) < 0) return;
+    netCheckAt = millis() + 120000;
+    NetKnown k[NET_MAX];
+    netKnown(k);
+    int p = netPreferred(k, netCount);
+    bool away = p >= 0 && !netSameNet(k, netCurrent, p);
+    bool unused = true;
+    for (int i = 0; i < netCount; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, netCurrent)) unused = false;
+    if (!away && !(unused && millis() - staOnlineSince >= NET_LOOK_MS)) return;
+    if (netOwnerNow()) return;
+    if (WiFi.scanNetworks(true) != WIFI_SCAN_FAILED) netMoveScan = true;
+}
+
 // The scan the supervisor started has finished (or not yet): pick the strongest
 // saved network in range and join it; with none in range, wait - longer the
 // longer the board has been away - and now and then try a proven one unseen,
@@ -2117,13 +2221,11 @@ void staSuperviseScan() {
     std::vector<String> names(n > 0 ? n : 0);
     std::vector<NetSeen> seen(n > 0 ? n : 0);
     for (int k = 0; k < n; k++) { names[k] = WiFi.SSID(k); seen[k] = {names[k].c_str(), (int)WiFi.RSSI(k)}; }
-    NetSaved saved[NET_MAX];
-    for (int i = 0; i < netCount; i++) {
-        bool staged = netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid);   // staged absence
-        bool cooling = netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0;
-        saved[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling};
-    }
-    int best = netPickBest(saved, netCount, seen.data(), n > 0 ? n : 0);
+    NetKnown known[NET_MAX];
+    netKnown(known);
+    int why = NET_NONE;
+    int best = netChoose(known, netCount, seen.data(), n > 0 ? n : 0, &why);
+    netWhy = why;
     if (!staDownSince) staDownSince = millis();
     if (best < 0) {
         staAway = true;
@@ -2166,13 +2268,16 @@ void netToFront(int i) {
     if (i <= 0) return;
     String s = netSsid[i], p = netPass[i], ip = netIp[i], gw = netGw[i], m = netMask[i], d = netDns[i];
     bool ok = netOk[i], bad = netBad[i]; uint32_t cool = netCoolUntil[i];
+    uint32_t sn = netNet[i], us = netUsed[i]; bool an = netAnchor[i], tr = netTried[i];
     for (int k = i; k > 0; k--) {
         netSsid[k] = netSsid[k-1]; netPass[k] = netPass[k-1]; netIp[k] = netIp[k-1]; netGw[k] = netGw[k-1];
         netMask[k] = netMask[k-1]; netDns[k] = netDns[k-1]; netOk[k] = netOk[k-1]; netBad[k] = netBad[k-1];
         netCoolUntil[k] = netCoolUntil[k-1];
+        netNet[k] = netNet[k-1]; netUsed[k] = netUsed[k-1]; netAnchor[k] = netAnchor[k-1]; netTried[k] = netTried[k-1];
     }
     netSsid[0] = s; netPass[0] = p; netIp[0] = ip; netGw[0] = gw; netMask[0] = m; netDns[0] = d;
     netOk[0] = ok; netBad[0] = bad; netCoolUntil[0] = cool;
+    netNet[0] = sn; netUsed[0] = us; netAnchor[0] = an; netTried[0] = tr;
     if (netCurrent == i) netCurrent = 0; else if (netCurrent >= 0 && netCurrent < i) netCurrent++;
 }
 
@@ -2181,9 +2286,11 @@ void netRemove(int i) {
         netSsid[k] = netSsid[k+1]; netPass[k] = netPass[k+1]; netIp[k] = netIp[k+1]; netGw[k] = netGw[k+1];
         netMask[k] = netMask[k+1]; netDns[k] = netDns[k+1]; netOk[k] = netOk[k+1]; netBad[k] = netBad[k+1];
         netCoolUntil[k] = netCoolUntil[k+1];
+        netNet[k] = netNet[k+1]; netUsed[k] = netUsed[k+1]; netAnchor[k] = netAnchor[k+1]; netTried[k] = netTried[k+1];
     }
     netCount--;
     netSsid[netCount] = netPass[netCount] = "";
+    netNet[netCount] = netUsed[netCount] = 0; netAnchor[netCount] = netTried[netCount] = false;
     if (netCurrent == i) netCurrent = -1; else if (netCurrent > i) netCurrent--;
 }
 
@@ -2200,6 +2307,9 @@ void netSave() {
         StaticJsonDocument<384> d;
         d["s"] = netSsid[i]; d["p"] = netPass[i]; d["ok"] = netOk[i];
         if (netIp[i].length()) { d["ip"] = netIp[i]; d["gw"] = netGw[i]; d["mask"] = netMask[i]; d["dns"] = netDns[i]; }
+        if (netNet[i]) d["sn"] = netNet[i];
+        if (netUsed[i]) d["us"] = netUsed[i];
+        if (netAnchor[i]) d["an"] = true;
         String out; serializeJson(d, out);
         preferences.putString(key, out);
     }
@@ -2232,6 +2342,9 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netIp[netCount] = d["ip"] | ""; netGw[netCount] = d["gw"] | "";
         netMask[netCount] = d["mask"] | ""; netDns[netCount] = d["dns"] | "";
         netBad[netCount] = false; netCoolUntil[netCount] = 0;
+        netNet[netCount] = d["sn"] | 0u; netUsed[netCount] = d["us"] | 0u; netAnchor[netCount] = d["an"] | false;
+        netTried[netCount] = false;
+        if (netUsed[netCount] > netUseCount) netUseCount = netUsed[netCount];
         netCount++;
     }
     bool legacyOk = preferences.getBool("sta_ok", false);
@@ -2240,6 +2353,7 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netSsid[0] = legacySsid; netPass[0] = legacyPass; netOk[0] = legacyOk;
         netIp[0] = staWantIp; netGw[0] = staWantGw; netMask[0] = staWantMask; netDns[0] = staWantDns;
         netBad[0] = false; netCoolUntil[0] = 0;
+        netNet[0] = netUsed[0] = 0; netAnchor[0] = netTried[0] = false;
         netCount = 1;
         netSave();
         COM_SERIAL.printf("[WIFI] Saved network %s carried over from the single-network settings\n", legacySsid.c_str());
@@ -2251,6 +2365,9 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
 void handleWifiNetworks() {
     DynamicJsonDocument d(1536);
     d["status"] = "ok"; d["reply"] = "wifi_networks"; d["max"] = NET_MAX;
+    NetKnown known[NET_MAX];
+    netKnown(known);
+    int prefIdx = netPreferred(known, netCount);
     JsonArray a = d.createNestedArray("networks");
     for (int i = 0; i < netCount; i++) {
         JsonObject o = a.createNestedObject();
@@ -2259,7 +2376,37 @@ void handleWifiNetworks() {
         o["static"] = netIp[i].length() > 0;
         o["current"] = (i == netCurrent && wifiConnected);
         if (netBad[i]) o["refused"] = true;
+        if (netUsed[i]) o["used"] = true;                     // D-02: an owner device reached the board over it
+        if (netAnchor[i]) o["computer"] = true;               // the paired computer did
+        if (i == prefIdx) o["preferred"] = true;
     }
+    sendJson(d);
+}
+
+// The owner makes a saved network the preferred one (D-02, rule 8): it ranks as the
+// paired computer's would. The board moves there when nobody is using it on the one
+// it is on now, or at once with "now": true.
+void handleWifiPrefer(const JsonDocument& inDoc) {
+    String ssid = inDoc["ssid"] | "";
+    int i = netFind(ssid);
+    StaticJsonDocument<256> d;
+    if (i < 0) { d["status"] = "error"; d["message"] = "Not a saved network"; sendJson(d); return; }
+    netUsed[i] = ++netUseCount;
+    for (int k = 0; k < netCount; k++) netAnchor[k] = (k == i);
+    netTried[i] = false;
+    netSave();
+    bool here = wifiConnected && netCurrent >= 0 && netCurrent < netCount;
+    NetKnown known[NET_MAX];
+    netKnown(known);
+    bool onIt = here && netSameNet(known, netCurrent, i);
+    if (!onIt && (inDoc["now"] | false)) {
+        if (wifiConnected) WiFi.disconnect(false);
+        staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
+    } else if (!onIt) {
+        netCheckAt = millis();                       // look at once, then move when nobody is using it here
+    }
+    COM_SERIAL.printf("[WIFI] %s is preferred\n", ssid.c_str());
+    d["status"] = "ok"; d["reply"] = "wifi_prefer"; d["ssid"] = ssid; d["on_it"] = onIt;
     sendJson(d);
 }
 
@@ -2721,6 +2868,7 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "net_fault") == 0) handleNetFault(inDoc);
     else if (strcmp(cmd, "wifi_networks") == 0) handleWifiNetworks();
     else if (strcmp(cmd, "wifi_forget") == 0) handleWifiForget(inDoc);
+    else if (strcmp(cmd, "wifi_prefer") == 0) handleWifiPrefer(inDoc);
     else if (strcmp(cmd, "internet_share") == 0) handleInternetShare(inDoc);
     else if (strcmp(cmd, "actions") == 0) handleActions(inDoc);
     else if (strcmp(cmd, "open") == 0)    handleOpen(inDoc);
@@ -3670,6 +3818,13 @@ void buildStatusDoc(JsonDocument& doc) {
     // companion_list, which is PIN-gated like every command.
     doc["comp_paired"]  = compPairedCount();
     doc["comp_online"]  = compOnlineCount();
+    {   // D-02: which network the board prefers, and why it is on the one it is on
+        NetKnown known[NET_MAX];
+        netKnown(known);
+        int p = netPreferred(known, netCount);
+        doc["wifi_preferred"] = p >= 0 ? netSsid[p] : String("");
+        doc["wifi_choice"] = wifiConnected ? netWhyName(netWhy) : "";
+    }
     doc["comp_pending"] = compPendingCount();
     doc["ap_open"] = (apPassword.length() == 0);
     doc["ap_pass_generated"] = apPassGenerated;
@@ -5036,7 +5191,10 @@ void handleAuth(const JsonDocument& inDoc) {
     }
     bool ok = (cmdSource == SRC_SERIAL) ? (authToken == tk) : pinCheck(tk);
     if (ok) {
-        if (cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) wsAuthed[wsClientNum] = true;
+        if (cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) {
+            wsAuthed[wsClientNum] = true;
+            if (wsFromLan[wsClientNum]) netOwnerHere(false);          // D-02: the board is used over this network
+        }
         doc["status"]="ok"; doc["reply"]="auth_ok";
     } else {
         doc["status"]="error"; doc["reply"]="auth_failed"; doc["message"]="Wrong PIN";
@@ -5095,6 +5253,7 @@ void handleSetAuth(const JsonDocument& inDoc) {
     for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = (authToken.length() == 0);
     if (authToken.length() && cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) {
         wsAuthed[wsClientNum] = true;
+        if (wsFromLan[wsClientNum]) netOwnerHere(false);
     }
     if (wipeVault) COM_SERIAL.println("[AUTH] PIN replaced without the old one - vault erased");
     if (wipePairings) COM_SERIAL.println("[AUTH] PIN replaced without the old one - paired computers removed");

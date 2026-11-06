@@ -370,6 +370,8 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     strncpy(c.fp, fp, 64); c.fp[64] = 0;
     strncpy(c.tn, tn, 32); c.tn[32] = 0;
     c.seenAt = millis();
+    // D-02: the paired computer reaches the board over this network - it anchors it.
+    if (!clientIsAp(IPAddress(ip))) netOwnerHere(true);
     if (!wasOnline) {
         JsonDocument ev;
         ev["event"] = "companion_online"; ev["name"] = c.name;

@@ -81,6 +81,65 @@ def saved_networks(ctx, names):
     sim._net_worked(sim.sta["ssid"] or "HomeNet")                  # the one it is on has worked
 
 
+@given("this phone reaches the board over the home network")
+def phone_on_lan(ctx):
+    ctx["sim"].phone_on_lan = True
+
+
+@given(parsers.parse('the board is used over "{ssid}"'))
+def used_over(ctx, ssid):
+    sim = ctx["sim"]
+    row = next(n for n in sim.nets if n["ssid"] == ssid)
+    sim.use_count += 1
+    row["used"] = sim.use_count
+
+
+@given(parsers.parse('the paired computer uses "{ssid}"'))
+def computer_uses(ctx, ssid):
+    used_over(ctx, ssid)
+    for n in ctx["sim"].nets:
+        n["computer"] = n["ssid"] == ssid
+
+
+@given(parsers.parse('in the air "{strong}" is strong and "{weak}" is weaker'))
+def air_two(ctx, strong, weak):
+    sim = ctx["sim"]
+    sim.air = {strong: -50, weak: -68}
+    sim.sta.update(ssid=strong)
+
+
+@when(parsers.parse('nobody uses the board on "{ssid}" for 5 minutes'))
+def nobody_for_5(ctx, ssid):
+    sim = ctx["sim"]
+    for n in sim.nets:                         # nobody - not even this page, which is on the board's own WiFi
+        n["used"] = 0
+        n["computer"] = False
+    assert sim.sta["ssid"] == ssid
+    assert sim.net_check(300) is not None
+    ctx["ui"].idle(400)
+
+
+@when("the board looks at whether to move")
+def looks(ctx):
+    assert ctx["sim"].net_check(0) is not None
+    ctx["ui"].idle(400)
+
+
+@when(parsers.parse('I prefer the saved network "{ssid}"'))
+def prefer(ctx, ssid):
+    ui = ctx["ui"]
+    ui.page.wait_for_selector(f'#savedNets [data-prefer="{ssid}"]', timeout=5000)
+    ui.page.locator(f'#savedNets [data-prefer="{ssid}"]').click()
+    ui.idle(400)
+
+
+@then(parsers.parse('the board prefers "{ssid}"'))
+def board_prefers(ctx, ssid):
+    sim = ctx["sim"]
+    p = sim.net_preferred()
+    assert p is not None and sim.nets[p]["ssid"] == ssid, [(n["ssid"], n.get("used"), n.get("computer")) for n in sim.nets]
+
+
 @when(parsers.parse('I forget the saved network "{ssid}"'))
 def forget(ctx, ssid):
     ui = ctx["ui"]

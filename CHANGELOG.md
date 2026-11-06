@@ -9,6 +9,28 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ## Unreleased - recovery mode and factory reset (no COM port needed), old devices
 
+### Firmware: the network your devices use, not the strongest
+
+- At home with two routers, one board joined the stronger one (ARVISANTU C6, its
+  own subnet) while the Mac and the iPad were on ARVISANTU EXT, so nobody could
+  reach it. The board now learns where it is used and prefers that network:
+  - It learns from a dashboard signed in over the home network, and from the
+    paired Companion, which ranks first.
+  - Strength still decides between a router and its extender (same subnet), and on
+    a board nobody has used yet.
+  - A board nobody uses on one network tries the others once, after 5 minutes.
+  - A board off its preferred network comes back to it.
+  - It never moves while you are using it.
+- Settings marks the **preferred** network and offers **Prefer** (new
+  `wifi_prefer`). Status adds `wifi_preferred` and `wifi_choice`, and moving
+  pushes `wifi_moving`.
+- New: [docs/DECISIONS.md](docs/DECISIONS.md), which records why each behaviour
+  is the way it is, with the tests that hold it. A static test fails if a named
+  test disappears.
+- Tested on the host against an independent version of the rules, on 4,000
+  random homes, and the board model against the firmware's code on 1,500 more.
+  Planted bugs in each rule are all caught.
+
 ### Dashboard: old phones and tablets, and input latency
 
 - **Works on iOS 12.** An iPad Air, iPad mini 2 or 3, iPhone 5s or iPhone 6 (all
