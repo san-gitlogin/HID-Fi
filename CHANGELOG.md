@@ -7,7 +7,9 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased - recovery mode and factory reset (no COM port needed), old devices
+## v4.3 - 2026-11-06
+
+Recovery and factory reset without a COM cable; old phones and tablets; input with no frame waits; the network your devices use.
 
 ### Firmware: the network your devices use, not the strongest
 

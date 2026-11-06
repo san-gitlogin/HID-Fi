@@ -209,5 +209,11 @@
   "evidence": "esp32s3-libs/3.3.12/sdkconfig and every <variant>/include/sdkconfig.h: CONFIG_LWIP_DNS_MAX_HOST_IP=1; tests/unit/test_dep_watch.py::test_the_dns_cache_overflow_cannot_happen_in_the_pinned_core reads it",
   "date": "2026-10-30",
   "revisit": "a core whose ESP-IDF sets CONFIG_LWIP_DNS_MAX_HOST_IP above 1 (the test fails); move to a core with ESP-IDF >= 5.5.6 when one is released"
+ },
+ "GHSA-rjvf-fxv5-x87j": {
+  "reason": "BLE Mesh GATT server (ESP-IDF 5.5.5): the core's prebuilt libs have CONFIG_BLE_MESH=y, but HID-Fi never starts Bluetooth and no BLE Mesh, GATT, Bluetooth host or controller-init code is linked into its firmware",
+  "evidence": "xtensa-esp32s3-elf-nm hid_fi.ino.elf (v4.3 build): 0 code symbols matching bt_mesh|ble_mesh|proxy_server|ble_gatts|ble_hs|nimble|esp_bt_controller_init|esp_bt_controller_enable|esp_bluedroid; esp_bt_controller_enable absent; the 63 'ble_mesh' matches are coex_schm_ble_mesh_* WiFi/BT coexistence data tables (V); btdm_* are ROM addresses (A). grep hid_fi/ for BLE/Bluetooth/esp_bt -> none",
+  "date": "2026-11-06",
+  "revisit": "any Bluetooth use (BLE, btStart, NimBLE), or a core that links BLE Mesh code by default; move to ESP-IDF 5.5.6 when an Arduino core ships it"
  }
 }
