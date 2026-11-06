@@ -133,7 +133,7 @@ def test_the_board_model_chooses_as_the_firmware_does(bench):
 # A saved network as the board remembers it: (name, usable, subnet, used, anchor, tried, refused).
 # refused: it has worked, but its router refused the saved password since start (D-08).
 # subnet 0: never joined. used: a counter, higher is more recent, 0 never.
-WORKABLE, LOOK_MS = -75, 300000
+WORKABLE, LOOK_MS = -85, 300000
 WHY = {0: None, 1: "preferred", 2: "strongest", 3: "coming home", 4: "looking"}
 EXT, C6, ARV = "ARVISANTU EXT", "ARVISANTU C6", "ARVISANTU"
 LAN1, LAN0 = 0xC0A80100, 0xC0A80000         # 192.168.1.0 (EXT and ARVISANTU), 192.168.0.0 (C6)
@@ -179,8 +179,9 @@ def test_the_network_you_use_wins_over_a_stronger_one(bench):
 
 
 @pytest.mark.parametrize("ext_rssi, want", [
-    (-75, (EXT, "preferred")),             # exactly workable: still preferred
-    (-76, (C6, "strongest")),              # just below: the board stays reachable on the strongest
+    (-80, (EXT, "preferred")),             # the owner's extender at the board, 2026-11-07: works, so it wins
+    (-85, (EXT, "preferred")),             # exactly workable: still preferred
+    (-86, (C6, "strongest")),              # just below: the board stays reachable on the strongest
     (-90, (C6, "strongest")),
     (None, (C6, "strongest")),             # gone
 ])
@@ -246,8 +247,10 @@ def test_it_comes_home_but_never_away_from_someone_using_it(bench):
     known = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=5)]
     # On C6 because EXT was down; EXT is back and workable: home.
     assert move(bench, known, AIR, 0) == (EXT, "coming home")
-    # EXT back but too weak: stays.
-    assert move(bench, known, [(C6, -48), (EXT, -80)], 0) == (None, None)
+    # EXT back but too weak to hold: stays.
+    assert move(bench, known, [(C6, -48), (EXT, -88)], 0) == (None, None)
+    # The owner's home measured on 2026-11-07: C6 at -36, the extender at -80 - home.
+    assert move(bench, known, [(C6, -36), (EXT, -80)], 0) == (EXT, "coming home")
     # Someone is using it on C6 right now: stays, whatever the preference.
     assert move(bench, known, AIR, 0, owner_now=True) == (None, None)
     # Already home (or on the same network under another name): stays.
@@ -272,6 +275,23 @@ def test_a_changed_password_never_pulls_it_off_a_working_network(bench):
     # The password entered again (or a join that works): home as before.
     known = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=5)]
     assert move(bench, known, AIR, 0) == (EXT, "coming home")
+
+
+def test_an_updated_board_stays_on_the_network_it_was_on(bench):
+    """D-09: from before D-02 no network is marked used; the one the board was last on
+    (the old firmware kept it first) is seeded, so the restart after an update does
+    not hop to a stronger router nobody uses."""
+    def seed(known):
+        return ask(bench, [f"seed {kspec(known)}"])[0][0]
+    upgraded = [net(EXT, subnet=LAN1), net(C6, subnet=LAN0), net(ARV, subnet=LAN1)]
+    assert seed(upgraded) == 0
+    # ...and with that seed, the choice after the restart is EXT, not the stronger C6.
+    seeded = [net(EXT, subnet=LAN1, used=1), net(C6, subnet=LAN0), net(ARV, subnet=LAN1)]
+    assert choose(bench, seeded, [(C6, -36), (EXT, -70)]) == (EXT, "preferred")
+    assert seed(seeded) == -1                                  # history already: nothing to seed
+    assert seed([net(EXT, anchor=True), net(C6)]) == -1
+    assert seed([net(EXT, usable=False), net(C6)]) == -1       # the first one refused: no guess
+    assert seed([]) == -1
 
 
 # The written rules (docs/DECISIONS.md D-02), implemented again here from the words,

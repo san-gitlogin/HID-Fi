@@ -516,7 +516,7 @@ things are checked instead:
 
 The board remembers up to five networks, most recently used first. It joins the
 one an owner device uses it over - a dashboard signed in over the home network, or
-the paired Companion, which ranks first - while that one is workable (-75 dBm or
+the paired Companion, which ranks first - while that one is workable (-85 dBm or
 better). Otherwise, and on a board nobody has used over a network yet, it joins the
 strongest in range. Saved networks on one subnet (a router and its extender) count
 as one network, so the strongest of those wins. The rules and why:

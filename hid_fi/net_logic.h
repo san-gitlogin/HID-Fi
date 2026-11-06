@@ -38,7 +38,11 @@ inline int netPickBest(const NetSaved* saved, int nSaved, const NetSeen* seen, i
 // decides between the access points of one network, and on a board nobody has used.
 #include <stdint.h>
 
-#define NET_WORKABLE   (-75)        // dBm: a preferred network this strong or better wins
+// dBm: a preferred network this strong or better wins. Where a link really stops
+// being usable, not where it is merely weaker: at -75, an extender measured at -80
+// (working normally) counted as too weak and the board fell back to a stronger
+// router nobody could reach (09F7C8, 2026-11-07).
+#define NET_WORKABLE   (-85)
 #define NET_LOOK_MS    300000UL     // on a network nobody uses: wait this long for an owner device
 
 struct NetKnown {          // one saved network and what the board remembers about it
@@ -152,4 +156,15 @@ inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere) {
     if (msHere < NET_LOOK_MS) return false;
     for (int i = 0; i < n; i++) if (k[i].usable && !k[i].tried && !k[i].refused && !netSameNet(k, i, cur)) return true;
     return false;
+}
+
+// Coming from a version before D-02 (no network has been marked used yet): the
+// network the board was last on is where it is used - the old firmware kept that
+// one first. Without this, a board updated over the air in a home with several
+// routers joined the strongest after the restart, and was out of reach until it
+// went looking 5 minutes later (DA1A2C, 2026-11-07). -1: nothing to seed.
+inline int netSeedFrom(const NetKnown* k, int n) {
+    if (n <= 0) return -1;
+    for (int i = 0; i < n; i++) if (k[i].used || k[i].anchor) return -1;
+    return k[0].usable ? 0 : -1;
 }

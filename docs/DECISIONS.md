@@ -59,8 +59,12 @@ Rules (`hid_fi/net_logic.h`):
    network, and a phone can always use the board's own WiFi. So the network the
    paired computer last reached it on ranks first. Without one, the network
    used most recently ranks first.
-3. **That network wins while it is workable** (−75 dBm or better), even against
-   a stronger network nobody uses. Weaker than that, or gone, the board falls
+3. **That network wins while it is workable** (−85 dBm or better), even against
+   a stronger network nobody uses. *Revised 2026-11-07:* the first cut-off was
+   −75 dBm. On the real board, the owner's extender measured −80 dBm and worked
+   normally, but counted as too weak, so the board fell back to the stronger
+   router nobody could reach. The cut-off is now where a link actually stops
+   being usable, not where it is merely weaker. Weaker than that, or gone, the board falls
    back to D-01 and stays reachable.
 4. **One network, several access points.** When the board joins a network it
    records its subnet. Saved networks on the same subnet (a router and its
@@ -207,3 +211,21 @@ minutes, for about a minute each time, until someone re-entered the password.
 - `tests/unit/test_net_logic.py::test_random_homes_against_the_written_rules`
 - `tests/ui/bdd/features/home_network.feature: A saved network whose password changed says so, and the board stays where it works`
 - `tests/ui/bdd/features/settings.feature: Entering the new password of a network whose password changed clears it`
+
+## D-09 · 2026-11-07 · An updated board stays on the network it was on
+
+**Refines D-02.**
+
+On the first start after an update from a version before D-02, no saved network
+has been marked as used yet. The network the board was last on (the older
+firmware always kept it first in the list) becomes the one it is used over. This
+happens once, and is recorded (`pref_seed` in `wifi_cfg`) so it never repeats.
+
+**Why:** v4.3 reaches most boards over the air. Without this, in a home with
+several routers, the restart after the update joined the strongest router. If
+nobody used that one, the board was out of reach until it went looking 5
+minutes later. DA1A2C, the owner's own board, did exactly that when updated on
+2026-11-07: it joined ARVISANTU C6, away from the Mac.
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_an_updated_board_stays_on_the_network_it_was_on`

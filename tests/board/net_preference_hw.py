@@ -20,7 +20,9 @@ check called it wrong).
 
 Needs: HIDFI_PIN (the board's access PIN), HIDFI_ONLY_BOARD (the test board's MAC).
 A board that already knows where it is used shows only step 4; steps 1-2 need one
-with no history (a factory reset, then its networks added again).
+with no history. Since D-09 a board seeds that history from the network it was last
+on at its first start, so steps 1-2 show only on a board whose saved networks were
+all added since it last started.
 Run: python3 tests/board/net_preference_hw.py /dev/cu.usbmodemXXXX
 """
 import json

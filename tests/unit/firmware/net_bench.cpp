@@ -6,6 +6,7 @@
 //   choose <known> <seen>                                     -> index why
 //   move <known> <seen> <cur> <msHere> <ownerHereNow 0|1>      -> index why
 //   look <known> <cur> <msHere>                                -> 1|0 0
+//   seed <known>                                                -> index 0
 // known: hexname:usable:net:used:anchor:tried[:refused],...  (D-02, D-08 in docs/DECISIONS.md)
 #include <cstdio>
 #include <cstdlib>
@@ -64,6 +65,14 @@ int main() {
         std::stringstream in(line);
         std::string op, a, b;
         in >> op >> a >> b;
+        if (op == "seed") {
+            auto kv = parseKnown(a);
+            std::vector<NetKnown> known;
+            for (auto& x : kv) known.push_back(x.k);
+            for (size_t i = 0; i < kv.size(); i++) known[i].ssid = kv[i].ssid.c_str();
+            std::cout << netSeedFrom(known.data(), (int)known.size()) << " 0\n";
+            continue;
+        }
         if (op == "look") {
             auto kv = parseKnown(a);
             std::vector<NetKnown> known;

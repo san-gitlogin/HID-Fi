@@ -2360,6 +2360,22 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netSave();
         COM_SERIAL.printf("[WIFI] Saved network %s carried over from the single-network settings\n", legacySsid.c_str());
     }
+    // D-09: once, on the first start after an update from before D-02, the network
+    // the board was last on becomes the one it is used over (see net_logic.h).
+    if (netCount) {
+        preferences.begin("wifi_cfg", true);
+        bool seeded = preferences.getBool("pref_seed", false);
+        preferences.end();
+        if (!seeded) {
+            NetKnown known[NET_MAX];
+            netKnown(known);
+            int s = netSeedFrom(known, netCount);
+            if (s >= 0) { netUsed[s] = ++netUseCount; netSave(); COM_SERIAL.printf("[NET] %s, where it was last, is where the board is used\n", netSsid[s].c_str()); }
+            preferences.begin("wifi_cfg", false);
+            preferences.putBool("pref_seed", true);
+            preferences.end();
+        }
+    }
     if (netCount) netSelect(0);
 }
 

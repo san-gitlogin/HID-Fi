@@ -732,7 +732,7 @@ class BoardSim:
             self.nets.insert(0, row)
 
     # ---- net_logic.h, the same rules (checked against it in tests/unit/test_net_logic.py)
-    WORKABLE, LOOK_S = -75, 300
+    WORKABLE, LOOK_S = -85, 300
 
     def _users(self):
         return [i for i, n in enumerate(self.nets) if n.get("used") or n.get("computer")]
