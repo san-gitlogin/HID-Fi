@@ -7,7 +7,19 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## v4.3 - 2026-11-06
+## Unreleased
+
+### Firmware
+
+- **A board taken down to an older version and back keeps its network.** v4.2.2
+  saves the network list without v4.3's "used" marks, and v4.3 seeded the
+  network the board was last on only once (a flag). A board flashed down and back
+  up therefore had no preferred network and could join a stronger router nobody
+  uses. Now it seeds whenever no network is marked used (DECISIONS.md D-09,
+  revised). Proven on 09F7C8: down to v4.2.2 and back, it kept a preferred
+  network.
+
+## v4.3 - 2026-11-07
 
 Recovery and factory reset without a COM cable; old phones and tablets; input with no frame waits; the network your devices use.
 

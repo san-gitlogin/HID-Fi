@@ -218,8 +218,12 @@ minutes, for about a minute each time, until someone re-entered the password.
 
 On the first start after an update from a version before D-02, no saved network
 has been marked as used yet. The network the board was last on (the older
-firmware always kept it first in the list) becomes the one it is used over. This
-happens once, and is recorded (`pref_seed` in `wifi_cfg`) so it never repeats.
+firmware always kept it first in the list) becomes the one it is used over. It
+happens whenever no network is marked used, which also covers a board taken down
+to an older version (which saves the list without the marks) and back up.
+Seeding creates the history, so it can't repeat on its own. *Revised
+2026-11-07:* v4.3 kept a "seeded once" flag. 09F7C8, flashed down to v4.2.2 and
+back to v4.3, then had no history and no seed, and joined C6.
 
 **Why:** v4.3 reaches most boards over the air. Without this, in a home with
 several routers, the restart after the update joined the strongest router. If
