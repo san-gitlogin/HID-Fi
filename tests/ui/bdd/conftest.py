@@ -110,6 +110,22 @@ def no_pin(ctx):
     ctx["sim"].pin = ""
 
 
+@given(parsers.parse('the router for "{ssid}" no longer takes its saved password'))
+def password_changed(ctx, ssid):
+    """D-08: a saved network that has worked refuses the saved password now (changed at
+    the router). The board is on another saved network meanwhile, if it has one."""
+    sim = ctx["sim"]
+    if not any(n["ssid"] == ssid for n in sim.nets):
+        sim._net_add(ssid, "old-" + ssid)
+    row = next(n for n in sim.nets if n["ssid"] == ssid)
+    row.update(proven=True, pw_refused=True)
+    other = next((n for n in sim.nets if n["ssid"] != ssid), None)
+    sim.air = {ssid: -45}
+    if other:
+        sim.air[other["ssid"]] = -65
+        sim.sta.update(phase="online", ssid=other["ssid"])
+
+
 @given(parsers.parse('the board\'s access PIN is "{pin}"'))
 def board_pin(ctx, pin):
     ctx["sim"].pin = pin

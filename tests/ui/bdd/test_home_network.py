@@ -119,6 +119,13 @@ def nobody_for_5(ctx, ssid):
     ctx["ui"].idle(400)
 
 
+@then(parsers.parse('the board stays on "{ssid}" when it looks at whether to move'))
+def stays(ctx, ssid):
+    sim = ctx["sim"]
+    assert sim.net_check(0) is None and sim.net_check(900) is None
+    assert sim.sta["ssid"] == ssid
+
+
 @when("the board looks at whether to move")
 def looks(ctx):
     assert ctx["sim"].net_check(0) is not None

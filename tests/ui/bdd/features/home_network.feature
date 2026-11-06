@@ -178,6 +178,15 @@ Feature: When the home network has a bad night
     When the board looks at whether to move
     Then I see the message "Moving to the network it is used over: Bangalore"
 
+  Scenario: A saved network whose password changed says so, and the board stays where it works
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the board is used over "HomeNet"
+    And the router for "HomeNet" no longer takes its saved password
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#savedNets" contains "the router no longer takes the saved password"
+    And the board stays on "Bangalore" when it looks at whether to move
+
   Scenario: Forgetting a network removes only that one
     Given the board has saved the networks "Bangalore, HomeNet"
     And the dashboard is open

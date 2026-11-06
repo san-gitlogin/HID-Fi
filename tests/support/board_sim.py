@@ -721,7 +721,7 @@ class BoardSim:
             self.nets.remove(row)
             if row["password"] != password:
                 row["proven"] = False
-            row.update(password=password, static=static, refused=False)
+            row.update(password=password, static=static, refused=False, pw_refused=False)
         self.nets.insert(0, row)
 
     def _net_worked(self, ssid):
@@ -747,7 +747,7 @@ class BoardSim:
 
     def _best_of(self, p):
         c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
-             if not n["refused"] and self._same(i, p) and n["ssid"] in self.air]
+             if not n["refused"] and not n.get("pw_refused") and self._same(i, p) and n["ssid"] in self.air]
         return (-max(c)[1], max(c)[0]) if c else (None, None)
 
     def net_choose(self):
@@ -759,7 +759,7 @@ class BoardSim:
                 return i, "preferred"
         for allow_tried in (False, True):
             c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
-                 if not n["refused"] and (allow_tried or not n.get("tried")) and n["ssid"] in self.air]
+                 if not n["refused"] and (allow_tried or (not n.get("tried") and not n.get("pw_refused"))) and n["ssid"] in self.air]
             if c:
                 return -max(c)[1], "strongest"
         return None, ""
@@ -777,7 +777,7 @@ class BoardSim:
         if any(self._same(i, cur) for i in self._users()) or here_s < self.LOOK_S:
             return None, ""
         c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
-             if not n["refused"] and not n.get("tried") and not self._same(i, cur) and n["ssid"] in self.air]
+             if not n["refused"] and not n.get("tried") and not n.get("pw_refused") and not self._same(i, cur) and n["ssid"] in self.air]
         return (self.nets[-max(c)[1]]["ssid"], "looking") if c else (None, "")
 
     def net_check(self, here_s, owner_now=False):
@@ -1372,6 +1372,8 @@ class BoardSim:
                      "current": online and n["ssid"] == self.sta["ssid"]}
                 if n["refused"]:
                     o["refused"] = True
+                if n.get("pw_refused"):
+                    o["password_changed"] = True
                 if n.get("used"):
                     o["used"] = True
                 if n.get("computer"):

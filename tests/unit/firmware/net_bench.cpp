@@ -6,7 +6,7 @@
 //   choose <known> <seen>                                     -> index why
 //   move <known> <seen> <cur> <msHere> <ownerHereNow 0|1>      -> index why
 //   look <known> <cur> <msHere>                                -> 1|0 0
-// known: hexname:usable:net:used:anchor:tried,...  (D-02, docs/DECISIONS.md)
+// known: hexname:usable:net:used:anchor:tried[:refused],...  (D-02, D-08 in docs/DECISIONS.md)
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -51,7 +51,8 @@ static std::vector<Known> parseKnown(const std::string& spec) {
         Known kn;
         kn.ssid = unhex(f[0]);
         kn.k = {nullptr, f[1] != "0", (uint32_t)std::strtoul(f[2].c_str(), nullptr, 10),
-                (uint32_t)std::strtoul(f[3].c_str(), nullptr, 10), f[4] != "0", f[5] != "0"};
+                (uint32_t)std::strtoul(f[3].c_str(), nullptr, 10), f[4] != "0", f[5] != "0",
+                f.size() > 6 && f[6] != "0"};
         v.push_back(kn);
     }
     return v;

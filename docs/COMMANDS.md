@@ -525,7 +525,7 @@ as one network, so the strongest of those wins. The rules and why:
 | Command | Parameters | Reply |
 |---|---|---|
 | `wifi_configure` | `ssid`, `password`, optional fixed IP | adds the network (or updates it) at the front and joins it. With five saved, the oldest is forgotten |
-| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first). Never a password. `max`: 5 |
+| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `password_changed` (it has worked, but its router refuses the saved password now - enter the new one; the board never moves to it meanwhile, DECISIONS.md D-08), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first). Never a password. `max`: 5 |
 | `wifi_forget` | `ssid` | `wifi_forgotten` with `left`. Forgetting the connected one leaves it, and the board looks for another |
 | `wifi_prefer` | `ssid`, optional `now` | `wifi_prefer` with `on_it`. Makes it the preferred network, ranked as the paired computer's would be. The board moves there when nobody is using it on the network it is on, or at once with `now: true` |
 | `wifi_disconnect` | - | forgets every saved network |

@@ -49,6 +49,8 @@ struct NetKnown {          // one saved network and what the board remembers abo
                            // higher is more recent; 0 never
     bool anchor;           // the paired computer last reached it over this one
     bool tried;            // joined since start, and no owner device came within NET_LOOK_MS
+    bool refused;          // has worked, but its router refused the saved password since start
+                           // (it changed?) - never a reason to move, tried only when nothing else is
 };
 
 enum NetWhy { NET_NONE = 0, NET_PREFERRED = 1, NET_STRONGEST = 2, NET_COMING_HOME = 3, NET_LOOKING = 4 };
@@ -81,7 +83,7 @@ inline int netStrongestSeen(const NetKnown& k, const NetSeen* seen, int nSeen) {
 inline int netBestOfNet(const NetKnown* k, int n, int p, const NetSeen* seen, int nSeen, int* rssiOut) {
     int best = -1, bestRssi = -1000;
     for (int i = 0; i < n; i++) {
-        if (!k[i].usable || !netSameNet(k, i, p)) continue;
+        if (!k[i].usable || k[i].refused || !netSameNet(k, i, p)) continue;
         int r = netStrongestSeen(k[i], seen, nSeen);
         if (r > bestRssi) { best = i; bestRssi = r; }
     }
@@ -100,10 +102,11 @@ inline int netChoose(const NetKnown* k, int n, const NetSeen* seen, int nSeen, i
         int r = -1000, i = netBestOfNet(k, n, p, seen, nSeen, &r);
         if (i >= 0 && r >= NET_WORKABLE) { if (why) *why = NET_PREFERRED; return i; }
     }
+    // A network refusing its saved password, or tried in vain, comes after the rest.
     NetSaved s[16];
     int m = n < 16 ? n : 16;
     for (int pass = 0; pass < 2; pass++) {
-        for (int i = 0; i < m; i++) s[i] = {k[i].ssid, k[i].usable && (pass == 1 || !k[i].tried)};
+        for (int i = 0; i < m; i++) s[i] = {k[i].ssid, k[i].usable && (pass == 1 || (!k[i].tried && !k[i].refused))};
         int i = netPickBest(s, m, seen, nSeen);
         if (i >= 0) { if (why) *why = NET_STRONGEST; return i; }
     }
@@ -128,7 +131,7 @@ inline int netMoveFrom(const NetKnown* k, int n, int cur, const NetSeen* seen, i
     if (curUsed || msHere < NET_LOOK_MS) return -1;
     int best = -1, bestRssi = -1000;
     for (int i = 0; i < n; i++) {
-        if (!k[i].usable || k[i].tried || netSameNet(k, i, cur)) continue;
+        if (!k[i].usable || k[i].tried || k[i].refused || netSameNet(k, i, cur)) continue;
         int r = netStrongestSeen(k[i], seen, nSeen);
         if (r > bestRssi) { best = i; bestRssi = r; }
     }
@@ -143,9 +146,10 @@ inline int netMoveFrom(const NetKnown* k, int n, int cur, const NetSeen* seen, i
 inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere) {
     if (cur < 0 || cur >= n) return false;
     int p = netPreferred(k, n);
-    if (p >= 0 && !netSameNet(k, cur, p)) return true;
+    if (p >= 0 && !netSameNet(k, cur, p))
+        for (int i = 0; i < n; i++) if (k[i].usable && !k[i].refused && netSameNet(k, i, p)) return true;
     for (int i = 0; i < n; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, cur)) return false;
     if (msHere < NET_LOOK_MS) return false;
-    for (int i = 0; i < n; i++) if (k[i].usable && !k[i].tried && !netSameNet(k, i, cur)) return true;
+    for (int i = 0; i < n; i++) if (k[i].usable && !k[i].tried && !k[i].refused && !netSameNet(k, i, cur)) return true;
     return false;
 }

@@ -175,3 +175,35 @@ devices." Measured with a slow redraw: pointer movement went from 20.8 ms to
 - `tests/ui/legacy/test_latency_budget.py::test_touch_to_message_within_budget_on_a_slow_cpu`
 - `tests/ui/legacy/test_input_path.py::test_nothing_runs_while_nobody_touches`
 - `tests/ui/legacy/test_input_path.py::test_a_gamepad_tap_faster_than_a_frame_reaches_the_computer`
+
+## D-08 · 2026-11-06 · A saved network whose password changed: never a reason to move
+
+**Refines D-02.**
+
+A network that has worked but whose router now refuses the saved password (it was
+probably changed at the router):
+
+- **Kept, not forgotten.** Routers sometimes misreport. After 3 refusals it rests
+  for 5 minutes while the other saved networks are tried, and the board's own
+  WiFi stays up throughout.
+- **Never a reason to move.** The board doesn't leave a working network to "come
+  home" to it, and doesn't scan for it. If it is the preferred network but a
+  router and its extender share it, the member that still takes the password is
+  home.
+- **Off a network, it comes after the others,** even when it is the strongest.
+  It is still tried when nothing else is in range, in case the router misreported
+  or the password was changed back.
+- **Settings says so on its row:** "the router no longer takes the saved password -
+  changed? Scan, pick it, enter the new one". Entering it, or a join that works,
+  clears it.
+
+**Why:** "have we handled password change scenario. Where known networks got
+their password changed". We hadn't, and D-02 had made it worse. A preferred
+network with a changed password pulled the board off a working network every 5
+minutes, for about a minute each time, until someone re-entered the password.
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_a_changed_password_never_pulls_it_off_a_working_network`
+- `tests/unit/test_net_logic.py::test_random_homes_against_the_written_rules`
+- `tests/ui/bdd/features/home_network.feature: A saved network whose password changed says so, and the board stays where it works`
+- `tests/ui/bdd/features/settings.feature: Entering the new password of a network whose password changed clears it`

@@ -281,6 +281,8 @@ uint32_t netNet[NET_MAX];             // the subnet it was on when joined (addre
 uint32_t netUsed[NET_MAX];            // when an owner device last reached the board over it; 0 never
 bool     netAnchor[NET_MAX];          // the paired computer last reached it over this one
 bool     netTried[NET_MAX];           // since start: joined, and no owner device came (not saved)
+bool     netPwRefused[NET_MAX];       // has worked, but its router refused the saved password since
+                                      // start - changed? (D-08; not saved, cleared by a join or re-entry)
 uint32_t netUseCount = 0;             // the highest netUsed - "used" is a counter, not a clock
 int8_t   netWhy = NET_NONE;           // why the board chose the network it is on
 uint32_t netCheckAt = 0;              // the next look, while online, at whether to move
@@ -1939,7 +1941,7 @@ void staScheduleRetry() {
         staRetryGap = min<uint32_t>(staRetryGap * 2 + 1000, STA_RETRY_MAX);
     } else if (staProven && staAuthFails >= 3) {
         // Routers misreport, so it is not dropped - it rests, and the others are tried.
-        if (netCurrent >= 0) netCoolUntil[netCurrent] = millis() + STA_RETRY_BADPASS;
+        if (netCurrent >= 0) { netCoolUntil[netCurrent] = millis() + STA_RETRY_BADPASS; netPwRefused[netCurrent] = true; }
         staError = "The router no longer accepts the saved password for " + staSavedSsid + ". If you changed it, enter it again in Settings.";
         staAuthFails = 0;
         gap = STA_RETRY_FIRST * 5;
@@ -1990,6 +1992,7 @@ void staCameOnline(const String& ip) {
     // Which network this is, by its subnet: a router and its extender share one (D-02).
     bool netDirty = false;
     if (netCurrent >= 0 && netCurrent < netCount) {
+        netPwRefused[netCurrent] = false;            // it took the password after all
         uint32_t sn = (uint32_t)WiFi.localIP() & (uint32_t)WiFi.subnetMask();
         if (sn && sn != netNet[netCurrent]) { netNet[netCurrent] = sn; netDirty = true; }
     }
@@ -2158,7 +2161,8 @@ void netKnown(NetKnown* k) {
     for (int i = 0; i < netCount; i++) {
         bool staged = netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid);   // staged absence
         bool cooling = netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0;
-        k[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling, netNet[i], netUsed[i], netAnchor[i], netTried[i]};
+        k[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling, netNet[i], netUsed[i], netAnchor[i], netTried[i],
+                netPwRefused[i]};
     }
 }
 
@@ -2264,16 +2268,17 @@ void netToFront(int i) {
     if (i <= 0) return;
     String s = netSsid[i], p = netPass[i], ip = netIp[i], gw = netGw[i], m = netMask[i], d = netDns[i];
     bool ok = netOk[i], bad = netBad[i]; uint32_t cool = netCoolUntil[i];
-    uint32_t sn = netNet[i], us = netUsed[i]; bool an = netAnchor[i], tr = netTried[i];
+    uint32_t sn = netNet[i], us = netUsed[i]; bool an = netAnchor[i], tr = netTried[i], pr = netPwRefused[i];
     for (int k = i; k > 0; k--) {
         netSsid[k] = netSsid[k-1]; netPass[k] = netPass[k-1]; netIp[k] = netIp[k-1]; netGw[k] = netGw[k-1];
         netMask[k] = netMask[k-1]; netDns[k] = netDns[k-1]; netOk[k] = netOk[k-1]; netBad[k] = netBad[k-1];
         netCoolUntil[k] = netCoolUntil[k-1];
         netNet[k] = netNet[k-1]; netUsed[k] = netUsed[k-1]; netAnchor[k] = netAnchor[k-1]; netTried[k] = netTried[k-1];
+        netPwRefused[k] = netPwRefused[k-1];
     }
     netSsid[0] = s; netPass[0] = p; netIp[0] = ip; netGw[0] = gw; netMask[0] = m; netDns[0] = d;
     netOk[0] = ok; netBad[0] = bad; netCoolUntil[0] = cool;
-    netNet[0] = sn; netUsed[0] = us; netAnchor[0] = an; netTried[0] = tr;
+    netNet[0] = sn; netUsed[0] = us; netAnchor[0] = an; netTried[0] = tr; netPwRefused[0] = pr;
     if (netCurrent == i) netCurrent = 0; else if (netCurrent >= 0 && netCurrent < i) netCurrent++;
 }
 
@@ -2283,10 +2288,11 @@ void netRemove(int i) {
         netMask[k] = netMask[k+1]; netDns[k] = netDns[k+1]; netOk[k] = netOk[k+1]; netBad[k] = netBad[k+1];
         netCoolUntil[k] = netCoolUntil[k+1];
         netNet[k] = netNet[k+1]; netUsed[k] = netUsed[k+1]; netAnchor[k] = netAnchor[k+1]; netTried[k] = netTried[k+1];
+        netPwRefused[k] = netPwRefused[k+1];
     }
     netCount--;
     netSsid[netCount] = netPass[netCount] = "";
-    netNet[netCount] = netUsed[netCount] = 0; netAnchor[netCount] = netTried[netCount] = false;
+    netNet[netCount] = netUsed[netCount] = 0; netAnchor[netCount] = netTried[netCount] = netPwRefused[netCount] = false;
     if (netCurrent == i) netCurrent = -1; else if (netCurrent > i) netCurrent--;
 }
 
@@ -2339,7 +2345,7 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netMask[netCount] = d["mask"] | ""; netDns[netCount] = d["dns"] | "";
         netBad[netCount] = false; netCoolUntil[netCount] = 0;
         netNet[netCount] = d["sn"] | 0u; netUsed[netCount] = d["us"] | 0u; netAnchor[netCount] = d["an"] | false;
-        netTried[netCount] = false;
+        netTried[netCount] = netPwRefused[netCount] = false;
         if (netUsed[netCount] > netUseCount) netUseCount = netUsed[netCount];
         netCount++;
     }
@@ -2349,7 +2355,7 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netSsid[0] = legacySsid; netPass[0] = legacyPass; netOk[0] = legacyOk;
         netIp[0] = staWantIp; netGw[0] = staWantGw; netMask[0] = staWantMask; netDns[0] = staWantDns;
         netBad[0] = false; netCoolUntil[0] = 0;
-        netNet[0] = netUsed[0] = 0; netAnchor[0] = netTried[0] = false;
+        netNet[0] = netUsed[0] = 0; netAnchor[0] = netTried[0] = netPwRefused[0] = false;
         netCount = 1;
         netSave();
         COM_SERIAL.printf("[WIFI] Saved network %s carried over from the single-network settings\n", legacySsid.c_str());
@@ -2372,6 +2378,7 @@ void handleWifiNetworks() {
         o["static"] = netIp[i].length() > 0;
         o["current"] = (i == netCurrent && wifiConnected);
         if (netBad[i]) o["refused"] = true;
+        if (netPwRefused[i]) o["password_changed"] = true;   // D-08: worked, now refused
         if (netUsed[i]) o["used"] = true;                     // D-02: an owner device reached the board over it
         if (netAnchor[i]) o["computer"] = true;               // the paired computer did
         if (i == prefIdx) o["preferred"] = true;
@@ -3902,7 +3909,7 @@ void handleWifiConfigure(const JsonDocument& inDoc) {
     }
     netSsid[row] = ssid; netPass[row] = pass;
     netIp[row] = staWantIp; netGw[row] = staWantGw; netMask[row] = staWantMask; netDns[row] = staWantDns;
-    netBad[row] = false; netCoolUntil[row] = 0;
+    netBad[row] = false; netCoolUntil[row] = 0; netPwRefused[row] = false;
     netToFront(row);
     netSave();
     netSelect(0);

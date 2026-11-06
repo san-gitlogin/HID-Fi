@@ -6019,6 +6019,7 @@ function loadSavedNets(){
       (x.preferred?' <span class="tag">preferred</span>':'')+
       (x.current?' <span class="tag">connected</span>':'')+(x.static?' <span class="tag">fixed IP</span>':'')+'</b>'+
       '<span>'+(x.refused?'the router refused the password - enter it again':
+        x.password_changed?'the router no longer takes the saved password - changed? Scan, pick it, enter the new one':
         x.computer?'your paired computer uses this one':x.used?'you have used the board over this one':
         x.proven?'has worked before':'not joined yet')+'</span></div>'+
       (x.preferred?'':'<button class="btn sm" data-prefer="'+esc(x.ssid)+'" aria-label="Prefer '+esc(x.ssid)+'">Prefer</button>')+

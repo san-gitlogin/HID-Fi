@@ -127,6 +127,19 @@ Feature: The Settings tab
     And I see the message "Connected as 192.168.1.77"
     And "#joinMsg" contains "Address assigned by the router"
 
+  Scenario: Entering the new password of a network whose password changed clears it
+    Given the router for "HomeNet" no longer takes its saved password
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#savedNets" contains "no longer takes the saved password"
+    When I tap "Scan networks"
+    And I pick the network "HomeNet"
+    And I type "the new one" into "#w_p"
+    And I tap "Connect"
+    Then the board receives {"cmd": "wifi_configure", "ssid": "HomeNet", "password": "the new one"}
+    And I see the message "Connected as"
+    And "#savedNets" does not contain "no longer takes the saved password"
+
   Scenario: A join that fails says so, and the access point stays up
     Given the dashboard is open
     When I open the "Settings" tab

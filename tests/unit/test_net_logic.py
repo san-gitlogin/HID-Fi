@@ -120,7 +120,7 @@ def test_the_board_model_chooses_as_the_firmware_does(bench):
     for n, (known, air, cur, here, owner) in enumerate(cases):
         s = BoardSim(pin="")
         s.nets = [{"ssid": k[0], "password": "p", "proven": True, "static": False, "refused": not k[1],
-                   "subnet": k[2], "used": k[3], "computer": k[4], "tried": k[5]} for k in known]
+                   "subnet": k[2], "used": k[3], "computer": k[4], "tried": k[5], "pw_refused": k[6]} for k in known]
         s.air = dict(air)
         c, m = got[2 * n], got[2 * n + 1]
         assert s.net_choose() == ((c[0], c[1]) if c[0] >= 0 else (None, "")), ("choose", known, air)
@@ -130,7 +130,8 @@ def test_the_board_model_chooses_as_the_firmware_does(bench):
 
 
 # ---- D-02: the network your devices use (docs/DECISIONS.md) ---------------------------
-# A saved network as the board remembers it: (name, usable, subnet, used, anchor, tried).
+# A saved network as the board remembers it: (name, usable, subnet, used, anchor, tried, refused).
+# refused: it has worked, but its router refused the saved password since start (D-08).
 # subnet 0: never joined. used: a counter, higher is more recent, 0 never.
 WORKABLE, LOOK_MS = -75, 300000
 WHY = {0: None, 1: "preferred", 2: "strongest", 3: "coming home", 4: "looking"}
@@ -139,7 +140,7 @@ LAN1, LAN0 = 0xC0A80100, 0xC0A80000         # 192.168.1.0 (EXT and ARVISANTU), 1
 
 
 def kspec(known):
-    return ",".join(f"{n.encode().hex()}:{int(u)}:{net}:{used}:{int(a)}:{int(t)}" for n, u, net, used, a, t in known) or "-"
+    return ",".join(f"{n.encode().hex()}:{int(u)}:{net}:{used}:{int(a)}:{int(t)}:{int(r)}" for n, u, net, used, a, t, r in known) or "-"
 
 
 def ask(bench, lines):
@@ -157,8 +158,8 @@ def move(bench, known, seen, cur, ms_here=0, owner_now=False):
     return (known[i][0] if i >= 0 else None), why
 
 
-def net(name, usable=True, subnet=0, used=0, anchor=False, tried=False):
-    return (name, usable, subnet, used, anchor, tried)
+def net(name, usable=True, subnet=0, used=0, anchor=False, tried=False, refused=False):
+    return (name, usable, subnet, used, anchor, tried, refused)
 
 
 # The owner's home on 2026-11-06: C6 is another router (192.168.0.x); EXT and ARVISANTU
@@ -254,6 +255,25 @@ def test_it_comes_home_but_never_away_from_someone_using_it(bench):
     assert move(bench, known + [net(ARV, subnet=LAN1)], AIR, 2) == (None, None)
 
 
+def test_a_changed_password_never_pulls_it_off_a_working_network(bench):
+    # EXT is preferred, but its router stopped taking the saved password (changed?).
+    known = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=5, refused=True)]
+    # On C6 meanwhile: it never leaves a working network to try EXT again...
+    assert move(bench, known, AIR, 0) == (None, None)
+    assert ask(bench, [f"look {kspec(known)} 0 0"])[0][0] == 0       # ...nor scans for it
+    # Off any network: the others first, even when the changed one is the strongest...
+    assert choose(bench, known, AIR) == (C6, "strongest")
+    assert choose(bench, known, [(EXT, -40), (C6, -66)]) == (C6, "strongest")
+    # ...EXT only when nothing else is in range (the router may have misreported).
+    assert choose(bench, known, [(EXT, -50)]) == (EXT, "strongest")
+    # A router and its extender: the extender still taking the password is home.
+    known = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=5, refused=True), net(ARV, subnet=LAN1)]
+    assert move(bench, known, AIR, 0) == (ARV, "coming home")
+    # The password entered again (or a join that works): home as before.
+    known = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=5)]
+    assert move(bench, known, AIR, 0) == (EXT, "coming home")
+
+
 # The written rules (docs/DECISIONS.md D-02), implemented again here from the words,
 # not from the header - the two must agree on any home.
 def oracle_preferred(k):
@@ -273,7 +293,8 @@ def strongest(name, seen):
 
 
 def oracle_best_of(k, p, seen):
-    c = [(strongest(k[i][0], seen), -i) for i in range(len(k)) if k[i][1] and same(k, i, p) and strongest(k[i][0], seen) is not None]
+    c = [(strongest(k[i][0], seen), -i) for i in range(len(k))
+         if k[i][1] and not k[i][6] and same(k, i, p) and strongest(k[i][0], seen) is not None]
     return (-max(c)[1], max(c)[0]) if c else (None, None)
 
 
@@ -285,7 +306,7 @@ def oracle_choose(k, seen):
             return i, "preferred"
     for allow_tried in (False, True):
         c = [(strongest(k[i][0], seen), -i) for i in range(len(k))
-             if k[i][1] and (allow_tried or not k[i][5]) and strongest(k[i][0], seen) is not None]
+             if k[i][1] and (allow_tried or (not k[i][5] and not k[i][6])) and strongest(k[i][0], seen) is not None]
         if c:
             return -max(c)[1], "strongest"
     return None, None
@@ -302,17 +323,17 @@ def oracle_move(k, seen, cur, ms, owner):
     if any((x[3] or x[4]) and same(k, i, cur) for i, x in enumerate(k)) or ms < LOOK_MS:
         return None, None
     c = [(strongest(k[i][0], seen), -i) for i in range(len(k))
-         if k[i][1] and not k[i][5] and not same(k, i, cur) and strongest(k[i][0], seen) is not None]
+         if k[i][1] and not k[i][5] and not k[i][6] and not same(k, i, cur) and strongest(k[i][0], seen) is not None]
     return (-max(c)[1], "looking") if c else (None, None)
 
 
 def oracle_look(k, cur, ms):
     p = oracle_preferred(k)
-    if p is not None and not same(k, cur, p):
+    if p is not None and not same(k, cur, p) and any(k[i][1] and not k[i][6] and same(k, i, p) for i in range(len(k))):
         return True
     if any((x[3] or x[4]) and same(k, i, cur) for i, x in enumerate(k)) or ms < LOOK_MS:
         return False
-    return any(k[i][1] and not k[i][5] and not same(k, i, cur) for i in range(len(k)))
+    return any(k[i][1] and not k[i][5] and not k[i][6] and not same(k, i, cur) for i in range(len(k)))
 
 
 def test_it_scans_only_when_there_is_something_to_decide(bench):
@@ -341,7 +362,7 @@ def random_home(rng):
     known = []
     for n in names:
         known.append(net(n, rng.random() > 0.15, rng.choice(subnets), rng.choice([0, 0, 0, 1, 2, 3, 7]),
-                         rng.random() < 0.15, rng.random() < 0.2))
+                         rng.random() < 0.15, rng.random() < 0.2, rng.random() < 0.15))
     seen = []
     for n in rng.sample(pool, rng.randint(0, len(pool))):
         for _ in range(rng.choice([1, 1, 1, 2])):          # some on two access points
@@ -370,14 +391,17 @@ def test_random_homes_against_the_written_rules(bench):
 MUTATIONS = [   # a planted bug each; the tests above must catch every one
     ("if (i >= 0 && r >= NET_WORKABLE) { if (why) *why = NET_PREFERRED; return i; }",
      "if (i >= 0) { if (why) *why = NET_PREFERRED; return i; }"),                 # preferred however weak
-    ("(k[i].anchor && !k[p].anchor) ||", ""),                                       # the computer does not anchor
+    ("(k[i].anchor && !k[p].anchor) ||", ""),
+    ("if (!k[i].usable || k[i].refused || !netSameNet(k, i, p)) continue;",
+     "if (!k[i].usable || !netSameNet(k, i, p)) continue;"),                       # comes home to a changed password
+    ("(pass == 1 || (!k[i].tried && !k[i].refused))", "(pass == 1 || !k[i].tried)"),   # a changed password first                                       # the computer does not anchor
     ("return a == b || (k[a].net && k[a].net == k[b].net);", "return a == b;"),     # no roaming within a network
     ("if (cur < 0 || cur >= n || ownerHereNow) return -1;", "if (cur < 0 || cur >= n) return -1;"),   # moves away from a user
     ("if (curUsed || msHere < NET_LOOK_MS) return -1;", "if (curUsed) return -1;"),                 # looks at once
-    ("if (k[i].usable && !k[i].tried && !netSameNet(k, i, cur)) return true;",
-     "if (k[i].usable && !netSameNet(k, i, cur)) return true;"),                  # scans forever once all tried
-    ("if (!k[i].usable || k[i].tried || netSameNet(k, i, cur)) continue;",
-     "if (!k[i].usable || netSameNet(k, i, cur)) continue;"),                       # looks in circles
+    ("if (k[i].usable && !k[i].tried && !k[i].refused && !netSameNet(k, i, cur)) return true;",
+     "if (k[i].usable && !k[i].refused && !netSameNet(k, i, cur)) return true;"),  # scans forever once all tried
+    ("if (!k[i].usable || k[i].tried || k[i].refused || netSameNet(k, i, cur)) continue;",
+     "if (!k[i].usable || k[i].refused || netSameNet(k, i, cur)) continue;"),                       # looks in circles
     ("seen[k].rssi > bestRssi) {", "seen[k].rssi >= bestRssi) {"),                    # a tie goes to the older
     ("if (!saved[i].usable || !saved[i].ssid) continue;", "if (!saved[i].ssid) continue;"),   # refused not skipped
     ("seen[k].rssi > bestRssi) {", "(best < 0 || seen[k].rssi < bestRssi)) {"),       # the weakest wins
@@ -393,7 +417,7 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
     exe = firmware.build_host(f"net_bench_{abs(hash(new))}", HERE / "net_bench.cpp", extra_inputs=[mutant],
                               flags=("-std=c++17", "-O2", f'-DNET_LOGIC="{mutant}"'))
     caught = 0
-    d02 = [(test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
+    d02 = [(test_a_changed_password_never_pulls_it_off_a_working_network, ()), (test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
            (test_one_network_on_two_names_roams_to_the_strongest, ()), (test_the_paired_computer_anchors_over_a_phone, ()),
            (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ())] + [
            (test_a_preferred_network_too_weak_falls_back_to_the_strongest, a) for a in [(-90, (C6, "strongest"))]]
