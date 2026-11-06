@@ -46,12 +46,17 @@ def center(page, sel):
     return b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
 
 
-def run(browser, rate, legacy, n=25):
+def run(browser, rate, legacy, n=25, busy=0):
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
     page = ctx.new_page()
     if legacy:
         page.add_init_script(LEGACY)
     page.add_init_script(PROBE)
+    if busy:
+        # A page that is slow to redraw (an old phone): every frame spends
+        # `busy` ms first. Input sent on the input path does not wait for it;
+        # input sent on the next frame does.
+        page.add_init_script("(function f(){requestAnimationFrame(function(){var t=performance.now();while(performance.now()-t<%d){}f();});})();" % busy)
     sim = BoardSim()
     sim.attach(page, dashboard.extract_html())
     page.goto(sim.URL)
@@ -110,11 +115,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--legacy", action="store_true")
     ap.add_argument("--rates", default="1,6")
+    ap.add_argument("--busy", type=int, default=0, help="ms every frame spends before anything else (a slow redraw)")
     a = ap.parse_args()
     with sync_playwright() as p:
         b = p.chromium.launch()
         for rate in [float(r) for r in a.rates.split(",")]:
             print(f"--- CPU {rate:g}x{' legacy' if a.legacy else ''}")
-            for k, v in run(b, rate, a.legacy).items():
+            for k, v in run(b, rate, a.legacy, busy=a.busy).items():
                 print(f"  {k:26s} {fmt(v)}")
         b.close()

@@ -166,9 +166,15 @@ class Dashboard:
         for script in res.get("result", []):
             if not script.get("url", "").startswith((URL, AP_URL)):
                 continue
+            # The page has two scripts: its own, and before it the old-browser
+            # layer (docs/LEGACY_DEVICES.md, checked by tests/ui/legacy). Only the
+            # page's own is the contract's; it is the one whose outermost range is
+            # its length.
+            n = _script_len()
+            if max((r["endOffset"] for fn in script.get("functions", []) for r in fn["ranges"]), default=0) != n:
+                continue
             ranges = [r for fn in script.get("functions", []) for r in fn["ranges"]]
             if ranges:
-                n = _script_len()      # the page has one script; its offsets index into it
                 cov = bytearray(n)
                 # Outer ranges first, so a nested block's count overrides its parent's.
                 for r in sorted(ranges, key=lambda r: r["startOffset"] - r["endOffset"]):

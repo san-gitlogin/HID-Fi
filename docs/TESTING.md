@@ -673,6 +673,33 @@ board, through the USB cable only (`net_fault`), so the router is never touched:
 Run it with `--board`; it takes about four minutes and puts everything back. The
 dashboard side is `tests/ui/bdd/features/home_network.feature`.
 
+## Old browsers and input latency
+
+`tests/ui/legacy/` (in the `ui` tier) checks the old-browser layer described in
+[LEGACY_DEVICES.md](LEGACY_DEVICES.md). It runs a current Chromium told to
+behave like iOS 12 Safari: no flex gap, no `aspect-ratio`, no `:has`, and no
+pointer events, with the browser's own pointer events blocked. It checks that:
+
+- every tab lays out exactly as the modern page, on three screen sizes;
+- no box is quietly kept right by the browser's own gap;
+- the rewritten stylesheet holds nothing iOS 12 can't read;
+- touches alone drive the trackpad and the keys;
+- the layer settles on an idle page, with and without Reduce Motion;
+- a current browser never runs the layer.
+
+Each check was confirmed to fail with the part it guards switched off.
+
+`test_latency_budget.py` (marked `timing`, so it runs alone) measures touch to
+message with the CPU slowed 6× and every frame spending 20 ms redrawing first.
+It fails if the median goes over 3 ms, modern or with the layer. A send moved
+back onto the next frame fails it.
+
+Two tools for looking further:
+
+- `python3 tests/perf/latency.py [--legacy] [--busy 20]` prints the numbers.
+- `python3 tests/support/live_board.py` serves the page and the board model to a
+  real device on the same WiFi.
+
 ## Golden files and baselines
 
 `tests/golden/` holds what "unchanged" means. A test compares against its golden

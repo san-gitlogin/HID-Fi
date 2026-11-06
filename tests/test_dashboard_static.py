@@ -232,7 +232,10 @@ def main():
 
     # --- script syntax ---
     scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
-    check("exactly one script block", len(scripts) == 1, str(len(scripts)))
+    # The page's script, and before it in <head> the old-browser layer
+    # (docs/LEGACY_DEVICES.md), which must run before anything is drawn. No other.
+    check("the page's script and the old-browser layer, nothing else", len(scripts) == 2
+          and "Older browsers" in scripts[0][:400] and html.index("<script>") < html.index("</head>"), str(len(scripts)))
     js = "\n".join(scripts)
     out_js = HERE / "_ui_preview.js"
     out_js.write_text(js, encoding="utf-8")

@@ -99,6 +99,12 @@ It runs in your phone's browser, served from the board itself — nothing to
 install. It adapts to the computer it is plugged into and works out which on its
 own: a Mac gets Mac keys, shortcuts and gestures, a PC gets Windows ones.
 
+**Old devices work too.** An iPad or iPhone stuck on iOS 12, an older Android
+tablet, a Raspberry Pi screen: the page fills in what an older browser lacks,
+and a current browser skips that entirely. The trackpad and keys send the
+moment a finger moves, on every device. The list of supported browsers, and how
+it is tested, is in [docs/LEGACY_DEVICES.md](docs/LEGACY_DEVICES.md).
+
 <table>
 <tr>
 <td align="center" width="25%"><img src="docs/assets/screens/01-trackpad.png" width="180" alt="Trackpad"><br><b>Trackpad</b><br><sub>Move, tap, two-finger scroll, pinch, three-finger gestures</sub></td>
@@ -595,6 +601,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
 | [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
+| [docs/LEGACY_DEVICES.md](docs/LEGACY_DEVICES.md) | Which phones, tablets and browsers work, the old-browser layer, input latency, testing a real device |
 | [docs/COMPANION.md](docs/COMPANION.md) | HID-Fi Companion: install it on macOS, Windows or Linux, pair, watch, fix problems |
 | [docs/AGENT_CONTROL.md](docs/AGENT_CONTROL.md) | Driving a computer from an AI agent: actions, steps, MCP |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the firmware and dashboard fit together |

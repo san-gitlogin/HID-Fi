@@ -7,7 +7,30 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased - recovery mode and factory reset (no COM port needed)
+## Unreleased - recovery mode and factory reset (no COM port needed), old devices
+
+### Dashboard: old phones and tablets, and input latency
+
+- **Works on iOS 12.** An iPad Air, iPad mini 2 or 3, iPhone 5s or iPhone 6 (all
+  stopped at iOS 12.5.7) showed a broken page: the trackpad had no height,
+  buttons ran together, and no touch did anything (iOS 12 has no pointer
+  events). A layer built into the page now fills in what an older browser lacks:
+  - the stylesheet is rewritten into equivalents it can read;
+  - flex gap and aspect-ratio are emulated from the browser's own layout;
+  - touches become pointer events.
+
+  Layout matches the modern page to the pixel on every tab. Tested on a real
+  iPad Air (iOS 12.5.7). Safari 12+, Chrome 79+ and Firefox 75+ are covered;
+  current browsers never run the layer. See docs/LEGACY_DEVICES.md.
+- **The trackpad sends the moment a finger moves,** not on the next frame. With
+  a slow redraw (20 ms per frame), movement went from 20.8 ms to 0.1 ms. Nothing
+  runs while the trackpad is idle; before, a loop ran every frame for as long as
+  the page was open.
+- **Key presses allocate no memory** (each key's messages are built once), so a
+  key never waits on garbage collection.
+- New: `tests/ui/legacy/` (layout to the pixel with iOS 12's gaps, touch-only
+  input, no busy loops, a latency budget), `tests/perf/latency.py` and
+  `tests/support/live_board.py` for testing a real device.
 
 Recovery of a forgotten WiFi password or access PIN no longer needs the COM
 cable, so a board with one USB port - the HID-Fi Dongle - can be recovered.

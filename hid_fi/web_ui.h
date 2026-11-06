@@ -3510,13 +3510,16 @@ function bindKnob(el,idx){
   const endless=(k.mode||'endless')==='endless';
   let active=false,lastAng=0,acc=0,steps=0,fade=0,press=0,moved=false;
   let ang=endless?0:(k.pos===undefined?.5:k.pos);
-  const angOf=e=>{const r=el.getBoundingClientRect();
-    return Math.atan2(e.clientY-(r.top+r.height/2),e.clientX-(r.left+r.width/2))*180/Math.PI;};
+  // The centre is measured when the finger lands, not on every move: the knob
+  // turning restyles it, and measuring then made a slow phone recalculate.
+  let kcx=0,kcy=0;
+  const centre=()=>{const r=el.getBoundingClientRect();kcx=r.left+r.width/2;kcy=r.top+r.height/2;};
+  const angOf=e=>Math.atan2(e.clientY-kcy,e.clientX-kcx)*180/Math.PI;
   const show=t=>{const n=$('kt'+idx);if(n)n.textContent=t;};
 
   el.addEventListener('pointerdown',e=>{
     active=true;moved=false;el.classList.add('act');el.setPointerCapture(e.pointerId);
-    lastAng=angOf(e);clearTimeout(fade);
+    centre();lastAng=angOf(e);clearTimeout(fade);
     // press and hold without turning = mute, the way a real volume knob clicks in
     press=setTimeout(()=>{if(!moved&&k.t==='media'){toggleMute();show('mute');buzz(24);}},450);
     e.preventDefault();
@@ -3769,16 +3772,19 @@ function bindStick(el,axis){
     cap.style.transform='translate3d('+dx+'px,'+dy+'px,0)';
     const nx=Math.round(clamp(dx/r,-1,1)*127), ny=Math.round(clamp(dy/r,-1,1)*127);
     if(axis==='l'){GP.lx=nx;GP.ly=ny;}else{GP.rx=nx;GP.ry=ny;}
-    GP.dirty=true;
+    GP.dirty=true;gpKick();
   };
+  // Measured once when the finger lands - the stick does not move while held,
+  // and measuring on every move made a slow phone restyle each time (the cap
+  // had just moved).
+  let cx=0,cy=0;
   el.addEventListener('pointerdown',e=>{
     on=true;el.classList.add('act');el.setPointerCapture(e.pointerId);
-    r=el.getBoundingClientRect().width*0.27;
+    const b=el.getBoundingClientRect();r=b.width*0.27;cx=b.left+b.width/2;cy=b.top+b.height/2;
     move(e);e.preventDefault();
   },{passive:false});
   const move=e=>{
-    const b=el.getBoundingClientRect();
-    let dx=e.clientX-(b.left+b.width/2), dy=e.clientY-(b.top+b.height/2);
+    let dx=e.clientX-cx, dy=e.clientY-cy;
     const d=Math.hypot(dx,dy);
     if(d>r){dx=dx/d*r;dy=dy/d*r;}
     set(dx,dy);
@@ -3791,16 +3797,24 @@ function bindStick(el,axis){
   el.addEventListener('pointerup',up,{passive:false});
   el.addEventListener('pointercancel',up,{passive:false});
 }
-function gpFlush(){
-  if(GP.dirty&&GP.enabled){txGamepad(GP.lx,GP.ly,GP.rx,GP.ry,GP.hat,GP.btns);GP.dirty=false;}
-  requestAnimationFrame(gpFlush);
+// Like the trackpad: the state leaves from the touch itself, at most every 8 ms,
+// and nothing runs while the gamepad is not being used. (Sent once a frame, a
+// button pressed and let go within one frame never reached the computer.)
+const GP_MS=8;
+let gpLast=-1e9,gpT=0;
+function gpKick(){
+  if(gpT)return;
+  const wait=gpLast+GP_MS-performance.now();
+  if(wait<=0)gpFlush();else gpT=setTimeout(()=>{gpT=0;gpFlush();},wait);
 }
-requestAnimationFrame(gpFlush);
+function gpFlush(){
+  if(GP.dirty&&GP.enabled){txGamepad(GP.lx,GP.ly,GP.rx,GP.ry,GP.hat,GP.btns);GP.dirty=false;gpLast=performance.now();}
+}
 function bindGpButtons(){
   document.querySelectorAll('[data-gb]').forEach(b=>{
     const bit=1<<(+b.dataset.gb);
-    const dn=e=>{GP.btns|=bit;GP.dirty=true;b.classList.add('on');buzz(6);e.preventDefault();};
-    const up=e=>{GP.btns&=~bit;GP.dirty=true;b.classList.remove('on');e.preventDefault();};
+    const dn=e=>{GP.btns|=bit;GP.dirty=true;gpKick();b.classList.add('on');buzz(6);e.preventDefault();};
+    const up=e=>{GP.btns&=~bit;GP.dirty=true;gpKick();b.classList.remove('on');e.preventDefault();};
     b.addEventListener('pointerdown',dn,{passive:false});
     b.addEventListener('pointerup',up,{passive:false});
     b.addEventListener('pointercancel',up,{passive:false});
@@ -3808,8 +3822,8 @@ function bindGpButtons(){
   });
   document.querySelectorAll('[data-hat]').forEach(b=>{
     const v=+b.dataset.hat;
-    const dn=e=>{GP.hat=v;GP.dirty=true;b.classList.add('on');buzz(6);e.preventDefault();};
-    const up=e=>{GP.hat=0;GP.dirty=true;b.classList.remove('on');e.preventDefault();};
+    const dn=e=>{GP.hat=v;GP.dirty=true;gpKick();b.classList.add('on');buzz(6);e.preventDefault();};
+    const up=e=>{GP.hat=0;GP.dirty=true;gpKick();b.classList.remove('on');e.preventDefault();};
     b.addEventListener('pointerdown',dn,{passive:false});
     b.addEventListener('pointerup',up,{passive:false});
     b.addEventListener('pointercancel',up,{passive:false});
@@ -5298,7 +5312,7 @@ function applyStatus(d){
   }
   if(d.power_mode)paintPower(d);
   if(d.ota_state!==undefined)paintOta(d);
-  if(d.gamepad!==undefined&&d.gamepad!==GP.enabled){GP.enabled=d.gamepad;gpSync();}
+  if(d.gamepad!==undefined&&d.gamepad!==GP.enabled){GP.enabled=d.gamepad;gpSync();gpKick();}
   if(d.wiggle_mode!==undefined)$('wigState').textContent=d.wiggle_active?('Active - '+d.wiggle_mode):'Idle';
   if(d.firmware){
     $('brandsub').textContent=d.firmware.replace('hid_fi_','');
