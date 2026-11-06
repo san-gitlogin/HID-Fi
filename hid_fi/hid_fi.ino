@@ -2200,11 +2200,7 @@ void netMaybeMove() {
     netCheckAt = millis() + 120000;
     NetKnown k[NET_MAX];
     netKnown(k);
-    int p = netPreferred(k, netCount);
-    bool away = p >= 0 && !netSameNet(k, netCurrent, p);
-    bool unused = true;
-    for (int i = 0; i < netCount; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, netCurrent)) unused = false;
-    if (!away && !(unused && millis() - staOnlineSince >= NET_LOOK_MS)) return;
+    if (!netNeedsLook(k, netCount, netCurrent, millis() - staOnlineSince)) return;
     if (netOwnerNow()) return;
     if (WiFi.scanNetworks(true) != WIFI_SCAN_FAILED) netMoveScan = true;
 }

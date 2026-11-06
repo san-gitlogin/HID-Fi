@@ -72,7 +72,8 @@ Rules (`hid_fi/net_logic.h`):
    most once per start, then settles on D-01.
 6. **Coming home.** On a network that isn't the preferred one, the board checks
    every 2 minutes. When the preferred one is workable and no owner device is
-   connected right now, it moves back.
+   connected right now, it moves back. It scans only when there is something to
+   decide, so a board that has tried every network and settled stops scanning.
 7. **No flip-flopping.** It never moves away from a network an owner device is
    using, and never on one visit from another network: it chooses only at the
    moments above.
@@ -88,6 +89,7 @@ Rules (`hid_fi/net_logic.h`):
 - `tests/unit/test_net_logic.py::test_a_board_nobody_uses_looks_for_its_people`
 - `tests/unit/test_net_logic.py::test_it_comes_home_but_never_away_from_someone_using_it`
 - `tests/unit/test_net_logic.py::test_random_homes_against_the_written_rules`
+- `tests/unit/test_net_logic.py::test_it_scans_only_when_there_is_something_to_decide`
 - `tests/unit/test_net_logic.py::test_the_board_model_chooses_as_the_firmware_does`
 - `tests/ui/bdd/features/home_network.feature: Signing in over the home network marks it as where the board is used`
 - `tests/ui/bdd/features/home_network.feature: The network you use is marked, and another can be preferred`

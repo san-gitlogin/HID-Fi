@@ -135,3 +135,17 @@ inline int netMoveFrom(const NetKnown* k, int n, int cur, const NetSeen* seen, i
     if (best >= 0 && bestRssi > -1000) { if (why) *why = NET_LOOKING; return best; }
     return -1;
 }
+
+// While online on cur: is there anything to decide, worth a scan? Off the preferred
+// network (it may be back), or on one nobody uses after NET_LOOK_MS with another
+// saved network left to try. Nothing to decide, no scan: each one briefly disturbs
+// the board's own WiFi, so a board nobody uses that has tried everything stops.
+inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere) {
+    if (cur < 0 || cur >= n) return false;
+    int p = netPreferred(k, n);
+    if (p >= 0 && !netSameNet(k, cur, p)) return true;
+    for (int i = 0; i < n; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, cur)) return false;
+    if (msHere < NET_LOOK_MS) return false;
+    for (int i = 0; i < n; i++) if (k[i].usable && !k[i].tried && !netSameNet(k, i, cur)) return true;
+    return false;
+}

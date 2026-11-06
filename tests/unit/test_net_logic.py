@@ -306,6 +306,34 @@ def oracle_move(k, seen, cur, ms, owner):
     return (-max(c)[1], "looking") if c else (None, None)
 
 
+def oracle_look(k, cur, ms):
+    p = oracle_preferred(k)
+    if p is not None and not same(k, cur, p):
+        return True
+    if any((x[3] or x[4]) and same(k, i, cur) for i, x in enumerate(k)) or ms < LOOK_MS:
+        return False
+    return any(k[i][1] and not k[i][5] and not same(k, i, cur) for i in range(len(k)))
+
+
+def test_it_scans_only_when_there_is_something_to_decide(bench):
+    def look(known, cur, ms):
+        return ask(bench, [f"look {kspec(known)} {cur} {ms}"])[0][0] == 1
+    fresh = [net(C6, subnet=LAN0), net(EXT, subnet=LAN1)]
+    assert not look(fresh, 0, LOOK_MS - 1)                      # nobody yet, but not 5 minutes
+    assert look(fresh, 0, LOOK_MS)                              # 5 minutes, EXT not tried
+    assert not look([net(C6, subnet=LAN0), net(EXT, subnet=LAN1, tried=True)], 0, LOOK_MS * 9)   # all tried: no more scans
+    assert not look([net(C6, subnet=LAN0, used=2), net(EXT, subnet=LAN1)], 0, LOOK_MS * 9)       # home: no scans
+    assert look([net(C6, subnet=LAN0), net(EXT, subnet=LAN1, used=2)], 0, 0)                     # away: watch for home
+    rng = random.Random(611)
+    cases = []
+    for _ in range(3000):
+        known, _ = random_home(rng)
+        cases.append((known, rng.randrange(len(known)), rng.choice([0, LOOK_MS - 1, LOOK_MS, LOOK_MS * 4])))
+    got = ask(bench, [f"look {kspec(k)} {c} {m}" for k, c, m in cases])
+    for (k, c, m), g in zip(cases, got):
+        assert (g[0] == 1) == oracle_look(k, c, m), (k, c, m)
+
+
 def random_home(rng):
     pool = [C6, EXT, ARV, "Hometown", "Office", "Cafe", "Phone hotspot"]
     names = rng.sample(pool, rng.randint(1, 5))
@@ -346,6 +374,8 @@ MUTATIONS = [   # a planted bug each; the tests above must catch every one
     ("return a == b || (k[a].net && k[a].net == k[b].net);", "return a == b;"),     # no roaming within a network
     ("if (cur < 0 || cur >= n || ownerHereNow) return -1;", "if (cur < 0 || cur >= n) return -1;"),   # moves away from a user
     ("if (curUsed || msHere < NET_LOOK_MS) return -1;", "if (curUsed) return -1;"),                 # looks at once
+    ("if (k[i].usable && !k[i].tried && !netSameNet(k, i, cur)) return true;",
+     "if (k[i].usable && !netSameNet(k, i, cur)) return true;"),                  # scans forever once all tried
     ("if (!k[i].usable || k[i].tried || netSameNet(k, i, cur)) continue;",
      "if (!k[i].usable || netSameNet(k, i, cur)) continue;"),                       # looks in circles
     ("seen[k].rssi > bestRssi) {", "seen[k].rssi >= bestRssi) {"),                    # a tie goes to the older
@@ -363,7 +393,7 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
     exe = firmware.build_host(f"net_bench_{abs(hash(new))}", HERE / "net_bench.cpp", extra_inputs=[mutant],
                               flags=("-std=c++17", "-O2", f'-DNET_LOGIC="{mutant}"'))
     caught = 0
-    d02 = [(test_the_network_you_use_wins_over_a_stronger_one, ()),
+    d02 = [(test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
            (test_one_network_on_two_names_roams_to_the_strongest, ()), (test_the_paired_computer_anchors_over_a_phone, ()),
            (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ())] + [
            (test_a_preferred_network_too_weak_falls_back_to_the_strongest, a) for a in [(-90, (C6, "strongest"))]]
