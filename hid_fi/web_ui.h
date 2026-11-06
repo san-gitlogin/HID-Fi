@@ -1484,7 +1484,14 @@ function isBox(e){if(e.__lgk===undefined)e.__lgk=m(e,gSel);return e.__lgk;}
 // changed - only a row that wraps depends on width, so only those.
 function later(el,w){if(w)wide=true;else if(el)dirty.push(el);else all=true;if(!q)q=requestAnimationFrame(run);}
 function run(){
-  q=0;var t1=Date.now();wrote=false;
+  q=0;
+  // Nothing while the page is still arriving: on a slow CPU (an iPad Air, a busy
+  // CI runner) a frame comes before the page has loaded, and a pass then used up
+  // "everything" on half a page - the rail, the top bar and the tabs were never
+  // done (seen: 5 of 6 loads at 6x slower). What was asked for is kept for the
+  // pass at load, which does everything.
+  if(D.readyState==='loading')return;
+  var t1=Date.now();wrote=false;
   if(useGap){var list=[],seen=++mark;
     // Whether an element is one of the boxes is asked of it once and kept (its
     // class changing asks again): running the whole list of gap rules over every
@@ -1521,7 +1528,7 @@ if(useGap||arSel){
   var motion=/(^|;)\s*(transform|opacity|animation-duration|color|transition)\s*:[^;]*/g;
   var same=function(a,b){return (a||'').replace(motion,'').replace(/[\s;]/g,'')===(b||'').replace(motion,'').replace(/[\s;]/g,'');};
   D.addEventListener('DOMContentLoaded',function(){
-    run();
+    all=true;run();
     // Only what can change a layout: elements arriving or leaving, a class,
     // hidden flag or inline style changing. Text changing (the pad's badge,
     // every frame of a drag) is not watched, and neither are this code's writes.

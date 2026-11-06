@@ -158,3 +158,24 @@ def test_the_layer_settles_on_an_idle_page(pages, browser, motion):
     ctx.close()
     # the latency pill updating is a style change it looks at, about once a second
     assert runs <= 4, f"{runs} passes in 3 s with nothing happening"
+
+
+@pytest.mark.parametrize("slower", [6, 20])
+def test_a_slow_cpu_still_gets_every_box(pages, slower):
+    """On a slow CPU (an iPad Air, a busy CI runner) a frame came before the page had
+    loaded; a pass then used up 'everything' on half a page and the rail, the top bar
+    and the tabs were never done (5 of 6 loads at 6x slower, 2026-11-06)."""
+    ctx = pages(viewport={"width": 768, "height": 1024}, has_touch=True, is_mobile=True, reduced_motion="reduce")
+    page = ctx.new_page()
+    ctx.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": slower})
+    page.add_init_script(PIN_RTT + IOS12 + NO_POINTER)
+    sim = BoardSim()
+    sim.attach(page, dashboard.extract_html())
+    page.goto(sim.URL)
+    page.wait_for_timeout(300)
+    settle(page)
+    for v in ("pad", "keys"):
+        page.evaluate(f"go('{v}')")
+        settle(page)
+        left = page.evaluate(NATIVE_GAP)
+        assert not left, f"{v}: boxes the layer never reached on a {slower}x slower CPU: {left}"
