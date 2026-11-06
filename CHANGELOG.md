@@ -28,6 +28,12 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   the page was open.
 - **Key presses allocate no memory** (each key's messages are built once), so a
   key never waits on garbage collection.
+- **The gamepad sends from the touch too.** It used to send once a frame, for as
+  long as the page was open; a button tapped within one frame then reached the
+  computer as a release only. The stick and knobs no longer re-measure
+  themselves on every move.
+- **Every combination of missing features tested:** 63 real mixes of the five
+  checks plus flex gap, each laid out to the pixel, with touch-only input.
 - New: `tests/ui/legacy/` (layout to the pixel with iOS 12's gaps, touch-only
   input, no busy loops, a latency budget), `tests/perf/latency.py` and
   `tests/support/live_board.py` for testing a real device.

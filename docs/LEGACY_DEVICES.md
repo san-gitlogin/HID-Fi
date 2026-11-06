@@ -79,6 +79,10 @@ changing what it shows) can't hold the pointer or a key back.
   (the USB polling interval). Nothing runs while nobody is touching.
 - **Keys:** each key's two messages (press and release) are built the first time
   it is used and reused after that, so a key press allocates no memory.
+- **Gamepad:** sent from the touch the same way. When it was sent once a frame, a
+  button pressed and released within one frame reached the computer as a
+  release only.
+- **Stick and knobs** are measured when the finger lands, not on every move.
 
 Measured with `tests/perf/latency.py`: Chromium with the CPU slowed 6×, and every
 frame spending 20 ms redrawing first, as a slow device does.
@@ -116,13 +120,18 @@ iOS 12: no flex gap, no `aspect-ratio`, no `:has`, and no pointer events, with t
 browser's own pointer events blocked. It checks that:
 
 - a current browser never runs the layer;
+- **every combination** of what a browser can lack works: the five checks plus
+  flex gap, 63 real mixes. In each, the layer decides by itself, every tab lays
+  out to the pixel, and touch-only input works;
 - every tab lays out exactly as the modern page, on three screen sizes, and no box
   is quietly kept right by the browser's own gap;
 - nothing is left in the rewritten stylesheet that iOS 12 can't read;
 - touches alone drive the trackpad and the keys;
 - the layer settles on an idle page, with and without Reduce Motion (it once ran
   142 times in 3 s from its own writes);
-- touch to message stays within budget on a slowed CPU.
+- touch to message stays within budget on a slowed CPU;
+- nothing runs on an idle page (no frame loop), and a gamepad tap faster than a
+  frame arrives as a press and a release.
 
 Each check was confirmed to fail when the part it guards is switched off.
 
