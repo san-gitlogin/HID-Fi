@@ -41,8 +41,19 @@ RECTS = """() => { const out={}; let i=0;
 # (a real iOS 12 has none). If the layer did not run, the native gap would do
 # the work and the layout would match anyway - so none may be left on screen.
 NATIVE_GAP = """() => [...document.querySelectorAll('body *')].filter(e => { if (!e.getClientRects().length) return false;
-  const s = getComputedStyle(e); return /flex/.test(s.display) && (parseFloat(s.rowGap) > 0 || parseFloat(s.columnGap) > 0); })
-  .slice(0, 5).map(e => e.id || e.className)"""
+  const s = getComputedStyle(e); if (!/flex/.test(s.display) || !(parseFloat(s.rowGap) > 0 || parseFloat(s.columnGap) > 0)) return false;
+  // Gap only does anything between two laid-out items (a slim rail hides its buttons' labels,
+  // leaving one: the layer rightly leaves those alone, and this once flagged them on CI).
+  let n = 0;
+  for (const k of e.childNodes) {
+    if (k.nodeType === 3) { if (/\\S/.test(k.nodeValue)) n++; continue; }
+    if (k.nodeType !== 1) continue;
+    const c = getComputedStyle(k);
+    if (c.display !== 'none' && c.position !== 'absolute' && c.position !== 'fixed') n++;
+  }
+  e.__items = n; return n > 1; }).slice(0, 5).map(e => ({box: e.id || e.className, items: e.__items,
+    seenByLayer: !!e.__lgb, style: e.getAttribute('style'), body: document.body.className,
+    layerRuns: window.__hidfiLegacy && window.__hidfiLegacy.runs, queued: !!(window.__hidfiLegacy && window.__hidfiLegacy.busy())}))"""
 VIEWS = ["pad", "screen", "keys", "short", "media", "game", "power", "setup"]
 SCREENS = [("ipad air", 768, 1024), ("iphone 5s", 320, 568), ("pi 7in", 800, 480)]
 

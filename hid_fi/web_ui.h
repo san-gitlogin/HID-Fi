@@ -1507,6 +1507,7 @@ function run(){
   L.runs=(L.runs||0)+1;L.runMs=(L.runMs||0)+Date.now()-t1;   // what it costs, for docs/LEGACY_DEVICES.md
 }
 L.redo=function(){later();};
+L.busy=function(){return !!q;};      // a pass is queued for the next frame (tests wait on it)
 if(useGap||arSel){
   // A new size can also show or hide things (media queries): everything on screen.
   window.addEventListener('resize',function(){gen++;later();});
