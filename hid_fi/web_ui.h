@@ -1245,6 +1245,333 @@ main::after{height:var(--flpad,0px)}
 @media(min-width:7000px) and (min-height:4000px){:root{zoom:3.5}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
+<script>
+/* Older browsers: iOS 12 Safari (an iPad Air, an iPhone 5s), Chrome before 2022
+   (an old Android tablet, a Raspberry Pi). docs/LEGACY_DEVICES.md has the list.
+   A current browser leaves on the next line and nothing else here runs for it.
+   An old one gets, once at load: the stylesheet rewritten into what it can read,
+   pointer events made from touches, boxes kept to their ratio, and the screen's
+   real height for dvh. Written as ES5 so even an engine older than the floor
+   parses it and gets that far. */
+(function(){
+var S=window.CSS&&CSS.supports?function(p,v){try{return v===undefined?CSS.supports(p):CSS.supports(p,v);}catch(e){return false;}}:function(){return false;};
+if(!window.__hidfiForceLegacy&&S('height','1dvh')&&S('aspect-ratio','1')&&S('color','color-mix(in srgb,red,red)')&&S('selector(:has(a))')&&('PointerEvent' in window))return;
+var D=document,R=D.documentElement,L=window.__hidfiLegacy={pe:'PointerEvent' in window&&!window.__hidfiForceNoPointer,ar:[],ta:[],ms:0};
+var t0=Date.now();
+
+/* Flex gap: measured, since nothing reports it. */
+var fg=(function(){
+  if(window.__hidfiForceNoFlexGap)return false;
+  var f=D.createElement('div');f.style.cssText='display:flex;flex-direction:column;row-gap:1px;position:absolute';
+  f.appendChild(D.createElement('div'));f.appendChild(D.createElement('div'));R.appendChild(f);
+  var ok=f.scrollHeight===1;R.removeChild(f);return ok;})();
+L.fg=fg;
+var arOk=S('aspect-ratio','1')&&!window.__hidfiForceNoAspect;
+
+/* ---- the stylesheet ---- */
+function close(s,i){var d=0;for(var j=i;j<s.length;j++){var c=s[j];if(c==='(')d++;else if(c===')'){d--;if(!d)return j;}}return s.length-1;}
+function split(s,ch){var out=[],d=0,b=0;for(var i=0;i<s.length;i++){var c=s[i];if(c==='('||c==='[')d++;else if(c===')'||c===']')d--;else if(c===ch&&!d){out.push(s.slice(b,i));b=i+1;}}out.push(s.slice(b));return out;}
+// :is(a,b) and :where(a,b) become the plain list they stand for.
+function expand(sel){
+  var m=/:(is|where)\(/.exec(sel);if(!m)return[sel];
+  var o=m.index+m[0].length-1,c=close(sel,o),pre=sel.slice(0,m.index),post=sel.slice(c+1),out=[];
+  split(sel.slice(o+1,c),',').forEach(function(a){expand(pre+a.trim()+post).forEach(function(x){out.push(x);});});
+  return out;
+}
+function valid(sel){if(sel.indexOf(':')<0)return true;if(window.__hidfiForceBadSel&&window.__hidfiForceBadSel.test(sel))return false;try{D.querySelector(sel.replace(/::?(before|after|placeholder|selection|-webkit-[\w-]+|-moz-[\w-]+)/g,''));return true;}catch(e){return false;}}
+// clamp(a,b,c) is exactly max(a,min(b,c)), which arrived years earlier.
+function unclamp(v){var i;while((i=v.indexOf('clamp('))>=0){var c=close(v,i+5),a=split(v.slice(i+6,c),',');v=v.slice(0,i)+'max('+a[0].trim()+',min('+a[1].trim()+','+a[2].trim()+'))'+v.slice(c+1);}return v;}
+var cv=D.createElement('canvas').getContext('2d'),rootCS=null;
+function rgba(s){
+  s=s.trim().replace(/var\((--[\w-]+)\)/g,function(_,n){rootCS=rootCS||getComputedStyle(R);return rootCS.getPropertyValue(n).trim();});
+  cv.fillStyle='#000';cv.fillStyle=s;var f=cv.fillStyle;
+  if(f[0]==='#')return[parseInt(f.substr(1,2),16),parseInt(f.substr(3,2),16),parseInt(f.substr(5,2),16),1];
+  var n=f.match(/[\d.]+/g)||[0,0,0,0];return[+n[0],+n[1],+n[2],n[3]===undefined?1:+n[3]];
+}
+// color-mix(in srgb, A p%, B): mixed here, the way the spec does it (premultiplied).
+function unmix(v){var i;while((i=v.indexOf('color-mix('))>=0){var c=close(v,i+9),a=split(v.slice(i+10,c),',');
+  var A=a[1].trim(),B=a[2].trim(),pm=/\s([\d.]+)%\s*$/.exec(A),p=pm?pm[1]/100:.5;if(pm)A=A.slice(0,pm.index);
+  var x=rgba(A),y=rgba(B),al=x[3]*p+y[3]*(1-p),ch=function(k){return al?Math.round((x[k]*x[3]*p+y[k]*y[3]*(1-p))/al):0;};
+  v=v.slice(0,i)+'rgba('+ch(0)+','+ch(1)+','+ch(2)+','+(+al.toFixed(3))+')'+v.slice(c+1);}return v;}
+function decls(body){var out=[];split(body,';').forEach(function(d){var k=d.indexOf(':');if(k>0)out.push([d.slice(0,k).trim(),d.slice(k+1).trim()]);});return out;}
+// Parse into rules, at-rule blocks and raw statements, nested.
+function parse(s){
+  var out=[],i=0;
+  while(i<s.length){
+    var o=s.indexOf('{',i),sc=s.indexOf(';',i);
+    if(o<0)break;
+    var head=s.slice(i,o).trim();
+    if(head[0]==='@'&&sc>=0&&sc<o){out.push({raw:s.slice(i,sc+1)});i=sc+1;continue;}
+    var d=1,j=o+1;for(;j<s.length&&d;j++){if(s[j]==='{')d++;else if(s[j]==='}')d--;}
+    var body=s.slice(o+1,j-1);
+    if(/^@(media|supports)/.test(head))out.push({at:head,kids:parse(body)});
+    else if(head[0]==='@')out.push({raw:head+'{'+body+'}'});
+    else out.push({sel:head,d:decls(body)});
+    i=j;
+  }
+  return out;
+}
+var gapSel=[],autoL=[],autoT=[];
+function fix(nodes,ctx){
+  var out=[];
+  nodes.forEach(function(n){
+    if(n.raw){out.push(n);return;}
+    if(n.kids){out.push({at:n.at,kids:fix(n.kids,ctx.concat([n.at]))});return;}
+    var sels=[];split(n.sel,',').forEach(function(s){expand(s.trim()).forEach(function(x){sels.push(x);});});
+    var d=[],gap=false;
+    n.d.forEach(function(p){
+      var k=p[0],v=p[1];
+      if(/[\d.](dvh|svh|lvh)\b/.test(v))v=v.replace(/(-?[\d.]+)(dvh|svh)\b/g,'calc(var(--lgvh,1vh)*$1)').replace(/(-?[\d.]+)lvh\b/g,'$1vh');
+      if(v.indexOf('clamp(')>=0)v=unclamp(v);
+      if(v.indexOf('color-mix(')>=0)v=unmix(v);
+      if(k==='inset'){var q=v.split(/\s+/),t=q[0],r=q[1]||t,b=q[2]||t,l=q[3]||r;d.push(['top',t],['right',r],['bottom',b],['left',l]);return;}
+      if(k==='aspect-ratio'&&!arOk){d.push(['--lgar',v]);L.ar.push(sels.join(','));return;}
+      if(k==='touch-action'&&v==='none')L.ta.push(sels.join(','));
+      if(k==='user-select')d.push(['-webkit-user-select',v]);
+      if(k==='position'&&v==='sticky')d.push(['position','-webkit-sticky']);
+      if(k==='gap'||k==='row-gap'||k==='column-gap')gap=true;
+      if(/^margin/.test(k)&&/auto/.test(v)){var m=k==='margin'?split(v,' ').filter(Boolean):null,sides=m?{t:m[0],l:m[3]||m[1]||m[0]}:{t:k==='margin-top'?v:'',l:k==='margin-left'||k==='margin-inline'||k==='margin-inline-start'?v:''};
+        if(/auto/.test(sides.l||''))autoL.push(sels.join(','));if(/auto/.test(sides.t||''))autoT.push(sels.join(','));}
+      d.push([k,v]);
+    });
+    // A list holding something this browser cannot read would drop the whole
+    // rule; split out only the parts it cannot read.
+    var ok=[],bad=[];sels.forEach(function(s){(valid(s)?ok:bad).push(s);});
+    if(ok.length)out.push({sel:ok.join(','),d:d});
+    bad.forEach(function(s){out.push({sel:s,d:d});});
+    if(gap&&ok.length)gapSel.push(ok.join(','));
+  });
+  return out;
+}
+function emit(nodes){return nodes.map(function(n){
+  if(n.raw)return n.raw;if(n.kids)return n.at+'{'+emit(n.kids)+'}';
+  return n.sel+'{'+n.d.map(function(p){return p[0]+':'+p[1];}).join(';')+'}';}).join('\n');}
+var st=D.getElementsByTagName('style')[0];
+if(st){
+  var src=st.textContent.replace(/\/\*[\s\S]*?\*\//g,''),tree=parse(src);
+  st.textContent=emit(fix(tree,[]));
+  L.css=st.textContent;
+}
+
+/* ---- the real visible height, for what was dvh ---- */
+function vh(){R.style.setProperty('--lgvh',(window.innerHeight/100)+'px');}
+vh();window.addEventListener('resize',vh);window.addEventListener('orientationchange',function(){setTimeout(vh,300);});
+
+/* ---- flex gap, where the browser has none ----
+   Real gap goes only between the items actually laid out: not before the first,
+   not next to one that is hidden or taken out of the flow. CSS cannot know which
+   those are, so the browser's own layout is read and the gap is added as margin
+   exactly there. Only what changed is redone: a key pressed redoes that key's
+   row, not the page. */
+var sim=!!window.__hidfiForceNoFlexGap,gSel=gapSel.join(','),aL=autoL.join(','),aT=autoT.join(',');
+function m(el,sel){try{return !!sel&&(el.matches?el.matches(sel):el.webkitMatchesSelector(sel));}catch(e){return false;}}
+function px(v){return v==='normal'?0:parseFloat(v)||0;}
+var SIDE={l:'marginLeft',t:'marginTop',r:'marginRight',b:'marginBottom'},gen=1,wrote=false;
+// Writes only what differs: a box already laid out costs reads, no writes, so
+// nothing restyles and no transition can start.
+function put(el,side,v){var k=SIDE[side],o='__lg'+side;
+  if(v===null){if(el[o]!==undefined){if(el.style[k]!==el[o]){el.style[k]=el[o];wrote=true;}el[o]=undefined;}return;}
+  if(el[o]===undefined)el[o]=el.style[k];if(el.style[k]!==v){el.style[k]=v;wrote=true;}}
+// The page's own margins, remembered: read again only when the element itself
+// changes (its class or style - the observer clears this) or the screen does.
+// Reading means taking this code's margins off first, which would start any
+// "transition: all" and read its first frame (seen: 8px read back, 16px
+// written) - so that element alone is held still while it is read.
+function fresh(el){var b=el.__lgb;return b&&b.g===gen;}
+function gapFix(list){
+  var i,j,c,k,ks,box=[],sims=[],held=[],need=[];
+  var hold=function(e){if(e.__lgtr===undefined){e.__lgtr=e.style.transition;e.style.transition='none';held.push(e);}};
+  // 1. take this code's writes off whatever has to be read again
+  for(i=0;i<list.length;i++){c=list[i];
+    if(!fresh(c)){hold(c);if(sim&&c.__lgg){c.style.rowGap=c.style.columnGap='';c.__lgg=0;}need.push(c);}
+    for(j=0;j<c.children.length;j++){k=c.children[j];if(!fresh(k)){hold(k);for(var sd in SIDE)put(k,sd,null);need.push(k);}}}
+  // 2. read: one style pass for all of it
+  need.forEach(function(e){var cs=getComputedStyle(e),l=px(cs.marginLeft),t=px(cs.marginTop);
+    e.__lgb={g:gen,l:l,t:t,r:px(cs.marginRight),b:px(cs.marginBottom),
+      // an auto margin shows as the space it took, so only one that is there can be one
+      autoL:!!l&&(m(e,aL)||e.style.marginLeft==='auto'),autoT:!!t&&(m(e,aT)||e.style.marginTop==='auto'),
+      rg:px(cs.rowGap),cg:px(cs.columnGap)};});
+  for(i=0;i<list.length;i++){c=list[i];var cb=c.__lgb,ccs=getComputedStyle(c);
+    // How it lays out is read every time (cheap); its gap is remembered only
+    // where the tests switch the real one off.
+    var rg=sim?cb.rg:px(ccs.rowGap),cg=sim?cb.cg:px(ccs.columnGap),col=/column/.test(ccs.flexDirection),wrap=ccs.flexWrap!=='nowrap';
+    if(!/flex/.test(ccs.display)||!rg&&!cg)continue;c.__lgw=wrap&&!col;if(c.__lgw&&wrapSet.indexOf(c)<0)wrapSet.push(c);
+    var items=[];
+    // Text is a flex item too: "<svg> Label" has the gap between icon and label.
+    for(j=0;j<c.childNodes.length;j++){k=c.childNodes[j];
+      if(k.nodeType===3){if(/\S/.test(k.nodeValue))items.push({text:true});continue;}
+      if(k.nodeType!==1)continue;ks=getComputedStyle(k);
+      if(ks.display==='none'||ks.position==='absolute'||ks.position==='fixed')continue;
+      var kb=k.__lgb;items.push({el:k,l:kb.l,t:kb.t,r:kb.r,b:kb.b,autoL:kb.autoL,autoT:kb.autoT});}
+    if(items.length>1)box.push({c:c,col:col,wrap:wrap,rg:rg,cg:cg,jc:ccs.justifyContent,items:items});
+    if(sim){c.__lgg=1;sims.push(c);}}
+  // (The tests run this in a browser that has flex gap, so there they switch it
+  // off on each box - a real old browser simply ignores it.)
+  sims.forEach(function(c){if(c.style.rowGap!=='0px')c.style.rowGap=c.style.columnGap='0px';});
+  // 3. write. Every item but the first has the gap before it; the page's own
+  // margin, if any, is kept and the gap added to it.
+  var wraps=[],want=function(it,side,base,add){put(it.el,side,add?(base+add)+'px':(base?base+'px':null));};
+  box.forEach(function(b){b.items.forEach(function(it,n){
+    if(it.text)return;
+    var nx=b.items[n+1];
+    if(b.col){want(it,'t',it.t,n&&!it.autoT?b.rg:0);want(it,'b',it.b,nx&&nx.text?b.rg:0);want(it,'l',it.l,0);want(it,'r',it.r,0);}
+    else if(!b.wrap){want(it,'l',it.l,n&&!it.autoL?b.cg:0);want(it,'r',it.r,nx&&nx.text?b.cg:0);want(it,'t',it.t,0);want(it,'b',it.b,0);}});
+    if(b.wrap&&!b.col){b.items=b.items.filter(function(it){return !it.text;});wraps.push(b);}});
+  // A wrapping row. The item that starts a line has no gap before it, so it
+  // carries the gap on its right instead and the next item drops its own: each
+  // line is then exactly as wide as with real gap, so lines break where gap
+  // breaks them. Where they break is worked out here, by flexbox's own rule
+  // with real gap - an item joins the line if the line, a gap and the item fit -
+  // not read back from the layout: an item marked as starting a line can stop
+  // fitting because of that mark (seen: Haptics, 297 of 303px, sent down a
+  // line). The row's width is read again after laying out, for a row that sizes
+  // to its content. Lines after the first get the row gap above.
+  var lay=function(b){var its=b.items;its.forEach(function(it,n){
+      var ml=0,mr=0,nx=its[n+1],pv=its[n-1];
+      if(n&&!it.st&&!it.autoL)ml=b.cg;
+      it.carry=false;
+      if(n&&it.st){
+        if(nx&&!nx.st){mr=b.cg;it.carry=true;}
+        // Alone on its line: no margin of its own (one that grows would come up
+        // short - seen: the Combo button, 271 of 280px). What keeps it off the
+        // line above is room after that line's last item, where a left-aligned
+        // row leaves it unseen - and only if that line has the room; if not,
+        // the item could never have fitted there. Centred or right-aligned rows
+        // split the gap around the item instead.
+        else if(/center/.test(b.jc)){ml=b.cg/2;mr=b.cg/2;}
+        else if(/end|right/.test(b.jc))ml=b.cg;
+        else if(pv.slack>=b.cg-.5)pv.mr2=b.cg;
+      }
+      it.ml=ml;it.mr=mr;it.mt=n&&it.line?b.rg:0;});
+    its.forEach(function(it,n){if(n&&its[n-1].carry)it.ml=0;});
+    its.forEach(function(it){want(it,'l',it.l,it.ml);want(it,'r',it.r,it.mr+(it.mr2||0));want(it,'t',it.t,it.autoT?0:it.mt);want(it,'b',it.b,0);it.mr2=0;});};
+  // Line starts are kept on the items, so a row that has not changed is one
+  // read and no writes. Its width is read again only if laying it out wrote
+  // something (a row that sizes to its content can change width).
+  var roomOf=function(b){var cs2=getComputedStyle(b.c);return b.c.clientWidth-px(cs2.paddingLeft)-px(cs2.paddingRight);};
+  for(var pass=0;pass<3&&wraps.length;pass++){
+    var room=wraps.map(roomOf),changed=false;
+    var ws=wraps.map(function(b){return b.items.map(function(it){return it.el.getBoundingClientRect().width+it.l+it.r;});});
+    wraps.forEach(function(b,bi){var W=room[bi]+.5,line=0,ln=0;b.items.forEach(function(it,n){var w=ws[bi][n],st=!n||line+b.cg+w>W;
+      if(st&&n){b.items[n-1].slack=W-.5-line;ln++;}it.line=ln;if(st!==it.el.__lgst){it.el.__lgst=st;changed=true;}it.st=st;
+      line=st?w:line+b.cg+w;});b.items[b.items.length-1].slack=0;});
+    var before=wrote;wrote=false;wraps.forEach(lay);var laid=wrote;wrote=wrote||before;
+    // Nothing moved and nothing written: done in one read. Otherwise read once
+    // more - widths of items that grow, and of a row sized to its content,
+    // follow the margins just written.
+    if(!laid&&!changed)break;if(!laid&&pass)break;
+  }
+  if(held.length){void D.body.offsetWidth;held.forEach(function(e){e.style.transition=e.__lgtr;e.__lgtr=undefined;});}
+}
+
+/* ---- boxes kept to their ratio ---- */
+var arSel=L.ar.join(','),arSet=[];
+function ratio(v){v=(v||'').trim();if(!v||v==='auto')return 0;var p=v.split('/');var r=p.length>1?parseFloat(p[0])/parseFloat(p[1]):parseFloat(p[0]);return r>0?r:0;}
+function arFix(){
+  if(!arSel)return;
+  var els=D.querySelectorAll(arSel),seen=[];
+  for(var i=0;i<els.length;i++){var e=els[i],r=ratio(getComputedStyle(e).getPropertyValue('--lgar'));
+    if(!r){if(e.__lgh){e.style.height='';e.__lgh=0;}continue;}
+    var w=e.getBoundingClientRect().width;if(!w)continue;
+    var h=Math.round(w/r*100)/100;if(e.__lgh!==h){e.style.height=h+'px';e.__lgh=h;}seen.push(e);}
+  arSet.forEach(function(e){if(seen.indexOf(e)<0&&e.__lgh){e.style.height='';e.__lgh=0;}});arSet=seen;
+}
+
+/* ---- when to redo them: at most once a frame, only what changed ---- */
+var useGap=!fg&&!!gSel,all=true,wide=false,dirty=[],q=0,mo=null,mark=0,wrapSet=[];
+function isBox(e){if(e.__lgk===undefined)e.__lgk=m(e,gSel);return e.__lgk;}
+// later(): everything. later(el): what el can affect. later(0,true): the width
+// changed - only a row that wraps depends on width, so only those.
+function later(el,w){if(w)wide=true;else if(el)dirty.push(el);else all=true;if(!q)q=requestAnimationFrame(run);}
+function run(){
+  q=0;var t1=Date.now();wrote=false;
+  if(useGap){var list=[],seen=++mark;
+    // Whether an element is one of the boxes is asked of it once and kept (its
+    // class changing asks again): running the whole list of gap rules over every
+    // changed part of the page was most of a tab switch on an iPad Air.
+    var add=function(x){if(x&&x.nodeType===1&&x.__lgs!==seen&&isBox(x)){x.__lgs=seen;list.push(x);}};
+    var walk=function(r){add(r);var a=r.getElementsByTagName('*');for(var n=0;n<a.length;n++)add(a[n]);};
+    if(all)walk(D.body);
+    else{var roots=dirty.filter(function(d,n){if(!d.parentNode)return false;for(var o=0;o<dirty.length;o++)if(o!==n&&dirty[o]!==d&&dirty[o].contains(d))return false;return dirty.indexOf(d)===n;});
+      roots.forEach(function(r){add(r.parentElement);walk(r);});
+      if(wide)wrapSet.forEach(add);}
+    // Only what is on screen: a hidden tab is done when it is shown (its class
+    // changes, which brings it here). Seen on an iPad Air: every box on every
+    // tab, eight times at load, was a second of work.
+    list=list.filter(function(c){return c.getClientRects().length>0;});
+    if(list.length)gapFix(list);}
+  var ar=all||wide||wrote||list&&list.length||dirty.some(function(d){return m(d,arSel)||!!(d.querySelector&&arSel&&d.querySelector(arSel));});
+  all=wide=false;dirty=[];
+  if(ar)arFix();
+  if(mo)mo.takeRecords();     // what this just wrote is not news
+  L.runs=(L.runs||0)+1;L.runMs=(L.runMs||0)+Date.now()-t1;   // what it costs, for docs/LEGACY_DEVICES.md
+}
+L.redo=function(){later();};
+if(useGap||arSel){
+  // A new size can also show or hide things (media queries): everything on screen.
+  window.addEventListener('resize',function(){gen++;later();});
+  window.addEventListener('orientationchange',function(){setTimeout(function(){gen++;later();},300);});
+  window.addEventListener('load',function(){later(0,true);});
+  // A size that animates (the rail opening) is measured again once it lands;
+  // colours, fades and movement never change a box.
+  D.addEventListener('transitionend',function(e){if(/width|height|flex|grid|padding|margin|left|right|top|bottom|font|zoom|^--/.test(e.propertyName))later(0,true);},true);
+  // A style change that only moves or fades something (a stick's cap under the
+  // finger, every frame) cannot change a box or a gap.
+  var motion=/(^|;)\s*(transform|opacity|animation-duration|color|transition)\s*:[^;]*/g;
+  var same=function(a,b){return (a||'').replace(motion,'').replace(/[\s;]/g,'')===(b||'').replace(motion,'').replace(/[\s;]/g,'');};
+  D.addEventListener('DOMContentLoaded',function(){
+    run();
+    // Only what can change a layout: elements arriving or leaving, a class,
+    // hidden flag or inline style changing. Text changing (the pad's badge,
+    // every frame of a drag) is not watched, and neither are this code's writes.
+    mo=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var x=ms[i];
+      if(x.type==='attributes'){if(x.attributeName!=='style'||!same(x.oldValue,x.target.getAttribute('style'))){x.target.__lgb=null;if(x.attributeName==='class')x.target.__lgk=undefined;later(x.target);}continue;}
+      var el=false,j;for(j=0;j<x.addedNodes.length;j++)if(x.addedNodes[j].nodeType===1){el=true;later(x.addedNodes[j]);}
+      for(j=0;j<x.removedNodes.length;j++)if(x.removedNodes[j].nodeType===1)el=true;
+      if(el)later(x.target);}});
+    mo.observe(D.body,{childList:true,subtree:true,attributes:true,attributeOldValue:true,attributeFilter:['class','hidden','style']});
+  });
+}
+
+/* ---- pointer events, from touches and the mouse ---- */
+if(!L.pe){
+  var EP=Element.prototype;
+  if(!EP.setPointerCapture){EP.setPointerCapture=function(){};EP.releasePointerCapture=function(){};EP.hasPointerCapture=function(){return false;};}
+  var taSel=L.ta.join(','),start={},own={},lastTouch=0,mDown=null;
+  var near=function(el,sel){for(;el&&el.nodeType===1;el=el.parentElement)if(el.matches?el.matches(sel):el.webkitMatchesSelector(sel))return true;return false;};
+  var fire=function(type,el,p,id,kind,buttons,bubbles){
+    var e=D.createEvent('Event');e.initEvent(type,bubbles!==false,true);
+    e.pointerId=id;e.pointerType=kind;e.isPrimary=id===1||id===2;e.button=0;e.buttons=buttons;
+    e.clientX=p.clientX;e.clientY=p.clientY;e.pageX=p.pageX;e.pageY=p.pageY;e.screenX=p.screenX;e.screenY=p.screenY;
+    e.width=e.height=1;e.pressure=buttons?.5:0;e.hidfiShim=true;
+    el.dispatchEvent(e);return e;};
+  var elOf=function(t){var el=t.target;return el&&el.nodeType===1?el:(el&&el.parentElement)||D.body;};
+  D.addEventListener('touchstart',function(ev){lastTouch=Date.now();
+    for(var i=0;i<ev.changedTouches.length;i++){var t=ev.changedTouches[i],el=elOf(t);start[t.identifier]=el;
+      own[t.identifier]=!!taSel&&near(el,taSel);fire('pointerdown',el,t,t.identifier+2,'touch',1);}},{passive:false,capture:true});
+  D.addEventListener('touchmove',function(ev){lastTouch=Date.now();var stop=false;
+    for(var i=0;i<ev.changedTouches.length;i++){var t=ev.changedTouches[i],el=start[t.identifier];if(!el)continue;
+      if(own[t.identifier])stop=true;fire('pointermove',el,t,t.identifier+2,'touch',1);}
+    // touch-action:none, which this browser ignores: the element owns the finger.
+    if(stop&&ev.cancelable)ev.preventDefault();},{passive:false,capture:true});
+  var lift=function(kind){return function(ev){lastTouch=Date.now();
+    for(var i=0;i<ev.changedTouches.length;i++){var t=ev.changedTouches[i],el=start[t.identifier];if(!el)continue;
+      fire(kind,el,t,t.identifier+2,'touch',0);fire('pointerleave',el,t,t.identifier+2,'touch',0,false);
+      delete start[t.identifier];delete own[t.identifier];}};};
+  D.addEventListener('touchend',lift('pointerup'),{passive:false,capture:true});
+  D.addEventListener('touchcancel',lift('pointercancel'),{passive:false,capture:true});
+  // A mouse (an old desktop browser). Taps also send mouse events afterwards;
+  // those are the same finger again and are ignored.
+  var mouse=function(kind){return function(ev){if(Date.now()-lastTouch<1500)return;
+    var el=kind==='pointerdown'?(mDown=ev.target):(mDown||ev.target),b=kind==='pointerup'?0:(ev.buttons||(mDown?1:0));
+    if(kind==='pointerup')mDown=null;fire(kind,el,ev,1,'mouse',b);};};
+  D.addEventListener('mousedown',mouse('pointerdown'),true);D.addEventListener('mousemove',mouse('pointermove'),true);
+  D.addEventListener('mouseup',mouse('pointerup'),true);
+  D.addEventListener('mouseleave',function(ev){if(Date.now()-lastTouch<1500||ev.target===D)return;fire('pointerleave',ev.target,ev,1,'mouse',0,false);},true);
+}
+L.ms=Date.now()-t0;
+})();
+</script>
 </head>
 <body>
 
@@ -2199,14 +2526,22 @@ function lanLocked(){
 // Keys ride the same binary channel as the pointer. As JSON each keystroke cost
 // a 1KB parse, a long strcmp walk and a reply frame nobody reads; as three bytes
 // it costs none of that, which is what makes fast typing land in order.
+// Each key's two frames (down, up) are built the first time it is used and
+// reused after: a key press allocates nothing, so it never waits on a collector.
+const KEYF=new Map();
+function keyFrame(name,down){
+  let f=KEYF.get(name);
+  if(f===undefined){
+    const n=new TextEncoder().encode(name);
+    f=n.length<=22?[0,1].map(d=>{const b=new Uint8Array(2+n.length);b[0]=OP.KEY;b[1]=d;b.set(n,2);return b.buffer;}):null;
+    KEYF.set(name,f);
+  }
+  return f&&f[down?1:0];
+}
 function txKey(name,down){
   if(wsUp&&authOK){
-    const n=new TextEncoder().encode(name);
-    if(n.length<=22){
-      const b=new Uint8Array(2+n.length);
-      b[0]=OP.KEY;b[1]=down?1:0;b.set(n,2);
-      try{ws.send(b.buffer);return;}catch(e){}
-    }
+    const b=keyFrame(name,down);
+    if(b){try{ws.send(b);return;}catch(e){}}
   }
   // socket down, not yet authenticated, or an unusually long key name
   send({cmd:down?'key_down':'key_up',key:name});
@@ -2848,12 +3183,12 @@ function onMove(e){
     }
     const sp=Math.hypot(dx,dy)/dt;
     const g=S.sens*(1+S.acc*Math.min(sp,4));
-    accX+=dx*g;accY+=dy*g;
+    accX+=dx*g;accY+=dy*g;kick();
     vx=dx*g/dt;vy=dy*g/dt;
   }else if(mode===3&&S.f3drag){
     if(e.pointerId===primaryId){          // one finger's delta, not the sum of three
       const g=S.sens*(1+S.acc*Math.min(Math.hypot(dx,dy)/dt,4));
-      accX+=dx*g;accY+=dy*g;
+      accX+=dx*g;accY+=dy*g;kick();
     }
   }else if(mode===3&&S.f3app){
     // Windows draws the switcher while your fingers are still down and commits
@@ -2877,7 +3212,7 @@ function onMove(e){
       if(Math.abs(pinchAcc)>32){send({cmd:'gesture',name:pinchAcc>0?'zoom_in':'zoom_out'});pinchAcc=0;buzz(6);}
     }else{
       const sy=dy*S.scr*(S.nat?1:-1), sx=dx*S.scr*(S.nat?-1:1);
-      scrollPx+=sy;panPx+=sx;
+      scrollPx+=sy;panPx+=sx;kick();
       svy=sy/dt;svx=sx/dt;
     }
   }
@@ -2937,7 +3272,7 @@ function onUp(e){
 }
 pad.addEventListener('pointerup',onUp,{passive:false});
 pad.addEventListener('pointercancel',onUp,{passive:false});
-pad.addEventListener('wheel',e=>{scrollPx+=(e.deltaY>0?1:-1)*24*S.scr*(S.nat?-1:1);e.preventDefault();},{passive:false});
+pad.addEventListener('wheel',e=>{scrollPx+=(e.deltaY>0?1:-1)*24*S.scr*(S.nat?-1:1);kick();e.preventDefault();},{passive:false});
 pad.addEventListener('contextmenu',e=>e.preventDefault());
 // The browser must never act on a finger on the pad - above all, never zoom the
 // page on a double tap. touch-action:none says so, but iOS Safari can lose it:
@@ -2960,7 +3295,7 @@ function glide(){
   const step=()=>{
     vx*=S.mom;vy*=S.mom;
     if(Math.hypot(vx,vy)<.06){momRAF=0;return;}
-    accX+=vx*16;accY+=vy*16;
+    accX+=vx*16;accY+=vy*16;kick();
     momRAF=requestAnimationFrame(step);
   };
   momRAF=requestAnimationFrame(step);
@@ -2974,24 +3309,32 @@ function scrollGlide(){
   const step=()=>{
     svx*=S.mom;svy*=S.mom;
     if(Math.hypot(svx,svy)<.06){scrollRAF=0;return;}
-    scrollPx+=svy*16;panPx+=svx*16;
+    scrollPx+=svy*16;panPx+=svx*16;kick();
     scrollRAF=requestAnimationFrame(step);
   };
   scrollRAF=requestAnimationFrame(step);
 }
 function stopScrollMomentum(){if(scrollRAF){cancelAnimationFrame(scrollRAF);scrollRAF=0;}svx=svy=0;}
 
-// one socket write per frame, worst case
+// Movement leaves from the finger's own event, not on the next frame: a page
+// that is slow to redraw (an old phone changing what it shows) must never hold
+// the pointer back, and nothing runs while nobody is touching. At most one write
+// per 8 ms, the USB polling interval; what arrives in between goes on a timer.
+const MOVE_MS=8;
+let lastTx=-1e9,flushT=0;
+function kick(){
+  if(flushT)return;
+  const wait=lastTx+MOVE_MS-performance.now();
+  if(wait<=0)flush();else flushT=setTimeout(()=>{flushT=0;flush();},wait);
+}
 function flush(){
   let dx=Math.round(accX),dy=Math.round(accY);
   accX-=dx;accY-=dy;
   let w=0,p=0;
   if(Math.abs(scrollPx)>=24){w=Math.trunc(scrollPx/24);scrollPx-=w*24;}
   if(Math.abs(panPx)>=42){p=Math.trunc(panPx/42);panPx-=p*42;}
-  if(dx||dy||w||p)txMove(clamp(dx,-2000,2000),clamp(dy,-2000,2000),clamp(w,-120,120),clamp(p,-120,120));
-  requestAnimationFrame(flush);
+  if(dx||dy||w||p){txMove(clamp(dx,-2000,2000),clamp(dy,-2000,2000),clamp(w,-120,120),clamp(p,-120,120));lastTx=performance.now();}
 }
-requestAnimationFrame(flush);
 
 // =====================================================================
 //  fullscreen - explicit state machine, survives ESC / system exit / back
