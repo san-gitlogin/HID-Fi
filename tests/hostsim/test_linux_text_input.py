@@ -16,6 +16,7 @@ import platform
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -45,11 +46,20 @@ def _missing():
 
 def _session(input_method, cases_file, out_file, table_file):
     env = dict(os.environ, DISPLAY=":97")
-    procs = [subprocess.Popen(["Xvfb", ":97", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
+    xlog = Path(out_file).with_suffix(".xvfb.log")      # a file: a pipe nobody reads can fill and stall Xvfb
+    with open(xlog, "w") as xerr:
+        procs = [subprocess.Popen(["Xvfb", ":97", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
+                                  stdout=subprocess.DEVNULL, stderr=xerr)]
     try:
-        time.sleep(1.5)
-        subprocess.run(["setxkbmap", "us"], env=env, check=True)
+        # Wait for the display, not a fixed time: a slow runner once failed all 312 cases
+        # with "Cannot open display" and the error Xvfb printed was thrown away.
+        deadline = time.monotonic() + 20
+        while subprocess.run(["setxkbmap", "us"], env=env, capture_output=True).returncode:
+            if procs[0].poll() is not None:
+                raise RuntimeError("Xvfb exited: " + xlog.read_text(errors="replace")[-2000:])
+            if time.monotonic() > deadline:
+                raise RuntimeError("Xvfb :97 did not accept connections within 20 s: " + xlog.read_text(errors="replace")[-2000:])
+            time.sleep(0.25)
         dbus = subprocess.run(["dbus-launch", "--sh-syntax"], env=env, capture_output=True, text=True).stdout
         for line in dbus.splitlines():
             if line.startswith("DBUS_SESSION_BUS_ADDRESS="):
