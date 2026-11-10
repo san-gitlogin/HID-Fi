@@ -369,7 +369,7 @@ not involved; with no access PIN set, every op answers `403 pin_required`.
 | `state` | `id` | `state`: `none`, `pending`, `confirm`, `code_shown`, `paired`, `aborted` |
 | `reveal` | `id`, `n_a` | `state: "code_shown"`, or `bad_mac` if it breaks the commitment |
 | `chal` | `id` | `chal`: single use, 30 s |
-| `beat` | `id`, `port`, `fp`, `tn`, `chal`, `mac` | `{"status":"ok"}`. The board records the request's source address, never a claimed one |
+| `beat` | `id`, `port`, `fp`, `tn`, `chal`, `mac`, optional `via` (this computer's own address toward the board; when it differs from the request's source the computer is behind another router and does not anchor the board's network - DECISIONS.md D-10) | `{"status":"ok"}`. The board records the request's source address, never a claimed one |
 
 HTTP status and `reply` on refusal: `400 bad_request`, `400 unsupported`,
 `403 pin_required`, `404 unknown_pc`, `409 not_ready`, `401 stale_chal`,
@@ -527,7 +527,8 @@ as one network, so the strongest of those wins. The rules and why:
 | `wifi_configure` | `ssid`, `password`, optional fixed IP | adds the network (or updates it) at the front and joins it. With five saved, the oldest is forgotten |
 | `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `password_changed` (it has worked, but its router refuses the saved password now - enter the new one; the board never moves to it meanwhile, DECISIONS.md D-08), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first). Never a password. `max`: 5 |
 | `wifi_forget` | `ssid` | `wifi_forgotten` with `left`. Forgetting the connected one leaves it, and the board looks for another |
-| `wifi_prefer` | `ssid`, optional `now` | `wifi_prefer` with `on_it`. Makes it the preferred network, ranked as the paired computer's would be. The board moves there when nobody is using it on the network it is on, or at once with `now: true` |
+| `net_here` | - | A page opened by address that can reach the board's `.local` name too: it is right on the board's network and counts as using it (DECISIONS.md D-10). `auth` also takes `host`, the page's own address bar - the board's `.local` name counts at once |
+| `wifi_prefer` | `ssid`, optional `now`, `force` | `wifi_prefer` with `on_it`. With `now` while someone else is using the board right on its network: `busy: true` and `using`, nothing changed - `force: true` moves anyway. Makes it the preferred network, ranked as the paired computer's would be. The board moves there when nobody is using it on the network it is on, or at once with `now: true` |
 | `wifi_disconnect` | - | forgets every saved network |
 
 `status` adds `sta_known` (how many are saved), `sta_away` (none of them in
@@ -570,7 +571,8 @@ drives the radio.
 | `sta_retry_in_s` | seconds to the next attempt |
 | `sta_reason` | why the router let the board go, e.g. `BEACON_TIMEOUT` (router gone) or `AUTH_FAIL` |
 | `wifi_preferred` | the saved network the board joins first, `""` while nobody has used it over one |
-| `wifi_choice` | why it is on this network: `preferred`, `strongest`, `coming_home` or `looking`; `""` while offline |
+| `wifi_choice` | why it is on this network: `preferred`, `strongest`, `coming_home`, `looking` or `roaming` (a stronger access point of the same network); `""` while offline |
+| `comp_routed` | the paired computer reaches the board through another router (its `via` address is not the one the request came from), so it does not anchor the board's network |
 
 Pushed to every open dashboard: `{"event":"sta_online","ip":...,"changed":true,"prev_ip":...,"mdns":...}`
 when the board is back (or at a new address), and `{"event":"ap_restored","why":"home network lost"}`.

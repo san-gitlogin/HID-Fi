@@ -1,0 +1,753 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<meta charset="utf-8">
+<title>HID-Fi Core</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --ground: #0b0d10;
+  --panel: #12151a;
+  --panel-2: #171b21;
+  --line: #242a32;
+  --ink: #eceef1;
+  --muted: #9aa3ad;
+  --faint: #66707b;
+  --accent: #1fffd8;
+  --blue: #4aa3ff;
+  --good: #3ddc97;
+  --warn: #ffb547;
+  --bad: #ff6b6b;
+  --display: "Barlow Condensed", "DIN Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.6 var(--body); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; }
+a { color: var(--blue); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-weight: 700; letter-spacing: .06em; font-size: clamp(40px, 7vw, 76px); line-height: .95; text-transform: uppercase; }
+h2 { font-weight: 600; text-transform: uppercase; letter-spacing: .16em; font-size: 16px; color: var(--muted); }
+h3 { font-weight: 600; font-size: 20px; letter-spacing: .04em; text-transform: uppercase; }
+p { margin: 0; max-width: 70ch; }
+.eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+header.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-block: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.mark { display: flex; align-items: center; gap: 10px; font: 600 13px/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+.mark svg { width: 20px; height: 20px; color: var(--ink); }
+.hero { display: grid; gap: 14px; padding-block: 34px 22px; }
+.hero p { color: var(--muted); font-size: 17px; }
+.hero p b { color: var(--ink); font-weight: 600; }
+.stage { position: relative; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 30%, #1a1f26 0%, #0f1216 55%, #0b0d10 100%); height: clamp(380px, 66vh, 740px); }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.overlay { position: absolute; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ov-tl { top: 14px; left: 14px; right: 14px; justify-content: space-between; pointer-events: none; }
+.ov-tl > * { pointer-events: auto; }
+.ov-b { left: 14px; right: 14px; bottom: 14px; justify-content: space-between; }
+.seg { display: inline-flex; background: rgba(11,13,16,.8); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button { all: unset; cursor: pointer; padding: 7px 13px; border-radius: 999px; font: 600 13px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.seg .lbl { padding: 7px 6px 7px 10px; font: 600 10px/1.3 var(--mono); letter-spacing: .12em; color: var(--faint); text-transform: uppercase; }
+.seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .feat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatches { display: inline-flex; gap: 6px; align-items: center; background: rgba(11,13,16,.8); border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; }
+.sw { all: unset; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+.sw[aria-pressed="true"] { border-color: var(--accent); }
+.swatches span { font: 600 12px/1 var(--display); color: var(--muted); letter-spacing: .14em; text-transform: uppercase; padding-inline: 4px 2px; min-width: 64px; }
+.chip { all: unset; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 999px; background: rgba(11,13,16,.8); border: 1px solid var(--line); font: 600 13px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+#pins[aria-pressed="true"] { border-color: var(--bad); }
+.ctrls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.slider { display: none; align-items: center; gap: 10px; padding: 6px 12px; background: rgba(11,13,16,.8); border: 1px solid var(--line); border-radius: 999px; font: 600 11px/1 var(--mono); color: var(--muted); }
+.slider.on { display: inline-flex; }
+.slider input { width: 120px; accent-color: var(--accent); }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; font: 600 13px/1 var(--display); letter-spacing: .2em; color: var(--faint); text-transform: uppercase; }
+.caption { position: absolute; left: 14px; top: 62px; max-width: min(400px, calc(100% - 28px)); background: rgba(11,13,16,.88); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.caption b { display: block; font: 600 14px/1.2 var(--display); text-transform: uppercase; letter-spacing: .12em; color: var(--accent); margin-bottom: 6px; }
+.specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 14px; margin-top: 14px; overflow: hidden; }
+.spec { padding: 16px 18px; border-right: 1px solid var(--line); display: grid; gap: 6px; }
+.spec:last-child { border-right: 0; }
+.spec .v { font: 600 clamp(24px, 3vw, 34px)/1 var(--display); letter-spacing: .02em; }
+.spec .v small { font: 500 .5em var(--body); color: var(--muted); margin-left: 4px; }
+.spec .v.ok { color: var(--good); }
+nav.toc { display: flex; gap: 6px 16px; flex-wrap: wrap; padding-block: 18px 0; }
+nav.toc a { font: 600 13px/1.6 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+nav.toc a:hover { color: var(--accent); }
+section { padding-block: 48px 8px; display: grid; gap: 18px; scroll-margin-top: 12px; }
+.lede { color: var(--muted); }
+.variants { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.vcard { border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; background: var(--panel); }
+.vcard header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.vcard h3 { font-size: 30px; letter-spacing: .1em; }
+.vcard .dims { font: 600 14px/1 var(--mono); color: var(--accent); }
+.vcard ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 14px; }
+.vcard li { padding-left: 20px; position: relative; }
+.vcard li::before { position: absolute; left: 0; top: 0; font: 700 13px/1.6 var(--mono); }
+.vcard li.pro::before { content: "+"; color: var(--good); }
+.vcard li.con::before { content: "−"; color: var(--warn); }
+.vcard button { justify-self: start; }
+.feats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.feat { all: unset; cursor: pointer; display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.feat:hover { border-color: #39424d; }
+.feat[aria-current="true"] { border-color: var(--accent); }
+.feat .n { font: 600 12px/1.6 var(--mono); color: var(--faint); }
+.feat h3 { font-size: 17px; margin-bottom: 4px; }
+.feat p { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.feat .tag { font: 600 10px/1 var(--mono); letter-spacing: .1em; color: var(--accent); margin-left: 8px; vertical-align: middle; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 680px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); background: var(--panel); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--ink); font-weight: 600; width: 26%; }
+td { color: var(--muted); }
+td b, td code, .card code { color: var(--ink); font-weight: 600; }
+code { font-family: var(--mono); font-size: .9em; }
+tr.grp td { background: var(--panel-2); color: var(--accent); font: 600 13px/1.3 var(--display); letter-spacing: .16em; text-transform: uppercase; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; background: var(--panel); display: grid; gap: 12px; align-content: start; }
+.card p, .card li { color: var(--muted); font-size: 14px; }
+.card b { color: var(--ink); font-weight: 600; }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.card.wide { grid-column: 1 / -1; }
+.verdict { font: 600 15px/1.4 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.note { border-left: 2px solid var(--warn); padding: 4px 0 4px 12px; color: var(--muted); font-size: 14px; }
+.note b { color: var(--warn); }
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: 150px 1fr 76px; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.bar .track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.bar .fill { height: 100%; background: var(--blue); border-radius: 4px; }
+.bar .fill.hot { background: var(--warn); }
+.bar .num { font-family: var(--mono); text-align: right; color: var(--ink); }
+.checks { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.checks li { display: grid; grid-template-columns: 64px 1fr; gap: 10px; font-size: 14px; color: var(--muted); }
+.checks .st { font: 700 11px/1.75 var(--mono); letter-spacing: .1em; }
+.checks .st.pass { color: var(--good); }
+.checks .st.fail { color: var(--bad); }
+.checks .st.todo, .checks .st.limit { color: var(--warn); }
+figure { margin: 0; display: grid; gap: 8px; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { font-size: 13px; color: var(--faint); }
+.dia text { font-family: var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 10px; color: var(--muted); font-size: 14px; }
+.steps > li::before { content: counter(s, decimal-leading-zero); font: 600 12px/1.7 var(--mono); color: var(--accent); }
+.steps b { color: var(--ink); }
+footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-top: 1px solid var(--line); margin-top: 48px; display: grid; gap: 6px; }
+@media (max-width: 860px) {
+  .variants, .feats, .two { grid-template-columns: 1fr; }
+  .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spec:nth-child(2) { border-right: 0; }
+  .spec:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 560px) {
+  .ov-b { flex-direction: column; align-items: flex-start; }
+  .swatches span { display: none; }
+  .bar { grid-template-columns: 100px 1fr 62px; }
+  .caption { top: auto; bottom: 150px; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.67 21.45A8.9 8.9 0 1 1 21.45 11.67"/><path d="M8.64 8.64 14.96 20.66 15.7 15.7 20.66 14.96Z" fill="currentColor" stroke-width="1.5"/></svg>
+      LxusBrain · HID-Fi hardware
+    </div>
+    <div class="eyebrow">Core build guide · rev B</div>
+  </header>
+
+  <div class="hero">
+    <h1>HID-Fi Core</h1>
+    <p><b>The first one to build.</b> A 9 mm shell around the board you already own: three printed parts, no screws, no glue. On your own printer it costs about ₹16 of filament.</p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#details">Details</a><a href="#budget">Budget</a><a href="#base">No screws</a><a href="#print">Print</a><a href="#fit">Fit check</a><a href="#assemble">Assemble</a><a href="#test">Test at home</a><a href="#later">What waits</a><a href="#review">Review</a><a href="#proof">Proof</a>
+    </nav>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="3D model of the HID-Fi Core. Drag to rotate, scroll or pinch to zoom."></canvas>
+    <div class="loading" id="loading">Loading geometry…</div>
+    <div class="overlay ov-tl">
+      <div class="seg" role="group" aria-label="Variant" hidden style="display:none">
+        <button id="v-core" aria-pressed="true">Core</button><button id="v-sense" aria-pressed="false">Sense</button><button id="v-go" aria-pressed="false">Go</button>
+      </div>
+      <span></span>
+      <div class="swatches" role="group" aria-label="Finish">
+        <button class="sw" id="f-graphite" style="background:#2b2e33" aria-pressed="true" aria-label="Graphite"></button>
+        <button class="sw" id="f-ceramic" style="background:#e7e4dd" aria-pressed="false" aria-label="Ceramic"></button>
+        <button class="sw" id="f-titan" style="background:#8f959c" aria-pressed="false" aria-label="Titan"></button>
+        <span id="f-name">Graphite</span>
+      </div>
+    </div>
+    <div class="caption" id="caption" hidden></div>
+    <div class="overlay ov-b">
+      <div class="seg" role="group" aria-label="View">
+        <button id="m-assembled" aria-pressed="true">Assembled</button>
+        <button id="m-exploded" aria-pressed="false">Exploded</button>
+        <button id="m-xray" aria-pressed="false">X-ray</button>
+        <button id="m-section" aria-pressed="false">Section</button>
+      </div>
+      <div class="ctrls">
+        <label class="slider" id="cutwrap" for="cut">CUT X <input id="cut" type="range" min="-2.5" max="30.5" step="0.1" value="8.5"><span id="cutv" class="mono">8.5</span></label>
+        <div class="seg" role="group" aria-label="Cables">
+          <span class="lbl">Cables</span>
+          <button id="k-off" aria-pressed="true">Off</button><button id="k-slim" aria-pressed="false">Slim</button><button id="k-max" aria-pressed="false">Max</button>
+        </div>
+        <button class="chip" id="ant" aria-pressed="false">Antenna</button>
+        <button class="chip" id="pins" aria-pressed="false">Pins as shipped</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs">
+    <div class="spec"><span class="eyebrow">Length × width</span><span class="v" id="s-lw">67.6 × 32.3<small>mm</small></span></div>
+    <div class="spec"><span class="eyebrow">Thickness</span><span class="v" id="s-h">9.0<small>mm</small></span></div>
+    <div class="spec"><span class="eyebrow">Plastic</span><span class="v" id="s-g">10<small>g</small></span></div>
+    <div class="spec"><span class="eyebrow">Build checks</span><span class="v ok" id="s-c">–<small>pass</small></span></div>
+  </div>
+
+  <section id="details">
+    <h2>Details</h2>
+    <p class="lede">Select one to fly the camera to it.</p>
+    <div class="feats" id="feats"></div>
+  </section>
+
+  <section id="budget">
+    <h2>What you need, and what it costs</h2>
+    <p class="lede">Prices are rough Bangalore and online ranges for late 2026. Every line has a free or near-free option, and nothing here needs an agent, a lab or an investor.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Item</th><th>Cheapest way</th><th>Cost</th><th>Better later</th></tr></thead>
+        <tbody>
+          <tr><td>The board</td><td>Use one of the two YD-ESP32-S3 boards you already run HID-Fi on. The shell does not touch its firmware or data.</td><td class="mono">₹0</td><td>A new one for a second unit: ₹600–900</td></tr>
+          <tr><td>Printing (about 15 g with the two test prints)</td><td>Your own or a friend's printer: 10.6 g for the Core, plus about 4.4 g for the fit coupon and peg gauge.</td><td class="mono">₹20–30</td><td>A print shop or online service: roughly ₹300–700 for the coupon and one set (ask for PETG)</td></tr>
+          <tr><td>Screws</td><td>None. The base clips in with a front tongue and two press-fit pegs.</td><td class="mono">₹0</td><td>—</td></tr>
+          <tr><td>Status light window</td><td>A drop of clear hot glue pressed into the 2 mm hole from inside: it glows like a light pipe.</td><td class="mono">₹0</td><td>The printed clear PETG light pipe</td></tr>
+          <tr><td>Status LED solder bridge</td><td>Skip it for the first build; the shell works without it.</td><td class="mono">₹0</td><td>One solder blob, if you have an iron</td></tr>
+          <tr><td>Measuring</td><td>The fit coupon (below) checks the critical fit without any tools.</td><td class="mono">₹0</td><td>A digital caliper: ₹400–800</td></tr>
+          <tr><td>Feet</td><td>None: the Core sits flat.</td><td class="mono">₹0</td><td>plate-feet.stl and four Ø6 × 1.2 mm silicone bumpers (₹20–50)</td></tr>
+          <tr><td><b>First Core</b></td><td>Own or borrowed printer, your existing board, hot-glue light</td><td class="mono"><b>≈ ₹20–40</b></td><td>At a print service, using the two kit files: about two minimum charges (≈ ₹200)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>One honest trade-off.</b> PLA is fine for the fit coupon, the peg gauge or a desk test. For a unit left running for days, use PETG: PLA softens near 55 °C, and the pegs would loosen.</p>
+  </section>
+
+
+  <section id="base">
+    <h2>How the base clips in, with no screws</h2>
+    <div class="two">
+      <div class="card">
+        <figure>
+          <svg class="dia" viewBox="0 0 560 250" role="img" aria-label="Side section: the base plate's front tongue hooks into a slot in the front wall; at the back, a ribbed peg presses up into a socket in the top shell. A coin notch at the back edge lets you lever it out.">
+            <rect x="20" y="30" width="520" height="22" fill="#2b2e33" stroke="#4a525c"/>
+            <text x="30" y="22" fill="#9aa3ad" font-size="13">Top shell</text>
+            <rect x="20" y="30" width="26" height="170" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="514" y="30" width="26" height="170" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="40" y="172" width="14" height="12" fill="#0b0d10"/>
+            <rect x="46" y="182" width="466" height="18" fill="#3a3f46" stroke="#4a525c"/>
+            <polygon points="54,182 40,182 40,176 54,170" fill="#3a3f46" stroke="#4a525c"/>
+            <text x="62" y="222" fill="#eceef1" font-size="13">1 · Tongue hooks into the front wall</text>
+            <rect x="440" y="52" width="46" height="96" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="451" y="52" width="24" height="96" fill="#0b0d10"/>
+            <text x="300" y="80" fill="#1fffd8" font-size="13">Socket in the shell</text>
+            <rect x="454" y="96" width="18" height="86" fill="#f1ede2"/>
+            <rect x="449" y="104" width="4" height="66" fill="#f1ede2"/>
+            <rect x="473" y="104" width="4" height="66" fill="#f1ede2"/>
+            <text x="300" y="132" fill="#eceef1" font-size="13">2 · Ribbed peg on the plate</text>
+            <text x="300" y="150" fill="#9aa3ad" font-size="12">the ribs squash a little: snug, no rattle</text>
+            <rect x="476" y="190" width="36" height="10" fill="#0b0d10"/>
+            <text x="350" y="240" fill="#eceef1" font-size="13">3 · Coin notch to lever it out</text>
+          </svg>
+          <figcaption>Side section, not to scale. Front on the left, back on the right.</figcaption>
+        </figure>
+      </div>
+      <div class="card">
+        <p><b>Closing:</b> hook the plate's front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush. Two pegs on the plate slide up into two sockets moulded in the top shell's back corners.</p>
+        <p><b>Why it stays put:</b> each peg has three thin ribs that squash slightly as it goes in, like a wall plug. That gives a firm grip even if your printer prints a little over or under size. In a 1 m drop onto its top, the plate needs only about 4 N of grip per peg to stay on; a snug press fit holds more than that (estimated; the peg gauge lets you feel it).</p>
+        <p><b>Opening:</b> put a coin in the small notch at the back edge of the plate and lever gently. The pegs slide out, then unhook the tongue.</p>
+        <p class="note"><b>Tune it once.</b> Print the peg gauge first: three pegs and three holes at three tightnesses. Press each pair together and pick the one that is snug but still comes out with a fingernail. If it is pair 1 or 3 instead of the default pair 2, change <span class="mono">PEG.fit</span> in <span class="mono">build.mjs</span> to 0.04 or 0.12 and rebuild.</p>
+        <button class="chip" id="showscrews">Show it in the model</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="print">
+    <h2>Print it</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Part</th><th>Material</th><th>On the bed</th><th>Settings</th></tr></thead>
+        <tbody id="printrows"></tbody>
+      </table>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>On your own printer</h3>
+        <ul>
+          <li>Use the files in <span class="mono">out/print</span> (or the zip): they are already turned the way they sit on the bed, so do not rotate them.</li>
+          <li>Print in this order: fit coupon, peg gauge, unibody, plate, light pipe (optional).</li>
+          <li>The unibody prints <b>top face down</b>. On a textured sheet the top comes out with a fine matte texture and no layer lines.</li>
+          <li>0.12 mm layers for the unibody (its walls are what people see), 0.16–0.2 mm for the rest. 100% cooling for PETG after the first layers, for the vent slopes.</li>
+          <li>Elephant-foot compensation 0.15 mm keeps the vents and lettering sharp.</li>
+          <li>No supports anywhere.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>At a print shop or online service</h3>
+        <ul>
+          <li><b>Shops charge a minimum per file</b> (often ₹100), not per gram. Cheapest: upload the single <span class="mono">kit-all.stl</span> (every black part: unibody, plate, trim guide, fit coupon, peg gauge; about 18 g). Or, to check the fit before printing the shell, upload the two kit files instead of separate parts: <span class="mono">kit-test.stl</span> (fit coupon + peg gauge) first, then <span class="mono">kit-core.stl</span> (unibody + plate). Two minimums instead of seven.</li>
+          <li><b>The light pipe must be clear PETG</b> ("transparent" or "natural"). Black blocks the light. Order it separately in clear, or skip it and use the free hot-glue window.</li>
+          <li>Then send <span class="mono">unibody.stl</span> and <span class="mono">plate.stl</span> from the zip, with <span class="mono">PRINT-NOTES.txt</span>: "PETG, no supports, print exactly as oriented in the files, unibody at 0.12 mm layers."</li>
+          <li>Ask for photos before they ship, so you can check that the vents and lettering came out.</li>
+          <li>Skip the light pipe at a shop: it needs clear material, which means another file and another minimum charge. The hot-glue window costs nothing and glows the same.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="fit">
+    <h2>Fit check, before the full print</h2>
+    <div class="card">
+      <ol class="steps">
+        <li><span>Print <span class="mono">fit-coupon.stl</span>: the first 14 mm of the shell, the end with the USB-C windows. About 15 minutes.</span></li>
+        <li><span>Hold it face down and slide the board's two sockets into the windows from inside. The board edge should touch the inside of the front wall, with the sockets sitting in the windows.</span></li>
+        <li><span>Plug in your <b>thickest</b> USB-C cable from outside. It must click fully home, the same as on the bare board.</span></li>
+        <li><span>Print the peg gauge and press pegs 1, 2 and 3 into holes 1, 2 and 3. Pick the pair that is snug but comes out with a fingernail. The default is 2.</span></li>
+        <li><span>If the cable stops short, measure how far the sockets stick out past the board edge (I assumed 0.6 mm) and change <span class="mono">USBC.overhang</span> in <span class="mono">build.mjs</span>. Rebuild and every check reruns. Otherwise, print the real parts.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="assemble">
+    <h2>Assemble</h2>
+    <div class="two">
+      <div class="card">
+        <ol class="steps">
+          <li><span><b>Pins.</b> If your board has pins soldered underneath, they must go; the shell has no room for them. See the main page for the trim method and the printable trim guide. Boards without pins skip this.</span></li>
+          <li><span><b>Light.</b> Press the printed light pipe in from inside, or fill the 2 mm window from inside with a drop of clear hot glue and let it set.</span></li>
+          <li><span><b>Board.</b> Unibody face down. Lower the board in components first, sockets into their windows, then slide it forward until it stops (about 0.8 mm).</span></li>
+          <li><span><b>Plate.</b> Hook its front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush: the two pegs slide into their sockets.</span></li>
+          <li><span><b>Done.</b> Plug USB into the computer, COM if you need serial.</span></li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>Taking it apart</h3>
+        <p>A coin in the notch at the back edge of the plate, lever gently, then unhook the tongue. Tilt the board back 0.8 mm and lift it out. Nothing is glued or screwed, so you can reuse the shell for every board you test.</p>
+        <h3>Your two boards</h3>
+        <p>The board that holds your personal shortcuts and macros keeps them: the shell changes nothing in software. Use the other one first if you prefer.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="test">
+    <h2>Test at home, for free</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Test</th><th>How</th><th>Pass</th></tr></thead>
+        <tbody>
+          <tr><td>Cables</td><td>Your thickest and thinnest USB-C cable in each port, then both at once</td><td>Each clicks fully home; the board does not move</td></tr>
+          <tr><td>Rattle</td><td>Shake it next to your ear</td><td>Silent</td></tr>
+          <tr><td>WiFi range</td><td>Phone signal strength to the HID-Fi access point at 1, 5 and 10 m, bare board and then in the shell (any WiFi analyser app shows it)</td><td>Within about 2 dB</td></tr>
+          <tr><td>Heat</td><td>Stream the Screen tab for 4 hours, then feel the top and the vents</td><td>Warm, never too hot to hold; no resets</td></tr>
+          <tr><td>Press</td><td>Press the top centre firmly with your thumb, then squeeze it across the middle</td><td>No creak, no crack; still works</td></tr>
+          <tr><td>Drop</td><td>Drop from desk height onto carpet, then onto a hard floor: each face once</td><td>No cracks; the plate stays clipped in; boots</td></tr>
+          <tr><td>Pocket</td><td>Carry it in a bag for a week</td><td>The plate still snug; lint stays out of the vents</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="later">
+    <h2>What can wait</h2>
+    <div class="card">
+      <ul>
+        <li><b>Approvals, agents, trademarks, patents.</b> None of these is needed to build and use units yourself or to test them with friends. They matter the day you sell, and that day can be planned when the Core has proven itself.</li>
+        <li><b>Keep the design private for now</b> if you might register it later: share photos with friends, not the STL files.</li>
+        <li><b>Sense and Go</b> fit the same top shell, so nothing you print now is wasted when you move on.</li>
+      </ul>
+    </div>
+  </section>
+
+
+  <section id="review">
+    <h2>Design review: what I checked, found and fixed</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Found and fixed in this review</h3>
+        <ul>
+          <li><b>The inside of the top shell was missing from the print files.</b> A build-order mistake cut away every internal feature: the screw posts, the two clamp ribs that hold the board, the status-light cell, the LED blackout pod and the pinhole guides. The interference check could not see it, because missing plastic never collides. You asked where the screws go, and that question exposed it. Fixed, and a new check now fails the build if any added feature is cut away. I proved it fails on the old code.</li>
+          <li><b>The Sense and Go bases had the same bug</b> (bay walls, columns, mic ribs). Restoring them revealed five real clashes, all now fixed: the mic boards rubbing their ribs, two alignment pins under the Go's switch and boost converter, and the Go door screw longer than its hole.</li>
+          <li><b>Light pipe:</b> a 1.94 mm pipe in a 2.0 mm hole would not fit a printed hole, so it is now 1.9 in 2.1. Its flange moved to the bottom end so it prints without hanging in the air.</li>
+          <li><b>Clearances widened for printing:</b> the base plate in its pocket from 0.15 to 0.25 mm, and the front tongue in its slot from 0.05 to 0.15 mm. The tongue's underside is now sloped so it prints cleanly.</li>
+          <li><b>Screws removed:</b> press-fit ribbed pegs and a coin notch instead, with a gauge print to set the grip.</li>
+          <li><b>Print-ready files:</b> every part is now exported already turned the way it sits on the bed. A print shop given the old files could have printed the shell upside down with supports.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Tested by a real slicer</h3>
+        <p>Every print file was sliced with PrusaSlicer 2.9.6 (PETG, 0.4 mm nozzle, no supports) using a conservative generic printer profile. Newer printers are faster.</p>
+        <div class="tablewrap" style="border:0">
+          <table style="min-width:0">
+            <thead><tr><th>Part</th><th>Layer</th><th>Time</th><th>PETG</th></tr></thead>
+            <tbody>
+              <tr><td>fit-coupon</td><td class="mono">0.12</td><td class="mono">20 min</td><td class="mono">1.7 g</td></tr>
+              <tr><td>peg-gauge</td><td class="mono">0.20</td><td class="mono">19 min</td><td class="mono">2.7 g</td></tr>
+              <tr><td>unibody</td><td class="mono">0.12</td><td class="mono">1 h 18 min</td><td class="mono">7.5 g</td></tr>
+              <tr><td>plate</td><td class="mono">0.20</td><td class="mono">23 min</td><td class="mono">3.1 g</td></tr>
+              <tr><td>light-pipe</td><td class="mono">0.08</td><td class="mono">1 min</td><td class="mono">0.01 g</td></tr>
+              <tr><td><b>A whole Core</b></td><td></td><td class="mono"><b>about 2 h</b></td><td class="mono"><b>10.6 g ≈ ₹16</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><b>Overhang check</b> on the print-ready files: nothing needs supports. The longest unsupported span is the 8 mm roof of the coin notch; the vent roofs are 1 mm bridges; the light pipe has none. Every part is one solid piece with nothing floating.</p>
+      </div>
+    </div>
+    <h3 style="margin-top:6px">Every measurement, and how sure it is</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Measurement</th><th>Value</th><th>From</th><th>Confidence</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4">The board</td></tr>
+          <tr><td>Board size</td><td class="mono">57.15 × 27.94 mm</td><td>VCC-GND metric drawing</td><td>High</td></tr>
+          <tr><td>Board thickness</td><td class="mono">1.6 mm</td><td>Standard; ±0.16 is normal</td><td>Medium: measure it</td></tr>
+          <tr><td>Header pitch and rows</td><td class="mono">2.54 mm, rows 25.4 apart</td><td>Drawing</td><td>High</td></tr>
+          <tr><td>Module, and antenna overhang</td><td class="mono">18 × 25.5 mm, 6.24 mm past the edge</td><td>Drawing</td><td>High</td></tr>
+          <tr><td>Module height</td><td class="mono">3.1 mm (3.25 max)</td><td>Espressif datasheet</td><td>High: 0.05–0.2 mm under the lid</td></tr>
+          <tr><td>USB-C positions</td><td class="mono">x 8.5 and 19.9 mm</td><td>Scaled from the drawing (±0.2)</td><td>Medium: the fit coupon checks it</td></tr>
+          <tr><td>USB-C overhang past the edge</td><td class="mono">0.6 mm</td><td>Estimated from the vendor photo</td><td>Low: the fit coupon checks it</td></tr>
+          <tr><td>USB-C height</td><td class="mono">3.26 mm</td><td>Typical part</td><td>Medium</td></tr>
+          <tr><td>BOOT and RST button height</td><td class="mono">≤ 2.5 mm</td><td>Assumed</td><td>Low: guide tubes start 0.2 mm above</td></tr>
+          <tr class="grp"><td colspan="4">The shell</td></tr>
+          <tr><td>Outside</td><td class="mono">67.6 × 32.3 × 9.0 mm</td><td>build.mjs</td><td>Exact</td></tr>
+          <tr><td>Walls</td><td class="mono">sides 2.0 · front 1.4 (0.8 at the ports) · back 1.8 · lid 1.5 · plate 1.2</td><td>build.mjs</td><td>Exact</td></tr>
+          <tr><td>Board clearance</td><td class="mono">0.2 each side · 1.4 under · front edge is the datum · 0.15 to the rear stops</td><td>build.mjs</td><td>Exact</td></tr>
+          <tr><td>Port windows</td><td class="mono">9.44 × 3.76 mm, socket + 0.25 all round</td><td>build.mjs</td><td>Exact</td></tr>
+          <tr><td>Pegs and sockets</td><td class="mono">socket Ø2.6 × 4.6 deep · ribs +0.08 mm · peg 3.8 long</td><td>build.mjs</td><td>Tune with the gauge</td></tr>
+          <tr><td>Fits</td><td class="mono">plate 0.25 · tongue 0.15 · light pipe 0.1</td><td>build.mjs</td><td>Set for FDM printing</td></tr>
+          <tr><td>Thinnest features</td><td class="mono">vent ribs 0.71 · port panel 0.8 · corner wall 1.29 · lettering 1.6 mm caps</td><td>Build checks</td><td>All print as two lines or more</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="proof">
+    <h2>What the build script checks</h2>
+    <div class="card"><ul class="checks" id="checks"></ul></div>
+  </section>
+
+  <footer>
+    <span>Print files: <span class="mono">HID-Fi-Core-print.zip</span> from the build script (<span class="mono">node build.mjs</span>), already oriented for the bed. This page loads the exact parts from <span class="mono">parts-core.json</span> beside it.</span>
+    <span>Board geometry: VCC-GND, <a href="https://github.com/vcc-gnd/YD-ESP32-S3" target="_blank" rel="noopener">github.com/vcc-gnd/YD-ESP32-S3</a>. Type: Barlow Condensed, SIL Open Font License.</span>
+  </footer>
+</div>
+
+<script>window.CORE_ONLY = true; window.PARTS_URL = "parts-core.json";</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = id => document.getElementById(id) || document.createElement('div');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const manifest = await (await fetch('manifest.json')).json();
+
+// ---------- page data from the manifest
+const checks = manifest.checks;
+const row = c => { const st = !c.ok ? 'fail' : c.limit ? 'limit' : 'pass';
+  return `<li><span class="st ${st}">${st === 'limit' ? 'LIMIT' : st.toUpperCase()}</span><span>${c.what.replace(/</g, '&lt;')}</span></li>`; };
+const shown = window.CORE_ONLY ? checks.filter(c => !/(^|\s)(sense|go)[:\s]|Go door|Sense|carried weight|tub/i.test(c.what)) : checks;
+$('checks').innerHTML = shown.map(row).join('');
+$('strengthchecks').innerHTML = checks.filter(c => /top: a|pocket:|drop|plugging in|carried weight|Go door|antenna|metal or copper|sits .* from the antenna/.test(c.what)).map(row).join('');
+$('plugchecks').innerHTML = checks.filter(c => /plug|receptacle|port panel|web between/.test(c.what)).map(row).join('');
+$('s-c').innerHTML = `${shown.filter(c => c.ok).length} / ${shown.length}<small>pass</small>`;
+for (const v of ['core', 'sense', 'go']) { const d = manifest.variants[v].dims; $('d-' + v).textContent = `${d.L} × ${d.W} × ${d.H.toFixed(1)}`; }
+const P = manifest.parts;
+const CORE_PARTS = ['fit-coupon', 'peg-gauge', 'unibody', 'plate', 'plate-feet', 'light-pipe', 'trim-guide'];
+const printRows = [
+  ['unibody', 'PETG matte (ASA if it lives in sun or a car)', 'Top face down on textured PEI', '0.12 mm layers, 5 walls, no supports, elephant-foot compensation 0.15 mm, seam at the rear, full cooling for the 40° vent slopes'],
+  ['fit-coupon', 'Any PETG or PLA', 'As supplied', 'Print this first: the port end only, to check the sockets and your thickest cable'],
+  ['peg-gauge', 'Same PETG as the plate', 'As supplied', 'Second: three pegs at three tightnesses, to pick the grip that suits your printer'],
+  ['plate', 'Same filament as the unibody', 'Bottom face down on textured PEI', '0.16 mm, no supports'],
+  ['plate-feet', 'Same filament as the unibody', 'Bottom face down', 'Optional instead of plate.stl: four pockets for silicone feet'],
+  ['plate-open', 'Any PETG (hidden inside)', 'Flat', '0.2 mm, no supports'],
+  ['tub-sense', 'Unibody filament', 'Floor down on textured PEI', '0.12 mm (its walls show), no supports'],
+  ['tub-go', 'Unibody filament', 'Floor down on textured PEI', '0.12 mm, no supports; the screw beam bridges 11.5 mm'],
+  ['door-go', 'Unibody filament', 'Outer face down', '0.16 mm, no supports'],
+  ['light-pipe', 'Clear or natural PETG', 'Flange down', '0.08 mm, 100% infill; or skip it and use clear hot glue'],
+  ['trim-guide', 'Any', 'Flat', '0.2 mm; a tool, not part of the product'],
+];
+$('printrows').innerHTML = printRows.filter(([n]) => !window.CORE_ONLY || CORE_PARTS.includes(n)).map(([n, m, o, s]) => `<tr><td><span class="mono">${n}.stl</span><br><span style="font-weight:400;color:var(--muted)">${P[n].grams} g</span></td><td>${m}</td><td>${o}</td><td>${s}</td></tr>`).join('');
+
+// ---------- renderer
+const canvas = $('c'), stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(28, 1, 1, 2000);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.minDistance = 40; controls.maxDistance = 600;
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(-60, -40, 140); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 6;
+Object.assign(key.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 10, far: 400 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fc7ff, 0.7); rim.position.set(80, 120, 40); scene.add(rim);
+const under = new THREE.DirectionalLight(0xffffff, 1.6); under.position.set(-50, -30, -140); scene.add(under);
+const under2 = new THREE.DirectionalLight(0xcfe3ff, 0.6); under2.position.set(70, 90, -60); scene.add(under2);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.ShadowMaterial({ opacity: 0.35 }));
+ground.receiveShadow = true; scene.add(ground);
+
+const C = [13.97, 32.4, 4.5];
+const clip = new THREE.Plane(new THREE.Vector3(1, 0, 0), -8.5);   // keeps x ≥ cut; view it from -x
+const clipList = [];
+
+// ---------- materials
+const FINISH = { graphite: ['#2b2e33', 0.62, 'Graphite'], ceramic: ['#e7e4dd', 0.58, 'Ceramic'], titan: ['#8f959c', 0.5, 'Titan'] };
+const shellMat = new THREE.MeshPhysicalMaterial({ color: FINISH.graphite[0], roughness: 0.62, metalness: 0, side: THREE.DoubleSide, clearcoat: 0.05, clippingPlanes: clipList });
+const innerMat = new THREE.MeshStandardMaterial({ color: '#3a3f46', roughness: 0.8, side: THREE.DoubleSide, clippingPlanes: clipList });
+const M = (o) => new THREE.MeshStandardMaterial({ clippingPlanes: clipList, ...o });
+const mats = {
+  pcb: M({ color: '#141414', roughness: 0.55 }), modpcb: M({ color: '#1b1d21', roughness: 0.5 }),
+  shield: M({ color: '#c9cdd2', roughness: 0.32, metalness: 1 }), usbc: M({ color: '#d4d7db', roughness: 0.28, metalness: 1 }),
+  ic: M({ color: '#24262a', roughness: 0.6 }), rgb: M({ color: '#f4f4f4', roughness: 0.3, emissive: '#1fffd8', emissiveIntensity: 0.5 }),
+  led: M({ color: '#cfd6c9', roughness: 0.4 }), pwr: M({ color: '#ff3b3b', emissive: '#ff2020', emissiveIntensity: 1.2 }),
+  button: M({ color: '#e7e7e7', roughness: 0.5 }), leg: M({ color: '#c0c4c8', metalness: 1, roughness: 0.35 }),
+  stub: M({ color: '#c8a85a', metalness: 1, roughness: 0.35 }), header: M({ color: '#ff6b6b', roughness: 0.5, transparent: true, opacity: 0.9 }),
+  sensorpcb: M({ color: '#3b2a8c', roughness: 0.55 }), gasket: M({ color: '#2d3136', roughness: 0.95 }),
+  cell: M({ color: '#2a2a2a', roughness: 0.35, metalness: 0.4 }), magnet: M({ color: '#b9bec4', metalness: 1, roughness: 0.25 }),
+  screw: M({ color: '#f1ede2', roughness: 0.45 }), metal: M({ color: '#c0c4c8', metalness: 1, roughness: 0.3 }), foot: M({ color: '#cfd8dc', roughness: 0.3, transparent: true, opacity: 0.75 }),
+};
+const pipeMat = new THREE.MeshPhysicalMaterial({ color: '#d9fff7', roughness: 0.15, transmission: 0.6, transparent: true, opacity: 0.85, emissive: '#1fffd8', emissiveIntensity: 1.2, clippingPlanes: clipList });
+
+// ---------- geometry
+const loader = new STLLoader();
+const stl = {};
+const packed = await (await fetch(window.PARTS_URL || 'parts.json')).json();   // the exact STL bytes, base64
+for (const [n, b64] of Object.entries(packed)) {
+  const bin = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+  const g = loader.parse(bin.buffer); g.computeVertexNormals(); stl[n] = g;
+}
+$('loading').remove();
+
+function solid(e) {
+  let g;
+  if (e.b) { const [x0, y0, z0, x1, y1, z1] = e.b; g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); }
+  else if (e.cyl) { const [cx, cy, r, z0, z1] = e.cyl; g = new THREE.CylinderGeometry(r, r, z1 - z0, 40); g.rotateX(Math.PI / 2); g.translate(cx, cy, (z0 + z1) / 2); }
+  else if (e.cone) { const [cx, cy, r0, r1, z0, z1] = e.cone; g = new THREE.CylinderGeometry(r1, r0, z1 - z0, 32); g.rotateX(Math.PI / 2); g.translate(cx, cy, (z0 + z1) / 2); }
+  else if (e.cylY) { const [cx, cz, r, y0, y1] = e.cylY; g = new THREE.CylinderGeometry(r, r, y1 - y0, 40); g.translate(cx, (y0 + y1) / 2, cz); }
+  else if (e.stadiumY) { const [cx, cz, w, h, y0, y1] = e.stadiumY; const r = h / 2, s = new THREE.Shape();
+    s.absarc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2); s.absarc(-w / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5);
+    g = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false, curveSegments: 12 }); g.rotateX(Math.PI / 2); g.translate(cx, y1, cz); }
+  const m = new THREE.Mesh(g, mats[e.kind] || mats.ic); m.castShadow = true; m.receiveShadow = true; return m;
+}
+const boardGroup = new THREE.Group();
+for (const c of manifest.board) boardGroup.add(solid(c));
+const pinsGroup = new THREE.Group();
+for (const c of manifest.asShipped) pinsGroup.add(solid(c));
+pinsGroup.visible = false; boardGroup.add(pinsGroup);
+scene.add(boardGroup);
+
+const roleOf = n => n === 'unibody' ? 'top' : n === 'light-pipe' ? 'pipe' : n === 'plate-open' ? 'inner' : n.startsWith('door') ? 'door' : n.startsWith('tub') ? 'tub' : 'plate';
+const EXPLODE = { top: 26, pipe: 15, board: 7, plate: -7, inner: -7, tub: -17, door: -30 };
+const partMeshes = {};
+for (const [n, g] of Object.entries(stl)) {
+  const role = roleOf(n);
+  const m = new THREE.Mesh(g, role === 'pipe' ? pipeMat : role === 'inner' ? innerMat : shellMat);
+  m.castShadow = true; m.receiveShadow = true; m.userData.role = role;
+  partMeshes[n] = m; scene.add(m);
+}
+const extraGroups = {};
+for (const [v, list] of Object.entries(manifest.extras)) {
+  extraGroups[v] = list.map(e => { const m = solid(e); m.userData.role = e.role || (/door/.test(e.id) ? 'door' : e.kind === 'cell' ? 'cell' : 'tub'); scene.add(m); return m; });
+}
+EXPLODE.cell = -23;
+const plugMat = { slim: M({ color: '#1d1f23', roughness: 0.6 }), max: M({ color: '#3a2a12', roughness: 0.6, emissive: '#ffb547', emissiveIntensity: 0.12 }) };
+const plugGroups = { slim: new THREE.Group(), max: new THREE.Group() };
+for (const p of manifest.plugs) {
+  const [cx, cz, w, h, r, y0, y1] = p.rrectY, s = new THREE.Shape();
+  s.moveTo(-w / 2 + r, -h / 2); s.lineTo(w / 2 - r, -h / 2); s.absarc(w / 2 - r, -h / 2 + r, r, -Math.PI / 2, 0); s.lineTo(w / 2, h / 2 - r);
+  s.absarc(w / 2 - r, h / 2 - r, r, 0, Math.PI / 2); s.lineTo(-w / 2 + r, h / 2); s.absarc(-w / 2 + r, h / 2 - r, r, Math.PI / 2, Math.PI);
+  s.lineTo(-w / 2, -h / 2 + r); s.absarc(-w / 2 + r, -h / 2 + r, r, Math.PI, Math.PI * 1.5);
+  const g = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false, curveSegments: 8 }); g.rotateX(Math.PI / 2); g.translate(cx, y1, cz);
+  const m = new THREE.Mesh(g, plugMat[p.size]); m.castShadow = true; plugGroups[p.size].add(m);
+  const [kx, kz, kr, ky0, ky1] = p.cableY, cg = new THREE.CylinderGeometry(kr, kr, ky1 - ky0, 24); cg.translate(kx, (ky0 + ky1) / 2, kz);
+  const c = new THREE.Mesh(cg, plugMat.slim); c.castShadow = true; plugGroups[p.size].add(c);
+  const sg = new THREE.BoxGeometry(8.25, 6.65, 2.4); sg.translate(cx, y1 + 3.3, cz); plugGroups[p.size].add(new THREE.Mesh(sg, mats.usbc));
+}
+for (const g of Object.values(plugGroups)) { g.visible = false; boardGroup.add(g); }
+const antGroup = new THREE.Group();
+{ const [x0, y0, z0, x1, y1, z1] = manifest.antenna;
+  const zone = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0 + 0.1), new THREE.MeshBasicMaterial({ color: '#1fffd8', transparent: true, opacity: 0.85 }));
+  zone.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2 + 0.05); antGroup.add(zone);
+  for (const k of [1, 2, 3]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.06, 8, 96), new THREE.MeshBasicMaterial({ color: '#1fffd8', transparent: true, opacity: 0.5, depthWrite: false }));
+    ring.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); ring.userData.k = k; antGroup.add(ring);
+  }
+  const keep = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), new THREE.MeshBasicMaterial({ color: '#1fffd8', transparent: true, opacity: 0.05, depthWrite: false }));
+  keep.scale.set(9 + 15, 3 + 15, 15); keep.position.copy(zone.position); antGroup.add(keep);
+}
+antGroup.visible = false; boardGroup.add(antGroup);
+const postGroup = new THREE.Group(), pegGroup = new THREE.Group();   // highlights for the clip-in view
+for (const [x, y] of manifest.features.sockets) {
+  const g = new THREE.CylinderGeometry(2.5, 2.5, 7.5 - 1.22, 40); g.rotateX(Math.PI / 2); g.translate(x, y, (7.5 + 1.22) / 2);
+  postGroup.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#1fffd8', emissive: '#0b5c50', transparent: true, opacity: 0.4, depthWrite: false })));
+  const p = new THREE.CylinderGeometry(1.3, 1.3, 3.8, 32); p.rotateX(Math.PI / 2); p.translate(x, y, 1.2 + 1.9);
+  pegGroup.add(new THREE.Mesh(p, new THREE.MeshStandardMaterial({ color: '#f1ede2', roughness: 0.5 })));
+}
+pegGroup.visible = false; scene.add(pegGroup);
+postGroup.visible = false; scene.add(postGroup);
+
+// ---------- state
+const state = { variant: 'core', mode: 'assembled', finish: 'graphite', explode: 0 };
+function applyVariant() {
+  const list = manifest.variants[state.variant].parts;
+  for (const [n, m] of Object.entries(partMeshes)) m.visible = list.includes(n);
+  for (const [v, arr] of Object.entries(extraGroups)) for (const m of arr) m.visible = v === state.variant;
+  const d = manifest.variants[state.variant].dims;
+  $('s-lw').innerHTML = `${d.L} × ${d.W}<small>mm</small>`;
+  $('s-h').innerHTML = `${d.H.toFixed(1)}<small>mm</small>`;
+  $('s-g').innerHTML = `${d.grams}<small>g</small>`;
+  for (const v of ['core', 'sense', 'go']) $('v-' + v).setAttribute('aria-pressed', v === state.variant);
+  renderFeats();
+}
+function applyMode() {
+  for (const m of ['assembled', 'exploded', 'xray', 'section']) $('m-' + m).setAttribute('aria-pressed', m === state.mode);
+  const xray = state.mode === 'xray' || ($('pins').getAttribute('aria-pressed') === 'true' && state.mode !== 'section');
+  for (const mat of [shellMat, innerMat]) { mat.transparent = xray; mat.opacity = xray ? 0.16 : 1; mat.depthWrite = !xray; mat.needsUpdate = true; }
+  clipList.length = 0; if (state.mode === 'section') clipList.push(clip);
+  for (const mat of [shellMat, innerMat, pipeMat, ...Object.values(mats)]) { mat.clippingPlanes = clipList; mat.needsUpdate = true; }
+  $('cutwrap').classList.toggle('on', state.mode === 'section');
+}
+function applyFinish() {
+  const [hex, rough, name] = FINISH[state.finish];
+  shellMat.color.set(hex); shellMat.roughness = rough; $('f-name').textContent = name;
+  for (const f of Object.keys(FINISH)) $('f-' + f).setAttribute('aria-pressed', f === state.finish);
+}
+for (const v of ['core', 'sense', 'go']) $('v-' + v).onclick = () => { state.variant = v; applyVariant(); hideCaption(); };
+for (const m of ['assembled', 'exploded', 'xray', 'section']) $('m-' + m).onclick = () => { state.mode = m; applyMode(); };
+for (const f of Object.keys(FINISH)) $('f-' + f).onclick = () => { state.finish = f; applyFinish(); };
+$('cut').oninput = e => { clip.constant = -e.target.value; $('cutv').textContent = (+e.target.value).toFixed(1); };
+$('pins').onclick = () => {
+  const on = $('pins').getAttribute('aria-pressed') !== 'true';
+  $('pins').setAttribute('aria-pressed', on); pinsGroup.visible = on; applyMode();
+  if (on) showCaption('Pins as shipped', 'The red rows are 8.5 mm of header that no slim shell can hold. Cut under the spacer, slide it off, and trim flush on the trim guide: 1.2 mm of stub is left, inside the 1.4 mm the shell leaves under the board.');
+  else hideCaption();
+};
+function setCables(k) {
+  for (const x of ['off', 'slim', 'max']) $('k-' + x).setAttribute('aria-pressed', x === k);
+  plugGroups.slim.visible = k === 'slim'; plugGroups.max.visible = k === 'max';
+  if (k === 'max') showCaption('Largest legal plugs', 'Each 12.35 × 6.5 mm overmould fits its socket on its own. Side by side they overlap by 0.95 mm, because the board puts its sockets 11.4 mm apart. Use a slim cable on COM.');
+  else if (k === 'slim') showCaption('Slim plugs, both ports', 'Two 10.5 mm overmoulds clear each other by 0.9 mm and rest on the recessed nose, 0.2 mm from the sockets.');
+  else hideCaption();
+}
+for (const k of ['off', 'slim', 'max']) $('k-' + k).onclick = () => setCables(k);
+function setAntenna(on) {
+  $('ant').setAttribute('aria-pressed', on); antGroup.visible = on;
+  if (on) showCaption('The antenna', 'The copper trace on the module\'s bare end, hanging off the board opposite the ports. The faint volume is Espressif\'s 15 mm keep-out: the enclosure puts no metal inside it.');
+  else hideCaption();
+}
+$('ant').onclick = () => setAntenna($('ant').getAttribute('aria-pressed') !== 'true');
+document.querySelectorAll('[data-variant]').forEach(b => b.onclick = () => { state.variant = b.dataset.variant; applyVariant(); flyTo(HOME); stage.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' }); });
+
+// ---------- camera
+const HOME = { cam: [88, -74, 66], tgt: C };
+let fly = null;
+function flyTo(v, ms = 900) {
+  const from = { cam: camera.position.clone(), tgt: controls.target.clone() };
+  const to = { cam: new THREE.Vector3(...v.cam), tgt: new THREE.Vector3(...v.tgt) };
+  if (reduce) { camera.position.copy(to.cam); controls.target.copy(to.tgt); return; }
+  fly = { from, to, t0: performance.now(), ms };
+}
+camera.position.set(...HOME.cam); controls.target.set(...C);
+
+// ---------- features
+const F = manifest.features;
+const FEATS = [
+  { t: 'Recessed nose', d: 'The front face is cut back 0.6 mm across 24.7 mm, full height and open through the top edge. Any plug, however tall its overmould, stops 0.2 mm from the socket. The 0.8 mm panel around each port takes the load.', cam: [30, -70, 26], tgt: [14, 0, 5], mode: 'assembled' },
+  { t: 'Blade vents', d: 'Nine blades of composed lengths over the radio shield: tops and bottoms land at different heights, every blade on the same 15° lines, ends cut square, flush with the top. Under each, a hidden 40° slope keeps falling dust out.', cam: [14, 24, 80], tgt: [14, 47, 9], mode: 'assembled' },
+  { t: 'Inside a blade', d: 'Cut through the vents: each slot climbs through the lid at 40°, its top opening 1.8 mm to the side of its bottom one. There is no straight line from the room to the board.', cam: [-6, 47, 30], tgt: [12, 47, 8], mode: 'section', cut: 11.0 },
+  { t: 'Uphill gills', d: 'Five gills a side, level with the module, rise 1.2 mm through the 2 mm wall. Cool air comes in low at the sides and leaves through the blade vents; nothing on the desk can be swept in.', cam: [-70, 40, 10], tgt: [0, 48, 5], mode: 'assembled' },
+  { t: 'USB and COM, named', d: 'Engraved above each socket in Barlow Condensed, in the board\'s own words. USB goes to the computer you control. COM is for flashing and serial.', cam: [14, -24, 62], tgt: [14, 6, 9], mode: 'assembled' },
+  { t: 'Cables plugged in', d: 'Both sockets with slim cables. Switch to Max in the Cables control to see the largest plugs the USB-C spec allows, and the one clash the board itself causes.', cam: [64, -98, 44], tgt: [14, -12, 5], mode: 'assembled', cables: 'slim' },
+  { t: 'Antenna in free air', d: 'The antenna is the module\'s bare end, overhanging the board by 6.24 mm, opposite the ports. Only plain plastic sits near it, and there are no screws; plugged into a laptop, it points away from the laptop.', cam: [64, 106, 46], tgt: [14, 60, 4], mode: 'xray', antenna: true },
+  { t: 'HID-Fi mark', d: 'Debossed into the right side wall, toward the ports, centred top to bottom. The top stays clean for the vents and the status light; the mark shows when the device sits beside a laptop.', cam: [92, -6, 16], tgt: [30, 16, 4.5], mode: 'assembled' },
+  { t: 'How the base clips in', d: 'No screws. The plate\'s front tongue hooks into the front wall; at the back, two ribbed pegs (white) press up into two sockets moulded in the top shell (teal). To open, lever the back edge out with a coin.', cam: [-30, 92, 16], tgt: [4, 60, 3], mode: 'xray', posts: true },
+  { t: 'One status light', d: 'A clear light pipe over the WS2812 RGB LED, in a light cell so nothing bleeds, in line with the USB socket it reports on.', cam: [-14, -8, 52], tgt: [9, 18.4, 8], mode: 'xray' },
+  { t: 'Blackout pod', d: 'The power LED is always on and TX/RX flicker with serial traffic. A sealed pod keeps all three dark, so a bedroom never glows red.', cam: [44, -6, 40], tgt: [19.6, 20.2, 5.5], mode: 'xray' },
+  { t: 'BOOT and RST pinholes', d: 'Flashing resets the board on its own, so the buttons are for rescue only. Paperclip: front hole BOOT, rear hole RST. Guide tubes land the clip on the button.', cam: [-38, 4, 40], tgt: [19.1, 31, 6], mode: 'section', cut: 19.1 },
+  { t: 'Zero play', d: 'Rails below, ribs and the USB-C shells above, the port panel in front and two stops behind. The board has no mounting holes, so it is held by its edges, never by a screw.', cam: [-96, 24, 20], tgt: [14, 30, 4], mode: 'section', cut: 3.0 },
+  { t: 'The underside', d: 'The LxusBrain mark over HID-Fi, set in Barlow Condensed with open tracking, debossed into the textured bed face. The Core\'s plate is smooth: it needs no feet. An optional plate-feet.stl adds four pockets for silicone bumpers. The build checks every word against every edge, hole and foot.', cam: [14, 66, -96], tgt: [14, 32, 0], mode: 'assembled', only: 'core' },
+  { t: 'Two boundary microphones', d: 'Two rings of seven 0.7 mm holes, 32 mm apart, listening through a 1.5 mm gap above the desk. Each INMP441 lies on a foam gasket; the ambient-sensor bay between them has its own gills.', cam: [14, 64, -100], tgt: [14, 30, -5], mode: 'assembled', only: 'sense' },
+  { t: 'Sensor deck', d: 'Wire slots under the pin rows drop straight into the deck, so sensors are wired from the board\'s underside with no headers.', cam: [-70, -40, -30], tgt: [14, 30, -3], mode: 'xray', only: 'sense' },
+  { t: 'Battery door', d: 'Two hooks at the back and one captive nylon screw at the front, turned with a coin. It stays shut in a 1 m drop, which magnets could not promise. The switch sits in its own pocket, marked with the IEC I and O symbols.', cam: [14, 66, -106], tgt: [14, 32, -12], mode: 'assembled', only: 'go' },
+  { t: 'Cells and power path', d: 'Two AAA cells in series under a solid plate, with a 4.8 V boost into 5Vin. USB always wins, so the cells only work when the computer cuts power.', cam: [-84, -30, -14], tgt: [14, 30, -6], mode: 'xray', only: 'go' },
+  { t: 'One shadow line', d: 'Every base continues the unibody\'s walls, and the joint is a 0.5 mm V-groove, so the seam reads as a deliberate line rather than a gap.', cam: [-98, -50, 0], tgt: [14, 32, 0], mode: 'assembled', only: ['sense', 'go'] },
+];
+let current = -1;
+function renderFeats() {
+  const list = FEATS.map((f, i) => ({ ...f, i })).filter(f => !f.only || [].concat(f.only).includes(state.variant));
+  $('feats').innerHTML = list.map((f, k) => `<button class="feat" data-i="${f.i}" aria-current="${f.i === current}"><span class="n">${String(k + 1).padStart(2, '0')}</span><span><h3>${f.t}${f.only ? `<span class="tag">${[].concat(f.only).join(' · ')}</span>` : ''}</h3><p>${f.d}</p></span></button>`).join('');
+  $('feats').querySelectorAll('.feat').forEach(b => b.onclick = () => focusFeat(+b.dataset.i));
+}
+function focusFeat(i) {
+  const f = FEATS[i];
+  state.mode = f.mode; if (f.cut != null) { clip.constant = -f.cut; $('cut').value = f.cut; $('cutv').textContent = f.cut.toFixed(1); }
+  applyMode(); setCables(f.cables || 'off'); setAntenna(!!f.antenna); postGroup.visible = pegGroup.visible = !!f.posts; current = i; flyTo(f); showCaption(f.t, f.d); renderFeats();
+  stage.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+}
+function showCaption(t, d) { const c = $('caption'); c.innerHTML = `<b>${t}</b>${d}`; c.hidden = false; }
+function hideCaption() { $('caption').hidden = true; current = -1; postGroup.visible = pegGroup.visible = false; renderFeats(); }
+controls.addEventListener('start', () => { fly = null; });
+
+// ---------- loop
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function frame(now) {
+  if (fly) {
+    const t = Math.min(1, (now - fly.t0) / fly.ms), e = ease(t);
+    camera.position.lerpVectors(fly.from.cam, fly.to.cam, e); controls.target.lerpVectors(fly.from.tgt, fly.to.tgt, e);
+    if (t >= 1) fly = null;
+  }
+  const target = state.mode === 'exploded' ? 1 : 0;
+  state.explode += (target - state.explode) * (reduce ? 1 : 0.12);
+  for (const m of Object.values(partMeshes)) m.position.z = EXPLODE[m.userData.role] * state.explode;
+  for (const arr of Object.values(extraGroups)) for (const m of arr) m.position.z = EXPLODE[m.userData.role] * state.explode;
+  boardGroup.position.z = EXPLODE.board * state.explode;
+  postGroup.position.z = EXPLODE.top * state.explode;
+  pegGroup.position.z = EXPLODE.plate * state.explode;
+  const lowest = { core: 0, sense: -5.4, go: -12.3 }[state.variant] + Math.min(0, EXPLODE.door * state.explode, state.variant === 'core' ? EXPLODE.plate * state.explode : EXPLODE.tub * state.explode);
+  ground.position.z = lowest - 0.6;
+  pipeMat.emissiveIntensity = reduce ? 1.2 : 0.9 + 0.5 * Math.sin(now / 900);
+  if (antGroup.visible) for (const r of antGroup.children) if (r.userData.k) {
+    const t = reduce ? r.userData.k / 3 : ((now / 2400) + r.userData.k / 3) % 1, sc = 10 + 26 * t;
+    r.scale.set(sc * 1.15, sc, sc * 0.5); r.material.opacity = 0.55 * (1 - t);
+  }
+  controls.update(); renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+$('showscrews').onclick = () => focusFeat(FEATS.findIndex(f => f.t === 'How the base clips in'));
+applyVariant(); applyMode(); applyFinish(); requestAnimationFrame(frame);
+window.__ready = true;
+</script>
+
+</body></html>

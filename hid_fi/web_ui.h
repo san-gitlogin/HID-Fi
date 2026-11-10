@@ -883,6 +883,7 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .frbig{width:100%;min-height:52px;font-size:16px}
 .netaway{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 14px 0;padding:12px 14px;border-radius:var(--r);
   background:rgba(255,176,46,.10);border:1px solid rgba(255,176,46,.32)}
+.netaway[hidden]{display:none}     /* display:flex above would otherwise beat the hidden attribute */
 .netaway .tx{flex:1 1 260px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
 .netaway .tx span{color:var(--fg2)}
 .netawaybtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -2883,19 +2884,25 @@ function netAwayShow(){
   $('netAway').hidden=false;
 }
 $('netAwayX').onclick=()=>{$('netAway').hidden=true;try{sessionStorage.setItem('netAwayX','1');}catch(e){}};
-$('netOwn').onclick=()=>sheet('Use the board\'s own WiFi',
-  '<p class="hint">On this device, join the WiFi <b>'+esc(AP_SSID||'ESP32-HID-...')+'</b> with the board\'s WiFi password, '+
-  'then open <b>http://'+esc(MDNS_NAME)+'.local</b>. The same address works there and on its home network.</p>');
+$('netOwn').onclick=()=>netOwnSheet();
 // Which saved network is this device on? Its browser cannot tell the board, so it asks;
 // the board then moves there. Someone using it on its network now is asked about first.
 $('netBring').onclick=()=>send({cmd:'wifi_networks'},r=>{
   const n=(r&&r.networks||[]).filter(x=>!x.current);
   if(!n.length){toast('The board has no other saved network - add this device\'s WiFi in Settings first','bad');return;}
+  netBringSheet(n);
+});
+function netOwnSheet(){
+  sheet('Use the board\'s own WiFi',
+    '<p class="hint">On this device, join the WiFi <b>'+esc(AP_SSID||'ESP32-HID-...')+'</b> with the board\'s WiFi password, '+
+    'then open <b>http://'+esc(MDNS_NAME)+'.local</b>. The same address works there and on its home network.</p>');
+}
+function netBringSheet(n){
   sheet('Which WiFi is this device on?',
     '<p class="hint">The board moves to it, and <b>'+esc(MDNS_NAME)+'.local</b> opens from here a few seconds later.</p>'+
     '<div class="list">'+n.map(x=>'<button class="item" data-bring="'+esc(x.ssid)+'">'+ico('wifi')+'<div class="tx"><b>'+esc(x.ssid)+'</b></div></button>').join('')+'</div>',
     ()=>document.querySelectorAll('[data-bring]').forEach(b=>b.onclick=()=>netBring(b.dataset.bring,false)));
-});
+}
 function netBring(ssid,force){
   send({cmd:'wifi_prefer',ssid:ssid,now:true,force:force},r=>{
     if(!r||r.status!=='ok'){toast((r&&r.message)||'Could not move it','bad');return;}

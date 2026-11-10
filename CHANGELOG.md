@@ -11,6 +11,21 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ### Firmware
 
+- **Reach the board by name, wherever your devices are.** A board is on one
+  network at a time, and its `.local` name only works on that one.
+  - **Only devices directly on the board's network count as using it:** a page
+    opened by the name, one that can reach the name (`net_here`), or a Companion
+    whose own address matches. Devices routed in from another network (a router
+    behind a router) no longer pin the board to the wrong network.
+  - **A phone on the other network is told what to do:** a banner offers **Bring
+    the board here** (pick your WiFi; it asks first if someone else is using the
+    board) or **Use the board's own WiFi**, where the same address works.
+  - **Joins the strongest access point of a network.** The ESP32 core took the
+    first one found.
+  - **Roams within one network** when the current access point turns weak
+    (below −70 dBm, another at least 10 dB stronger, nobody using it), and never
+    between networks on strength. DECISIONS.md D-10.
+- The Companion reports which address it used to reach the board (`via`).
 - **A board taken down to an older version and back keeps its network.** v4.2.2
   saves the network list without v4.3's "used" marks, and v4.3 seeded the
   network the board was last on only once (a flag). A board flashed down and back

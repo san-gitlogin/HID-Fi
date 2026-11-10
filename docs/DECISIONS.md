@@ -233,3 +233,56 @@ minutes later. DA1A2C, the owner's own board, did exactly that when updated on
 
 **Guarded by:**
 - `tests/unit/test_net_logic.py::test_an_updated_board_stays_on_the_network_it_was_on`
+
+## D-10 · 2026-11-07 · Reach the board by name: count only devices right on its network
+
+**Refines D-02.**
+
+A board can be on one home network at a time, and its `.local` name only works on
+that network and on the board's own WiFi. People use the name and don't remember
+IP addresses. The board therefore aims to be on the network the owner's devices
+are **directly** on, and tells a device on the wrong side what to do.
+
+- **Only devices directly on the board's network count as using it.** They count
+  towards choosing its network, and towards "someone is using it now", which
+  blocks any move:
+  - a page opened by the board's `.local` name (the name never crosses a router);
+  - a page opened by address that then reaches the name (`net_here`);
+  - a paired Companion whose own address (`via`) is the one the request came from.
+
+  A device routed in from another network (one router behind another) can still
+  open the board by IP. It never counts and never pins the board.
+- **A device on the wrong side is told what to do, without addresses.** A page
+  opened by IP that can't reach the name shows a small, dismissible banner.
+  - **Bring the board here:** you pick which WiFi this device is on, and the board
+    moves there. If someone else is directly using the board, it asks first.
+  - **Use the board's own WiFi:** the same `.local` address works there.
+
+  This is not the "new place" prompt D-05 rejected. It shows only when this
+  device demonstrably can't reach the board by name.
+- **Signal strength decides only within one network.**
+  - When joining, the board takes the strongest access point of the chosen name
+    (all channels scanned, sorted by signal); the core's default was the first
+    one found.
+  - While connected, it roams to an access point of the same network (same name
+    or same subnet) when the current one is weaker than −70 dBm and another is at
+    least 10 dB stronger, never while an owner device is using it.
+  - It never hops between networks on strength.
+
+**Why:** in the owner's hometown, C6 sits behind ARVISANTU. The owner's Mac and
+phones moved to C6, while the board had learned ARVISANTU from overnight tests,
+including visits routed through C6's router, which counted as "used here". The
+phones could not open `esp-hid-09f7c8.local`, and the dashboard was slow over two
+hops. "As an end user, user would not be willing to visit webpages via IP and
+that's why we had the .local URL... What if multiple devices try to connect to
+the board from different network but within range."
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_it_roams_within_one_network_and_never_between_networks`
+- `tests/unit/test_net_logic.py::test_random_homes_roam_by_the_written_rule`
+- `tests/ui/bdd/features/home_network.feature: Opened by address from another network, the page says so and the visit does not count`
+- `tests/ui/bdd/features/home_network.feature: Opened by address right on the board's network, the page checks the name and counts`
+- `tests/ui/bdd/features/home_network.feature: Bring the board to this device's WiFi - pick it, and the board moves`
+- `tests/ui/bdd/features/home_network.feature: Someone using the board on its network is asked about before it moves`
+- `tests/ui/bdd/features/home_network.feature: The board's own WiFi is offered, with the same address`
+- `tests/ui/bdd/features/home_network.feature: A paired computer behind another router does not anchor the board`

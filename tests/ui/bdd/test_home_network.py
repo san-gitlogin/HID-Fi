@@ -217,3 +217,21 @@ def nowhere(ctx):
     ctx["sim"].net_search()
     ctx["ui"].page.evaluate("refresh()")
     ctx["ui"].idle(300)
+
+
+def _until(ui, pred, what, tries=40):
+    for _ in range(tries):
+        if pred():
+            return
+        ui.idle(100)
+    raise AssertionError(what)
+
+
+@then(parsers.parse('"#{el_id}" is visible'))
+def visible(ctx, el_id):
+    _until(ctx["ui"], lambda: ctx["ui"].page.locator(f"#{el_id}").is_visible(), f"#{el_id} is hidden")
+
+
+@then(parsers.parse('"#{el_id}" is hidden'))
+def hidden(ctx, el_id):
+    _until(ctx["ui"], lambda: not ctx["ui"].page.locator(f"#{el_id}").is_visible(), f"#{el_id} is visible")

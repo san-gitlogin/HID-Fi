@@ -52,6 +52,9 @@ PAGE_STATES = [(f"tab {v}", f"go('{v}')", "") for v in VIEWS] + [
     ("mouse buttons", "go('pad');if($('btnsMouse').style.display==='none')$('btnBtnView').click()",
      "if($('btnsMouse').style.display!=='none')$('btnBtnView').click()"),
     ("gamepad on", "GP.enabled=true;gpSync();go('game')", "GP.enabled=false;gpSync()"),
+    # D-10: the banner a device on another network sees, on every screen, over a tab.
+    ("net away banner", "go('pad');MDNS_NAME='esp-hid-da1a2c';try{sessionStorage.removeItem('netAwayX')}catch(e){};netAwayShow()",
+     "$('netAway').hidden=true"),
     ("fullscreen pad", "go('pad');$('btnFs').click()", "$('btnFsExitTop').click()"),
     ("fullscreen deck", "go('pad');$('btnFs').click();if(getComputedStyle($('padkbd')).display==='none')$('btnDeck').click()",
      "if(getComputedStyle($('padkbd')).display!=='none')$('btnDeck').click();$('btnFsExitTop').click()"),
@@ -72,6 +75,8 @@ SHEET_STATES = [
     ("sheet help", "go('setup');showHelp()"),
     ("sheet join", f"joinWifi('{SSID32}')"),
     ("sheet security info", "secInfo()"),
+    ("sheet net own wifi", "MDNS_NAME='esp-hid-da1a2c';AP_SSID='ESP32-HID-DA1A2C';netOwnSheet()"),
+    ("sheet net bring", f"MDNS_NAME='esp-hid-da1a2c';netBringSheet([{{ssid:'{SSID32}'}},{{ssid:'ARVISANTU C6'}},{{ssid:'Hometown'}},{{ssid:'Office'}}])"),
     ("sheet forgot pin", "forgotPin(false)"),
     ("sheet factory reset", "frSheet(null)"),
     ("sheet factory reset asked", f"frSheet({{name:'{LONG[:32]}',request:'{'a' * 32}'}})"),
