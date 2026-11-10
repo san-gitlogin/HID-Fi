@@ -173,13 +173,13 @@ Feature: Screen - seeing the computer's own picture
       | flick                 | right     | #scrBadge  |
       | flick                 | left      | #scrTools  |
       | flick                 | right     | #scrTools  |
-      | flick                 | left      | #pad       |
-      | flick                 | right     | #pad       |
-      | pan two fingers       | left      | #pad       |
-      | swipe three fingers   | right     | #pad       |
-      | pinch out             | left      | #pad       |
-      | hold then drag        | left      | #pad       |
-      | double tap then flick | right     | #pad       |
+      | flick                 | left      | #padarea       |
+      | flick                 | right     | #padarea       |
+      | pan two fingers       | left      | #padarea       |
+      | swipe three fingers   | right     | #padarea       |
+      | pinch out             | left      | #padarea       |
+      | hold then drag        | left      | #padarea       |
+      | double tap then flick | right     | #padarea       |
 
   Scenario Outline: Zoomed in, a sideways pan moves the picture, never the tab
     Given the dashboard is open and signed in with "4826"
@@ -679,8 +679,8 @@ Feature: Screen - seeing the computer's own picture
     And a computer "Studio PC" is paired and running
     When I open the "<tab>" tab
     And I watch what the browser is allowed to do with touches
-    And I double tap with one finger on "#pad"
-    Then the browser was told to leave every touch on "#pad" alone
+    And I double tap with one finger on "#padarea"
+    Then the browser was told to leave every touch on "#padarea" alone
     And the page is not zoomed
     And the picture is not zoomed
     And the board receives two clicks of the "left" button

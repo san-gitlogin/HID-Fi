@@ -124,7 +124,7 @@ def test_touches_alone_drive_the_pad_keys_and_buttons(pages, browser):
         return b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
 
     n = len(sim.log)
-    x, y = mid("#pad")
+    x, y = mid("#padarea")
     touch("touchStart", x, y)
     for i in range(12):
         touch("touchMove", x + i * 8, y + i * 5)

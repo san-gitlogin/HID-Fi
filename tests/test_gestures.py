@@ -24,7 +24,7 @@ SETUP = r"""
   window.txMove = (dx, dy, w, p) => window.__sent.push({dx, dy, w, p});
   window.txBtn  = (b, a, c) => window.__sent.push({btn: b, act: a});
   window.send   = (o, cb) => { window.__sent.push(o); if (cb) cb({status: 'ok'}); };
-  const pad = document.getElementById('pad');
+  const pad = document.getElementById('padarea');
   pad.setPointerCapture = () => {};
   pad.releasePointerCapture = () => {};
   window.__pad = pad;

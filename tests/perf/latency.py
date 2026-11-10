@@ -81,7 +81,7 @@ def _run(ctx, rate, legacy, n, busy):
 
     # trackpad: finger down, then moves
     page.evaluate("go('pad')"); page.wait_for_timeout(600)
-    x, y = center(page, "#pad")
+    x, y = center(page, "#padarea")
     page.evaluate("__lat.send.length=0;__lat.paint.length=0")
     touch(cdp, "touchStart", x, y)
     for i in range(n):

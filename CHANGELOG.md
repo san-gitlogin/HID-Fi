@@ -33,6 +33,18 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   uses. Now it seeds whenever no network is marked used (DECISIONS.md D-09,
   revised). Proven on 09F7C8: down to v4.2.2 and back, it kept a preferred
   network.
+- **"Move it now" counts everyone using the board, whoever asks.** Asked over USB
+  or HTTP, the board still skipped the last browser that had sent it a command,
+  so it reported one user fewer than there really were. Found on 09F7C8 (the
+  Companion alone counted 1, the Companion plus a signed-in page also counted 1);
+  now 1 and 2.
+
+### Dashboard
+
+- **The Trackpad tab no longer scrolls itself on open.** The trackpad's element
+  had the id `pad`, the same as the tab's address (`#pad`), so the browser
+  scrolled to it as the page settled: 14 px of the page went missing on every
+  load, and with the network banner showing, the whole banner. Found on 09F7C8.
 
 ## v4.3 - 2026-11-07
 

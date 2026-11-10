@@ -135,7 +135,7 @@ def test_every_combination(pages, browser, combo):
             cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [] if kind == "touchEnd" else [{"x": x, "y": y, "id": 1}]})
         page.evaluate("go('pad')")
         page.wait_for_timeout(300)
-        b = page.locator("#pad").bounding_box()
+        b = page.locator("#padarea").bounding_box()
         x, y = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
         n = len(sim.log)
         touch("touchStart", x, y)

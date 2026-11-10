@@ -232,6 +232,19 @@ def visible(ctx, el_id):
     _until(ctx["ui"], lambda: ctx["ui"].page.locator(f"#{el_id}").is_visible(), f"#{el_id} is hidden")
 
 
+@then(parsers.parse('"#{el_id}" is on screen'))
+def on_screen(ctx, el_id):
+    """Shown is not seen: the trackpad's element was once id="pad", the Trackpad tab's
+    hash, so the browser scrolled the page to it as it settled - on a real board after
+    the banner was up, carrying it out of sight. Here the page loads fast enough that
+    the scroll lands first, so the check is also that nothing scrolled the page."""
+    js = f"""(() => {{ const r = document.getElementById('{el_id}').getBoundingClientRect(),
+                     m = document.getElementById('main');
+                     return r.height > 0 && m.scrollTop === 0 && r.top >= m.getBoundingClientRect().top
+                            && r.bottom <= innerHeight; }})()"""
+    _until(ctx["ui"], lambda: ctx["ui"].page.evaluate(js), f"#{el_id} is scrolled out of view")
+
+
 @then(parsers.parse('"#{el_id}" is hidden'))
 def hidden(ctx, el_id):
     _until(ctx["ui"], lambda: not ctx["ui"].page.locator(f"#{el_id}").is_visible(), f"#{el_id} is visible")

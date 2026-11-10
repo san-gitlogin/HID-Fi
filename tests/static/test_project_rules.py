@@ -365,3 +365,34 @@ def test_the_powershell_count_rule_sees_the_bug():
     old = "$rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }\nif ($rec.Count -eq 1) { }\n"
     assert ps_count_without_array(old) and not ps_count_without_array(old.replace(
         "$rec = if ($namedCom) { @() } else { @(Get-RecoveryLinks $ports) }", "$rec = @(if (-not $namedCom) { Get-RecoveryLinks $ports })"))
+
+
+def test_the_asking_socket_is_only_trusted_for_websocket_commands():
+    """wsClientNum names the last browser that sent a command and is never cleared. A
+    command that came over USB or HTTP still sees it, so reading it without checking
+    the source once made "move now" skip a signed-in page and tell the owner fewer
+    people were using the board than really were. Every read must sit behind a
+    SRC_WS check that opens its block (a few lines up at most)."""
+    src = paths.INO.read_text(encoding="utf-8")
+    lines = src.splitlines()
+    bad = []
+    for n, line in enumerate(lines):
+        if "wsClientNum" not in line or re.match(r"\s*(int|//)", line) or "wsClientNum = num" in line:
+            continue
+        near = " ".join(lines[max(0, n - 6):n + 1])   # the guarding if opens the block
+        if "SRC_WS" not in near:
+            bad.append(f"hid_fi.ino:{n + 1}: {line.strip()}")
+    assert not bad, "the asking socket read without checking the command came over WebSocket:\n" + "\n".join(bad)
+
+
+def test_no_tab_name_is_also_a_visible_element_id():
+    """The tab lives in the URL hash (#pad, #keys...), and once the page settles the
+    browser scrolls to the element whose id matches it. The trackpad was id="pad": every
+    load scrolled the page under the network banner (D-10) and hid it. A hash target
+    must be a hidden stand-in, like <i id="watch" hidden>, or not an id at all."""
+    html = paths.WEB_UI.read_text(encoding="utf-8")
+    views = set(re.findall(r"\{id:'([a-z]+)',", html)) | {"watch", "wall"}
+    assert "pad" in views, "the tab list moved; this check must read it again"
+    bad = [m.group(0) for m in re.finditer(r"<(\w+)[^>]*\bid=\"([a-z]+)\"[^>]*>", html)
+           if m.group(2) in views and " hidden" not in m.group(0)]
+    assert not bad, "an element the browser will scroll to when that tab opens:\n" + "\n".join(bad)

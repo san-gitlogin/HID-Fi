@@ -143,7 +143,7 @@ def no_way_back(ctx):
 
 @when("I drag one finger across the trackpad")
 def drag_pad(ctx):
-    ctx["ui"].touch_drag("#pad", [[0, 0], [20, 5], [40, 10], [60, 15], [80, 20]])
+    ctx["ui"].touch_drag("#padarea", [[0, 0], [20, 5], [40, 10], [60, 15], [80, 20]])
 
 
 @then("the board refused the pointer")

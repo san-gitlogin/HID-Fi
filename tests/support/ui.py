@@ -40,7 +40,7 @@ TABS = {"Trackpad": "pad", "Screen": "screen", "Keyboard": "keys", "Keys": "shor
 # its family (generated controls such as keys, shortcuts, knobs, list rows).
 DESCRIBE_JS = r"""
 window.__hidfiDescribe = function(t){
-  const el = t && t.closest && t.closest('button,input,textarea,select,a,label,[data-k],[data-knob],[data-sc],[data-q],[data-ms],[data-gi],[data-ssid],[data-hat],[data-gb],.stick,#pad,.pinbox,.dial,[id]');
+  const el = t && t.closest && t.closest('button,input,textarea,select,a,label,[data-k],[data-knob],[data-sc],[data-q],[data-ms],[data-gi],[data-ssid],[data-hat],[data-gb],.stick,#padarea,.pinbox,.dial,[id]');
   if (!el) return null;
   for (const a of el.getAttributeNames()) if (a.startsWith('data-') && a !== 'data-guarded' && a !== 'data-nofill') return '[' + a + ']';
   if (el.id && !/^(b\d+|kp\d+|kt\d+)$/.test(el.id)) return '#' + el.id;
@@ -66,7 +66,7 @@ RECORD_JS = DESCRIBE_JS + r"""
 INVENTORY_JS = DESCRIBE_JS + r"""
 (() => {
   const out = new Set();
-  const sel = 'button,input,textarea,select,[data-k],[data-knob],[data-sc],[data-hat],[data-gb],.stick,#pad,.pinbox';
+  const sel = 'button,input,textarea,select,[data-k],[data-knob],[data-sc],[data-hat],[data-gb],.stick,#padarea,.pinbox';
   document.querySelectorAll(sel).forEach(el => { const d = window.__hidfiDescribe(el); if (d) out.add(d); });
   return [...out];
 })()

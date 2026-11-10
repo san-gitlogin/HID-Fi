@@ -22,7 +22,7 @@ FINGERPRINT = """() => {
   const r = s => { const e = document.querySelector(s); if (!e || !e.checkVisibility()) return null;
                    const b = e.getBoundingClientRect(); return [s, Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
   return {tiers: Object.assign({}, kbTierOf), rail: document.body.className,
-          boxes: ['#padwrap', '#pad', '#padkbd', '#kbd2', '#kbd', '#tabbar', '#rail', '.topbar', '#main']
+          boxes: ['#padwrap', '#padarea', '#padkbd', '#kbd2', '#kbd', '#tabbar', '#rail', '.topbar', '#main']
                  .map(r).filter(Boolean)};
 }"""
 

@@ -17,12 +17,12 @@ def _wait(ui, pred, what, tries=30):
 
 @when("I drag one finger across the trackpad")
 def drag_pad(ctx):
-    ctx["ui"].touch_drag("#pad", [[0, 0], [20, 5], [40, 10], [60, 15], [80, 20]])
+    ctx["ui"].touch_drag("#padarea", [[0, 0], [20, 5], [40, 10], [60, 15], [80, 20]])
 
 
 @when("I tap the trackpad")
 def tap_pad(ctx):
-    ctx["ui"].tap_point("#pad")
+    ctx["ui"].tap_point("#padarea")
     ctx["ui"].idle(600)        # a tap is only final once the double-tap window passes
 
 
@@ -193,7 +193,7 @@ def fs_keys(ctx):
 def _fingers(ui, start, end, steps=8, step_ms=16, hold_ms=0, tail_ms=0, scroll=True):
     """Fingers go down at `start` offsets (from the pad centre), travel to `end`,
     and lift together. Each finger keeps its own id throughout."""
-    cx, cy = ui._center("#pad") if scroll else ui.position("#pad")
+    cx, cy = ui._center("#padarea") if scroll else ui.position("#padarea")
     pts = lambda f: [(cx + (s[0] + (e[0] - s[0]) * f), cy + (s[1] + (e[1] - s[1]) * f), i)
                      for i, (s, e) in enumerate(zip(start, end))]
     ui._touch("touchStart", pts(0))
@@ -235,7 +235,7 @@ def tap_then_drag(ctx):
     # an imaginary first one (fixed in v4.0.2: it starts at -Infinity). The wait
     # stays so this scenario measures the double tap and nothing else.
     ui.page.wait_for_function("performance.now() > 700")
-    x, y = ui._center("#pad")
+    x, y = ui._center("#padarea")
     ui._touch("touchStart", [(x, y)])
     ui.page.wait_for_timeout(60)
     ui._touch("touchEnd", [])
@@ -359,7 +359,7 @@ def switch_flipped(ctx):
 def tap_then_hold(ctx):
     ui = ctx["ui"]
     ui.page.wait_for_function("performance.now() > 700")
-    x, y = ui._center("#pad")
+    x, y = ui._center("#padarea")
     ui._touch("touchStart", [(x, y)])
     ui.page.wait_for_timeout(60)
     ui._touch("touchEnd", [])

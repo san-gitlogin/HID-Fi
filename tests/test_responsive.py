@@ -243,7 +243,7 @@ PROBE = r"""
   // --- the trackpad card must not change size when it flips ---
   const deck = document.getElementById('padkbd');
   const wrap = document.getElementById('padwrap');
-  const pad  = document.getElementById('pad');
+  const pad  = document.getElementById('padarea');
   const btn  = document.getElementById('btnDeck');
   const show = on => { if ((getComputedStyle(deck).display !== 'none') !== on) btn.click(); };
 

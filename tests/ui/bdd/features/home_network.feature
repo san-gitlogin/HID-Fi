@@ -186,6 +186,7 @@ Feature: When the home network has a bad night
     And the board's name does not reach this device
     And the dashboard is opened by the board's address
     Then "#netAway" is visible
+    And "#netAway" is on screen
     And "#netAway" contains "esp-hid-da1a2c.local"
     And the board prefers no network yet
 

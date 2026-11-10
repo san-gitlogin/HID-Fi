@@ -800,7 +800,7 @@ WATCH_JS = """() => {
     // Bubbling, on window: runs after every handler of the page, so it sees
     // whether one of them told the browser to leave the touch alone.
     window.addEventListener(k, e => window.__touchLog.push({k: e.type, prevented: e.defaultPrevented,
-      cancelable: e.cancelable, on: e.target.closest('#pad') ? '#pad' : e.target.closest('#scrStage') ? '#scrStage' : 'other'}));
+      cancelable: e.cancelable, on: e.target.closest('#padarea') ? '#padarea' : e.target.closest('#scrStage') ? '#scrStage' : 'other'}));
 }"""
 
 
@@ -834,7 +834,7 @@ def touches_prevented(ctx, selector):
     assert len(ends) == 2, f"two taps, two touchends: {log}"
     # The zoom is decided on a touch's end (and a dblclick); the pad also gives up
     # its touch starts - the picture keeps them for the links inside it.
-    kinds = ("touchstart", "touchend", "dblclick") if selector == "#pad" else ("touchend", "dblclick")
+    kinds = ("touchstart", "touchend", "dblclick") if selector == "#padarea" else ("touchend", "dblclick")
     assert all(e["prevented"] for e in log if e["k"] in kinds), log
 
 

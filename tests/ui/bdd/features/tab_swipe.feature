@@ -48,7 +48,7 @@ Feature: A sideways swipe changes tab only on empty space
   Scenario Outline: On the trackpad, no gesture changes tab
     Given the dashboard is open
     And I am on the "Trackpad" tab
-    When I <gesture> <direction> on "#pad"
+    When I <gesture> <direction> on "#padarea"
     Then the "Trackpad" tab is still shown
 
     Examples:
@@ -87,9 +87,9 @@ Feature: A sideways swipe changes tab only on empty space
     Given the dashboard is open
     And I am on the "Trackpad" tab
     When I tap the "#btnFs" control
-    And I flick left on "#pad"
-    And I pan two fingers left on "#pad"
-    And I swipe three fingers right on "#pad"
+    And I flick left on "#padarea"
+    And I pan two fingers left on "#padarea"
+    And I swipe three fingers right on "#padarea"
     Then the "Trackpad" tab is still shown
 
   Scenario Outline: The same flick on empty space still changes tab

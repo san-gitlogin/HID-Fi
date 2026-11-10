@@ -2442,8 +2442,9 @@ void handleWifiPrefer(const JsonDocument& inDoc) {
     // (D-10). The one asking does not count: they are the one wanting it moved.
     if ((inDoc["now"] | false) && !(inDoc["force"] | false)) {
         int others = compOnLinkCount();
+        int asker = (cmdSource == SRC_WS) ? wsClientNum : -1;   // over USB or HTTP every page counts
         for (int k = 0; k < WS_MAX_CLIENTS; k++)
-            if (k != wsClientNum && wsAuthed[k] && wsOnLink[k] && webSocket.clientIsConnected(k)) others++;
+            if (k != asker && wsAuthed[k] && wsOnLink[k] && webSocket.clientIsConnected(k)) others++;
         if (others) {
             d["status"] = "ok"; d["reply"] = "wifi_prefer"; d["ssid"] = ssid; d["busy"] = true; d["using"] = others;
             sendJson(d); return;                        // nothing changed

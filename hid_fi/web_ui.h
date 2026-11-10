@@ -316,7 +316,7 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
 .padwrap.fs{position:fixed;inset:0;z-index:600;border-radius:0;border:none;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 @media(max-width:2399px){.padwrap.fs{width:100vw;height:100vh;height:100dvh}}
-#pad{
+#padarea{
   position:relative;width:100%;height:var(--padh);touch-action:none;user-select:none;-webkit-user-select:none;
   background:
     radial-gradient(120% 90% at 50% 0%,rgba(0,210,255,.10),transparent 62%),
@@ -325,16 +325,16 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
   transition:box-shadow .18s;
 }
 .padwrap.fs{--padh:100%}
-.padwrap.fs #pad{height:100%}
-#pad.live{box-shadow:inset 0 0 0 1.5px rgba(0,210,255,.5)}
-#pad.grab{box-shadow:inset 0 0 0 2px var(--ok)}
+.padwrap.fs #padarea{height:100%}
+#padarea.live{box-shadow:inset 0 0 0 1.5px rgba(0,210,255,.5)}
+#padarea.grab{box-shadow:inset 0 0 0 2px var(--ok)}
 
 /* ---- keyboard deck: the same card, showing keys instead of the pad ----
    The deck takes its height from the identical clamp the pad uses, so flipping
    between them never moves the page under your thumb. */
 #padkbd{display:none;flex-direction:column;gap:8px;padding:var(--dpad);box-sizing:border-box;
   height:var(--padh);--dpad:10px}
-.padwrap.kb #pad{display:none}
+.padwrap.kb #padarea{display:none}
 .padwrap.kb #padkbd{display:flex}
 /* Everything in the corner that means "trackpad" steps aside. Grab is a pointer
    idea with no keyboard equivalent, and the badge reports pointer state. */
@@ -444,7 +444,7 @@ main{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp);
   font-style:normal;font-size:10.5px;line-height:1;letter-spacing:.2px;color:var(--fg3);
   background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:5px 9px;white-space:nowrap;
 }
-#pad.live .padhint{opacity:0}
+#padarea.live .padhint{opacity:0}
 @media(max-height:520px){.padhint{display:none}}
 .padtools{position:absolute;top:10px;right:10px;display:flex;gap:7px;z-index:2}
 .padtools .iconbtn{width:34px;height:34px;background:rgba(0,0,0,.45);backdrop-filter:blur(6px)}
@@ -1027,8 +1027,8 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
   padding:18px;border:1px dashed var(--line);border-radius:var(--r);color:var(--fg3);font-size:13px;text-align:center}
 .scrpadslot{min-width:0}
 .scrpadslot .padwrap{--padh:clamp(180px,30vh,320px)}
-/* The phone-landscape rule sizes #pad by id; in this tab the pad follows --padh. */
-#scrPadSlot #pad{height:var(--padh)}
+/* The phone-landscape rule sizes #padarea by id; in this tab the pad follows --padh. */
+#scrPadSlot #padarea{height:var(--padh)}
 .scrpc .tag{margin-left:6px}
 .scrcode{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 a.btn{color:inherit;text-decoration:none}
@@ -1227,7 +1227,7 @@ main::after{height:var(--flpad,0px)}
   .card{padding:12px}
   /* 38vh of 400px is 152px, which is not a trackpad. Take the room from the
      viewport instead, minus the topbar and the card's own padding. */
-  #pad{height:clamp(150px,calc(100vh - 150px),300px)}
+  #padarea{height:clamp(150px,calc(100vh - 150px),300px)}
   .padwrap{--padh:clamp(150px,calc(100vh - 150px),300px)}
   .padhint{display:none}
   .kbd{margin-top:8px}
@@ -1717,7 +1717,7 @@ L.ms=Date.now()-t0;
               <button class="iconbtn" id="btnGrab" aria-label="Grab mode"><svg class="ic"><use href="#i-hand"/></svg></button>
               <button class="iconbtn" id="btnFs" aria-label="Fullscreen"><svg class="ic"><use href="#i-max"/></svg></button>
             </div>
-            <div id="pad">
+            <div id="padarea">
               <div class="padhint" id="padhint">
                 <i>1 finger move</i><i>tap click</i><i>hold grab</i><i>2 scroll</i><i>3 swipe</i>
               </div>
@@ -3144,7 +3144,7 @@ window.addEventListener('hashchange',()=>{
 // =====================================================================
 //  trackpad
 // =====================================================================
-const pad=$('pad'),padwrap=$('padwrap');
+const pad=$('padarea'),padwrap=$('padwrap');
 const pts=new Map();
 let accX=0,accY=0,scrollPx=0,panPx=0;
 let vx=0,vy=0,lastT=0,momRAF=0;
