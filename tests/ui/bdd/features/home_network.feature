@@ -231,6 +231,14 @@ Feature: When the home network has a bad night
     Then "#sheetin" contains "esp-hid-da1a2c.local"
     And "#sheetin" contains "ESP32-HID"
 
+  Scenario: Dismissed, the banner stays away for the rest of the visit
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the board's name does not reach this device
+    And the dashboard is opened by the board's address
+    When I tap the "#netAwayX" control
+    Then "#netAway" is hidden
+
   Scenario: A paired computer behind another router does not anchor the board
     Given the board has saved the networks "Bangalore, HomeNet"
     And the paired computer reaches the board from another network

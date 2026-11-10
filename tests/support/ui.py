@@ -17,7 +17,7 @@ import re
 import time
 
 from support import dashboard
-from support.board_sim import AP_URL, URL
+from support.board_sim import AP_URL, URL, LAN_PAGE_URL, BoardSim
 
 IPHONE_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
              "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1")
@@ -172,7 +172,9 @@ class Dashboard:
         res = self.cdp.send("Profiler.takePreciseCoverage")
         ran, seen = set(), set()
         for script in res.get("result", []):
-            if not script.get("url", "").startswith((URL, AP_URL)):
+            # Every address the model serves the page at (D-10: its .local name and its
+            # home-network address too).
+            if not script.get("url", "").startswith((URL, AP_URL, LAN_PAGE_URL, f"http://{BoardSim.MDNS}.local/")):
                 continue
             # The page has two scripts: its own, and before it the old-browser
             # layer (docs/LEGACY_DEVICES.md, checked by tests/ui/legacy). Only the
