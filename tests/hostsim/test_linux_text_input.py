@@ -51,8 +51,9 @@ def _session(input_method, cases_file, out_file, table_file):
         procs = [subprocess.Popen(["Xvfb", ":97", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
                                   stdout=subprocess.DEVNULL, stderr=xerr)]
     try:
-        # Wait for the display, not a fixed time: a slow runner once failed all 312 cases
-        # with "Cannot open display" and the error Xvfb printed was thrown away.
+        # Wait for the display, not a fixed time, and keep what Xvfb says: CI once failed all
+        # 312 cases with "Cannot open display" - the second session's Xvfb had died on the
+        # first one's lock (it was terminated, never waited for) and its error went nowhere.
         deadline = time.monotonic() + 20
         while subprocess.run(["setxkbmap", "us"], env=env, capture_output=True).returncode:
             if procs[0].poll() is not None:
@@ -77,8 +78,13 @@ def _session(input_method, cases_file, out_file, table_file):
         return json.loads(out_file.read_text(encoding="utf-8"))
     finally:
         subprocess.run(["pkill", "-f", "ibus-daemon"], capture_output=True)
-        for p in procs:
+        for p in procs:             # wait it out: the next session's Xvfb dies on a held :97 lock
             p.terminate()
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait(timeout=10)
 
 
 @pytest.fixture(scope="module")
