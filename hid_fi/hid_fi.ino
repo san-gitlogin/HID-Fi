@@ -195,6 +195,7 @@ bool    wsAuthed[WS_MAX_CLIENTS];
 // once per connection - the client's address cannot change while it is open -
 // so the binary hot path pays for a bool, never an address lookup.
 bool    wsFromLan[WS_MAX_CLIENTS];
+bool    wsOnLink[WS_MAX_CLIENTS];   // signed in from right on the board's network - opened by its .local name (D-10)
 uint32_t wsOpenedAt[WS_MAX_CLIENTS];
 unsigned long pendingRestartAt   = 0;    // deferred reboot so the reply can flush first
 unsigned long consumerReleaseAt  = 0;    // deferred media-key release, keeps the socket free
@@ -819,6 +820,8 @@ void netLoad(const String& legacySsid, const String& legacyPass);
 void handleWifiNetworks();
 void handleWifiForget(const JsonDocument& inDoc);
 void handleWifiPrefer(const JsonDocument& inDoc);
+void handleNetHere();
+bool netHostIsName(const char* host);
 void handleNetFault(const JsonDocument& inDoc);
 void handleInternetShare(const JsonDocument& inDoc);
 void applyInternetShare();
@@ -1214,7 +1217,7 @@ void setup() {
     if (resetBoot) COM_SERIAL.println("[REC] Factory-reset boot: a paired computer may erase this board over USB for 60 s");
     else if (recoveryBoot) COM_SERIAL.println("[REC] Recovery boot: a serial link joins HID on the native USB for 5 minutes");
 
-    for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOpenedAt[i] = 0; }
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) { wsAuthed[i] = false; wsFromLan[i] = false; wsOnLink[i] = false; wsOpenedAt[i] = 0; }
 
     preferences.begin("hid_cfg", true);
     absoluteMode   = preferences.getBool("abs", false);
@@ -1554,6 +1557,11 @@ void setupWifi() {
     // web server up but unable to answer anything until the join timed out.
     WiFi.onEvent(onStaEvent);
     WiFi.setAutoReconnect(false);       // the supervisor owns reconnecting (checkWifiConnection)
+    // One network name on several access points (a mesh, an extender with the
+    // router's name): join the strongest of them. The core's default is the first
+    // one found on the channel sweep, which can be the far one (D-10).
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
     netLoad(savedSSID, savedPass);
     {
         preferences.begin("wifi_cfg", true);
@@ -2150,11 +2158,30 @@ void netOwnerHere(bool computer) {
     if (dirty) { netSave(); COM_SERIAL.printf("[NET] %s is where the board is used%s\n", netSsid[i].c_str(), computer ? " (the paired computer)" : ""); }
 }
 
+// A page's own address bar: the board's .local name (not an IP, not 192.168.4.1).
+bool netHostIsName(const char* host) {
+    String h = String(host); h.toLowerCase();
+    return mdnsName.length() && h == (mdnsName + ".local");
+}
+
+// net_here: a page opened by address found it can reach the board's .local name too,
+// so it is right on the board's network after all (D-10). Signed-in sockets only.
+void handleNetHere() {
+    StaticJsonDocument<96> d;
+    d["status"] = "ok"; d["reply"] = "net_here";
+    if (cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS && wsAuthed[wsClientNum] && wsFromLan[wsClientNum]) {
+        wsOnLink[wsClientNum] = true;
+        netOwnerHere(false);
+        d["counted"] = true;
+    }
+    sendJson(d);
+}
+
 // Someone is using the board over the home network right now: a signed-in page
 // or the paired Companion. The board never moves away from them.
 bool netOwnerNow() {
-    for (int i = 0; i < WS_MAX_CLIENTS; i++) if (wsAuthed[i] && wsFromLan[i] && webSocket.clientIsConnected(i)) return true;
-    return compOnlineCount() > 0;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) if (wsAuthed[i] && wsOnLink[i] && webSocket.clientIsConnected(i)) return true;
+    return compOnLinkCount() > 0;
 }
 
 void netKnown(NetKnown* k) {
@@ -2168,7 +2195,8 @@ void netKnown(NetKnown* k) {
 
 const char* netWhyName(int why) {
     switch (why) { case NET_PREFERRED: return "preferred"; case NET_STRONGEST: return "strongest";
-                   case NET_COMING_HOME: return "coming_home"; case NET_LOOKING: return "looking"; default: return ""; }
+                   case NET_COMING_HOME: return "coming_home"; case NET_LOOKING: return "looking";
+                   case NET_ROAMING: return "roaming"; default: return ""; }
 }
 
 // While online: every 2 minutes, and only when there is something to decide - off
@@ -2189,9 +2217,14 @@ void netMaybeMove() {
         int why = NET_NONE;
         int to = netMoveFrom(k, netCount, netCurrent, seen.data(), n, millis() - staOnlineSince, netOwnerNow(), &why);
         WiFi.scanDelete();
-        if (to < 0) return;
+        if (to < 0) {
+            // Within one network: a much stronger access point than the weak one in use.
+            to = netShouldRoam(k, netCount, netCurrent, seen.data(), n, WiFi.RSSI(), netOwnerNow());
+            if (to < 0) return;
+            why = NET_ROAMING;
+        }
         if (why == NET_LOOKING) netTried[netCurrent] = true;
-        COM_SERIAL.printf("[NET] %s: leaving %s for %s\n", why == NET_LOOKING ? "Nobody came" : "Coming home",
+        COM_SERIAL.printf("[NET] %s: leaving %s for %s\n", why == NET_LOOKING ? "Nobody came" : why == NET_ROAMING ? "Roaming" : "Coming home",
                           netSsid[netCurrent].c_str(), netSsid[to].c_str());
         StaticJsonDocument<192> ev;
         ev["event"] = "wifi_moving"; ev["from"] = netSsid[netCurrent]; ev["to"] = netSsid[to]; ev["why"] = netWhyName(why);
@@ -2204,7 +2237,7 @@ void netMaybeMove() {
     netCheckAt = millis() + 120000;
     NetKnown k[NET_MAX];
     netKnown(k);
-    if (!netNeedsLook(k, netCount, netCurrent, millis() - staOnlineSince)) return;
+    if (!netNeedsLook(k, netCount, netCurrent, millis() - staOnlineSince, WiFi.RSSI())) return;
     if (netOwnerNow()) return;
     if (WiFi.scanNetworks(true) != WIFI_SCAN_FAILED) netMoveScan = true;
 }
@@ -2405,6 +2438,17 @@ void handleWifiPrefer(const JsonDocument& inDoc) {
     int i = netFind(ssid);
     StaticJsonDocument<256> d;
     if (i < 0) { d["status"] = "error"; d["message"] = "Not a saved network"; sendJson(d); return; }
+    // Moving now cuts off anyone using the board right on its network - asked first
+    // (D-10). The one asking does not count: they are the one wanting it moved.
+    if ((inDoc["now"] | false) && !(inDoc["force"] | false)) {
+        int others = compOnLinkCount();
+        for (int k = 0; k < WS_MAX_CLIENTS; k++)
+            if (k != wsClientNum && wsAuthed[k] && wsOnLink[k] && webSocket.clientIsConnected(k)) others++;
+        if (others) {
+            d["status"] = "ok"; d["reply"] = "wifi_prefer"; d["ssid"] = ssid; d["busy"] = true; d["using"] = others;
+            sendJson(d); return;                        // nothing changed
+        }
+    }
     netUsed[i] = ++netUseCount;
     for (int k = 0; k < netCount; k++) netAnchor[k] = (k == i);
     netTried[i] = false;
@@ -2883,6 +2927,7 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "wifi_networks") == 0) handleWifiNetworks();
     else if (strcmp(cmd, "wifi_forget") == 0) handleWifiForget(inDoc);
     else if (strcmp(cmd, "wifi_prefer") == 0) handleWifiPrefer(inDoc);
+    else if (strcmp(cmd, "net_here") == 0) handleNetHere();
     else if (strcmp(cmd, "internet_share") == 0) handleInternetShare(inDoc);
     else if (strcmp(cmd, "actions") == 0) handleActions(inDoc);
     else if (strcmp(cmd, "open") == 0)    handleOpen(inDoc);
@@ -3832,6 +3877,7 @@ void buildStatusDoc(JsonDocument& doc) {
     // companion_list, which is PIN-gated like every command.
     doc["comp_paired"]  = compPairedCount();
     doc["comp_online"]  = compOnlineCount();
+    doc["comp_routed"]  = compRoutedCount() > 0;   // D-10: the paired computer reaches the board through another router
     {   // D-02: which network the board prefers, and why it is on the one it is on
         NetKnown known[NET_MAX];
         netKnown(known);
@@ -4753,6 +4799,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             if (num < WS_MAX_CLIENTS) {
                 wsAuthed[num]  = (authToken.length() == 0);
                 wsFromLan[num] = !clientIsAp(webSocket.remoteIP(num));
+                wsOnLink[num] = false;
                 wsOpenedAt[num] = millis();
             }
             noteActivity();
@@ -4763,7 +4810,7 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             break;
 
         case WStype_DISCONNECTED:
-            if (num < WS_MAX_CLIENTS) { wsAuthed[num] = false; wsFromLan[num] = false; wsOpenedAt[num] = 0; }
+            if (num < WS_MAX_CLIENTS) { wsAuthed[num] = false; wsFromLan[num] = false; wsOnLink[num] = false; wsOpenedAt[num] = 0; }
             // A dashboard can vanish mid-chord - phone locked, tab killed, WiFi
             // dropped - while it is holding Alt for the app switcher or the left
             // button for a drag. That would leave the host unusable, so once the
@@ -5207,7 +5254,11 @@ void handleAuth(const JsonDocument& inDoc) {
     if (ok) {
         if (cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) {
             wsAuthed[wsClientNum] = true;
-            if (wsFromLan[wsClientNum]) netOwnerHere(false);          // D-02: the board is used over this network
+            // D-10: only a device right on the board's network counts as using it here.
+            // A page opened by the board's .local name is (the name does not cross a
+            // router); one opened by address may be routed in from another network,
+            // and says so later with net_here if it can reach the name.
+            if (wsFromLan[wsClientNum] && netHostIsName(inDoc["host"] | "")) { wsOnLink[wsClientNum] = true; netOwnerHere(false); }
         }
         doc["status"]="ok"; doc["reply"]="auth_ok";
     } else {
@@ -5267,7 +5318,7 @@ void handleSetAuth(const JsonDocument& inDoc) {
     for (int i = 0; i < WS_MAX_CLIENTS; i++) wsAuthed[i] = (authToken.length() == 0);
     if (authToken.length() && cmdSource == SRC_WS && wsClientNum >= 0 && wsClientNum < WS_MAX_CLIENTS) {
         wsAuthed[wsClientNum] = true;
-        if (wsFromLan[wsClientNum]) netOwnerHere(false);
+        if (wsFromLan[wsClientNum] && netHostIsName(inDoc["host"] | "")) { wsOnLink[wsClientNum] = true; netOwnerHere(false); }
     }
     if (wipeVault) COM_SERIAL.println("[AUTH] PIN replaced without the old one - vault erased");
     if (wipePairings) COM_SERIAL.println("[AUTH] PIN replaced without the old one - paired computers removed");

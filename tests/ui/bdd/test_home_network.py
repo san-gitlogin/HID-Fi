@@ -132,6 +132,62 @@ def looks(ctx):
     ctx["ui"].idle(400)
 
 
+@given("the dashboard is opened by the board's name")
+def open_by_name(ctx, browser):
+    from support.ui import Dashboard
+    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"]).open_url(
+        f"http://{ctx['sim'].MDNS}.local/")
+
+
+@given("the dashboard is opened by the board's address")
+def open_by_address(ctx, browser):
+    from support.ui import Dashboard
+    from support.board_sim import LAN_PAGE_URL
+    ctx["ui"] = Dashboard(browser, ctx["sim"], device="phone", answers=ctx["answers"], init=ctx["init"]).open_url(LAN_PAGE_URL)
+    ctx["ui"].idle(3000)            # the name check: up to 2.5 s
+
+
+@given("the board's name does not reach this device")
+def name_unreachable(ctx):
+    ctx["sim"].name_reachable = False
+
+
+@given("someone else is using the board right on its network")
+def someone_else(ctx):
+    ctx["sim"].others_on_link = 1
+
+
+@given("the paired computer reaches the board from another network")
+def computer_routed(ctx):
+    from support.companion_sim import FakeApp
+    sim = ctx["sim"]
+    sim.sta.update(phase="online", ssid=sim.nets[0]["ssid"])
+    app = FakeApp(sim.comp, ip="192.168.1.60")   # the request arrives from C6's router, on the board's network
+    with sim.lock:
+        app.hello()
+        sim.comp.command("companion_pair", {"id": app.id}, "serial")
+        app.advance()
+        sim.comp.command("companion_pair", {"id": app.id, "code": app.code}, "serial")
+    assert app.beat(via="192.168.0.248").get("status") == "ok"   # its own address behind that router
+
+
+@when(parsers.parse('I pick "{ssid}" as this device\'s WiFi'))
+def pick_bring(ctx, ssid):
+    ui = ctx["ui"]
+    ui.page.locator(f'[data-bring="{ssid}"]').click()
+    ui.idle(600)
+
+
+@then("the board prefers no network yet")
+def prefers_none(ctx):
+    assert ctx["sim"].net_preferred() is None, [(n["ssid"], n.get("used"), n.get("computer")) for n in ctx["sim"].nets]
+
+
+@then("the board says its computer is on another network")
+def says_routed(ctx):
+    assert ctx["sim"].status().get("comp_routed") is True
+
+
 @when(parsers.parse('I prefer the saved network "{ssid}"'))
 def prefer(ctx, ssid):
     ui = ctx["ui"]

@@ -65,6 +65,8 @@ struct CompPaired {
     char     fp[65];
     char     tn[33];
     uint32_t seenAt;
+    bool     onLink;          // the computer is right on the board's network (D-10): the address
+                              // it says it used is the one the request came from
     // Live challenges: a few at once, because one Companion asks from more than
     // one place (its heartbeat and an update can overlap - found end to end, a
     // single slot made the second one "expired"). Each is single use.
@@ -153,6 +155,8 @@ int compPendingCount() {
     return n;
 }
 int compOnlineCount() { int n = 0; for (auto& c : compPaired) n += compOnline(c); return n; }
+int compOnLinkCount() { int n = 0; for (auto& c : compPaired) n += compOnline(c) && c.onLink; return n; }
+int compRoutedCount() { int n = 0; for (auto& c : compPaired) n += compOnline(c) && !c.onLink; return n; }
 
 static int compFindPaired(const uint8_t id[16]) {
     for (int i = 0; i < COMP_PAIRED_MAX; i++)
@@ -370,8 +374,14 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     strncpy(c.fp, fp, 64); c.fp[64] = 0;
     strncpy(c.tn, tn, 32); c.tn[32] = 0;
     c.seenAt = millis();
-    // D-02: the paired computer reaches the board over this network - it anchors it.
-    if (!clientIsAp(IPAddress(ip))) netOwnerHere(true);
+    // D-02/D-10: the paired computer anchors the network - but only when it is right
+    // on it. The Companion says which local address it used; a request that came from
+    // another address was routed in from another network (a router in between), and a
+    // computer there cannot reach the board by name. Older Companions send nothing.
+    const char* via = in["via"] | "";
+    IPAddress said;
+    c.onLink = !via[0] || (said.fromString(via) && (uint32_t)said == ip);
+    if (!clientIsAp(IPAddress(ip)) && c.onLink) netOwnerHere(true);
     if (!wasOnline) {
         JsonDocument ev;
         ev["event"] = "companion_online"; ev["name"] = c.name;

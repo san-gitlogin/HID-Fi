@@ -881,6 +881,11 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .frchk{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;font-size:14px;line-height:1.4;cursor:pointer}
 .frchk input{width:28px;height:28px;flex:none;margin:0;accent-color:var(--bad)}
 .frbig{width:100%;min-height:52px;font-size:16px}
+.netaway{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 14px 0;padding:12px 14px;border-radius:var(--r);
+  background:rgba(255,176,46,.10);border:1px solid rgba(255,176,46,.32)}
+.netaway .tx{flex:1 1 260px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
+.netaway .tx span{color:var(--fg2)}
+.netawaybtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .warnbox{background:color-mix(in srgb,var(--bad) 12%,var(--surface2));border-color:color-mix(in srgb,var(--bad) 38%,var(--line));margin-bottom:12px}
 .item .tx{flex:1;min-width:0}
 .item .tx b{display:block;font-size:13.5px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1691,6 +1696,13 @@ L.ms=Date.now()-t0;
     </header>
 
     <main id="main">
+    <div class="netaway" id="netAway" hidden role="status">
+      <div class="tx"><b>This device is on a different network from the board</b>
+        <span>so <b id="netAwayName">its name</b> won't open from here. Bring the board to this device's Wi-Fi, or join the board's own Wi-Fi - the same address works there.</span></div>
+      <div class="netawaybtns"><button class="btn sm" id="netBring">Bring the board here</button>
+        <button class="btn sm" id="netOwn">Use the board's own Wi-Fi</button>
+        <button class="iconbtn" id="netAwayX" aria-label="Dismiss"><svg class="ic ic-sm"><use href="#i-x"/></svg></button></div>
+    </div>
 
     <!-- ============ TRACKPAD ============ -->
     <section class="view on" id="v-pad">
@@ -2385,7 +2397,7 @@ function connect(){
     if(fullTold){fullTold=false;closeSheet();toast('Connected','ok');}
     lostAt=0;lostTold=false;
     wsUp=true;tries=0;link(true);bootDone();apDone();
-    const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p});
+    const p=sessionStorage.getItem('pin');if(p)send({cmd:'auth',token:p,host:location.hostname});
     send({cmd:'key_release_all'});      // clear anything a previous session left held
     refresh();loadCfg();loadMacros();loadPcs();loadVault();loadSavedNets();loadClients();loadStorage();
     scrAgain(true);if(curView==='screen'||SCR.float||WATCH.on||WALL.on)scrList();};
@@ -2438,7 +2450,7 @@ function connect(){
     // was refused, so after signing in a person saw the default tiles - and an
     // edit saved those over the board's real layout. Not in syncAll(), which
     // runs after every write and would redraw tiles and knobs under a finger.
-    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();loadCfg();}
+    if(m.reply==='auth_ok'){authOK=true;pinAskDone(true);toast('Unlocked','ok');syncAll();loadCfg();netWhere();}
     if(m.reply==='auth_failed'){authOK=false;sessionStorage.removeItem('pin');
       askPin();pinAskDone(false,m.retry_in?('Wrong PIN. Locked for '+m.retry_in+'s.'):'That PIN was not right.');}
     // Refused unchecked, so it may be wrong: kept, it would be re-sent on every
@@ -2727,7 +2739,7 @@ function askPin(){
       $('pinAskForgot').onclick=()=>{pinAsking=false;PIN_ASK=null;forgotPin(true);};
       const p=bindPin('pinAsk',v=>{
         sessionStorage.setItem('pin',v);
-        send({cmd:'auth',token:v});
+        send({cmd:'auth',token:v,host:location.hostname});
       });
       PIN_ASK=p;p.focus();
     });
@@ -2845,6 +2857,57 @@ function apDone(){
   $('apnew').classList.remove('on');
   toast('Reconnected','ok');
 }
+// ---- a device on a different network from the board (docs/DECISIONS.md D-10) ----
+// A board can be on one home network at a time, and its .local name only works on
+// that one (and on its own WiFi). A page opened by address may have been routed in
+// from another network (a router behind a router). It checks the name: reachable, it
+// is right on the board's network and says so (net_here); not, it says what to do -
+// no IP addresses to remember.
+const NETW={done:false,away:false};
+function netWhere(){
+  if(NETW.done||!MDNS_NAME)return;
+  const h=location.hostname;
+  if(!/^\d+\.\d+\.\d+\.\d+$/.test(h)||h==='192.168.4.1')return;   // opened by name, or on its own WiFi
+  NETW.done=true;
+  let late=false;
+  const t=setTimeout(()=>{late=true;netAwayShow();},2500);
+  fetch('http://'+MDNS_NAME+'.local/api/ping',{mode:'no-cors',cache:'no-store'})
+    .then(()=>{if(late)return;clearTimeout(t);send({cmd:'net_here'});})
+    .catch(()=>{if(late)return;clearTimeout(t);netAwayShow();});
+}
+function netAwayShow(){
+  let x=false;try{x=sessionStorage.getItem('netAwayX')==='1';}catch(e){}
+  if(x)return;
+  NETW.away=true;
+  $('netAwayName').textContent=MDNS_NAME+'.local';
+  $('netAway').hidden=false;
+}
+$('netAwayX').onclick=()=>{$('netAway').hidden=true;try{sessionStorage.setItem('netAwayX','1');}catch(e){}};
+$('netOwn').onclick=()=>sheet('Use the board\'s own WiFi',
+  '<p class="hint">On this device, join the WiFi <b>'+esc(AP_SSID||'ESP32-HID-...')+'</b> with the board\'s WiFi password, '+
+  'then open <b>http://'+esc(MDNS_NAME)+'.local</b>. The same address works there and on its home network.</p>');
+// Which saved network is this device on? Its browser cannot tell the board, so it asks;
+// the board then moves there. Someone using it on its network now is asked about first.
+$('netBring').onclick=()=>send({cmd:'wifi_networks'},r=>{
+  const n=(r&&r.networks||[]).filter(x=>!x.current);
+  if(!n.length){toast('The board has no other saved network - add this device\'s WiFi in Settings first','bad');return;}
+  sheet('Which WiFi is this device on?',
+    '<p class="hint">The board moves to it, and <b>'+esc(MDNS_NAME)+'.local</b> opens from here a few seconds later.</p>'+
+    '<div class="list">'+n.map(x=>'<button class="item" data-bring="'+esc(x.ssid)+'">'+ico('wifi')+'<div class="tx"><b>'+esc(x.ssid)+'</b></div></button>').join('')+'</div>',
+    ()=>document.querySelectorAll('[data-bring]').forEach(b=>b.onclick=()=>netBring(b.dataset.bring,false)));
+});
+function netBring(ssid,force){
+  send({cmd:'wifi_prefer',ssid:ssid,now:true,force:force},r=>{
+    if(!r||r.status!=='ok'){toast((r&&r.message)||'Could not move it','bad');return;}
+    if(r.busy){
+      if(confirm('Someone is using the board on its network right now. Moving it cuts them off until they join "'+ssid+'" too. Move it anyway?'))netBring(ssid,true);
+      return;
+    }
+    closeSheet();$('netAway').hidden=true;
+    toast('Moving the board to '+ssid+' - open '+MDNS_NAME+'.local in a few seconds','ok');
+  });
+}
+
 function sheet(title,html,onOpen){
   $('sheetin').innerHTML='<div class="sheeth"><h3>'+esc(title)+'</h3>'+
     '<button class="iconbtn" onclick="closeSheet()">'+ico('x')+'</button></div>'+html;
@@ -5245,6 +5308,7 @@ function applyStatus(d){
   if(d.ap_share!==undefined)paintShare(d.ap_share,d.ap_share_active,d.wifi_connected?'the access point':'the home network');
   if(d.mdns)MDNS_NAME=d.mdns;
   if(d.ap_ssid)AP_SSID=d.ap_ssid;
+  if(d.mdns&&authOK)netWhere();
   if(d.wifi_connected&&d.wifi_ip)noteHomeIp(d.wifi_ip);
   if(d.wifi_connected!==undefined&&SCR.homeNet!==!!d.wifi_connected){SCR.homeNet=!!d.wifi_connected;if(!SCR.pcs.length)scrRenderList();}
   if(!d)return;

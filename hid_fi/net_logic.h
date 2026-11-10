@@ -43,6 +43,8 @@ inline int netPickBest(const NetSaved* saved, int nSaved, const NetSeen* seen, i
 // (working normally) counted as too weak and the board fell back to a stronger
 // router nobody could reach (09F7C8, 2026-11-07).
 #define NET_WORKABLE   (-85)
+#define NET_ROAM_BELOW (-70)        // dBm: roam only off an access point weaker than this (D-10)
+#define NET_ROAM_GAIN  10           // dB: to one of the same network this much stronger
 #define NET_LOOK_MS    300000UL     // on a network nobody uses: wait this long for an owner device
 
 struct NetKnown {          // one saved network and what the board remembers about it
@@ -57,7 +59,7 @@ struct NetKnown {          // one saved network and what the board remembers abo
                            // (it changed?) - never a reason to move, tried only when nothing else is
 };
 
-enum NetWhy { NET_NONE = 0, NET_PREFERRED = 1, NET_STRONGEST = 2, NET_COMING_HOME = 3, NET_LOOKING = 4 };
+enum NetWhy { NET_NONE = 0, NET_PREFERRED = 1, NET_STRONGEST = 2, NET_COMING_HOME = 3, NET_LOOKING = 4, NET_ROAMING = 5 };
 
 // The network that defines "where the board is used": the paired computer's, else the
 // one used most recently. -1: nobody has used it over any saved network yet.
@@ -147,8 +149,9 @@ inline int netMoveFrom(const NetKnown* k, int n, int cur, const NetSeen* seen, i
 // network (it may be back), or on one nobody uses after NET_LOOK_MS with another
 // saved network left to try. Nothing to decide, no scan: each one briefly disturbs
 // the board's own WiFi, so a board nobody uses that has tried everything stops.
-inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere) {
+inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere, int curRssi = 0) {
     if (cur < 0 || cur >= n) return false;
+    if (curRssi && curRssi < NET_ROAM_BELOW) return true;      // a stronger access point may be near
     int p = netPreferred(k, n);
     if (p >= 0 && !netSameNet(k, cur, p))
         for (int i = 0; i < n; i++) if (k[i].usable && !k[i].refused && netSameNet(k, i, p)) return true;
@@ -168,3 +171,25 @@ inline int netSeedFrom(const NetKnown* k, int n) {
     for (int i = 0; i < n; i++) if (k[i].used || k[i].anchor) return -1;
     return k[0].usable ? 0 : -1;
 }
+
+// ---- roaming within one network (docs/DECISIONS.md D-10) -----------------------------
+// Strength decides between the access points of one network only - never between the
+// owner's network and another. While connected the board moves to a stronger access
+// point of the same network when the one it is on has turned weak, by a margin that
+// cannot ping-pong, and never while an owner device is using it.
+
+// The network cur belongs to (same name, or same subnet) has a much stronger access point
+// in range: the index to rejoin (cur itself when the stronger one has the same name; the
+// join then takes the strongest, WIFI_CONNECT_AP_BY_SIGNAL). -1: stay.
+inline int netShouldRoam(const NetKnown* k, int n, int cur, const NetSeen* seen, int nSeen,
+                         int curRssi, bool ownerHereNow) {
+    if (cur < 0 || cur >= n || ownerHereNow || curRssi >= NET_ROAM_BELOW) return -1;
+    int best = -1, bestRssi = -1000;
+    for (int i = 0; i < n; i++) {
+        if (!k[i].usable || k[i].refused || !netSameNet(k, i, cur)) continue;
+        int r = netStrongestSeen(k[i], seen, nSeen);
+        if (r > bestRssi) { best = i; bestRssi = r; }
+    }
+    return (best >= 0 && bestRssi >= curRssi + NET_ROAM_GAIN) ? best : -1;
+}
+

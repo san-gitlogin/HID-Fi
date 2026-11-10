@@ -142,6 +142,14 @@ class Dashboard:
         return d.accept() if ans else d.dismiss()
 
     # ---- lifecycle ----------------------------------------------------------------------
+    def open_url(self, url):
+        """Open the dashboard at another address the board answers on (its .local name, its
+        home-network IP) - docs/DECISIONS.md D-10."""
+        self.page.goto(url)
+        self.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)
+        self.idle()
+        return self
+
     def open(self, hash_=""):
         self.page.goto(self.sim.URL + (("#" + hash_) if hash_ else ""))
         self.page.wait_for_function("() => document.getElementById('ltext').textContent === 'live'", timeout=8000)

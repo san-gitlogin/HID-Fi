@@ -108,6 +108,7 @@ class CompanionBoard:
         self.tick()
         return {"comp_paired": len(self.paired),
                 "comp_online": sum(1 for c in self.paired if self.online(c)),
+                "comp_routed": any(self.online(c) and not c.get("on_link", True) for c in self.paired),
                 "comp_pending": sum(1 for p in self.pending if p["phase"] != "aborted")}
 
     def wipe(self):
@@ -311,7 +312,11 @@ class CompanionBoard:
             return self._refuse(401, "bad_mac", "The heartbeat proof is wrong")
         was = self.online(c)
         c.update(ip=ip, port=port, fp=b["fp"], tn=b["tn"], seen=self._now())
-        if not str(ip).startswith("192.168.4."):        # D-02: the paired computer anchors this network
+        # D-02/D-10: it anchors the network only when right on it - the address it says
+        # it used is the one the request came from (older Companions send none).
+        via = b.get("via", "")
+        c["on_link"] = not via or via == ip
+        if not str(ip).startswith("192.168.4.") and c["on_link"]:
             self.sim.owner_here(computer=True)
         if not was:
             self.sim._push({"event": "companion_online", "name": c["name"]})
@@ -510,10 +515,13 @@ class FakeApp:
     def reset_request_status(self, request):
         return self._call(op="reset_request_status", request=request)[1]
 
-    def beat(self):
+    def beat(self, via=None):
+        """via: this computer's own address toward the board (D-10); None sends none, as
+        Companions before it did."""
         _, r = self._call(op="chal", id=self.id)
         if r.get("status") != "ok":
             return r
         self.tn = os.urandom(16).hex()
         m = mac(self.key, f"beat|{self.id}|{self.port}|{self.fp}|{self.tn}|{r['chal']}")
-        return self._call(op="beat", id=self.id, port=self.port, fp=self.fp, tn=self.tn, chal=r["chal"], mac=m)[1]
+        extra = {} if via is None else {"via": via}
+        return self._call(op="beat", id=self.id, port=self.port, fp=self.fp, tn=self.tn, chal=r["chal"], mac=m, **extra)[1]

@@ -294,6 +294,62 @@ def test_an_updated_board_stays_on_the_network_it_was_on(bench):
     assert seed([]) == -1
 
 
+ROAM_BELOW, ROAM_GAIN = -70, 10
+
+
+def oracle_roam(k, seen, cur, cur_rssi, owner):
+    """D-10 in words: off a weak access point (< -70) to one of the same network (same
+    name or subnet) at least 10 dB stronger, never while an owner device is on it."""
+    if owner or cur_rssi >= ROAM_BELOW:
+        return None
+    c = [(strongest(k[i][0], seen), -i) for i in range(len(k))
+         if k[i][1] and not k[i][6] and same(k, i, cur) and strongest(k[i][0], seen) is not None]
+    if not c or max(c)[0] < cur_rssi + ROAM_GAIN:
+        return None
+    return -max(c)[1]
+
+
+def roam(bench, known, seen, cur, cur_rssi, owner=False):
+    i = ask(bench, [f"roam {kspec(known)} {spec(seen)} {cur} {cur_rssi} {int(owner)}"])[0][0]
+    return known[i][0] if i >= 0 else None
+
+
+def test_it_roams_within_one_network_and_never_between_networks(bench):
+    """D-10: strength decides between access points of one network only."""
+    home = [net(EXT, subnet=LAN1, used=3), net(ARV, subnet=LAN1), net(C6, subnet=LAN0)]
+    # On ARVISANTU at -80 (the far router), the extender EXT at -45: same network - roam.
+    assert roam(bench, home, [(ARV, -80), (EXT, -45), (C6, -30)], 1, -80) == EXT
+    # C6 is far stronger but another network: never a reason to roam.
+    assert roam(bench, home, [(ARV, -80), (C6, -30)], 1, -80) is None
+    # One name on two access points (a mesh): the same name, much stronger elsewhere -
+    # rejoin it (the join then takes the strongest access point).
+    assert roam(bench, home, [(EXT, -82), (EXT, -50)], 0, -82) == EXT
+    # Not weak enough to bother, or not a big enough gain: stays (no ping-pong).
+    assert roam(bench, home, [(ARV, -68), (EXT, -40)], 1, -68) is None
+    assert roam(bench, home, [(ARV, -75), (EXT, -66)], 1, -75) is None
+    assert roam(bench, home, [(ARV, -75), (EXT, -65)], 1, -75) == EXT
+    # Someone using it right on its network now: never.
+    assert roam(bench, home, [(ARV, -80), (EXT, -45)], 1, -80, owner=True) is None
+    # A member refusing its password is no place to roam to.
+    home2 = [net(EXT, subnet=LAN1, refused=True), net(ARV, subnet=LAN1, used=3)]
+    assert roam(bench, home2, [(ARV, -80), (EXT, -45)], 1, -80) is None
+    # A weak access point is a reason to look (scan); a good one is not.
+    assert ask(bench, [f"look {kspec(home)} 1 0 -80"])[0][0] == 1
+    assert ask(bench, [f"look {kspec([net(EXT, subnet=LAN1, used=3)])} 0 0 -60"])[0][0] == 0
+
+
+def test_random_homes_roam_by_the_written_rule(bench):
+    rng = random.Random(1107)
+    cases = []
+    for _ in range(3000):
+        known, seen = random_home(rng)
+        cur = rng.randrange(len(known))
+        cases.append((known, seen, cur, rng.choice(range(-92, -40, 2)), rng.random() < 0.2))
+    got = ask(bench, [f"roam {kspec(k)} {spec(s_)} {c} {r} {int(o)}" for k, s_, c, r, o in cases])
+    for (k, s_, c, r, o), g in zip(cases, got):
+        assert (None if g[0] < 0 else g[0]) == oracle_roam(k, s_, c, r, o), (k, s_, c, r, o)
+
+
 # The written rules (docs/DECISIONS.md D-02), implemented again here from the words,
 # not from the header - the two must agree on any home.
 def oracle_preferred(k):
@@ -412,6 +468,9 @@ MUTATIONS = [   # a planted bug each; the tests above must catch every one
     ("if (i >= 0 && r >= NET_WORKABLE) { if (why) *why = NET_PREFERRED; return i; }",
      "if (i >= 0) { if (why) *why = NET_PREFERRED; return i; }"),                 # preferred however weak
     ("(k[i].anchor && !k[p].anchor) ||", ""),
+    ("if (!k[i].usable || k[i].refused || !netSameNet(k, i, cur)) continue;\n        int r = netStrongestSeen(k[i], seen, nSeen);\n        if (r > bestRssi) { best = i; bestRssi = r; }\n    }\n    return (best",
+     "if (!k[i].usable || k[i].refused) continue;\n        int r = netStrongestSeen(k[i], seen, nSeen);\n        if (r > bestRssi) { best = i; bestRssi = r; }\n    }\n    return (best"),  # roams to another network
+    ("return (best >= 0 && bestRssi >= curRssi + NET_ROAM_GAIN) ? best : -1;", "return (best >= 0 && bestRssi > curRssi) ? best : -1;"),   # ping-pong
     ("if (!k[i].usable || k[i].refused || !netSameNet(k, i, p)) continue;",
      "if (!k[i].usable || !netSameNet(k, i, p)) continue;"),                       # comes home to a changed password
     ("(pass == 1 || (!k[i].tried && !k[i].refused))", "(pass == 1 || !k[i].tried)"),   # a changed password first                                       # the computer does not anchor
@@ -437,7 +496,7 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
     exe = firmware.build_host(f"net_bench_{abs(hash(new))}", HERE / "net_bench.cpp", extra_inputs=[mutant],
                               flags=("-std=c++17", "-O2", f'-DNET_LOGIC="{mutant}"'))
     caught = 0
-    d02 = [(test_a_changed_password_never_pulls_it_off_a_working_network, ()), (test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
+    d02 = [(test_it_roams_within_one_network_and_never_between_networks, ()), (test_a_changed_password_never_pulls_it_off_a_working_network, ()), (test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
            (test_one_network_on_two_names_roams_to_the_strongest, ()), (test_the_paired_computer_anchors_over_a_phone, ()),
            (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ())] + [
            (test_a_preferred_network_too_weak_falls_back_to_the_strongest, a) for a in [(-90, (C6, "strongest"))]]

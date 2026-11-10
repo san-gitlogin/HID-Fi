@@ -111,6 +111,25 @@ pub struct Session {
     pub key_changed: bool,
 }
 
+/// This computer's own address on the way to the board at `base` ("http://a.b.c.d"),
+/// as the OS routes it - a UDP "connect" sends nothing. Empty for a name, or on any
+/// error: the board then treats the computer as before (D-10).
+pub fn local_addr_toward(base: &str) -> String {
+    let host = base
+        .trim_start_matches("http://")
+        .split(['/', ':'])
+        .next()
+        .unwrap_or("");
+    let Ok(ip) = host.parse::<std::net::Ipv4Addr>() else {
+        return String::new();
+    };
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| s.connect((ip, 80)).map(|_| s))
+        .and_then(|s| s.local_addr())
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default()
+}
+
 fn rand16() -> [u8; 16] {
     let mut b = [0u8; 16];
     getrandom::fill(&mut b).expect("the OS random source is available");
@@ -426,6 +445,7 @@ impl Session {
                 tn,
                 chal,
                 mac,
+                via: local_addr_toward(&self.base),
             },
         )?;
         self.status = Status::Online;
@@ -449,4 +469,19 @@ fn board_uptime(http: &dyn Http, base: &str) -> Option<Duration> {
     }
     let v: serde_json::Value = serde_json::from_str(&body).ok()?;
     v.get("uptime_sec")?.as_u64().map(Duration::from_secs)
+}
+
+#[cfg(test)]
+mod via_tests {
+    use super::local_addr_toward;
+
+    #[test]
+    fn the_address_toward_the_board_is_the_one_the_os_would_use() {
+        // Loopback reaches loopback from loopback: the board would see this same address.
+        assert_eq!(local_addr_toward("http://127.0.0.1"), "127.0.0.1");
+        assert_eq!(local_addr_toward("http://127.0.0.1:80/x"), "127.0.0.1");
+        // A name is never resolved here (that could wait on the network): unknown, empty.
+        assert_eq!(local_addr_toward("http://esp-hid-09f7c8.local"), "");
+        assert_eq!(local_addr_toward(""), "");
+    }
 }

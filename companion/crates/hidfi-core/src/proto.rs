@@ -41,6 +41,11 @@ pub enum Request {
         tn: String,
         chal: String,
         mac: String,
+        /// This computer's own address on the way to the board (D-10, docs/DECISIONS.md).
+        /// The board compares it with where the request came from: different means a
+        /// router in between, so the computer is on another network and does not anchor
+        /// the board's. Empty when unknown. Not secret, so outside the MAC.
+        via: String,
     },
     /// An update action for the board this computer is paired with
     /// (hid_fi/ota.h, compOta): check, from (relay), install, cancel, apply,
@@ -250,6 +255,7 @@ mod tests {
             tn: "1".repeat(32),
             chal: "c".repeat(32),
             mac: "d".repeat(64),
+            via: "255.255.255.255".into(),
         };
         assert!(r.to_body().len() <= MAX_BODY);
         let h = Request::Hello {

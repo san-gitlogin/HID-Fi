@@ -127,7 +127,7 @@ Feature: When the home network has a bad night
   Scenario: Signing in over the home network marks it as where the board is used
     Given the board has saved the networks "Bangalore, HomeNet"
     And this phone reaches the board over the home network
-    And the dashboard is open
+    And the dashboard is opened by the board's name
     When I open the "Settings" tab
     Then "#savedNets" contains "you have used the board over this one"
     And "#savedNets" contains "preferred"
@@ -177,6 +177,65 @@ Feature: When the home network has a bad night
     And the dashboard is open
     When the board looks at whether to move
     Then I see the message "Moving to the network it is used over: Bangalore"
+
+  # ---- devices on another network (docs/DECISIONS.md D-10) ---------------------------
+
+  Scenario: Opened by address from another network, the page says so and the visit does not count
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the board's name does not reach this device
+    And the dashboard is opened by the board's address
+    Then "#netAway" is visible
+    And "#netAway" contains "esp-hid-da1a2c.local"
+    And the board prefers no network yet
+
+  Scenario: Opened by address right on the board's network, the page checks the name and counts
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the dashboard is opened by the board's address
+    Then "#netAway" is hidden
+    And the board receives {"cmd": "net_here"}
+    And the board prefers "HomeNet"
+
+  Scenario: Bring the board to this device's WiFi - pick it, and the board moves
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the board's name does not reach this device
+    And the dashboard is opened by the board's address
+    When I tap the "#netBring" control
+    Then the dialog "Which WiFi is this device on?" is open
+    When I pick "Bangalore" as this device's WiFi
+    Then the board receives {"cmd": "wifi_prefer", "ssid": "Bangalore", "now": true, "force": false}
+    And I see the message "Moving the board to Bangalore"
+    And "#netAway" is hidden
+
+  Scenario: Someone using the board on its network is asked about before it moves
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the board's name does not reach this device
+    And someone else is using the board right on its network
+    And the dashboard is opened by the board's address
+    And I will answer "no" to the next question
+    When I tap the "#netBring" control
+    And I pick "Bangalore" as this device's WiFi
+    Then a confirmation asking "cuts them off" was shown
+    And the board does not receive "force"
+    And the board prefers no network yet
+
+  Scenario: The board's own WiFi is offered, with the same address
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And this phone reaches the board over the home network
+    And the board's name does not reach this device
+    And the dashboard is opened by the board's address
+    When I tap the "#netOwn" control
+    Then "#sheetin" contains "esp-hid-da1a2c.local"
+    And "#sheetin" contains "ESP32-HID"
+
+  Scenario: A paired computer behind another router does not anchor the board
+    Given the board has saved the networks "Bangalore, HomeNet"
+    And the paired computer reaches the board from another network
+    Then the board prefers no network yet
+    And the board says its computer is on another network
 
   Scenario: A saved network whose password changed says so, and the board stays where it works
     Given the board has saved the networks "Bangalore, HomeNet"

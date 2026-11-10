@@ -28,6 +28,7 @@ import time
 URL = "http://hidfi.test/"
 WS_URL = "ws://hidfi.test:81/"
 AP_URL = "http://192.168.4.1/"
+LAN_PAGE_URL, LAN_PAGE_WS = "http://192.168.1.77/", "ws://192.168.1.77:81/"   # the board's home-network address
 AP_WS_URL = "ws://192.168.4.1:81/"
 
 OP = {1: "move", 2: "button", 3: "abs", 4: "ping", 5: "gamepad", 6: "consumer", 7: "key"}
@@ -184,6 +185,8 @@ class BoardSim:
         # and tried - what the firmware remembers; use_count is its netUseCount.
         self.use_count = 0
         self.net_why = ""
+        self.others_on_link = 0
+        self.name_reachable = True    # D-10: this device can reach the board's .local name       # scenarios: devices right on the board's network not modelled as sockets
         self.scans = 0
         self.away = False
         self.networks = [{"ssid": "HomeNet", "rssi": -48, "quality": "excellent", "channel": 6, "encryption": "WPA2"},
@@ -261,7 +264,7 @@ class BoardSim:
             "mac": self.mac, "ap_mac": "BA" + self.mac[2:], "ws_clients": sum(1 for k in self.sockets if k["open"]),
             "ws_devices": len({k.get("ip") or AP_IP for k in self.sockets if k["open"]}),
             "ws_max": self.ws_max,
-            "mdns": "esp-hid-da1a2c", "pc_state": self.pc_state, "host_os": self.host_os(),
+            "mdns": self.MDNS, "pc_state": self.pc_state, "host_os": self.host_os(),
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
             "detect_phase": "settled", "unicode_mac": self.unicode["mac"], "unicode_linux": self.unicode["linux"],
             "usb_set_idle": 1, "usb_ctrl_reqs": 2, "usb_led_reports": 0, "usb_str_reqs": 10, "usb_str_rereads": 5,
@@ -411,8 +414,14 @@ class BoardSim:
         where = lambda: ip or (LAN_IP if self.phone_on_lan else AP_IP)
         page.add_init_script("if (location.protocol === 'http:') "
                              "setInterval(() => fetch('/__sim_tick').catch(() => {}), 100)")
-        for base, ws in ((URL, WS_URL), (AP_URL, AP_WS_URL)):
-            page.route(base + "**", lambda route, req: self._http(route, req, html, where()))
+        # D-10: also by the board's .local name and by its home-network address, as a
+        # phone reaches a real board. name_reachable False: this device is on another
+        # network, so the name does not resolve here (the address may still be routed in).
+        name = f"http://{self.MDNS}.local/"
+        for base, ws in ((URL, WS_URL), (AP_URL, AP_WS_URL), (name, f"ws://{self.MDNS}.local:81/"),
+                         (LAN_PAGE_URL, LAN_PAGE_WS)):
+            page.route(base + "**", lambda route, req, base=base: (route.abort("addressunreachable")
+                       if base == name and not self.name_reachable else self._http(route, req, html, where())))
             page.route_web_socket(ws, lambda w: self._ws(w, where()))
 
     def _http(self, route, req, html, ip=AP_IP):
@@ -733,6 +742,7 @@ class BoardSim:
 
     # ---- net_logic.h, the same rules (checked against it in tests/unit/test_net_logic.py)
     WORKABLE, LOOK_S = -85, 300
+    MDNS = "esp-hid-da1a2c"
 
     def _users(self):
         return [i for i, n in enumerate(self.nets) if n.get("used") or n.get("computer")]
@@ -984,8 +994,13 @@ class BoardSim:
             if self._pin_check(b.get("token", "")):
                 if sock:
                     sock["authed"] = True
-                if transport != "serial" and self.peer and not str(self.peer).startswith("192.168.4."):
-                    self.owner_here()              # D-02: signed in over the home network
+                # D-10: only a page opened by the board's .local name is right on its
+                # network; one opened by address may be routed in (net_here says later).
+                if transport != "serial" and self.peer and not str(self.peer).startswith("192.168.4.") \
+                        and str(b.get("host", "")).lower() == self.MDNS + ".local":
+                    if sock:
+                        sock["on_link"] = True
+                    self.owner_here()
                 return OK("auth_ok")
             r = E("Wrong PIN", reply="auth_failed")
             if self.pin_locked():
@@ -1383,11 +1398,23 @@ class BoardSim:
             if p is not None:
                 nets[p]["preferred"] = True
             return OK("wifi_networks", max=5, networks=nets)
+        if c == "net_here":
+            if sock and sock.get("authed") and self.peer and not str(self.peer).startswith("192.168.4."):
+                sock["on_link"] = True
+                self.owner_here()
+                return OK("net_here", counted=True)
+            return OK("net_here")
         if c == "wifi_prefer":
             ssid = b.get("ssid", "")
             row = next((n for n in self.nets if n["ssid"] == ssid), None)
             if row is None:
                 return E("Not a saved network")
+            # D-10: moving now cuts off anyone else right on the board's network - asked first.
+            if b.get("now") and not b.get("force"):
+                others = sum(1 for k in self.sockets if k is not sock and k["open"] and k.get("authed") and k.get("on_link"))
+                others += self.others_on_link
+                if others:
+                    return OK("wifi_prefer", ssid=ssid, busy=True, using=others)
             self.use_count += 1
             row["used"] = self.use_count
             for n in self.nets:

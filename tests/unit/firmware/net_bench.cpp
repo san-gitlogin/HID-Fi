@@ -7,6 +7,8 @@
 //   move <known> <seen> <cur> <msHere> <ownerHereNow 0|1>      -> index why
 //   look <known> <cur> <msHere>                                -> 1|0 0
 //   seed <known>                                                -> index 0
+//   roam <known> <seen> <cur> <curRssi> <ownerHereNow 0|1>      -> index 0
+//   look <known> <cur> <msHere> [curRssi]                      -> 1|0 0
 // known: hexname:usable:net:used:anchor:tried[:refused],...  (D-02, D-08 in docs/DECISIONS.md)
 #include <cstdio>
 #include <cstdlib>
@@ -65,6 +67,19 @@ int main() {
         std::stringstream in(line);
         std::string op, a, b;
         in >> op >> a >> b;
+        if (op == "roam") {
+            auto kv = parseKnown(a);
+            auto sn = parse(b);
+            std::vector<NetKnown> known;
+            for (auto& x : kv) known.push_back(x.k);
+            for (size_t i = 0; i < kv.size(); i++) known[i].ssid = kv[i].ssid.c_str();
+            std::vector<NetSeen> seen;
+            for (auto& p : sn) seen.push_back({p.first.c_str(), p.second});
+            long cur = 0, rssi = 0, owner = 0;
+            in >> cur >> rssi >> owner;
+            std::cout << netShouldRoam(known.data(), (int)known.size(), (int)cur, seen.data(), (int)seen.size(), (int)rssi, owner != 0) << " 0\n";
+            continue;
+        }
         if (op == "seed") {
             auto kv = parseKnown(a);
             std::vector<NetKnown> known;
@@ -78,9 +93,9 @@ int main() {
             std::vector<NetKnown> known;
             for (auto& x : kv) known.push_back(x.k);
             for (size_t i = 0; i < kv.size(); i++) known[i].ssid = kv[i].ssid.c_str();
-            long ms = 0;
-            in >> ms;
-            std::cout << (netNeedsLook(known.data(), (int)known.size(), std::atoi(b.c_str()), (uint32_t)ms) ? 1 : 0) << " 0\n";
+            long ms = 0, rssi = 0;
+            in >> ms >> rssi;
+            std::cout << (netNeedsLook(known.data(), (int)known.size(), std::atoi(b.c_str()), (uint32_t)ms, (int)rssi) ? 1 : 0) << " 0\n";
             continue;
         }
         if (op == "choose" || op == "move") {
