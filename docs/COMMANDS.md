@@ -617,6 +617,33 @@ makes the board behave as if the router misbehaved, without touching the router.
 | `ip_was` with `ip` | the board believes it last held `ip`, so the next join is a change |
 | `clear` | ends a staged fault now |
 
+**Rehearsing other networks.** `net_sim` (USB only, `usb_only` over WiFi) puts
+made-up networks into the board's scans, so the choices of DECISIONS.md D-02
+and D-10 run on the real board with no second router and nobody walking about.
+`tests/board/test_networks_rehearsed.py` and `test_reach_by_name_live.py` use
+it. A made-up network is joined over the real network the board was on when
+the rehearsal began (the `carrier`), and counts as a network of its own (its own
+subnet) unless `same_net` says it is the same network, like an extender. Memory
+only: a restart ends it, except the one it asks for itself.
+
+```json
+{"cmd":"net_sim","nets":[{"ssid":"HIDFI-SIM-B","rssi":-45,"same_net":false}],"owners":"HIDFI-SIM-B","speed":15}
+{"cmd":"net_sim"}
+{"cmd":"net_sim","off":true}
+```
+
+| Field | Staged |
+|---|---|
+| `nets` | up to 4 made-up networks with their strength; one with the carrier's own name is another access point of it. A made-up network left out is gone: on it, the board drops off |
+| `owners` | the network the owner's devices are on; elsewhere they do not count, as if behind another router. `""` where they really are, `"-"` nowhere |
+| `hide` | a real network the scans no longer see |
+| `link_rssi` | the strength the board reads for its own link (0: the real one) |
+| `speed` | 1-60: the 5-minute and 2-minute timers run that much faster |
+| `restart` | `true` restarts the board and keeps the rehearsal |
+
+With no field it only answers how things stand: `on`, `carrier`, `network` (the
+saved network the board thinks it is on), and the fields above.
+
 ### Power
 
 ```json

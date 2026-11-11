@@ -94,3 +94,18 @@ def test_a_brownout_restart_is_reported():
     assert 'doc["reset_reason"] = resetReasonStr();' in status[:status.index("\n}\n")]
     sim = (paths.TESTS / "support" / "board_sim.py").read_text(encoding="utf-8")
     assert '"reset_reason":' in sim, "the simulated board answers status like the real one (test_sim_contract)"
+
+
+def test_network_rehearsals_stay_on_the_usb_cable():
+    """net_fault and net_sim stage networks that are not there; over WiFi they would let anyone
+    near the board move it off its network."""
+    ino = (FW / "hid_fi.ino").read_text(encoding="utf-8")
+    for fn in ("void handleNetFault(", "void handleNetSim("):
+        at = re.search(re.escape(fn) + r"[^;{]*\)\s*\{", ino)
+        assert at, f"{fn} not found"
+        head = ino[at.start():].split("\n")[:6]
+        assert any("if (cmdSource != SRC_SERIAL)" in line for line in head[:3]), \
+            f"{fn} must refuse anything but the USB cable before doing anything"
+        assert any('"usb_only"' in line for line in head), f"{fn} must answer usb_only over WiFi"
+    assert "RTC_NOINIT_ATTR NetSimState" in ino and "esp_reset_reason() == ESP_RST_SW" in ino, \
+        "a rehearsal lives in memory and survives only the restart it asks for"

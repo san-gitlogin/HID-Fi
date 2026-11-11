@@ -1065,6 +1065,38 @@ class BoardSim:
             if kind == "vanish":
                 r["s"] = max(5, min(600, int(b.get("s", 30))))
             return r
+        if c == "net_sim":
+            # Made-up networks for the board's scans (the firmware's decisions are proven on
+            # the real board, tests/board/test_networks_rehearsed.py); the model keeps the
+            # reply's shape and the USB-only rule.
+            if transport != "serial":
+                return E("Network tests run over the USB cable only", reply="usb_only")
+            sim = getattr(self, "net_sim", None)
+            asks = any(k in b for k in ("nets", "owners", "hide", "link_rssi", "speed", "restart"))
+            if b.get("off"):
+                sim = None
+            elif asks:
+                if sim is None:
+                    if self.sta["phase"] != "online":
+                        return E("Join a real network first", reply="net_sim")
+                    sim = {"carrier": self.sta.get("ssid", ""), "owners": "", "hide": "", "link_rssi": 0, "speed": 1, "nets": []}
+                if "nets" in b:
+                    sim["nets"] = [{"ssid": n.get("ssid", ""), "rssi": max(-100, min(-1, int(n.get("rssi", -60)))),
+                                    "same_net": bool(n.get("same_net"))} for n in b["nets"][:4]]
+                for k in ("owners", "hide"):
+                    if k in b:
+                        sim[k] = str(b[k])
+                if "link_rssi" in b:
+                    sim["link_rssi"] = max(-100, min(0, int(b["link_rssi"])))
+                if "speed" in b:
+                    sim["speed"] = max(1, min(60, int(b["speed"])))
+            self.net_sim = sim
+            r = OK("net_sim", on=sim is not None)
+            if sim is not None:
+                r.update(sim)
+            if self.sta["phase"] == "online":
+                r["network"] = self.sta.get("ssid", "")
+            return r
         if c in ("do", "actions", "open", "steps"):
             return self._agent(c, b, OK, E)
         if c in ("key_down", "key_up"):

@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.3.1 - 2026-11-11
 
 ### Firmware
 
@@ -59,6 +59,28 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   touches is a named define, never a strapping, flash, octal-PSRAM, USB or UART0
   pin (GPIO0 stays the BOOT button by design), and any analog input is on ADC1,
   which keeps working while WiFi is on. `tests/static/test_hardware_rules.py`.
+
+- **"Bring the board here" right after adding a network goes where asked.** A join
+  still on its way finished even after "move now", and the board sat on the network
+  it had been joining - thinking it was the asked-for one - until its next look two
+  minutes later. The asked-for network is now joined at once, replacing the one on
+  its way. Found by the new rehearsal tests on 09F7C8.
+
+### Tests
+
+- **Where the board goes is rehearsed on the real board, with nobody walking about.**
+  `net_sim` (USB only) puts made-up networks into the board's scans, says where
+  the owner's devices are and runs the timers faster; the shipped firmware then
+  decides on the real radio. `tests/board/test_networks_rehearsed.py` covers
+  coming home, never hopping on strength, a restart, following the owner to a
+  hotspot and back when it goes, Bring-here out of range, roaming only when nobody
+  uses it, an extender, and move-during-a-join. The phone hotspot carried about by
+  a person (`test_two_homes.py`) is no longer needed for any of it.
+- **A phone on another network, through the real dashboard:**
+  `tests/board/test_reach_by_name_live.py` opens the board in Chromium by name, by
+  address, and by address with the name made unresolvable (as behind another
+  router), and checks the banner, both of its buttons, "asks first when someone is
+  using it", and what the board counts.
 
 ### Dashboard
 

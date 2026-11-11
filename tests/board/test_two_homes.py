@@ -1,5 +1,8 @@
 """Two homes, for real: the board moves between two saved networks by itself.
 
+Optional since 2026-11-11: test_networks_rehearsed.py proves the same stories on the
+real board with net_sim and needs nobody. This one remains for a real second router.
+
 The second "home" is a phone's hotspot. A person turns it on and off when a
 dialog on this Mac asks; everything else is driven over the USB cable. The home
 network is never forgotten or changed - only staged as absent for a minute -

@@ -286,6 +286,22 @@ the board from different network but within range."
 - `tests/ui/bdd/features/home_network.feature: Someone using the board on its network is asked about before it moves`
 - `tests/ui/bdd/features/home_network.feature: The board's own WiFi is offered, with the same address`
 - `tests/ui/bdd/features/home_network.feature: A paired computer behind another router does not anchor the board`
+- `tests/board/test_networks_rehearsed.py::test_joined_where_nobody_is_it_comes_home`
+- `tests/board/test_networks_rehearsed.py::test_a_stronger_network_nearby_never_pulls_it_away`
+- `tests/board/test_networks_rehearsed.py::test_restarted_it_goes_straight_to_the_preferred_network`
+- `tests/board/test_networks_rehearsed.py::test_the_owner_moves_and_their_hotspot_goes_it_finds_them_again`
+- `tests/board/test_networks_rehearsed.py::test_brought_to_a_network_out_of_range_it_comes_back`
+- `tests/board/test_networks_rehearsed.py::test_a_weak_access_point_roams_only_when_nobody_uses_it`
+- `tests/board/test_networks_rehearsed.py::test_an_extender_with_another_name_is_the_same_network`
+- `tests/board/test_networks_rehearsed.py::test_asked_to_move_during_a_join_it_goes_where_asked`
+- `tests/board/test_reach_by_name_live.py::test_from_another_network_the_banner_shows_and_the_visit_does_not_count`
+- `tests/board/test_reach_by_name_live.py::test_bring_the_board_here_asks_first_when_someone_is_using_it`
+
+*2026-11-11:* proven on the real board without a second router or a person moving
+about (`net_sim`, owner: "I want all the tests to be automated including the one you
+complain of having a real device hotspot and asking me to perform actions or move
+around"). The rehearsal found that "Bring the board here" during a join still on
+its way was overridden by that join; the asked-for network is now joined at once.
 
 ## D-11 · 2026-11-11 · A failed update connection says where it stopped, and asks the name again
 

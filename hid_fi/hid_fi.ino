@@ -314,6 +314,29 @@ volatile uint8_t staLastReason = 0;   // 802.11 reason the router gave for letti
 // powered-off router looks like. The boot variant survives the restart in RTC RAM.
 uint32_t netFaultUntil = 0;
 String   netFaultSsid = "";           // vanish one network only (empty: all of them)
+
+// Test networks (serial only, net_sim): made-up networks in the board's scans, so the
+// choices of D-02/D-10 run on the real board with no second router and nobody walking
+// about. A made-up network is joined over the real one the board was on when the test
+// began (the carrier) but counts as a network of its own (its own subnet) unless the
+// test says it is the same network, like an extender. "owners" names the network the
+// owner's devices are on: on any other they do not count, as if behind another router.
+// speed runs the 5-minute and 2-minute timers that much faster. RAM only; it survives
+// only the restart net_sim itself asks for (RTC memory, software restart).
+struct NetSimNet { char ssid[33]; int8_t rssi; bool sameNet; };
+struct NetSimState {
+    uint32_t magic;
+    uint8_t n; NetSimNet v[4];
+    char owners[33];              // "" - wherever they really are; "-" - nowhere
+    char hide[33];                // a real network the scans no longer see
+    int8_t curRssi;               // 0, or the strength the board reads for its own link
+    uint8_t speed;                // 1..60
+    char carrier[33];
+};
+#define NET_SIM_MAGIC 0x5e7511a1u
+RTC_NOINIT_ATTR NetSimState netSimRtc;
+NetSimState netSim = {};
+inline bool netSimOn() { return netSim.magic == NET_SIM_MAGIC; }
 // Sharing the home internet with phones on the board's own WiFi (NAPT). Off by
 // default: it lets anything on the board's WiFi reach the home network, and the
 // traffic shares the radio with the pointer. Active only while both are up.
@@ -426,7 +449,7 @@ bool heapWarned = false;
 // FW_SERIES is FW_VERSION's MAJOR.MINOR (tests/static/test_project_rules.py checks).
 #define  FW_SERIES "4.3"
 #ifndef HIDFI_TEST_PATCH
-#define  FW_VERSION "hid_fi_v4.3" FW_TEST_SUFFIX
+#define  FW_VERSION "hid_fi_v4.3.1" FW_TEST_SUFFIX
 #else
 // A test build that claims a newer patch of this series (tests/board/test_ota_download.py).
 #define  FW_STR2(x) #x
@@ -806,6 +829,14 @@ void setupWebRoutes();
 void checkWifiConnection();
 void staCameOnline(const String& ip);
 void netOwnerHere(bool computer);
+bool netSimRides(const String& ssid);
+uint32_t netSimSubnet(const String& ssid, uint32_t real);
+bool netSimOwnersAway();
+uint32_t netSimMs(uint32_t ms);
+uint32_t netSimMsHere(uint32_t ms);
+int netSimLinkRssi();
+void netScanResults(int n, std::vector<String>& names, std::vector<int>& rssi);
+void handleNetSim(const JsonDocument& in);
 void netMaybeMove();
 void onStaEvent(arduino_event_id_t event, arduino_event_info_t info);
 void staWentAway();
@@ -1577,6 +1608,11 @@ void setupWifi() {
         netFaultUntil = millis() + constrain(rtcFaultSecs, 5u, 600u) * 1000UL;
         COM_SERIAL.printf("[NET] Test fault: home network gone for %us from boot\n", (unsigned)rtcFaultSecs);
     }
+    if (netSimRtc.magic == NET_SIM_MAGIC && esp_reset_reason() == ESP_RST_SW) {
+        netSim = netSimRtc;                          // net_sim restart: the rehearsal goes on
+        COM_SERIAL.printf("[NET] Test networks: %u, carried over the restart\n", (unsigned)netSim.n);
+    }
+    netSimRtc.magic = 0;
     if (netCount > 0) {
         // Look first, then join the strongest saved network in range.
         COM_SERIAL.printf("[WIFI] %u saved network(s) - looking for one in range\n", (unsigned)netCount);
@@ -1888,7 +1924,13 @@ void staBeginJoin(const String& ssid, const String& pass, bool useStatic) {
         WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
     }
 
-    WiFi.begin(ssid.c_str(), pass.c_str());
+    String joinSsid = ssid, joinPass = pass;
+    if (netSimRides(ssid)) {                         // a made-up network: over the real one
+        int c = netFind(String(netSim.carrier));
+        joinSsid = netSim.carrier;
+        joinPass = c >= 0 ? netPass[c] : String("");
+    }
+    WiFi.begin(joinSsid.c_str(), joinPass.c_str());
     COM_SERIAL.printf("[STA] Joining %s (%s)...\n", ssid.c_str(), staIpMode.c_str());
 }
 
@@ -2028,10 +2070,10 @@ void staCameOnline(const String& ip) {
     bool netDirty = false;
     if (netCurrent >= 0 && netCurrent < netCount) {
         netPwRefused[netCurrent] = false;            // it took the password after all
-        uint32_t sn = (uint32_t)WiFi.localIP() & (uint32_t)WiFi.subnetMask();
+        uint32_t sn = netSimSubnet(netSsid[netCurrent], (uint32_t)WiFi.localIP() & (uint32_t)WiFi.subnetMask());
         if (sn && sn != netNet[netCurrent]) { netNet[netCurrent] = sn; netDirty = true; }
     }
-    netCheckAt = millis() + 120000;
+    netCheckAt = millis() + netSimMs(120000);
     netMoveScan = false;
     staScanPending = false;
     staBlindRound = 0;                     // a new outage counts its rounds from the start
@@ -2173,6 +2215,7 @@ void checkWifiConnection() {
 // board prefers. Saved only when it changes, so the flash is not worn by use.
 void netOwnerHere(bool computer) {
     if (!wifiConnected || netCurrent < 0 || netCurrent >= netCount) return;
+    if (netSimOwnersAway()) return;
     int i = netCurrent;
     bool dirty = false;
     if (!netUsed[i] || netUsed[i] != netUseCount) { netUsed[i] = ++netUseCount; dirty = true; }
@@ -2207,6 +2250,7 @@ void handleNetHere() {
 // Someone is using the board over the home network right now: a signed-in page
 // or the paired Companion. The board never moves away from them.
 bool netOwnerNow() {
+    if (netSimOwnersAway()) return false;
     for (int i = 0; i < WS_MAX_CLIENTS; i++) if (wsAuthed[i] && wsOnLink[i] && webSocket.clientIsConnected(i)) return true;
     return compOnLinkCount() > 0;
 }
@@ -2236,17 +2280,20 @@ void netMaybeMove() {
         if (n == WIFI_SCAN_RUNNING) return;
         netMoveScan = false;
         if (n < 0 || netCurrent < 0 || netCurrent >= netCount) return;
-        std::vector<String> names(n);
+        std::vector<String> names;
+        std::vector<int> rssi;
+        netScanResults(n, names, rssi);
+        n = names.size();
         std::vector<NetSeen> seen(n);
-        for (int s = 0; s < n; s++) { names[s] = WiFi.SSID(s); seen[s] = {names[s].c_str(), (int)WiFi.RSSI(s)}; }
+        for (int s = 0; s < n; s++) seen[s] = {names[s].c_str(), rssi[s]};
         NetKnown k[NET_MAX];
         netKnown(k);
         int why = NET_NONE;
-        int to = netMoveFrom(k, netCount, netCurrent, seen.data(), n, millis() - staOnlineSince, netOwnerNow(), &why);
+        int to = netMoveFrom(k, netCount, netCurrent, seen.data(), n, netSimMsHere(millis() - staOnlineSince), netOwnerNow(), &why);
         WiFi.scanDelete();
         if (to < 0) {
             // Within one network: a much stronger access point than the weak one in use.
-            to = netShouldRoam(k, netCount, netCurrent, seen.data(), n, WiFi.RSSI(), netOwnerNow());
+            to = netShouldRoam(k, netCount, netCurrent, seen.data(), n, netSimLinkRssi(), netOwnerNow());
             if (to < 0) return;
             why = NET_ROAMING;
         }
@@ -2261,10 +2308,10 @@ void netMaybeMove() {
         return;
     }
     if (netCurrent < 0 || netCurrent >= netCount || (long)(millis() - netCheckAt) < 0) return;
-    netCheckAt = millis() + 120000;
+    netCheckAt = millis() + netSimMs(120000);
     NetKnown k[NET_MAX];
     netKnown(k);
-    if (!netNeedsLook(k, netCount, netCurrent, millis() - staOnlineSince, WiFi.RSSI())) return;
+    if (!netNeedsLook(k, netCount, netCurrent, netSimMsHere(millis() - staOnlineSince), netSimLinkRssi())) return;
     if (netOwnerNow()) return;
     if (WiFi.scanNetworks(true) != WIFI_SCAN_FAILED) netMoveScan = true;
 }
@@ -2278,13 +2325,16 @@ void staSuperviseScan() {
     if (n == WIFI_SCAN_RUNNING) return;
     staScanPending = false;
     // The choice itself is net_logic.h, the same header the host tests compile.
-    std::vector<String> names(n > 0 ? n : 0);
-    std::vector<NetSeen> seen(n > 0 ? n : 0);
-    for (int k = 0; k < n; k++) { names[k] = WiFi.SSID(k); seen[k] = {names[k].c_str(), (int)WiFi.RSSI(k)}; }
+    std::vector<String> names;
+    std::vector<int> rssi;
+    netScanResults(n, names, rssi);
+    n = names.size();
+    std::vector<NetSeen> seen(n);
+    for (int k = 0; k < n; k++) seen[k] = {names[k].c_str(), rssi[k]};
     NetKnown known[NET_MAX];
     netKnown(known);
     int why = NET_NONE;
-    int best = netChoose(known, netCount, seen.data(), n > 0 ? n : 0, &why);
+    int best = netChoose(known, netCount, seen.data(), n, &why);
     netWhy = why;
     if (!staDownSince) staDownSince = millis();
     if (best < 0) {
@@ -2487,7 +2537,21 @@ void handleWifiPrefer(const JsonDocument& inDoc) {
     bool onIt = here && netSameNet(known, netCurrent, i);
     if (!onIt && (inDoc["now"] | false)) {
         if (wifiConnected) WiFi.disconnect(false);
-        staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
+        // A join still on its way (a network just added) finishes even after a disconnect -
+        // the driver completes the association - and the board then sat on the wrong network,
+        // thinking it was the one it had been joining, until the next look 2 minutes on.
+        // So the asked-for network is joined at once, replacing the one on its way. Found on
+        // 09F7C8 (tests/board/test_networks_rehearsed.py). Out of range, that join times out
+        // and the supervisor chooses again, as after any failed join.
+        if (staPhase == STA_CONNECTING && staSsid != ssid) {
+            COM_SERIAL.printf("[WIFI] Join of %s replaced: %s asked for now\n", staSsid.c_str(), ssid.c_str());
+            netSelect(i);
+            staSupervised = true; staTries++;
+            staBeginJoin(staSavedSsid, staSavedPass, true);
+            staRetryAt = 0;
+        } else {
+            staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
+        }
     } else if (!onIt) {
         netCheckAt = millis();                       // look at once, then move when nobody is using it here
     }
@@ -2551,6 +2615,104 @@ void handleNetFault(const JsonDocument& inDoc) {
     }
     d["status"]="ok"; d["reply"]="net_fault"; d["kind"]=kind;
     if (!strcmp(kind, "vanish")) d["s"] = secs;
+    sendJson(d);
+}
+
+// ---- net_sim (see the state above) -------------------------------------------
+int netSimIndex(const String& ssid) {
+    if (!netSimOn()) return -1;
+    for (int i = 0; i < netSim.n; i++) if (ssid == netSim.v[i].ssid) return i;
+    return -1;
+}
+// A made-up network that is not just another access point of the carrier.
+bool netSimRides(const String& ssid) { return netSimIndex(ssid) >= 0 && ssid != netSim.carrier; }
+
+// The scan as the decisions see it: the real results less a hidden network, plus the
+// made-up ones. n is WiFi.scanComplete()'s count (negative: none).
+void netScanResults(int n, std::vector<String>& names, std::vector<int>& rssi) {
+    for (int s = 0; s < n; s++) {
+        String ssid = WiFi.SSID(s);
+        if (netSimOn() && netSim.hide[0] && ssid == netSim.hide) continue;
+        names.push_back(ssid); rssi.push_back((int)WiFi.RSSI(s));
+    }
+    if (!netSimOn()) return;
+    for (int i = 0; i < netSim.n; i++) { names.push_back(String(netSim.v[i].ssid)); rssi.push_back(netSim.v[i].rssi); }
+}
+
+// A made-up network has a subnet of its own (10.66.<n>.0), unless it is the carrier's.
+uint32_t netSimSubnet(const String& ssid, uint32_t real) {
+    int i = netSimIndex(ssid);
+    if (i < 0 || netSim.v[i].sameNet || ssid == netSim.carrier) return real;
+    return (uint32_t)IPAddress(10, 66, (uint8_t)(i + 1), 0);
+}
+
+bool netSimOwnersAway() {
+    if (!netSimOn() || !netSim.owners[0]) return false;
+    if (!strcmp(netSim.owners, "-")) return true;
+    if (netCurrent < 0 || netCurrent >= netCount) return true;
+    int o = netFind(String(netSim.owners));
+    if (o < 0) return true;
+    NetKnown k[NET_MAX];
+    netKnown(k);
+    return !netSameNet(k, netCurrent, o);
+}
+
+uint32_t netSimMs(uint32_t ms) { return netSimOn() && netSim.speed > 1 ? ms / netSim.speed : ms; }
+uint32_t netSimMsHere(uint32_t ms) { return netSimOn() && netSim.speed > 1 ? ms * netSim.speed : ms; }
+int netSimLinkRssi() { return netSimOn() && netSim.curRssi ? netSim.curRssi : WiFi.RSSI(); }
+
+// {"cmd":"net_sim","nets":[{"ssid":"SIM-B","rssi":-45,"same_net":false}],"owners":"SIM-B",
+//  "hide":"","link_rssi":0,"speed":15} turns it on (each field optional after the first);
+// "off":true ends it; "restart":true restarts the board with it kept. USB only.
+void handleNetSim(const JsonDocument& in) {
+    DynamicJsonDocument d(768);
+    if (cmdSource != SRC_SERIAL) {
+        d["status"]="error"; d["reply"]="usb_only"; d["message"]="Network tests run over the USB cable only";
+        sendJson(d); return;
+    }
+    bool asks = !in["nets"].isNull() || !in["owners"].isNull() || !in["hide"].isNull() || !in["link_rssi"].isNull() ||
+                !in["speed"].isNull() || !in["restart"].isNull();
+    if (!asks && !(in["off"] | false)) {
+        // nothing asked: only say how things stand
+    } else if (in["off"] | false) {
+        bool on = netSimOn();
+        netSim = {}; netSimRtc.magic = 0;
+        if (on) { COM_SERIAL.println("[NET] Test networks off"); staRetryAt = millis(); }
+    } else {
+        if (!netSimOn()) {
+            netSim = {}; netSim.magic = NET_SIM_MAGIC; netSim.speed = 1;
+            String c = (wifiConnected && netCurrent >= 0 && netCurrent < netCount) ? netSsid[netCurrent] : String("");
+            if (!c.length()) { netSim.magic = 0; d["status"]="error"; d["reply"]="net_sim"; d["message"]="Join a real network first"; sendJson(d); return; }
+            strlcpy(netSim.carrier, c.c_str(), sizeof netSim.carrier);
+        }
+        if (in["nets"].is<JsonArrayConst>()) {
+            netSim.n = 0;
+            for (JsonObjectConst o : in["nets"].as<JsonArrayConst>()) {
+                if (netSim.n >= 4) break;
+                NetSimNet& v = netSim.v[netSim.n++];
+                strlcpy(v.ssid, o["ssid"] | "", sizeof v.ssid);
+                v.rssi = (int8_t)constrain((int)(o["rssi"] | -60), -100, -1);
+                v.sameNet = o["same_net"] | false;
+            }
+            // A made-up network that has gone: if the board is on it, it is off it now.
+            if (wifiConnected && netCurrent >= 0 && netCurrent < netCount && netSimIndex(netSsid[netCurrent]) < 0 &&
+                netSsid[netCurrent] != netSim.carrier) WiFi.disconnect(false);
+        }
+        if (!in["owners"].isNull()) strlcpy(netSim.owners, in["owners"] | "", sizeof netSim.owners);
+        if (!in["hide"].isNull()) strlcpy(netSim.hide, in["hide"] | "", sizeof netSim.hide);
+        if (!in["link_rssi"].isNull()) netSim.curRssi = (int8_t)constrain((int)(in["link_rssi"] | 0), -100, 0);
+        if (!in["speed"].isNull()) netSim.speed = (uint8_t)constrain((int)(in["speed"] | 1), 1, 60);
+        netCheckAt = millis();                       // decide again now, with what the test changed
+        if (in["restart"] | false) { netSimRtc = netSim; pendingRestartAt = millis() + 300; }
+    }
+    d["status"]="ok"; d["reply"]="net_sim"; d["on"]=netSimOn();
+    if (netSimOn()) {
+        d["carrier"]=netSim.carrier; d["owners"]=netSim.owners; d["hide"]=netSim.hide;
+        d["link_rssi"]=netSim.curRssi; d["speed"]=netSim.speed;
+        JsonArray a = d.createNestedArray("nets");
+        for (int i = 0; i < netSim.n; i++) { JsonObject o = a.createNestedObject(); o["ssid"]=netSim.v[i].ssid; o["rssi"]=netSim.v[i].rssi; o["same_net"]=netSim.v[i].sameNet; }
+    }
+    if (wifiConnected && netCurrent >= 0 && netCurrent < netCount) d["network"] = netSsid[netCurrent];
     sendJson(d);
 }
 
@@ -2952,6 +3114,7 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "do") == 0)      handleDo(inDoc);
     else if (strcmp(cmd, "net_fault") == 0) handleNetFault(inDoc);
+    else if (strcmp(cmd, "net_sim") == 0) handleNetSim(inDoc);
     else if (strcmp(cmd, "wifi_networks") == 0) handleWifiNetworks();
     else if (strcmp(cmd, "wifi_forget") == 0) handleWifiForget(inDoc);
     else if (strcmp(cmd, "wifi_prefer") == 0) handleWifiPrefer(inDoc);
