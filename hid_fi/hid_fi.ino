@@ -4029,6 +4029,11 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["ap_mac"] = WiFi.softAPmacAddress();
     doc["ws_clients"] = webSocket.connectedClients();
     doc["ws_devices"] = wsDevices();
+    // Signed-in pages right on the board's network now (D-10): opened by its name, or
+    // they reached it (net_here). A page routed in from another network is not one.
+    int onLink = 0;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) onLink += wsAuthed[i] && wsOnLink[i] && webSocket.clientIsConnected(i);
+    doc["ws_onlink"] = onLink;
     doc["ws_max"]     = WS_MAX_CLIENTS;
     doc["mdns"] = mdnsName;
     doc["pc_state"] = lockStateStr();

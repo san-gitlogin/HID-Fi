@@ -624,10 +624,14 @@ static void otaDoInstall() {
     COM_SERIAL.printf("[OTA] %s is in %s - it starts at the next restart\n", job.version.c_str(), part->label);
 }
 
+// The update task's least free stack so far (bytes): TLS, the HTTP client and the
+// failure note all run on it, and an overflow restarts the board mid-check.
+static volatile uint32_t otaStackFree = 0;
 static void otaWorker(void*) {
     for (;;) {
         if (job.reqCheck) { job.reqCheck = false; job.cancel = false; otaDoCheck(); }
         if (job.reqInstall) { job.reqInstall = false; job.cancel = false; otaDoInstall(); }
+        otaStackFree = uxTaskGetStackHighWaterMark(nullptr);
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
@@ -856,13 +860,14 @@ void otaJobFields(JsonDocument& doc) {
 }
 
 void handleOtaStatus() {
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<640> doc;
     doc["status"] = "ok";
     doc["reply"]  = "ota_status";
     otaStatusFields(doc);
     doc["firmware"] = FW_VERSION;
     doc["to"]   = ota.to;        // always present, empty when nothing is recorded:
     doc["from"] = ota.from;      // one shape for every reply (tests/board/test_sim_contract.py)
+    doc["stack_free"] = otaStackFree;
     doc["why"]  = ota.why;
     if (ota.pending) {
         JsonObject s = doc.createNestedObject("selftest");

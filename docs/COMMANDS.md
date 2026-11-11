@@ -718,6 +718,7 @@ the same text back - a round-trip check for a transport.
   "ap_mac": "DC:B4:D9:09:F7:C9",
   "ws_clients": 1,
   "ws_devices": 1,
+  "ws_onlink": 1,
   "ws_max": 8,
   "pointer_mode": "relative",
   "gamepad": false,
@@ -757,6 +758,11 @@ briefly drop during a join.
 means the supply dipped, usually while the radio transmitted. Look for a weak USB
 port, a long or thin cable, or a battery running down.
 
+`ws_onlink` counts the signed-in dashboard pages right on the board's network
+(opened by its name, or able to reach it - DECISIONS.md D-10); a page routed in
+from another network is not one of them. The paired computer is reported apart
+(`comp_online`, `comp_routed`).
+
 `heap_floor` is the lowest free heap since boot. Current free heap recovers, so it
 hides a leak that already happened; the floor does not.
 
@@ -782,7 +788,9 @@ station side — the one your router's DHCP table and any MAC filter will show.
 `{"cmd":"ota_status"}` adds the details: `firmware`, `to` and `from` (the versions
 of the last update, empty when none is recorded), `why` (for `rolled_back`:
 `did_not_start` - a reset before the self-test ended -, `network`, `usb_hid` or
-`test_build`), `restart_deferred` (a restart is waiting for the self-test), and
+`test_build`), `restart_deferred` (a restart is waiting for the self-test),
+`stack_free` (the update task's least free stack so far, in bytes: TLS, the HTTP
+client and the failure note all run on it), and
 while `pending_verify` a `selftest` object: `waiting_for` (`running`, `network`,
 `usb_hid`), `remaining_s`, `needs_network`. Read-only, every transport.
 

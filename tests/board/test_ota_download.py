@@ -186,7 +186,7 @@ def test_a_check_rides_out_a_wifi_blip(env):
     The board's own "[OTA]" lines go into every failure message."""
     board = fresh(env)
     srv = env["srv"]
-    why = lambda seen: (seen, list(board.ota_log)[-6:])
+    why = lambda seen: (seen, list(board.ota_log)[-6:], list(board.net_log)[-6:])
     n = len(srv.log)
     board.ota_log.clear()
     srv.faults["drop"] = 2

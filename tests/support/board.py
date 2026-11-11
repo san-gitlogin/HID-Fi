@@ -40,6 +40,10 @@ class Board:
         # for failure messages. Nothing else the board prints is kept: other lines
         # can carry a person's data.
         self.ota_log = collections.deque(maxlen=100)
+        # The network supervisor's lines ("[NET]", "[STA] Joining/Online", "[WIFI]" - network
+        # names, addresses and decisions only), so a failure can say whether the board was
+        # on its network. Lines that hold anything else are not kept.
+        self.net_log = collections.deque(maxlen=60)
         self.boots = 0
 
     # ---- session ------------------------------------------------------------
@@ -95,6 +99,9 @@ class Board:
             if not line.startswith("{"):
                 if line.startswith("[OTA]"):
                     self.ota_log.append(line)
+                elif line.startswith(("[NET]", "[STA] Joining", "[STA] Online", "[WIFI] ", "Last restart:", "Guru Meditation", "rst:")) \
+                        and "assword" not in line:
+                    self.net_log.append(f"{time.strftime('%H:%M:%S')} {line[:160]}")
                 continue
             try:
                 d = json.loads(line)

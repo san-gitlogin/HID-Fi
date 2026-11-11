@@ -13,9 +13,9 @@ the board's counting are all real.
 | by IP | does not | the banner, not counted; both buttons work |
 | Bring here | busy | the person is asked first; yes moves the board (staged network) |
 
-"Counted" is read from the board itself: asked over USB to move to the network it
-is already on, it answers how many devices are using it right on that network, and
-changes nothing while anyone is. Needs --board, the board on its home network and
+"Counted" is read from the board itself: status `ws_onlink`, the signed-in pages
+right on its network (the Companion, which comes and goes on its own heartbeat, is
+counted apart and so cannot blur the reading). Needs --board, the board on its home network and
 its access PIN in HIDFI_PIN (never printed). Puts everything back.
 """
 import json
@@ -48,21 +48,39 @@ def live(request, _board_holder):
             "auth": bool(st.get("auth_set")), "slots": len(nets)}
 
 
-def _using(board, home):
-    """Devices right on the board's network now - over USB, asking to move where it already is."""
-    r = board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True}, "wifi_prefer")
-    assert r.get("status") == "ok", r
-    return r.get("using", 0) if r.get("busy") else 0
+def _pages(board):
+    """Signed-in pages right on the board's network now, from the board itself."""
+    return board.status().get("ws_onlink", -1)
 
 
-def _wait_using(board, home, want, secs=10):
+def _settled(board):
+    """The count once pages closed by an earlier test have gone."""
+    last, end = _pages(board), time.time() + 20
+    while time.time() < end:
+        time.sleep(2)
+        now = _pages(board)
+        if now == last:
+            return now
+        last = now
+    return last
+
+
+def _wait_pages(board, want, secs=10):
     end, got = time.time() + secs, None
     while time.time() < end:
-        got = _using(board, home)
+        got = _pages(board)
         if got == want:
             return got
         time.sleep(0.5)
     return got
+
+
+def _using(board, home):
+    """Devices right on the board's network now (pages and the Companion) - over USB,
+    asking to move where it already is; changes nothing while anyone is."""
+    r = board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True}, "wifi_prefer")
+    assert r.get("status") == "ok", r
+    return r.get("using", 0) if r.get("busy") else 0
 
 
 @pytest.fixture(scope="module")
@@ -93,33 +111,35 @@ def _open(browser, live, url):
 
 
 def test_opened_by_name_it_counts_and_shows_no_banner(live, browsers):
-    base = _using(live["board"], live["home"])
+    base = _settled(live["board"])
     ctx, page = _open(browsers["plain"], live, f"http://{live['name']}.local/")
     try:
         assert page.locator("#netAway").is_hidden()
-        assert _wait_using(live["board"], live["home"], base + 1) == base + 1, "a page opened by name must count"
+        assert _wait_pages(live["board"], base + 1) == base + 1, "a page opened by name must count"
     finally:
         ctx.close()
 
 
 def test_opened_by_address_on_the_network_it_checks_the_name_and_counts(live, browsers):
-    base = _using(live["board"], live["home"])
+    base = _settled(live["board"])
     ctx, page = _open(browsers["plain"], live, f"http://{live['ip']}/")
     try:
         assert page.locator("#netAway").is_hidden(), "the name resolves here: no banner"
-        assert _wait_using(live["board"], live["home"], base + 1) == base + 1, "net_here must count the page"
+        assert _wait_pages(live["board"], base + 1) == base + 1, "net_here must count the page"
     finally:
         ctx.close()
 
 
 def test_from_another_network_the_banner_shows_and_the_visit_does_not_count(live, browsers):
-    base = _using(live["board"], live["home"])
+    base = _settled(live["board"])
     ctx, page = _open(browsers["routed"], live, f"http://{live['ip']}/")
     try:
         assert page.locator("#netAway").is_visible(), "the name cannot open from here: the banner must say so"
         assert page.locator("#netAwayName").inner_text() == f"{live['name']}.local"
         assert "192.168" not in page.locator("#netAway").inner_text(), "no addresses to remember"
-        assert _wait_using(live["board"], live["home"], base, secs=4) == base, "a routed visit must not count"
+        assert live["board"].status().get("ws_clients", 0) >= 1, "the routed page is connected"
+        time.sleep(3)
+        assert _pages(live["board"]) == base, "a routed visit must not count"
         page.click("#netOwn")
         sheet = page.locator("#sheet.on").inner_text()
         assert f"{live['name']}.local" in sheet and "ESP32-HID-" in sheet, sheet

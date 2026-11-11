@@ -263,6 +263,7 @@ class BoardSim:
             "ap_ssid": self.ap_ssid, "ap_ip": "192.168.4.1", "ap_clients": 1, "channel": 6,
             "mac": self.mac, "ap_mac": "BA" + self.mac[2:], "ws_clients": sum(1 for k in self.sockets if k["open"]),
             "ws_devices": len({k.get("ip") or AP_IP for k in self.sockets if k["open"]}),
+            "ws_onlink": sum(1 for k in self.sockets if k["open"] and k.get("authed") and k.get("on_link")),
             "ws_max": self.ws_max,
             "mdns": self.MDNS, "pc_state": self.pc_state, "host_os": self.host_os(),
             "host_os_source": "manual" if self.host_manual else "auto", "host_os_detected": self.host_detected,
@@ -1582,7 +1583,7 @@ class BoardSim:
                                     "security": r.get("security", False), "risk": r.get("risk", ""),
                                     "installable": bool(o["available"]), "changelog": r.get("changelog", [])}
             return OK("ota_status", **self.ota_fields(), firmware=self.firmware, to=o["to"], **{"from": o["from"]},
-                      why=o["why"], restart_deferred=o["restart_deferred"], **extra)
+                      why=o["why"], restart_deferred=o["restart_deferred"], stack_free=4200, **extra)
         if c in ("led_set", "led_blink", "led_status"):
             return OK({"led_set": "led_set", "led_blink": "led_blink_started", "led_status": "led_status"}[c],
                       on=False, r=0, g=0, b=0)

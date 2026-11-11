@@ -50,8 +50,11 @@ def wait_status(board, pred, timeout, what):
         except Exception:
             pass
         time.sleep(1)
-    raise AssertionError(f"{what} - not within {timeout}s; last: "
-                         f"{ {k: st.get(k) for k in ('firmware', 'ota_slot', 'ota_state', 'ota_result', 'ota_step', 'ota_error', 'ota_bytes', 'uptime_sec')} }")
+    keys = ('firmware', 'ota_slot', 'ota_state', 'ota_result', 'ota_step', 'ota_error', 'ota_bytes', 'uptime_sec',
+            'wifi_connected', 'wifi_ip', 'sta_phase', 'sta_reason')
+    tail = list(getattr(board, "ota_log", []))[-12:] + list(getattr(board, "net_log", []))[-12:]
+    raise AssertionError(f"{what} - not within {timeout}s; last: {({k: st.get(k) for k in keys})}"
+                         + ("\nboard log:\n  " + "\n  ".join(tail) if tail else ""))
 
 
 def install(_board_holder, image):
