@@ -667,6 +667,7 @@ the same text back - a round-trip check for a transport.
   "firmware": "hid_fi_v3.6",
   "recovery": false,
   "uptime_sec": 412,
+  "reset_reason": "power_on",
   "free_heap": 200932,
   "heap_floor": 188104,
   "heap_low": false,
@@ -721,6 +722,13 @@ board made for itself (v3.10); `ap_pass_default` is true if it is the old shared
 the home network are always on the same one — joining a router drags the access
 point onto that router's channel, which is why a phone connected to the AP can
 briefly drop during a join.
+
+`reset_reason` is why the chip last restarted: `power_on`, `external`, `software`
+(a restart it chose, such as after an update), `usb`, `panic`, `interrupt_watchdog`,
+`task_watchdog`, `watchdog`, `brownout`, `power_glitch`, `cpu_lockup`, `deep_sleep`,
+`sdio`, `jtag`, `efuse` or `unknown`. The boot event carries it too. `brownout`
+means the supply dipped, usually while the radio transmitted. Look for a weak USB
+port, a long or thin cable, or a battery running down.
 
 `heap_floor` is the lowest free heap since boot. Current free heap recovers, so it
 hides a leak that already happened; the floor does not.

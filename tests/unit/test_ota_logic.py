@@ -185,6 +185,50 @@ def test_retries_back_off_and_are_capped(bench):
         ["2000", "4000", "8000", "16000", "32000", "60000", "60000", "60000"]
 
 
+# https http_code name_ok tls_error tcp_opens -> stage, and whether the next try asks the name again
+FAILSTAGE = [
+    ("1 -1 0 -1 0", "name 0"),            # the lookup failed (the core then "connects" to 0.0.0.0: -1)
+    ("0 -1 0 0 0", "name 0"),
+    ("1 -1 1 -1 0", "connect 1"),         # this address would not open, and neither does a plain one
+    ("1 -1 1 -1 1", "tls_timeout 1"),     # a plain connection opens: the handshake ran out of time
+    ("1 -1 1 0 0", "connect 1"),
+    ("1 -1 1 -30592 0", "tls 0"),         # mbedTLS's own (-0x7780, a fatal alert from the server)
+    ("1 -1 1 -9984 1", "tls 0"),          # -0x2700, the certificate did not verify: the name is right
+    ("0 -1 1 0 0", "connect 1"),          # a plain client keeps no stage
+    ("0 -1 1 -1 1", "connect 1"),
+    ("1 -11 1 0 0", "no_answer 0"),       # read timeout: connected, so the address worked
+    ("1 -2 0 -1 1", "no_answer 0"),       # headers would not send
+    ("0 -4 1 0 0", "no_answer 0"),
+]
+
+
+@pytest.mark.parametrize("given, want", FAILSTAGE)
+def test_a_failed_connection_says_where_it_stopped(bench, given, want):
+    assert ask(bench, [f"failstage {given}"]) == [want]
+
+
+URLHOST = [
+    ("https://github.com/san-gitlogin/HID-Fi/releases/latest/download/", "github.com 443"),
+    ("https://release-assets.githubusercontent.com/x?sp=r&sig=a/b", "release-assets.githubusercontent.com 443"),
+    ("http://192.168.0.101:8737/ota/", "192.168.0.101 8737"),
+    ("http://10.0.0.2", "10.0.0.2 80"),
+    ("https://me:secret@mirror.example:8443/fw/", "mirror.example 8443"),  # credentials never reach the log
+    ("https://a@b@host.example/", "host.example 443"),
+    ("http://host:0/", "- 0"),
+    ("http://host:65536/", "- 0"),
+    ("http://host:99999999999/", "- 0"),
+    ("http://host:8x/", "- 0"),
+    ("https:///path", "- 0"),
+    ("github.com/x", "- 0"),
+    ("-", "- 0"),
+]
+
+
+@pytest.mark.parametrize("url, want", URLHOST)
+def test_the_host_a_failure_names(bench, url, want):
+    assert ask(bench, [f"urlhost {url}"]) == [want]
+
+
 # enabled online online_for checked_before since_last busy
 CHECK = [
     ("1 1 30000 0 0 0", "1"),             # half a minute after coming online, first look
@@ -282,7 +326,8 @@ def test_every_planted_bug_is_caught(tmp_path):
     src = LOGIC.read_text(encoding="utf-8")
     muts = json.loads((HERE / "ota_mutations.json").read_text(encoding="utf-8"))["mutations"]
     tables = [("caninstall", INSTALL), ("cancel", CANCEL), ("resume", RESUME), ("shouldcheck", CHECK),
-              ("mayapply", APPLY), ("recovery", RECOVERY)]
+              ("mayapply", APPLY), ("recovery", RECOVERY),
+              ("failstage", FAILSTAGE), ("urlhost", URLHOST)]
     lines = ([f"version {t}" for t, _ in VERSIONS] + [f"compare {a} {b}" for a, b, _ in COMPARE]
              + [f"selftest {g}" for g, _ in SELFTEST] + [f"outcome {g}" for g, _ in OUTCOMES] + ["restart 1", "restart 0"]
              + [f"{op} {g}" for op, rows in tables for g, _ in rows] + [f"delay {a}" for a in (1, 2, 6, 20)]

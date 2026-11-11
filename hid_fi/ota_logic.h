@@ -252,6 +252,80 @@ inline bool otaMayApply(bool asked, bool auto_security, bool security, bool keys
     return asked || (auto_security && security);
 }
 
+// ---- why a connection failed, and what the next try does ----------------------------
+// Release builds compile the core's own connect and TLS errors out, so a failed check
+// said only "no connection (-1)". From one home network every check failed for days,
+// and nothing told a name that would not resolve from a port that would not open from
+// a handshake that broke. The stage, in the order a connection meets them, from:
+//   http_code  the HTTP client's own error; only -1 means it could not connect - any
+//              other came after the connection opened;
+//   name_ok    the board's own lookup of the host, made after the failure (the core's
+//              secure client takes a failed lookup as an address, 0.0.0.0, and fails
+//              at connecting - its last error cannot tell);
+//   tls_error  the TLS client's last error: -1 its socket would not connect or the
+//              handshake ran out of time, anything else mbedTLS's own;
+//   tcp_opens  a plain connection to the same address and port, made only to tell
+//              those two -1s apart.
+enum OtaFailStage { OTA_FAIL_NAME = 0, OTA_FAIL_CONNECT = 1, OTA_FAIL_TLS_SLOW = 2, OTA_FAIL_TLS = 3,
+                    OTA_FAIL_NO_ANSWER = 4 };
+
+inline OtaFailStage otaFailStage(bool https, int http_code, bool name_ok, int tls_error, bool tcp_opens) {
+    if (http_code != -1) return OTA_FAIL_NO_ANSWER;   // connected; the answer never came
+    if (!name_ok) return OTA_FAIL_NAME;
+    if (!https || tls_error == 0) return OTA_FAIL_CONNECT;
+    if (tls_error == -1) return tcp_opens ? OTA_FAIL_TLS_SLOW : OTA_FAIL_CONNECT;
+    return OTA_FAIL_TLS;
+}
+
+inline const char* otaFailStageStr(OtaFailStage s) {
+    switch (s) {
+        case OTA_FAIL_NAME:     return "name";
+        case OTA_FAIL_TLS_SLOW: return "tls_timeout";
+        case OTA_FAIL_TLS:      return "tls";
+        case OTA_FAIL_NO_ANSWER: return "no_answer";
+        default:                return "connect";
+    }
+}
+
+// Before the next try, forget the address the name gave. GitHub's download host has
+// four addresses and a home router hands them out in turn; the board keeps the first
+// it got until it expires. On 2026-11-11 one of the four was unreachable from the
+// owner's home network (the others connected in 10 ms): every try went to the dead
+// one and the check failed, while a computer beside it just tried the next address.
+// Asked again, the name gives the next one. Only when the address itself is in doubt
+// - it would not connect, or it accepted and then stalled.
+inline bool otaAskNameAgain(OtaFailStage s) { return s == OTA_FAIL_CONNECT || s == OTA_FAIL_TLS_SLOW; }
+
+// The host and port of an http(s) URL. A user:password@ part is skipped (it never
+// reaches the log); "" and 0 when the URL has no host.
+inline void otaUrlHost(const char* url, char* host, size_t n, int* port) {
+    if (n) host[0] = 0;
+    *port = 0;
+    if (!url || !n) return;
+    const char* p = strstr(url, "://");
+    if (!p) return;
+    bool https = (size_t)(p - url) == 5 && !strncmp(url, "https", 5);
+    p += 3;
+    const char* end = p + strcspn(p, "/?#");
+    const char* at = p;
+    for (const char* q = p; q < end; q++) if (*q == '@') at = q + 1;
+    const char* colon = (const char*)memchr(at, ':', end - at);
+    const char* hEnd = colon ? colon : end;
+    size_t len = (size_t)(hEnd - at);
+    if (!len || len >= n) return;
+    memcpy(host, at, len); host[len] = 0;
+    *port = https ? 443 : 80;
+    if (colon) {
+        int v = 0;
+        for (const char* q = colon + 1; q < end; q++) {
+            if (*q < '0' || *q > '9' || v > 65535) { host[0] = 0; *port = 0; return; }
+            v = v * 10 + (*q - '0');
+        }
+        if (v < 1 || v > 65535) { host[0] = 0; *port = 0; return; }
+        *port = v;
+    }
+}
+
 // Commands that only read or manage updates - they never press, type or move
 // anything, so they do not make the board "in use" (a dashboard polls status
 // every second; counting that would keep a ready update from ever applying).

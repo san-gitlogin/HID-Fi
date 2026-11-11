@@ -182,6 +182,8 @@ void otaJobFields(JsonDocument& doc);
 // slot is never written.
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>
+#include "lwip/dns.h"
+#include "lwip/tcpip.h"
 #include "mbedtls/sha256.h"
 #include "ota_verify.h"
 
@@ -282,6 +284,45 @@ static void otaSetRelay(const String& s) {
 
 static int otaFetchOnce(const String& url, uint8_t* buf, size_t max, int* transport);
 
+// Where a GET that never got an answer stopped (ota_logic.h otaFailStage), for the log:
+// "connect release-assets.githubusercontent.com:443 185.199.109.133", "name ...",
+// "tls_timeout ...", "tls ...: <mbedTLS>", "no_answer ...: read Timeout". The host is
+// the last redirect's when there was one - GitHub hands the download to another host.
+// Only after a failure, on the update task: the lookup is the cached one, and the plain
+// connection that tells a blocked port from a stalled handshake opens only for that.
+// When the address is in doubt the name is forgotten, so the next try asks again.
+static char otaFailWhy[192];
+static void otaNoteFailure(HTTPClient& http, NetworkClientSecure& tls, bool https, const String& url, int code) {
+    char host[96], err[80] = "";
+    int port;
+    const String& loc = http.getLocation();
+    otaUrlHost(loc.length() ? loc.c_str() : url.c_str(), host, sizeof host, &port);
+    IPAddress ip;
+    // The core's hostByName returns its error, not 0, when the name fails: only 1 is an address.
+    bool named = host[0] && Network.hostByName(host, ip) == 1 && ip != IPAddress((uint32_t)0);
+    int te = https ? tls.lastError(err, sizeof err) : 0;
+    bool tcp = false;
+    if (code == -1 && https && named && te == -1) {
+        NetworkClient probe;
+        tcp = probe.connect(ip, port, 3000);
+        probe.stop();
+    }
+    OtaFailStage st = otaFailStage(https, code, named, te, tcp);
+    String addr = named ? ip.toString() : String("-");
+    if (st == OTA_FAIL_TLS)
+        snprintf(otaFailWhy, sizeof otaFailWhy, "tls %s:%d %s: %s (-0x%04x)", host, port, addr.c_str(), err, (unsigned)-te);
+    else if (st == OTA_FAIL_NO_ANSWER)
+        snprintf(otaFailWhy, sizeof otaFailWhy, "no_answer %s:%d %s: %s", host, port, addr.c_str(),
+                 HTTPClient::errorToString(code).c_str());
+    else
+        snprintf(otaFailWhy, sizeof otaFailWhy, "%s %s:%d %s", otaFailStageStr(st), host, port, addr.c_str());
+    if (otaAskNameAgain(st)) {
+        LOCK_TCPIP_CORE();
+        dns_clear_cache();
+        UNLOCK_TCPIP_CORE();
+    }
+}
+
 // One GET into a PSRAM buffer, at most `max` bytes. Follows redirects (GitHub
 // sends two, the last with a ~1.3 KB Location). Returns the length, -1 on error.
 // A connection that fails outright is tried again, 1, 2 and 4 s later: on a busy
@@ -295,8 +336,8 @@ static int otaFetch(const String& url, uint8_t* buf, size_t max) {
         uint32_t t0 = millis();
         int n = otaFetchOnce(url, buf, max, &transport);
         if (n >= 0 || !transport || job.cancel) return n;
-        COM_SERIAL.printf("[OTA] no connection (%d after %lu ms, attempt %d)\n", transport,
-                          (unsigned long)(millis() - t0), attempt + 1);
+        COM_SERIAL.printf("[OTA] no connection (%d after %lu ms, attempt %d: %s)\n", transport,
+                          (unsigned long)(millis() - t0), attempt + 1, otaFailWhy);
         if (attempt == OTA_FETCH_TRIES - 1) return n;
         for (uint32_t until = millis() + (1000u << attempt); (long)(until - millis()) > 0;) {
             if (job.cancel) return -1;
@@ -315,7 +356,9 @@ static int otaFetchOnce(const String& url, uint8_t* buf, size_t max, int* transp
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     http.setRedirectLimit(5);
     http.setTimeout(10000);
+    otaFailWhy[0] = 0;
     int code = http.GET();
+    if (code < 0) otaNoteFailure(http, tls, https, url, code);
     if (code != 200) { *transport = code < 0 ? code : 0; http.end(); return -1; }
     int len = http.getSize();
     if (len > (int)max) { http.end(); return -1; }
@@ -474,6 +517,11 @@ static void otaDoInstall() {
         http.setTimeout(10000);
         if (written) http.addHeader("Range", "bytes=" + String(written) + "-");
         int code = began ? http.GET() : -1;
+        if (began && code < 0) {
+            otaNoteFailure(http, tls, https, url, code);
+            COM_SERIAL.printf("[OTA] download: no connection (%d at %lu bytes: %s)\n", code,
+                              (unsigned long)written, otaFailWhy);
+        }
         if (code == 200 && written) {
             // The server ignored Range: start again from byte 0 (the sectors already
             // erased and written are erased again as they are reached).

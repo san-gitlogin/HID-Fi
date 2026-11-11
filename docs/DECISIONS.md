@@ -286,3 +286,34 @@ the board from different network but within range."
 - `tests/ui/bdd/features/home_network.feature: Someone using the board on its network is asked about before it moves`
 - `tests/ui/bdd/features/home_network.feature: The board's own WiFi is offered, with the same address`
 - `tests/ui/bdd/features/home_network.feature: A paired computer behind another router does not anchor the board`
+
+## D-11 · 2026-11-11 · A failed update connection says where it stopped, and asks the name again
+
+When the board cannot reach the update server, its log names the stage and the
+address: `name` (the host would not resolve), `connect` (the address would not
+open), `tls_timeout` (it opened, then the handshake stalled), `tls` (mbedTLS's own
+error), or `no_answer` (connected, the answer never came). Example:
+`[OTA] no connection (-1 after 10494 ms, attempt 1: connect
+release-assets.githubusercontent.com:443 185.199.109.133)`. The host is the last
+redirect's. A URL's `user:password@` never reaches the log.
+
+When the address itself is in doubt (`connect`, `tls_timeout`), the board forgets
+the name before the next try. That try asks the router again and usually gets
+another of the host's addresses.
+
+**Why:** the board's check failed from the owner's hometown network for days,
+and the log said only `no connection (-1)`. On 2026-11-11 at Bangalore it failed
+again. One of GitHub's four download addresses (185.199.109.133) did not answer
+from the home network, while the other three connected in 10 ms. The router hands
+the four out in turn, and the board kept the first one it got until it expired,
+so every try went to the dead one. The Mac beside it worked because it moves on
+to the next address after 7.5 s. Proven on 09F7C8: before, 4 of 4 tries failed;
+after, the second try reached another address and the check passed. The owner:
+"Please look at the OTA. It's very important and necessary. I don't want any
+regression issues."
+
+**Guarded by:**
+- `tests/unit/test_ota_logic.py::test_a_failed_connection_says_where_it_stopped`
+- `tests/unit/test_ota_logic.py::test_the_host_a_failure_names`
+- `tests/unit/test_ota_logic.py::test_every_planted_bug_is_caught`
+

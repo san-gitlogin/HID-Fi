@@ -170,6 +170,81 @@
       "name": "recovery refused during a mere check",
       "find": "    if (pending_verify) return \"verifying\";\n    if (step",
       "replace": "    if (pending_verify) return \"verifying\";\n    if (step == OTA_STEP_CHECKING) return \"busy\";\n    if (step"
+    },
+    {
+      "name": "credentials in the URL reach the log",
+      "find": "if (*q == '@') at = q + 1;",
+      "replace": "if (*q == '@') at = at;"
+    },
+    {
+      "name": "the first @ taken, not the last",
+      "find": "for (const char* q = p; q < end; q++) if (*q == '@')",
+      "replace": "for (const char* q = p; q < end && at == p; q++) if (*q == '@')"
+    },
+    {
+      "name": "https gets port 80",
+      "find": "*port = https ? 443 : 80;",
+      "replace": "*port = 80;"
+    },
+    {
+      "name": "port 0 accepted",
+      "find": "if (v < 1 || v > 65535)",
+      "replace": "if (v > 65535)"
+    },
+    {
+      "name": "a letter in the port accepted",
+      "find": "if (*q < '0' || *q > '9' || v > 65535)",
+      "replace": "if (v > 65535)"
+    },
+    {
+      "name": "an empty host accepted",
+      "find": "if (!len || len >= n) return;",
+      "replace": "if (len >= n) return;"
+    },
+    {
+      "name": "an error after connecting blamed on the connection",
+      "find": "    if (http_code != -1) return OTA_FAIL_NO_ANSWER;",
+      "replace": "    if (http_code > 0) return OTA_FAIL_NO_ANSWER;"
+    },
+    {
+      "name": "a failed lookup blamed on the connection",
+      "find": "    if (!name_ok) return OTA_FAIL_NAME;",
+      "replace": ""
+    },
+    {
+      "name": "a plain client's failure read as TLS",
+      "find": "    if (!https || tls_error == 0) return OTA_FAIL_CONNECT;",
+      "replace": "    if (tls_error == 0) return OTA_FAIL_CONNECT;"
+    },
+    {
+      "name": "a slow handshake read as a blocked port",
+      "find": "tcp_opens ? OTA_FAIL_TLS_SLOW : OTA_FAIL_CONNECT",
+      "replace": "OTA_FAIL_CONNECT"
+    },
+    {
+      "name": "a blocked port read as a slow handshake",
+      "find": "return tcp_opens ?",
+      "replace": "return !tcp_opens ?"
+    },
+    {
+      "name": "no answer named as something else",
+      "find": "        case OTA_FAIL_NO_ANSWER: return \"no_answer\";",
+      "replace": ""
+    },
+    {
+      "name": "a dead address asked again never",
+      "find": "return s == OTA_FAIL_CONNECT || s == OTA_FAIL_TLS_SLOW;",
+      "replace": "return s == OTA_FAIL_TLS_SLOW;"
+    },
+    {
+      "name": "a stalled address kept",
+      "find": "|| s == OTA_FAIL_TLS_SLOW; }",
+      "replace": "; }"
+    },
+    {
+      "name": "the name asked again after a TLS error",
+      "find": "inline bool otaAskNameAgain(OtaFailStage s) { return",
+      "replace": "inline bool otaAskNameAgain(OtaFailStage s) { return s == OTA_FAIL_TLS ||"
     }
   ]
 }

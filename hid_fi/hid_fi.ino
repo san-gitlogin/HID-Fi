@@ -829,6 +829,7 @@ void handleWifiScan();
 
 // Power + exposure (v3.4)
 const char* powerModeStr();
+const char* resetReasonStr();
 void setRadioAwake(bool awake);
 void noteActivity();
 void applyPowerMode();
@@ -1283,10 +1284,11 @@ void setup() {
     COM_SERIAL.printf("STA:  %s\n", wifiConnected ? wifiIP.c_str() : "not connected — use dashboard or wifi_configure");
     if (mdnsName.length()) COM_SERIAL.printf("mDNS: http://%s.local/\n", mdnsName.c_str());
     COM_SERIAL.printf("PIN:  %s\n", authToken.length() ? "set" : "not set (WiFi clients unrestricted)");
+    COM_SERIAL.printf("Last restart: %s\n", resetReasonStr());
     COM_SERIAL.println("========================================");
     
     // Boot event JSON
-    StaticJsonDocument<384> doc;
+    StaticJsonDocument<448> doc;
     doc["event"] = "boot";
     doc["chip"] = "ESP32-S3";
     doc["firmware"] = FW_VERSION;
@@ -1299,6 +1301,7 @@ void setup() {
     doc["pointer_mode"] = absoluteMode ? "absolute" : "relative";
     doc["host_os"] = hostOsName(hostOs());
     doc["host_os_source"] = hostOsSource();
+    doc["reset_reason"] = resetReasonStr();
     doc["uptime"] = 0;
     sendJson(doc);
 }
@@ -1646,6 +1649,30 @@ void startMdns(const String& suffix) {
 }
 
 // ==================== POWER ====================
+// Why the chip last restarted (ESP-IDF's own record). A brownout - the supply dipping
+// while the radio transmits, from a weak USB port, a long cable or a battery running
+// down - otherwise looks like a random restart, and a panic like a power cut.
+const char* resetReasonStr() {
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:    return "power_on";
+        case ESP_RST_EXT:        return "external";
+        case ESP_RST_SW:         return "software";
+        case ESP_RST_PANIC:      return "panic";
+        case ESP_RST_INT_WDT:    return "interrupt_watchdog";
+        case ESP_RST_TASK_WDT:   return "task_watchdog";
+        case ESP_RST_WDT:        return "watchdog";
+        case ESP_RST_DEEPSLEEP:  return "deep_sleep";
+        case ESP_RST_BROWNOUT:   return "brownout";
+        case ESP_RST_SDIO:       return "sdio";
+        case ESP_RST_USB:        return "usb";
+        case ESP_RST_JTAG:       return "jtag";
+        case ESP_RST_EFUSE:      return "efuse";
+        case ESP_RST_PWR_GLITCH: return "power_glitch";
+        case ESP_RST_CPU_LOCKUP: return "cpu_lockup";
+        default:                 return "unknown";
+    }
+}
+
 const char* powerModeStr() {
     switch (powerMode) {
         case PWR_PERFORMANCE: return "performance";
@@ -3777,6 +3804,7 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["chip"] = "ESP32-S3";
     doc["firmware"] = FW_VERSION;
     doc["uptime_sec"] = millis() / 1000;
+    doc["reset_reason"] = resetReasonStr();
     doc["free_heap"] = ESP.getFreeHeap();
     doc["heap_floor"] = ESP.getMinFreeHeap();
     doc["heap_low"] = (ESP.getMinFreeHeap() < HEAP_WARN);

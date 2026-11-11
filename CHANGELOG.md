@@ -39,6 +39,27 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   Companion alone counted 1, the Companion plus a signed-in page also counted 1);
   now 1 and 2.
 
+- **An update check gets past a dead server address.** GitHub's download host
+  has four addresses. From the owner's home network one of them did not answer,
+  and the board kept trying the same one, so every check failed. The Mac beside it
+  worked because it moves on to the next address. Now a failed connection makes
+  the board ask for the address again, and the next try reaches a working one.
+  Proven on 09F7C8: 4 of 4 tries failed before; the second try passes now.
+- **A failed update connection says where it stopped** in the board's log: the
+  name, the connection, the TLS handshake (with mbedTLS's reason) or the answer,
+  and which address it tried. Before, it said only `no connection (-1)`.
+  DECISIONS.md D-11.
+
+- **The board says why it last restarted:** `reset_reason` in status and in the
+  boot event (`power_on`, `software`, `panic`, `task_watchdog`, `brownout` ...), and
+  `Last restart:` on the serial banner. A brownout (the supply dipping while the
+  radio transmits, from a weak USB port, a thin cable or a running-down battery)
+  used to look like a random restart.
+- **New static guards for ESP32-S3 hardware rules:** every pin the firmware
+  touches is a named define, never a strapping, flash, octal-PSRAM, USB or UART0
+  pin (GPIO0 stays the BOOT button by design), and any analog input is on ADC1,
+  which keeps working while WiFi is on. `tests/static/test_hardware_rules.py`.
+
 ### Dashboard
 
 - **The Trackpad tab no longer scrolls itself on open.** The trackpad's element

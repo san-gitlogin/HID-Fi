@@ -13,6 +13,8 @@
 //   delay <attempt>                                 -> ms
 //   shouldcheck <enabled> <online> <online_for_ms> <checked_before> <since_last_ms> <busy> -> 0 | 1
 //   mayapply <asked> <auto_security> <security> <keys_held> <pending>  -> 0 | 1
+//   failstage <https> <http_code> <name_ok> <tls_error> <tcp_opens> -> stage asknameagain(0|1)
+//   urlhost <url>                                   -> host port ("-" and 0 when none)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -85,6 +87,14 @@ int main() {
         } else if (op == "mayapply") {
             int asked, autos, sec, held, pend; in >> asked >> autos >> sec >> held >> pend;
             std::printf("%d\n", otaMayApply(asked, autos, sec, held, pend) ? 1 : 0);
+        } else if (op == "failstage") {
+            int https, code, named, err, tcp; in >> https >> code >> named >> err >> tcp;
+            OtaFailStage st = otaFailStage(https, code, named, err, tcp);
+            std::printf("%s %d\n", otaFailStageStr(st), otaAskNameAgain(st) ? 1 : 0);
+        } else if (op == "urlhost") {
+            std::string u; in >> u; char h[64]; int port;
+            otaUrlHost(arg(u), h, sizeof h, &port);
+            std::printf("%s %d\n", h[0] ? h : "-", port);
         } else if (op == "queryonly") {
             std::string c; in >> c; std::printf("%d\n", otaQueryOnly(c.c_str()) ? 1 : 0);
         } else {

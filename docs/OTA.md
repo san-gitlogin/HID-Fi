@@ -270,6 +270,32 @@ message, the switches. Commands: `ota_status`, `ota_check`, `ota_install`,
 during a download is measured with the perf tier before this ships, against
 v4.0.4 on the same machine; if it stutters, writes are paced.
 
+### When the board cannot reach the server
+
+Each failed connection is logged with its stage and address. The rule is
+`otaFailStage` in `ota_logic.h`, host-tested with planted bugs; DECISIONS.md D-11.
+
+| Log says | Meaning | Next try |
+|---|---|---|
+| `name host:443 -` | the host would not resolve | same |
+| `connect host:443 a.b.c.d` | this address would not open | asks the name again |
+| `tls_timeout host:443 a.b.c.d` | it opened; the handshake stalled | asks the name again |
+| `tls host:443 a.b.c.d: <mbedTLS> (-0x....)` | the handshake failed (certificate, garbage) | same |
+| `no_answer host:443 a.b.c.d: read Timeout` | connected; no answer | same |
+
+Two traps found on the way (core 3.3.12):
+- Release builds compile out the core's own connect and TLS logs.
+- `Network.hostByName()` returns its error, not 0, when a name fails. The secure
+  client then "connects" to 0.0.0.0, so its own error says `connect`. The board
+  therefore makes its own lookup after a failure and takes only `== 1` as an
+  address.
+
+The name is asked again because a host with several addresses can have one that
+is dead from a given network. lwIP keeps only one address per name
+(`LWIP_DNS_MAX_HOST_IP=1`) until it expires, so without this every try reused it.
+2026-11-11, Bangalore: GitHub's 185.199.109.133 timed out from the home router;
+.108, .110 and .111 answered in 10 ms.
+
 ## The Companion
 
 ### What it shows, per board on this computer

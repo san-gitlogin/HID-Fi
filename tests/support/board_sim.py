@@ -241,7 +241,7 @@ class BoardSim:
         up = int(self.now() - self.t0)
         online = self.sta["phase"] == "online"
         return {
-            "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up,
+            "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up, "reset_reason": "power_on",
             "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "total_psram": 8388608,
             "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": self.usb_mounted,
             "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
