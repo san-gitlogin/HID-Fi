@@ -87,6 +87,12 @@ def model(_board_holder):
 
 @pytest.mark.parametrize("cmd", READ_ONLY, ids=[json.dumps(c, sort_keys=True)[:60] for c in READ_ONLY])
 def test_model_replies_like_the_board(board, model, cmd):
+    if cmd["cmd"].startswith("ota_"):
+        # The board looks for an update by itself 30 s after it comes online; while that
+        # runs it answers "busy", which the idle model never does. Compare at rest.
+        end = time.time() + 90
+        while time.time() < end and board.status().get("ota_step") not in ("idle", None):
+            time.sleep(1)
     real = board.cmd(cmd, timeout=6)
     fake = model.handle(dict(cmd), "serial")
     assert fake, f"the model sent no reply to {cmd}, the board sent {real}"
