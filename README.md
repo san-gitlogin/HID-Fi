@@ -209,9 +209,11 @@ do test one, please say so, it is the most useful report you can send.
 
 A 9 mm shell for the YD-ESP32-S3 board: three printed parts, no screws, no glue,
 about 10.6 g of PETG. **[`kit-all.stl`](hardware/hid-fi-core/print/kit-all.stl)**
-puts every part on one bed, so a print shop needs only one file. The build guide,
-print settings, fit check and an interactive 3D model are in
-[hardware/hid-fi-core](hardware/hid-fi-core).
+puts every part on one bed, so a print shop needs only one file.
+
+**[Open the HID-Fi Core build guide](https://san-gitlogin.github.io/HID-Fi/hardware/hid-fi-core/)**:
+an interactive 3D model, print settings, fit check, assembly and every download.
+The page and the files live in [hardware/hid-fi-core](hardware/hid-fi-core).
 
 *First print in progress: the files pass every build check but have not yet been
 test-fitted on a real board.* **Personal, noncommercial use only:** selling
@@ -623,7 +625,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Document | What is in it |
 |---|---|
 | [docs/HARDWARE.md](docs/HARDWARE.md) | The board, the two ports, cables, the RGB LED, power |
-| [hardware/hid-fi-core](hardware/hid-fi-core) | HID-Fi Core, the printed case: STL files, build guide, 3D model (personal use only) |
+| [HID-Fi Core build guide](https://san-gitlogin.github.io/HID-Fi/hardware/hid-fi-core/) | The printed case: 3D model, print guide and STL files ([source](hardware/hid-fi-core), personal use only) |
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
 | [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |

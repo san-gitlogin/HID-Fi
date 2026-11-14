@@ -1,5 +1,8 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HID-Fi Core</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -164,6 +167,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
   .caption { top: auto; bottom: 150px; }
 }
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="top">
@@ -177,8 +182,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
   <div class="hero">
     <h1>HID-Fi Core</h1>
     <p><b>The first one to build.</b> A 9 mm shell around the board you already own: three printed parts, no screws, no glue. On your own printer it costs about ₹16 of filament.</p>
-    <p class="status"><b>First print in progress.</b> The files are sliced and pass every build check; the first set is being printed now and has not yet been test-fitted on a real board. Print the fit coupon first.</p>
-    <a class="btn" href="print/kit-all.stl" download data-save="kit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>Download the print file</a>
+    <p class="status"><b>First print in progress.</b> The files are sliced and pass every build check; the first 3D-printed set is on its way and has not yet been test-fitted on a real board. Print the fit coupon first.</p>
+    <a class="btn" href="print/kit-all.stl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>Download the print file</a>
     <nav class="toc" aria-label="Sections">
       <a href="#download">Download</a><a href="#details">Details</a><a href="#budget">Budget</a><a href="#base">No screws</a><a href="#print">Print</a><a href="#fit">Fit check</a><a href="#assemble">Assemble</a><a href="#test">Test at home</a><a href="#later">What waits</a><a href="#review">Review</a><a href="#proof">Proof</a>
     </nav>
@@ -232,10 +237,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <div class="card main">
         <h3>One file, everything on one bed</h3>
         <p><b>kit-all.stl</b> holds every black part: the unibody, the plate, the fit coupon, the peg gauge and the pin-trim guide, laid out on one 106 × 96 mm bed, about 18 g of PETG. Every part is already turned the way it sits on the bed and none needs supports. Give this one file to a print shop, which charges a minimum per file, or print it in one go on your own printer.</p>
-        <a class="btn" href="print/kit-all.stl" download data-save="kit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>kit-all.stl · 2 MB</a>
-        <a class="btn ghost" href="print/HID-Fi-Core-print.zip" download data-save="all">Every file + print notes (zip)</a>
-        <p id="dlnote" hidden>Here the one-shot file comes in a small zip, with the print notes and the licence notice. The single parts open on GitHub.</p>
-        <p id="dlmsg" role="status"></p>
+        <a class="btn" href="print/kit-all.stl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>kit-all.stl · 2 MB</a>
+        <a class="btn ghost" href="print/HID-Fi-Core-print.zip" download>Every file + print notes (zip)</a>
       </div>
       <div class="card">
         <h3>Or part by part</h3>
@@ -496,53 +499,6 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
 </div>
 
 <script>window.CORE_ONLY = true; window.PARTS_URL = "parts-core.json";</script>
-<script>
-// Downloads. Opened from the repo, the plain links work. Inside a claude.ai viewer a page
-// cannot start a download itself: every link opens the file on GitHub, and where the viewer
-// offers saving, the two big buttons build a zip here from the exact print files
-// (print-files.json, base64) and hand it over (.stl is not a type the viewer saves).
-(() => {
-  if (!window.claude || !window.claude.use) return;
-  const GH = 'https://github.com/san-gitlogin/HID-Fi/raw/main/hardware/hid-fi-core/';
-  const PACKS = {
-    kit: ['HID-Fi-Core-kit-all.zip', ['kit-all.stl', 'PRINT-NOTES.txt', 'LICENSE-NOTICE.txt']],
-    all: ['HID-Fi-Core-print.zip', null],
-  };
-  const links = [...document.querySelectorAll('a[download]')];
-  for (const a of links) { a.href = GH + a.getAttribute('href'); a.removeAttribute('download'); a.target = '_blank'; a.rel = 'noopener'; }
-  let files = null, zipLib = null;
-  const getFiles = () => files || (files = fetch('print-files.json').then(r => { if (!r.ok) throw new Error('print files'); return r.json(); }));
-  const getZip = () => zipLib || (zipLib = new Promise((ok, no) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    s.onload = () => ok(window.JSZip); s.onerror = no; document.head.appendChild(s);
-  }));
-  window.claude.use('downloads').then(dl => {
-    if (!dl) return;
-    document.getElementById('dlnote').hidden = false;
-    const msg = document.getElementById('dlmsg');
-    for (const a of links.filter(x => x.dataset.save)) a.addEventListener('click', async e => {
-      e.preventDefault();
-      const [name, pick] = PACKS[a.dataset.save];
-      msg.textContent = 'Preparing ' + name + '...';
-      let blob;
-      try {
-        const [all, JSZip] = await Promise.all([getFiles(), getZip()]);
-        const zip = new JSZip();
-        for (const n of pick || Object.keys(all)) zip.file(n, all[n], { base64: true, binary: true });
-        blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
-      } catch (err) { msg.textContent = 'Could not prepare the zip here. Open the files on GitHub with the links on this page.'; return; }
-      try {
-        await dl.save({ filename: name, data: blob });
-        msg.textContent = 'Saved ' + name + '.';
-      } catch (err) {
-        const code = err && err.code;
-        msg.textContent = code === 'declined' ? '' : code === 'rate_limited' ? 'A save is already waiting for you. Answer it, then try again.' : 'This viewer cannot save files. The links on this page open each file on GitHub.';
-      }
-    });
-  });
-})();
-</script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -848,4 +804,5 @@ applyVariant(); applyMode(); applyFinish(); requestAnimationFrame(frame);
 window.__ready = true;
 </script>
 
-</body></html>
+</body>
+</html>

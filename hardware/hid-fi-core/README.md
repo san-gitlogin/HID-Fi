@@ -8,8 +8,8 @@ exploded, X-ray and section views.
 
 > [!NOTE]
 > **First print in progress.** These files have been sliced and checked by the
-> build script, and the first set is being printed now. They have not yet been
-> test-fitted on a real board. Print the fit coupon first.
+> build script, and the first 3D-printed set is on its way. They have not yet
+> been test-fitted on a real board. Print the fit coupon first.
 
 ## Print files
 
@@ -40,7 +40,10 @@ with every copy.
 
 ## The 3D build guide
 
-Open it through a local web server, because it loads `manifest.json` and
+**Open it at <https://san-gitlogin.github.io/HID-Fi/hardware/hid-fi-core/>**:
+this folder's `index.html`, served by GitHub Pages from the repository.
+
+To open it offline, use a local web server, because it loads `manifest.json` and
 `parts-core.json` beside it:
 
 ```bash
