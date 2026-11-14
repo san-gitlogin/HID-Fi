@@ -34,6 +34,16 @@ no rights to install anything on.
 
 ---
 
+## See it in two minutes
+
+[![Control your computer from your phone: HID-Fi in two minutes](docs/assets/ad-thumb.png)](https://www.youtube.com/watch?v=8RiCR_qBxCI)
+
+The board in its printed case, the trackpad and keyboard on a phone, joining your
+home Wi-Fi, screen sharing with the Companion app and updates over the air.
+**[Watch on YouTube](https://www.youtube.com/watch?v=8RiCR_qBxCI)** (2:13)
+
+---
+
 ## Watch the build
 
 [![Control Any PC From Your Phone via Wi-Fi using an ESP32 S3 — a hands-on with HID-Fi](docs/assets/video-thumb.png)](https://www.youtube.com/watch?v=HUG3y0nIfkw)
@@ -47,6 +57,7 @@ tour of the dashboard.
 
 ## Contents
 
+- [See it in two minutes](#see-it-in-two-minutes)
 - [Watch the build](#watch-the-build)
 - [What it does](#what-it-does)
 - [The dashboard](#the-dashboard)
