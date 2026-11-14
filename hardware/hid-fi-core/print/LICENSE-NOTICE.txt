@@ -1,0 +1,13 @@
+HID-Fi Core - print files
+Copyright (c) 2026 Santhosh - HID-Fi. All rights reserved except as licensed below.
+https://github.com/san-gitlogin/HID-Fi
+
+Licensed under PolyForm Noncommercial 1.0.0: personal, noncommercial printing and
+use only. Selling printed units, kits or these files, or any commercial use, is not
+licensed and infringes the author's copyright. Commercial licences: contact the
+author. Unauthorised commercial use will be pursued legally.
+
+Full licence terms: https://polyformproject.org/licenses/noncommercial/1.0.0
+(also LICENSE.md at the root of the HID-Fi repository)
+
+Anyone who gets a copy of these files from you must also get this notice.

@@ -135,9 +135,24 @@ figcaption { font-size: 13px; color: var(--faint); }
 .steps > li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 10px; color: var(--muted); font-size: 14px; }
 .steps > li::before { content: counter(s, decimal-leading-zero); font: 600 12px/1.7 var(--mono); color: var(--accent); }
 .steps b { color: var(--ink); }
+.dl { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+.dl .card.main { border-color: var(--accent); }
+.btn { display: inline-flex; align-items: center; gap: 10px; justify-self: start; padding: 11px 18px; border-radius: 999px; background: var(--accent); color: var(--ground); text-decoration: none; font: 700 15px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.btn svg { width: 16px; height: 16px; }
+.files { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.files a { font-family: var(--mono); font-size: 13px; }
+.files span { color: var(--faint); font-size: 13px; }
+.status { border-left: 2px solid var(--warn); padding: 4px 0 4px 12px; color: var(--muted); font-size: 15px; }
+.status b { color: var(--warn); }
+.legal { border: 1px solid var(--bad); border-radius: 14px; padding: 16px 20px; display: grid; gap: 8px; background: var(--panel); }
+.legal h3 { color: var(--bad); font-size: 17px; }
+.legal p { color: var(--muted); font-size: 14px; }
+.legal p b { color: var(--ink); }
 footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-top: 1px solid var(--line); margin-top: 48px; display: grid; gap: 6px; }
 @media (max-width: 860px) {
-  .variants, .feats, .two { grid-template-columns: 1fr; }
+  .variants, .feats, .two, .dl { grid-template-columns: 1fr; }
   .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spec:nth-child(2) { border-right: 0; }
   .spec:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
@@ -162,8 +177,10 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
   <div class="hero">
     <h1>HID-Fi Core</h1>
     <p><b>The first one to build.</b> A 9 mm shell around the board you already own: three printed parts, no screws, no glue. On your own printer it costs about ₹16 of filament.</p>
+    <p class="status"><b>First print in progress.</b> The files are sliced and pass every build check; the first set is being printed now and has not yet been test-fitted on a real board. Print the fit coupon first.</p>
+    <a class="btn" href="print/kit-all.stl" download data-save="kit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>Download the print file</a>
     <nav class="toc" aria-label="Sections">
-      <a href="#details">Details</a><a href="#budget">Budget</a><a href="#base">No screws</a><a href="#print">Print</a><a href="#fit">Fit check</a><a href="#assemble">Assemble</a><a href="#test">Test at home</a><a href="#later">What waits</a><a href="#review">Review</a><a href="#proof">Proof</a>
+      <a href="#download">Download</a><a href="#details">Details</a><a href="#budget">Budget</a><a href="#base">No screws</a><a href="#print">Print</a><a href="#fit">Fit check</a><a href="#assemble">Assemble</a><a href="#test">Test at home</a><a href="#later">What waits</a><a href="#review">Review</a><a href="#proof">Proof</a>
     </nav>
   </div>
 
@@ -209,6 +226,40 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <div class="spec"><span class="eyebrow">Build checks</span><span class="v ok" id="s-c">–<small>pass</small></span></div>
   </div>
 
+  <section id="download">
+    <h2>Download</h2>
+    <div class="dl">
+      <div class="card main">
+        <h3>One file, everything on one bed</h3>
+        <p><b>kit-all.stl</b> holds every black part: the unibody, the plate, the fit coupon, the peg gauge and the pin-trim guide, laid out on one 106 × 96 mm bed, about 18 g of PETG. Every part is already turned the way it sits on the bed and none needs supports. Give this one file to a print shop, which charges a minimum per file, or print it in one go on your own printer.</p>
+        <a class="btn" href="print/kit-all.stl" download data-save="kit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>kit-all.stl · 2 MB</a>
+        <a class="btn ghost" href="print/HID-Fi-Core-print.zip" download data-save="all">Every file + print notes (zip)</a>
+        <p id="dlnote" hidden>Here the one-shot file comes in a small zip, with the print notes and the licence notice. The single parts open on GitHub.</p>
+        <p id="dlmsg" role="status"></p>
+      </div>
+      <div class="card">
+        <h3>Or part by part</h3>
+        <ul class="files">
+          <li><a href="print/kit-test.stl" download>kit-test.stl</a> <span>fit coupon + peg gauge, print first</span></li>
+          <li><a href="print/kit-core.stl" download>kit-core.stl</a> <span>unibody + plate</span></li>
+          <li><a href="print/unibody.stl" download>unibody.stl</a> <span>the shell</span></li>
+          <li><a href="print/plate.stl" download>plate.stl</a> <span>the base</span></li>
+          <li><a href="print/plate-feet.stl" download>plate-feet.stl</a> <span>base with pockets for silicone feet</span></li>
+          <li><a href="print/fit-coupon.stl" download>fit-coupon.stl</a> <span>port end only</span></li>
+          <li><a href="print/peg-gauge.stl" download>peg-gauge.stl</a> <span>three grip strengths</span></li>
+          <li><a href="print/trim-guide.stl" download>trim-guide.stl</a> <span>only if your board has pins</span></li>
+          <li><a href="print/light-pipe.stl" download>light-pipe.stl</a> <span>clear PETG only, optional</span></li>
+          <li><a href="print/PRINT-NOTES.txt" download>PRINT-NOTES.txt</a> <span>settings and order</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="legal">
+      <h3>Personal use only</h3>
+      <p>Copyright © 2026 Santhosh — HID-Fi. <b>Licensed under PolyForm Noncommercial 1.0.0: personal, noncommercial printing and use only. Selling printed units, kits or these files, or any commercial use, is not licensed and infringes the author's copyright. Commercial licences: contact the author. Unauthorised commercial use will be pursued legally.</b></p>
+      <p>Full terms: <a href="https://polyformproject.org/licenses/noncommercial/1.0.0" target="_blank" rel="noopener">PolyForm Noncommercial 1.0.0</a>. Each file carries this notice in its header; pass <span class="mono">LICENSE-NOTICE.txt</span> on with any copy. Source: <a href="https://github.com/san-gitlogin/HID-Fi/tree/main/hardware/hid-fi-core" target="_blank" rel="noopener">github.com/san-gitlogin/HID-Fi</a>.</p>
+    </div>
+  </section>
+
   <section id="details">
     <h2>Details</h2>
     <p class="lede">Select one to fly the camera to it.</p>
@@ -222,7 +273,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <table>
         <thead><tr><th>Item</th><th>Cheapest way</th><th>Cost</th><th>Better later</th></tr></thead>
         <tbody>
-          <tr><td>The board</td><td>Use one of the two YD-ESP32-S3 boards you already run HID-Fi on. The shell does not touch its firmware or data.</td><td class="mono">₹0</td><td>A new one for a second unit: ₹600–900</td></tr>
+          <tr><td>The board</td><td>Use the YD-ESP32-S3 board you already run HID-Fi on. The shell does not touch its firmware or data.</td><td class="mono">₹0</td><td>A new one for a second unit: ₹600–900</td></tr>
           <tr><td>Printing (about 15 g with the two test prints)</td><td>Your own or a friend's printer: 10.6 g for the Core, plus about 4.4 g for the fit coupon and peg gauge.</td><td class="mono">₹20–30</td><td>A print shop or online service: roughly ₹300–700 for the coupon and one set (ask for PETG)</td></tr>
           <tr><td>Screws</td><td>None. The base clips in with a front tongue and two press-fit pegs.</td><td class="mono">₹0</td><td>—</td></tr>
           <tr><td>Status light window</td><td>A drop of clear hot glue pressed into the 2 mm hole from inside: it glows like a light pipe.</td><td class="mono">₹0</td><td>The printed clear PETG light pipe</td></tr>
@@ -269,7 +320,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <p><b>Closing:</b> hook the plate's front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush. Two pegs on the plate slide up into two sockets moulded in the top shell's back corners.</p>
         <p><b>Why it stays put:</b> each peg has three thin ribs that squash slightly as it goes in, like a wall plug. That gives a firm grip even if your printer prints a little over or under size. In a 1 m drop onto its top, the plate needs only about 4 N of grip per peg to stay on; a snug press fit holds more than that (estimated; the peg gauge lets you feel it).</p>
         <p><b>Opening:</b> put a coin in the small notch at the back edge of the plate and lever gently. The pegs slide out, then unhook the tongue.</p>
-        <p class="note"><b>Tune it once.</b> Print the peg gauge first: three pegs and three holes at three tightnesses. Press each pair together and pick the one that is snug but still comes out with a fingernail. If it is pair 1 or 3 instead of the default pair 2, change <span class="mono">PEG.fit</span> in <span class="mono">build.mjs</span> to 0.04 or 0.12 and rebuild.</p>
+        <p class="note"><b>Tune it once.</b> Print the peg gauge first: three pegs and three holes at three tightnesses. Press each pair together and pick the one that is snug but still comes out with a fingernail. The files ship with pair 2's grip. If pair 1 or 3 suits your printer better, open an issue on GitHub with the pair number and the parts can be regenerated with that grip.</p>
         <button class="chip" id="showscrews">Show it in the model</button>
       </div>
     </div>
@@ -287,7 +338,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <div class="card">
         <h3>On your own printer</h3>
         <ul>
-          <li>Use the files in <span class="mono">out/print</span> (or the zip): they are already turned the way they sit on the bed, so do not rotate them.</li>
+          <li>Use the files from <a href="#download">Download</a>: they are already turned the way they sit on the bed, so do not rotate them.</li>
           <li>Print in this order: fit coupon, peg gauge, unibody, plate, light pipe (optional).</li>
           <li>The unibody prints <b>top face down</b>. On a textured sheet the top comes out with a fine matte texture and no layer lines.</li>
           <li>0.12 mm layers for the unibody (its walls are what people see), 0.16–0.2 mm for the rest. 100% cooling for PETG after the first layers, for the vent slopes.</li>
@@ -316,7 +367,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <li><span>Hold it face down and slide the board's two sockets into the windows from inside. The board edge should touch the inside of the front wall, with the sockets sitting in the windows.</span></li>
         <li><span>Plug in your <b>thickest</b> USB-C cable from outside. It must click fully home, the same as on the bare board.</span></li>
         <li><span>Print the peg gauge and press pegs 1, 2 and 3 into holes 1, 2 and 3. Pick the pair that is snug but comes out with a fingernail. The default is 2.</span></li>
-        <li><span>If the cable stops short, measure how far the sockets stick out past the board edge (I assumed 0.6 mm) and change <span class="mono">USBC.overhang</span> in <span class="mono">build.mjs</span>. Rebuild and every check reruns. Otherwise, print the real parts.</span></li>
+        <li><span>If the cable stops short, measure how far the sockets stick out past the board edge (the design assumes 0.6 mm) and open an issue on GitHub with the number: the parts are regenerated from it and every check reruns. Otherwise, print the real parts.</span></li>
       </ol>
     </div>
   </section>
@@ -326,7 +377,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <div class="two">
       <div class="card">
         <ol class="steps">
-          <li><span><b>Pins.</b> If your board has pins soldered underneath, they must go; the shell has no room for them. See the main page for the trim method and the printable trim guide. Boards without pins skip this.</span></li>
+          <li><span><b>Pins.</b> If your board has pins soldered underneath, they must go; the shell has no room for them. Switch on "Pins as shipped" in the model for the trim method, and use the printable trim guide. Boards without pins skip this.</span></li>
           <li><span><b>Light.</b> Press the printed light pipe in from inside, or fill the 2 mm window from inside with a drop of clear hot glue and let it set.</span></li>
           <li><span><b>Board.</b> Unibody face down. Lower the board in components first, sockets into their windows, then slide it forward until it stops (about 0.8 mm).</span></li>
           <li><span><b>Plate.</b> Hook its front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush: the two pegs slide into their sockets.</span></li>
@@ -336,8 +387,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <div class="card">
         <h3>Taking it apart</h3>
         <p>A coin in the notch at the back edge of the plate, lever gently, then unhook the tongue. Tilt the board back 0.8 mm and lift it out. Nothing is glued or screwed, so you can reuse the shell for every board you test.</p>
-        <h3>Your two boards</h3>
-        <p>The board that holds your personal shortcuts and macros keeps them: the shell changes nothing in software. Use the other one first if you prefer.</p>
+        <h3>Your settings stay</h3>
+        <p>The shell changes nothing in software: your board keeps its shortcuts, macros and networks.</p>
       </div>
     </div>
   </section>
@@ -365,7 +416,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <div class="card">
       <ul>
         <li><b>Approvals, agents, trademarks, patents.</b> None of these is needed to build and use units yourself or to test them with friends. They matter the day you sell, and that day can be planned when the Core has proven itself.</li>
-        <li><b>Keep the design private for now</b> if you might register it later: share photos with friends, not the STL files.</li>
+        <li><b>Personal use only.</b> Print it for yourself, your home or your lab. Selling printed units, kits or the files needs a commercial licence from the author (see <a href="#download">Download</a>).</li>
         <li><b>Sense and Go</b> fit the same top shell, so nothing you print now is wasted when you move on.</li>
       </ul>
     </div>
@@ -439,12 +490,59 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
   </section>
 
   <footer>
-    <span>Print files: <span class="mono">HID-Fi-Core-print.zip</span> from the build script (<span class="mono">node build.mjs</span>), already oriented for the bed. This page loads the exact parts from <span class="mono">parts-core.json</span> beside it.</span>
+    <span>Print files: <a href="#download">Download</a>, already oriented for the bed. The model on this page is built from the same parts. Copyright © 2026 Santhosh — HID-Fi; PolyForm Noncommercial 1.0.0, personal use only.</span>
     <span>Board geometry: VCC-GND, <a href="https://github.com/vcc-gnd/YD-ESP32-S3" target="_blank" rel="noopener">github.com/vcc-gnd/YD-ESP32-S3</a>. Type: Barlow Condensed, SIL Open Font License.</span>
   </footer>
 </div>
 
 <script>window.CORE_ONLY = true; window.PARTS_URL = "parts-core.json";</script>
+<script>
+// Downloads. Opened from the repo, the plain links work. Inside a claude.ai viewer a page
+// cannot start a download itself: every link opens the file on GitHub, and where the viewer
+// offers saving, the two big buttons build a zip here from the exact print files
+// (print-files.json, base64) and hand it over (.stl is not a type the viewer saves).
+(() => {
+  if (!window.claude || !window.claude.use) return;
+  const GH = 'https://github.com/san-gitlogin/HID-Fi/raw/main/hardware/hid-fi-core/';
+  const PACKS = {
+    kit: ['HID-Fi-Core-kit-all.zip', ['kit-all.stl', 'PRINT-NOTES.txt', 'LICENSE-NOTICE.txt']],
+    all: ['HID-Fi-Core-print.zip', null],
+  };
+  const links = [...document.querySelectorAll('a[download]')];
+  for (const a of links) { a.href = GH + a.getAttribute('href'); a.removeAttribute('download'); a.target = '_blank'; a.rel = 'noopener'; }
+  let files = null, zipLib = null;
+  const getFiles = () => files || (files = fetch('print-files.json').then(r => { if (!r.ok) throw new Error('print files'); return r.json(); }));
+  const getZip = () => zipLib || (zipLib = new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => ok(window.JSZip); s.onerror = no; document.head.appendChild(s);
+  }));
+  window.claude.use('downloads').then(dl => {
+    if (!dl) return;
+    document.getElementById('dlnote').hidden = false;
+    const msg = document.getElementById('dlmsg');
+    for (const a of links.filter(x => x.dataset.save)) a.addEventListener('click', async e => {
+      e.preventDefault();
+      const [name, pick] = PACKS[a.dataset.save];
+      msg.textContent = 'Preparing ' + name + '...';
+      let blob;
+      try {
+        const [all, JSZip] = await Promise.all([getFiles(), getZip()]);
+        const zip = new JSZip();
+        for (const n of pick || Object.keys(all)) zip.file(n, all[n], { base64: true, binary: true });
+        blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
+      } catch (err) { msg.textContent = 'Could not prepare the zip here. Open the files on GitHub with the links on this page.'; return; }
+      try {
+        await dl.save({ filename: name, data: blob });
+        msg.textContent = 'Saved ' + name + '.';
+      } catch (err) {
+        const code = err && err.code;
+        msg.textContent = code === 'declined' ? '' : code === 'rate_limited' ? 'A save is already waiting for you. Answer it, then try again.' : 'This viewer cannot save files. The links on this page open each file on GitHub.';
+      }
+    });
+  });
+})();
+</script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",

@@ -51,7 +51,7 @@ tour of the dashboard.
 - [What it does](#what-it-does)
 - [The dashboard](#the-dashboard)
 - [See the computer's screen](#see-the-computers-screen)
-- [What you need](#what-you-need)
+- [What you need](#what-you-need) (and [a case you can print](#a-case-you-can-print-hid-fi-core))
 - [The two USB ports are not interchangeable](#the-two-usb-ports-are-not-interchangeable)
 - [Quick start](#quick-start)
 - [Your board's password, PIN and recovery](#your-boards-password-pin-and-recovery)
@@ -193,6 +193,18 @@ or PSRAM size only needs a different `PartitionScheme` and `PSRAM` flag at build
 time — but none has been tried. [docs/HARDWARE.md](docs/HARDWARE.md) explains
 what actually matters and what to check before buying something else — and if you
 do test one, please say so, it is the most useful report you can send.
+
+### A case you can print: HID-Fi Core
+
+A 9 mm shell for the YD-ESP32-S3 board: three printed parts, no screws, no glue,
+about 10.6 g of PETG. **[`kit-all.stl`](hardware/hid-fi-core/print/kit-all.stl)**
+puts every part on one bed, so a print shop needs only one file. The build guide,
+print settings, fit check and an interactive 3D model are in
+[hardware/hid-fi-core](hardware/hid-fi-core).
+
+*First print in progress: the files pass every build check but have not yet been
+test-fitted on a real board.* **Personal, noncommercial use only:** selling
+printed units, kits or the files needs a commercial licence from the author.
 
 ---
 
@@ -600,6 +612,7 @@ More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Document | What is in it |
 |---|---|
 | [docs/HARDWARE.md](docs/HARDWARE.md) | The board, the two ports, cables, the RGB LED, power |
+| [hardware/hid-fi-core](hardware/hid-fi-core) | HID-Fi Core, the printed case: STL files, build guide, 3D model (personal use only) |
 | [docs/FLASHING.md](docs/FLASHING.md) | Flashing from nothing, rebuilding, troubleshooting |
 | [docs/MACOS.md](docs/MACOS.md) | Mac setup — the accessory prompt, the keyboard assistant, and what auto-switches |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every JSON command and WebSocket opcode |
@@ -722,6 +735,10 @@ notice and you are fine.
 on them, ship it inside a product, or use it as part of paid work, get in touch
 and we will agree terms — usually a flat fee or a revenue share depending on what
 you are building.
+
+The same licence covers the HID-Fi Core case in
+[hardware/hid-fi-core](hardware/hid-fi-core): print it for yourself, but selling
+printed units, kits or the files is not licensed.
 
 This is **source-available, not OSI open source**. That is deliberate: the work
 took real effort, and I would rather share it openly with one condition attached
