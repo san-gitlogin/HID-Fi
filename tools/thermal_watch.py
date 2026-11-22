@@ -251,7 +251,7 @@ def watch(hours, every, note, out_dir):
     state, last_ok, last_up, shown, pace = {}, None, None, set(), every
     started = time.time()
     end = started + hours * 3600
-    print(f"Watching {board_name(mac)} every {every} s for {hours} h -> {path}")
+    print(f"Watching {board_name(mac)} every {every} s for {hours} h -> {path}", flush=True)
     with path.open("a", encoding="utf-8") as f:
         def write(rec):
             f.write(json.dumps(rec) + "\n")
@@ -266,7 +266,7 @@ def watch(hours, every, note, out_dir):
                 answer_ms = (time.time() - t) * 1000
             except (OSError, ValueError, urllib.error.URLError) as e:
                 write({"t": round(t, 1), "unreachable": type(e).__name__})
-                print(f"{datetime.datetime.now():%H:%M:%S}  out of reach ({type(e).__name__}); looking again")
+                print(f"{datetime.datetime.now():%H:%M:%S}  out of reach ({type(e).__name__}); looking again", flush=True)
                 new = locate()
                 host = new or host
                 pace = next_interval(every, None, None, pace)
@@ -287,13 +287,13 @@ def watch(hours, every, note, out_dir):
             last_ok, last_up = t, st.get("uptime_sec")
             tc = st.get("temp_c")
             print(f"{datetime.datetime.now():%H:%M:%S}  {'-' if tc is None else f'{tc:.1f}'} °C"
-                  f" (peak {st.get('temp_peak_c')})  {describe_load(signature(rec))}")
+                  f" (peak {st.get('temp_peak_c')})  {describe_load(signature(rec))}", flush=True)
             recent = [x for x in samples if x["t"] > t - 7200]          # the last two hours are enough to see a shift
             for e in events(recent):
                 key = (e["kind"], e.get("what", "")[:40], round(e["t"] / 600))
                 if key not in shown and e["t"] > started - LOOKBACK_S:
                     shown.add(key)
-                    print(f"          {e['kind']}: {e['what']}")
+                    print(f"          {e['kind']}: {e['what']}", flush=True)
             pace = next_interval(every, st, answer_ms, pace)
             time.sleep(max(1.0, pace - (time.time() - t)))
     return 0
