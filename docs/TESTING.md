@@ -333,12 +333,19 @@ packages above, plug in the board, run `sudo -E python tests/run.py --e2e`.
 | WiFi join, power modes, inventory | | | yes | | | | |
 | Dashboard: every tab, control, sheet, gesture and error path | | ~280 scenarios | model checked against the board | | | | |
 | Latency and throughput | | | serial | page timestamps | page timestamps | kernel timestamps | |
+| Chip temperature: readings, peak, four-hour log, gaps, failed sensor | thermal.h on the host + 13 planted bugs (test_thermal.py) | device card, power card | `temp_log` against the model (test_sim_contract.py) | | | | |
+| Heat over hours, shell on or off found by itself | tools/thermal_watch.py on synthetic boards (test_thermal_watch.py) | | `tools/thermal_watch.py` on a real board | | | | |
+| HID-Fi Core print files: every gap measured on the meshes, closed licensed solids, zips | static: test_shell_print.py | | | | | | |
 
 Not automated, and why: absolute-pointer and gamepad **delivery** (switching
 either reboots the board into a different USB device - covered by
 acceptance on the board tier and by hand); real lock/unlock against a real
 password (`test_lock_state.py`, by hand); `vault_type` putting a real secret on
-the wire (only with `test_vault.py --type`, by hand).
+the wire (only with `test_vault.py --type`, by hand). The printed case itself (does
+it click, survive 20 cycles and a drop) is checked on the printed coupons by hand;
+the parametric source outside this repository checks its own design with a planted
+fault for every check (`node test.mjs` there), and `test_shell_print.py` measures what
+was published here.
 
 ---
 

@@ -1,15 +1,18 @@
 # HID-Fi Core
 
-A 9 mm printed shell for the YD-ESP32-S3 board HID-Fi runs on: three parts, no
-screws, no glue, about 10.6 g of PETG. The build guide (print settings, fit check,
+A 9 mm printed shell for the YD-ESP32-S3 board HID-Fi runs on: two parts, no
+screws, no glue, about 10.4 g of PETG. The build guide (print settings, fit check,
 assembly, home tests, design review and every measurement with how sure it is) is
 `index.html`, with an interactive 3D model of the shell and board: assembled,
 exploded, X-ray and section views.
 
 > [!NOTE]
-> **First print in progress.** These files have been sliced and checked by the
-> build script, and the first 3D-printed set is on its way. They have not yet
-> been test-fitted on a real board. Print the fit coupon first.
+> **Rev C, after the first print.** The first printed set (November 2026) fitted
+> the board perfectly, but its base did not close: the front tongue had 0.1 mm of
+> room in its slot, less than one layer line of a service print, and a press-fit
+> peg snapped when the base came off. Rev C closes like a TV remote's battery
+> cover: two thick front tabs and a click latch at the back, with 0.3 mm round every
+> fit. Rev C is sliced and checked but not printed yet: print `kit-test.stl` first.
 
 ## Print files
 
@@ -18,12 +21,11 @@ bed. Do not rotate them, and no part needs supports.
 
 | File | What it is |
 |---|---|
-| [`kit-all.stl`](print/kit-all.stl) | **Everything in one file:** unibody, plate, trim guide, fit coupon and peg gauge, laid out on one 106 × 96 mm bed, about 18 g of black PETG. The cheapest way at a print shop, which charges a minimum per file. |
-| [`kit-test.stl`](print/kit-test.stl) | Fit coupon + peg gauge: print first to check the fit |
+| [`kit-all.stl`](print/kit-all.stl) | **Everything in one file:** unibody, plate, trim guide, fit coupon and latch coupon, laid out on one 106 × 89 mm bed, about 17 g of PETG. The cheapest way at a print shop, which charges a minimum per file. |
+| [`kit-test.stl`](print/kit-test.stl) | Fit coupon + latch coupon + a plate: print first, check the sockets, your cable, the tabs and the click |
 | [`kit-core.stl`](print/kit-core.stl) | Unibody + plate: the Core itself |
-| `unibody.stl`, `plate.stl`, `fit-coupon.stl`, `peg-gauge.stl`, `trim-guide.stl`, `plate-feet.stl` | Each part on its own |
-| [`light-pipe.stl`](print/light-pipe.stl) | Optional, **clear** PETG only, so it never shares a file with black parts. A drop of clear hot glue in the 2 mm window works too. |
-| [`PRINT-NOTES.txt`](print/PRINT-NOTES.txt) | Settings and print order, for you or the print shop |
+| `unibody.stl`, `plate.stl`, `fit-coupon.stl`, `latch-coupon.stl`, `trim-guide.stl`, `plate-feet.stl` | Each part on its own |
+| [`PRINT-NOTES.txt`](print/PRINT-NOTES.txt) | Settings, print order and how to open and close it, for you or the print shop |
 | [`HID-Fi-Core-kit-all.zip`](print/HID-Fi-Core-kit-all.zip) | `kit-all.stl` with the print notes and licence notice |
 | [`HID-Fi-Core-print.zip`](print/HID-Fi-Core-print.zip) | All of the above in one download |
 
@@ -52,7 +54,10 @@ cd hardware/hid-fi-core && python3 -m http.server 8000   # then http://localhost
 
 - `parts-core.json` holds the exact STL geometry of each part (base64), the same
   parts as in `print/`.
-- `manifest.json` holds the board geometry, the dimensions and every build check.
+- `manifest.json` holds the board geometry, the dimensions, every build check and
+  the closure's numbers (fits, tabs, latch).
+- `tests/static/test_shell_print.py` measures every mating gap on these meshes by
+  itself (ray casts) and checks each print file is a closed, licensed solid.
 - The model's libraries (three.js) load from cdn.jsdelivr.net.
 
 The parametric source (`build.mjs`) is kept with the enclosure project, outside

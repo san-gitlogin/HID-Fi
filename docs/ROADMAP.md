@@ -7,7 +7,36 @@ re-researching. Order is the owner's current priority.
 
 See [OTA.md](OTA.md).
 
-## 2. Jev / Laya: say what you want, the board does it
+## 2. Heat: measure the Core closed and open, then decide (TODO, 2026-11-22)
+
+The first printed Core was hot to the touch after 4-5 hours plugged in and idle.
+The firmware now reports the chip's temperature (`temp_c`, `temp_log`,
+DECISIONS.md D-13) and `tools/thermal_watch.py` logs it and finds the moments the
+shell went on or off by itself. What to measure, on a board flashed with that
+firmware (COM cable needed to flash a build that is not a signed release):
+
+1. Open, idle, no dashboard tab anywhere, 1 h: the baseline.
+2. Open, idle, a dashboard tab left open, 1 h: the radio held awake.
+3. In the rev C shell (or the first print, taped shut), idle, 1-4 h: what the
+   shell adds.
+4. Screen sharing for 1 h, open and closed: the worst case.
+5. The access point off (Settings > auto-off), idle, 1 h: Espressif's modem sleep
+   works only when the board is a station alone, so this is the radio really
+   sleeping. Put the setting back.
+
+Then, with numbers: vents in the base (intake low, the blades exhaust high), a
+default for the access point on a board that is on a home network (a decision
+entry: it changes how phones reach the board), PSRAM ECC (the datasheet's way to
+lift the module from 65 to 85 °C ambient, for 1/16 of the PSRAM; HID-Fi uses PSRAM
+only for the update manifest buffer), and a dashboard warning with a
+threshold taken from the measurements. A thermocouple taped to the module's can,
+its wire out of the seam, tells how far the die reading sits above the air the
+module's 65 °C rating is about.
+
+Also waiting on the rev C print: the coupons (tabs in with no force, a click, 20
+open/close cycles), then the shell; the drop and pocket tests on the build guide.
+
+## 3. Jev / Laya: say what you want, the board does it
 
 **Decision (2026-10-23):** the **board calls the decision model itself** - no
 Companion needed for one-shot commands, so it works on any computer with
@@ -47,13 +76,13 @@ nothing installed, and the board stays the authority.
   github.com/moritzkremb/jev-voice-browser,
   madewithjev.com/builds/computer-use-without-screenshots.
 
-## 3. Voice
+## 4. Voice
 
 - **The microphone is the phone** (a mic on the board defeats remote control).
   Browsers allow the mic (getUserMedia) only on secure pages; the dashboard is
   plain http on a LAN address.
 - **Step 1:** the phone keyboard's own dictation into the command box (works on
-  http, no license question) - feeds item 2.
+  http, no license question) - feeds item 3.
 - **Step 2:** HTTPS with a publicly trusted certificate per board (Plex-style
   name like `09f7c8.<domain>` resolving to the LAN IP, Let's Encrypt via a small
   service the vendor runs) so the page can stream audio; the board relays to the
@@ -68,7 +97,7 @@ nothing installed, and the board stays the authority.
 - **INMP441 (desk use only):** VDD 3V3, GND, L/R GND, SCK GPIO5, WS GPIO6,
   SD GPIO4 (free on the N16R8: avoid 0/3/45/46, 19/20, 26-32, 35-37, 43/44, 48).
 
-## 4. Ten-year upkeep
+## 5. Ten-year upkeep
 
 - Upgrade the ESP32 core deliberately (the red `latest-dependencies` job: core
   3.3.12 adds ~16 KB static RAM; the board has ~217 KB free) - skill

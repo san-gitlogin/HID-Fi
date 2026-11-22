@@ -7,6 +7,48 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+### Firmware
+
+- **The board says how hot it runs.** `status` carries `temp_c` and `temp_peak_c`
+  from the ESP32-S3's own die sensor, read every 2 s; the new `temp_log` returns
+  the last four hours, one point a minute, gaps kept as gaps. Settings > Device
+  shows it. It is the die, not the air, for comparing and for trends
+  (docs/HARDWARE.md, "Heat"). DECISIONS.md D-13.
+
+### Dashboard
+
+- **The power card no longer says "Radio sleeping" while the access point is on.**
+  Espressif's modem sleep works only when the board is a station alone, so the
+  access point keeps the radio awake whatever the power mode asks; the card now
+  says so.
+
+### Tools
+
+- **`tools/thermal_watch.py`** logs a board's temperature for hours with no one at
+  the keyboard, reads the board's own log for the time it was not watching, and
+  reports by itself when the board was put in its case or taken out, never blaming
+  the case for the board's own load (a restart, the radio waking, a dashboard left
+  open). No network names or anything personal in its logs.
+
+### HID-Fi Core case (rev C)
+
+- **The base clicks shut like a remote's battery cover.** The first print fitted
+  the board perfectly but its base did not close: the tongue had 0.1 mm of room in
+  its slot, less than a print's layer line, and a press-fit peg snapped when the
+  base came off. Now two 1 mm tabs hook in at the front and two flat spring beams
+  click their catches into a window in the back wall; a fingernail through the
+  window opens it. 0.3 mm round every fit, so a coarse print still closes.
+  DECISIONS.md D-12.
+- `kit-test.stl` is both coupons and a plate; `latch-coupon.stl` is new; the peg
+  gauge and the light pipe are gone (the light shines through a cross cut in the
+  lid).
+- `tests/static/test_shell_print.py` measures every gap on the published meshes and
+  checks each print file is a closed, licensed solid.
+
+---
+
 ## v4.3.1 - 2026-11-11
 
 ### Firmware

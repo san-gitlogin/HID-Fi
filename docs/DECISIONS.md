@@ -333,3 +333,64 @@ regression issues."
 - `tests/unit/test_ota_logic.py::test_the_host_a_failure_names`
 - `tests/unit/test_ota_logic.py::test_every_planted_bug_is_caught`
 
+
+## D-12 · 2026-11-22 · The Core's base clicks shut like a remote's battery cover, sized for a coarse print
+
+The HID-Fi Core's base hooks in at the front with two 1 mm tabs and clicks shut at
+the back: two flat spring beams in the plate carry square catches into a window in
+the back wall. A fingernail through the window opens it. Every mating gap is 0.3 mm,
+the build fails unless a plate grown by a coarse print's error (0.24 mm sideways,
+0.28 mm up and down) still meets nothing, and nothing that flexes may stand up off
+the bed (it would bend across its layers). Strain stays inside PETG's repeat-use
+limit (2.5%); closing takes 3-20 N, opening 10 N at most.
+
+**Why:** the first print fitted the board perfectly, but its 0.8 mm front tongue never
+went into a slot with 0.10-0.15 mm round it, and a press-fit peg snapped when the
+base was pulled off. The owner: "3D printing has the swirls around each and
+everything, and when we plan a design like something to be inserted, it simply
+doesn't work. You know how battery compartment works in TV remotes. No screws
+involved but there will be something that can snap better. That shall not be slim or
+easy to break, but carefully engineered."
+
+The parametric source stays outside this repository (it checks itself, with a
+planted fault for every check); these tests measure what is published here.
+
+**Guarded by:**
+- `tests/static/test_shell_print.py::test_the_front_tabs_have_a_coarse_prints_room_all_round`
+- `tests/static/test_shell_print.py::test_the_catches_click_into_the_window_with_room_to_spare`
+- `tests/static/test_shell_print.py::test_the_plate_clears_the_peg_posts_above_it`
+- `tests/static/test_shell_print.py::test_the_plate_itself_has_no_pegs_or_press_fits`
+- `tests/static/test_shell_print.py::test_the_latch_bends_inside_petgs_repeat_use_strain`
+- `tests/static/test_shell_print.py::test_the_published_design_passed_every_build_check`
+
+## D-13 · 2026-11-22 · The board says how hot it runs, and the power card says what really keeps the radio on
+
+The firmware reads the ESP32-S3's die sensor every 2 s. `status` carries `temp_c`
+and `temp_peak_c`; `temp_log` returns the last four hours a minute at a time, with
+gaps left as gaps, so a tool that was not watching can still see what happened. The
+dashboard's device card shows it. `tools/thermal_watch.py` logs it for hours and
+finds by itself when the board was put in its shell or taken out (a steady-
+temperature shift nothing the board reports explains), and never blames the shell
+for the board's own load.
+
+The power card no longer says "Radio sleeping" while the access point is on: Espressif
+documents that modem sleep "works in station-only mode" (ESP-IDF stable, ESP32-S3,
+"Wi-Fi Power-saving Mode", read 2026-11-22), so the access point keeps the radio
+awake whatever the power mode asks.
+
+**Why:** the first printed Core was hot to the touch after 4-5 hours plugged in and
+doing nothing, and nothing on the board could say how hot. The owner: "How would you
+read temperatures?" and "which you shall not assume that the board is under shell
+always, as a human I would remove it or put it back".
+
+What the numbers mean for the shell (vents in the base, the access point's default)
+waits for the measurements in docs/ROADMAP.md; this entry only makes them possible.
+
+**Guarded by:**
+- `tests/unit/test_thermal.py::test_every_planted_bug_is_caught`
+- `tests/unit/test_thermal.py::test_a_minute_the_sensor_failed_is_a_gap_not_the_last_value`
+- `tests/unit/test_thermal.py::test_the_firmware_feeds_the_sensor_into_this_header`
+- `tests/unit/test_thermal_watch.py::test_putting_it_in_a_shell_is_found_without_anyone_saying_so`
+- `tests/unit/test_thermal_watch.py::test_the_radio_waking_is_not_blamed_on_the_shell`
+- `tests/ui/bdd/features/settings.feature: The device card says how hot the chip runs, and its peak since start`
+- `tests/ui/bdd/features/settings.feature: The radio only really sleeps with the access point off, and the card says which`

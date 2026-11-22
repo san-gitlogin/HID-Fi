@@ -176,13 +176,13 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.67 21.45A8.9 8.9 0 1 1 21.45 11.67"/><path d="M8.64 8.64 14.96 20.66 15.7 15.7 20.66 14.96Z" fill="currentColor" stroke-width="1.5"/></svg>
       LxusBrain · HID-Fi hardware
     </div>
-    <div class="eyebrow">Core build guide · rev B</div>
+    <div class="eyebrow">Core build guide · rev C</div>
   </header>
 
   <div class="hero">
     <h1>HID-Fi Core</h1>
-    <p><b>The first one to build.</b> A 9 mm shell around the board you already own: three printed parts, no screws, no glue. On your own printer it costs about ₹16 of filament.</p>
-    <p class="status"><b>First print in progress.</b> The files are sliced and pass every build check; the first 3D-printed set is on its way and has not yet been test-fitted on a real board. Print the fit coupon first.</p>
+    <p><b>The first one to build.</b> A 9 mm shell around the board you already own: two printed parts, no screws, no glue. On your own printer it costs about ₹16 of filament.</p>
+    <p class="status"><b>First print done; rev C is what it taught.</b> The first 3D-printed set fitted the board perfectly, but its base did not close: the front tongue never went into a slot with 0.1 mm round it, because a print's layer lines are that thick, and a press-fit peg snapped when the base came off. Rev C closes like a TV remote's battery cover: two thick tabs at the front, a click latch at the back, and 0.3 mm round every fit so a coarse print still closes. Rev C itself is not printed yet: print <span class="mono">kit-test.stl</span> first.</p>
     <a class="btn" href="print/kit-all.stl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>Download the print file</a>
     <nav class="toc" aria-label="Sections">
       <a href="#download">Download</a><a href="#details">Details</a><a href="#budget">Budget</a><a href="#base">No screws</a><a href="#print">Print</a><a href="#fit">Fit check</a><a href="#assemble">Assemble</a><a href="#test">Test at home</a><a href="#later">What waits</a><a href="#review">Review</a><a href="#proof">Proof</a>
@@ -236,22 +236,21 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <div class="dl">
       <div class="card main">
         <h3>One file, everything on one bed</h3>
-        <p><b>kit-all.stl</b> holds every black part: the unibody, the plate, the fit coupon, the peg gauge and the pin-trim guide, laid out on one 106 × 96 mm bed, about 18 g of PETG. Every part is already turned the way it sits on the bed and none needs supports. Give this one file to a print shop, which charges a minimum per file, or print it in one go on your own printer.</p>
+        <p><b>kit-all.stl</b> holds every part: the unibody, the plate, the fit coupon, the latch coupon and the pin-trim guide, laid out on one 106 × 89 mm bed, about 17 g of PETG. Every part is already turned the way it sits on the bed and none needs supports. Give this one file to a print shop, which charges a minimum per file, or print it in one go on your own printer.</p>
         <a class="btn" href="print/kit-all.stl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6M4 21h16"/></svg>kit-all.stl · 2 MB</a>
         <a class="btn ghost" href="print/HID-Fi-Core-print.zip" download>Every file + print notes (zip)</a>
       </div>
       <div class="card">
         <h3>Or part by part</h3>
         <ul class="files">
-          <li><a href="print/kit-test.stl" download>kit-test.stl</a> <span>fit coupon + peg gauge, print first</span></li>
+          <li><a href="print/kit-test.stl" download>kit-test.stl</a> <span>both coupons + a plate, print first</span></li>
           <li><a href="print/kit-core.stl" download>kit-core.stl</a> <span>unibody + plate</span></li>
           <li><a href="print/unibody.stl" download>unibody.stl</a> <span>the shell</span></li>
           <li><a href="print/plate.stl" download>plate.stl</a> <span>the base</span></li>
           <li><a href="print/plate-feet.stl" download>plate-feet.stl</a> <span>base with pockets for silicone feet</span></li>
           <li><a href="print/fit-coupon.stl" download>fit-coupon.stl</a> <span>port end only</span></li>
-          <li><a href="print/peg-gauge.stl" download>peg-gauge.stl</a> <span>three grip strengths</span></li>
+          <li><a href="print/latch-coupon.stl" download>latch-coupon.stl</a> <span>back end only, with the latch window</span></li>
           <li><a href="print/trim-guide.stl" download>trim-guide.stl</a> <span>only if your board has pins</span></li>
-          <li><a href="print/light-pipe.stl" download>light-pipe.stl</a> <span>clear PETG only, optional</span></li>
           <li><a href="print/PRINT-NOTES.txt" download>PRINT-NOTES.txt</a> <span>settings and order</span></li>
         </ul>
       </div>
@@ -277,17 +276,17 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <thead><tr><th>Item</th><th>Cheapest way</th><th>Cost</th><th>Better later</th></tr></thead>
         <tbody>
           <tr><td>The board</td><td>Use the YD-ESP32-S3 board you already run HID-Fi on. The shell does not touch its firmware or data.</td><td class="mono">₹0</td><td>A new one for a second unit: ₹600–900</td></tr>
-          <tr><td>Printing (about 15 g with the two test prints)</td><td>Your own or a friend's printer: 10.6 g for the Core, plus about 4.4 g for the fit coupon and peg gauge.</td><td class="mono">₹20–30</td><td>A print shop or online service: roughly ₹300–700 for the coupon and one set (ask for PETG)</td></tr>
-          <tr><td>Screws</td><td>None. The base clips in with a front tongue and two press-fit pegs.</td><td class="mono">₹0</td><td>—</td></tr>
-          <tr><td>Status light window</td><td>A drop of clear hot glue pressed into the 2 mm hole from inside: it glows like a light pipe.</td><td class="mono">₹0</td><td>The printed clear PETG light pipe</td></tr>
+          <tr><td>Printing (about 17 g with the test print)</td><td>Your own or a friend's printer: 10.4 g for the Core, plus about 3.5 g for the two coupons (the test print's plate is a real plate).</td><td class="mono">₹20–30</td><td>A print shop or online service: roughly ₹300–700 for the coupon and one set (ask for PETG)</td></tr>
+          <tr><td>Screws</td><td>None. The base hooks in at the front and clicks shut at the back, like a remote's battery cover.</td><td class="mono">₹0</td><td>—</td></tr>
+          <tr><td>Status light window</td><td>Nothing to buy: the light shines through a small cross cut in the lid.</td><td class="mono">₹0</td><td>—</td></tr>
           <tr><td>Status LED solder bridge</td><td>Skip it for the first build; the shell works without it.</td><td class="mono">₹0</td><td>One solder blob, if you have an iron</td></tr>
           <tr><td>Measuring</td><td>The fit coupon (below) checks the critical fit without any tools.</td><td class="mono">₹0</td><td>A digital caliper: ₹400–800</td></tr>
           <tr><td>Feet</td><td>None: the Core sits flat.</td><td class="mono">₹0</td><td>plate-feet.stl and four Ø6 × 1.2 mm silicone bumpers (₹20–50)</td></tr>
-          <tr><td><b>First Core</b></td><td>Own or borrowed printer, your existing board, hot-glue light</td><td class="mono"><b>≈ ₹20–40</b></td><td>At a print service, using the two kit files: about two minimum charges (≈ ₹200)</td></tr>
+          <tr><td><b>First Core</b></td><td>Own or borrowed printer, your existing board</td><td class="mono"><b>≈ ₹20–40</b></td><td>At a print service, using the two kit files: about two minimum charges (≈ ₹200)</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note"><b>One honest trade-off.</b> PLA is fine for the fit coupon, the peg gauge or a desk test. For a unit left running for days, use PETG: PLA softens near 55 °C, and the pegs would loosen.</p>
+    <p class="note"><b>One honest trade-off.</b> PLA is fine for the coupons or a desk test. For a unit left running for days, use PETG: PLA softens near 55 °C, and the board inside runs warm (see Test at home).</p>
   </section>
 
 
@@ -296,34 +295,32 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <div class="two">
       <div class="card">
         <figure>
-          <svg class="dia" viewBox="0 0 560 250" role="img" aria-label="Side section: the base plate's front tongue hooks into a slot in the front wall; at the back, a ribbed peg presses up into a socket in the top shell. A coin notch at the back edge lets you lever it out.">
+          <svg class="dia" viewBox="0 0 560 250" role="img" aria-label="Side section: at the front, a thick tab on the plate hooks into a slot in a rib inside the front wall; at the back, a flat spring beam in the plate carries a catch that clicks into a window in the back wall. A fingernail through the window pushes the catch back to open it.">
             <rect x="20" y="30" width="520" height="22" fill="#2b2e33" stroke="#4a525c"/>
             <text x="30" y="22" fill="#9aa3ad" font-size="13">Top shell</text>
             <rect x="20" y="30" width="26" height="170" fill="#2b2e33" stroke="#4a525c"/>
-            <rect x="514" y="30" width="26" height="170" fill="#2b2e33" stroke="#4a525c"/>
-            <rect x="40" y="172" width="14" height="12" fill="#0b0d10"/>
-            <rect x="46" y="182" width="466" height="18" fill="#3a3f46" stroke="#4a525c"/>
-            <polygon points="54,182 40,182 40,176 54,170" fill="#3a3f46" stroke="#4a525c"/>
-            <text x="62" y="222" fill="#eceef1" font-size="13">1 · Tongue hooks into the front wall</text>
-            <rect x="440" y="52" width="46" height="96" fill="#2b2e33" stroke="#4a525c"/>
-            <rect x="451" y="52" width="24" height="96" fill="#0b0d10"/>
-            <text x="300" y="80" fill="#1fffd8" font-size="13">Socket in the shell</text>
-            <rect x="454" y="96" width="18" height="86" fill="#f1ede2"/>
-            <rect x="449" y="104" width="4" height="66" fill="#f1ede2"/>
-            <rect x="473" y="104" width="4" height="66" fill="#f1ede2"/>
-            <text x="300" y="132" fill="#eceef1" font-size="13">2 · Ribbed peg on the plate</text>
-            <text x="300" y="150" fill="#9aa3ad" font-size="12">the ribs squash a little: snug, no rattle</text>
-            <rect x="476" y="190" width="36" height="10" fill="#0b0d10"/>
-            <text x="350" y="240" fill="#eceef1" font-size="13">3 · Coin notch to lever it out</text>
+            <rect x="46" y="150" width="14" height="50" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="514" y="30" width="26" height="128" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="514" y="186" width="26" height="14" fill="#2b2e33" stroke="#4a525c"/>
+            <rect x="34" y="166" width="26" height="22" fill="#0b0d10"/>
+            <rect x="64" y="186" width="420" height="14" fill="#3a3f46" stroke="#4a525c"/>
+            <polygon points="40,170 74,170 74,186 70,186 70,184 40,184" fill="#f1ede2"/>
+            <text x="30" y="222" fill="#eceef1" font-size="13">1 · Two thick tabs hook in at the front</text>
+            <text x="30" y="240" fill="#9aa3ad" font-size="12">1 mm thick, 0.3 mm of room all round</text>
+            <rect x="484" y="168" width="20" height="32" fill="#f1ede2"/>
+            <polygon points="504,174 526,174 526,180 504,190" fill="#f1ede2"/>
+            <text x="250" y="132" fill="#eceef1" font-size="13">2 · A spring beam clicks its catch</text>
+            <text x="250" y="150" fill="#9aa3ad" font-size="12">into the window in the back wall</text>
+            <text x="300" y="222" fill="#eceef1" font-size="13">3 · Fingernail in the window to open</text>
           </svg>
           <figcaption>Side section, not to scale. Front on the left, back on the right.</figcaption>
         </figure>
       </div>
       <div class="card">
-        <p><b>Closing:</b> hook the plate's front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush. Two pegs on the plate slide up into two sockets moulded in the top shell's back corners.</p>
-        <p><b>Why it stays put:</b> each peg has three thin ribs that squash slightly as it goes in, like a wall plug. That gives a firm grip even if your printer prints a little over or under size. In a 1 m drop onto its top, the plate needs only about 4 N of grip per peg to stay on; a snug press fit holds more than that (estimated; the peg gauge lets you feel it).</p>
-        <p><b>Opening:</b> put a coin in the small notch at the back edge of the plate and lever gently. The pegs slide out, then unhook the tongue.</p>
-        <p class="note"><b>Tune it once.</b> Print the peg gauge first: three pegs and three holes at three tightnesses. Press each pair together and pick the one that is snug but still comes out with a fingernail. The files ship with pair 2's grip. If pair 1 or 3 suits your printer better, open an issue on GitHub with the pair number and the parts can be regenerated with that grip.</p>
+        <p><b>Closing:</b> hook the plate's two front tabs into the slots behind the ports, swing the back up and press: two catches click into the window in the back wall. About 11 N, a firm thumb.</p>
+        <p><b>Why it stays put:</b> the catches have square faces, so pulling cannot open them; in a 1 m drop onto the top the plate pulls with about 28 N and the catches hold about 90 N. Nothing is a press fit and nothing relies on friction.</p>
+        <p><b>Opening:</b> push both catches in through the window with a fingernail (about 6 N), put a coin in the notch under it and twist; the back drops out, then lift the tabs out.</p>
+        <p class="note"><b>Why it changed.</b> The first print's tongue had 0.1 mm of room and never went in: a print's layer lines are that thick. Its pegs stood up off the bed, so they bent across their layers and snapped. Now every fit has 0.3 mm, the build proves a plate grown by a coarse print's error still closes, and the spring beams lie flat on the bed so they bend along their layers (2.3% strain, inside PETG's limit for repeated use).</p>
         <button class="chip" id="showscrews">Show it in the model</button>
       </div>
     </div>
@@ -342,9 +339,9 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <h3>On your own printer</h3>
         <ul>
           <li>Use the files from <a href="#download">Download</a>: they are already turned the way they sit on the bed, so do not rotate them.</li>
-          <li>Print in this order: fit coupon, peg gauge, unibody, plate, light pipe (optional).</li>
+          <li>Print in this order: kit-test (both coupons and a plate), then the unibody. The test print's plate is a real plate.</li>
           <li>The unibody prints <b>top face down</b>. On a textured sheet the top comes out with a fine matte texture and no layer lines.</li>
-          <li>0.12 mm layers for the unibody (its walls are what people see), 0.16–0.2 mm for the rest. 100% cooling for PETG after the first layers, for the vent slopes.</li>
+          <li>0.12–0.2 mm layers for the unibody (its walls are what people see), 0.2 mm for the rest; up to 0.28 still fits. 100% cooling for PETG after the first layers, for the vent slopes.</li>
           <li>Elephant-foot compensation 0.15 mm keeps the vents and lettering sharp.</li>
           <li>No supports anywhere.</li>
         </ul>
@@ -352,11 +349,9 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <div class="card">
         <h3>At a print shop or online service</h3>
         <ul>
-          <li><b>Shops charge a minimum per file</b> (often ₹100), not per gram. Cheapest: upload the single <span class="mono">kit-all.stl</span> (every black part: unibody, plate, trim guide, fit coupon, peg gauge; about 18 g). Or, to check the fit before printing the shell, upload the two kit files instead of separate parts: <span class="mono">kit-test.stl</span> (fit coupon + peg gauge) first, then <span class="mono">kit-core.stl</span> (unibody + plate). Two minimums instead of seven.</li>
-          <li><b>The light pipe must be clear PETG</b> ("transparent" or "natural"). Black blocks the light. Order it separately in clear, or skip it and use the free hot-glue window.</li>
-          <li>Then send <span class="mono">unibody.stl</span> and <span class="mono">plate.stl</span> from the zip, with <span class="mono">PRINT-NOTES.txt</span>: "PETG, no supports, print exactly as oriented in the files, unibody at 0.12 mm layers."</li>
-          <li>Ask for photos before they ship, so you can check that the vents and lettering came out.</li>
-          <li>Skip the light pipe at a shop: it needs clear material, which means another file and another minimum charge. The hot-glue window costs nothing and glows the same.</li>
+          <li><b>Shops charge a minimum per file</b> (often ₹100), not per gram. Cheapest: upload the single <span class="mono">kit-all.stl</span> (unibody, plate, trim guide and both coupons, about 17 g). To check the fit first, upload <span class="mono">kit-test.stl</span> (both coupons and a plate, about 7 g), then <span class="mono">kit-core.stl</span>.</li>
+          <li>Send <span class="mono">PRINT-NOTES.txt</span> with it: "PETG, no supports, print exactly as oriented in the files."</li>
+          <li>A coarse shop print is fine: every fit has 0.3 mm of room. Ask for photos before they ship, so you can check that the vents and lettering came out.</li>
         </ul>
       </div>
     </div>
@@ -369,7 +364,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <li><span>Print <span class="mono">fit-coupon.stl</span>: the first 14 mm of the shell, the end with the USB-C windows. About 15 minutes.</span></li>
         <li><span>Hold it face down and slide the board's two sockets into the windows from inside. The board edge should touch the inside of the front wall, with the sockets sitting in the windows.</span></li>
         <li><span>Plug in your <b>thickest</b> USB-C cable from outside. It must click fully home, the same as on the bare board.</span></li>
-        <li><span>Print the peg gauge and press pegs 1, 2 and 3 into holes 1, 2 and 3. Pick the pair that is snug but comes out with a fingernail. The default is 2.</span></li>
+        <li><span>Hook the test plate's front tabs into the fit coupon's slots: they go in with no force. Then clip the plate's back into the latch coupon: it clicks, and opens again when you push the catches in through the window with a fingernail.</span></li>
         <li><span>If the cable stops short, measure how far the sockets stick out past the board edge (the design assumes 0.6 mm) and open an issue on GitHub with the number: the parts are regenerated from it and every check reruns. Otherwise, print the real parts.</span></li>
       </ol>
     </div>
@@ -381,15 +376,14 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       <div class="card">
         <ol class="steps">
           <li><span><b>Pins.</b> If your board has pins soldered underneath, they must go; the shell has no room for them. Switch on "Pins as shipped" in the model for the trim method, and use the printable trim guide. Boards without pins skip this.</span></li>
-          <li><span><b>Light.</b> Press the printed light pipe in from inside, or fill the 2 mm window from inside with a drop of clear hot glue and let it set.</span></li>
-          <li><span><b>Board.</b> Unibody face down. Lower the board in components first, sockets into their windows, then slide it forward until it stops (about 0.8 mm).</span></li>
-          <li><span><b>Plate.</b> Hook its front tongue into the slot inside the front wall, then press the back down with your thumb until it sits flush: the two pegs slide into their sockets.</span></li>
+                    <li><span><b>Board.</b> Unibody face down. Lower the board in components first, sockets into their windows, then slide it forward until it stops (about 0.8 mm).</span></li>
+          <li><span><b>Plate.</b> Hook its two front tabs into the slots behind the ports, swing the back up and press until the catches click into the window in the back wall.</span></li>
           <li><span><b>Done.</b> Plug USB into the computer, COM if you need serial.</span></li>
         </ol>
       </div>
       <div class="card">
         <h3>Taking it apart</h3>
-        <p>A coin in the notch at the back edge of the plate, lever gently, then unhook the tongue. Tilt the board back 0.8 mm and lift it out. Nothing is glued or screwed, so you can reuse the shell for every board you test.</p>
+        <p>Push both catches in through the window in the back wall with a fingernail, twist a coin in the notch under it, and lift the tabs out of their slots. Slide the board back 1 mm and lift it out. Nothing is glued or screwed, so you can reuse the shell for every board you test.</p>
         <h3>Your settings stay</h3>
         <p>The shell changes nothing in software: your board keeps its shortcuts, macros and networks.</p>
       </div>
@@ -405,9 +399,10 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
           <tr><td>Cables</td><td>Your thickest and thinnest USB-C cable in each port, then both at once</td><td>Each clicks fully home; the board does not move</td></tr>
           <tr><td>Rattle</td><td>Shake it next to your ear</td><td>Silent</td></tr>
           <tr><td>WiFi range</td><td>Phone signal strength to the HID-Fi access point at 1, 5 and 10 m, bare board and then in the shell (any WiFi analyser app shows it)</td><td>Within about 2 dB</td></tr>
-          <tr><td>Heat</td><td>Stream the Screen tab for 4 hours, then feel the top and the vents</td><td>Warm, never too hot to hold; no resets</td></tr>
+          <tr><td>Heat</td><td>Leave it plugged in for 4 hours, idle and then streaming the Screen tab, closed and then open. Settings &gt; Device shows the chip's temperature and its peak; <span class="mono">tools/thermal_watch.py</span> logs it for hours and spots when the shell went on or off by itself</td><td>Warm, never too hot to hold; no resets. Note the chip's peak closed and open (the first print ran hot to the touch idle: the access point keeps the radio awake)</td></tr>
+          <tr><td>Open and close</td><td>Open and close the base 20 times</td><td>Clicks every time; nothing whitens, cracks or loosens</td></tr>
           <tr><td>Press</td><td>Press the top centre firmly with your thumb, then squeeze it across the middle</td><td>No creak, no crack; still works</td></tr>
-          <tr><td>Drop</td><td>Drop from desk height onto carpet, then onto a hard floor: each face once</td><td>No cracks; the plate stays clipped in; boots</td></tr>
+          <tr><td>Drop</td><td>Drop from desk height onto carpet, then onto a hard floor: each face once</td><td>No cracks; the plate stays clicked in; boots</td></tr>
           <tr><td>Pocket</td><td>Carry it in a bag for a week</td><td>The plate still snug; lint stays out of the vents</td></tr>
         </tbody>
       </table>
@@ -430,7 +425,14 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
     <h2>Design review: what I checked, found and fixed</h2>
     <div class="two">
       <div class="card">
-        <h3>Found and fixed in this review</h3>
+        <h3>Found by the first print, fixed in rev C</h3>
+        <ul>
+          <li><b>The board fitted perfectly</b>: size, sockets, port windows. Those measurements stand.</li>
+          <li><b>The base would not close.</b> The tongue had 0.10-0.15 mm of room in its slot; a service print's layer lines are about that thick, so the slot closed up. Every fit now has 0.3 mm, and the build fails unless a plate grown by a coarse print's error (0.24 mm sideways, 0.28 mm up and down) still meets nothing.</li>
+          <li><b>A press-fit peg snapped</b> when the base was pulled off: a peg stands up off the bed, so it bends across its layers, the weakest way a print can be loaded. The new latch's beams lie flat on the bed and bend along their layers, and the build checks their strain and the force to close and open.</li>
+          <li><b>It ran hot to the touch</b> after hours of doing nothing. The board's access point keeps the radio awake (Espressif: modem sleep works only when the board is a station alone), and the firmware now reports the chip's temperature so it can be measured, closed and open.</li>
+        </ul>
+        <h3>Found and fixed in the first review</h3>
         <ul>
           <li><b>The inside of the top shell was missing from the print files.</b> A build-order mistake cut away every internal feature: the screw posts, the two clamp ribs that hold the board, the status-light cell, the LED blackout pod and the pinhole guides. The interference check could not see it, because missing plastic never collides. You asked where the screws go, and that question exposed it. Fixed, and a new check now fails the build if any added feature is cut away. I proved it fails on the old code.</li>
           <li><b>The Sense and Go bases had the same bug</b> (bay walls, columns, mic ribs). Restoring them revealed five real clashes, all now fixed: the mic boards rubbing their ribs, two alignment pins under the Go's switch and boost converter, and the Go door screw longer than its hole.</li>
@@ -442,21 +444,20 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
       </div>
       <div class="card">
         <h3>Tested by a real slicer</h3>
-        <p>Every print file was sliced with PrusaSlicer 2.9.6 (PETG, 0.4 mm nozzle, no supports) using a conservative generic printer profile. Newer printers are faster.</p>
+        <p>Every print file was sliced with PrusaSlicer 2.9.7 (PETG, 0.4 mm nozzle, no supports) using a conservative generic printer profile. Newer printers are faster.</p>
         <div class="tablewrap" style="border:0">
           <table style="min-width:0">
             <thead><tr><th>Part</th><th>Layer</th><th>Time</th><th>PETG</th></tr></thead>
             <tbody>
-              <tr><td>fit-coupon</td><td class="mono">0.12</td><td class="mono">20 min</td><td class="mono">1.7 g</td></tr>
-              <tr><td>peg-gauge</td><td class="mono">0.20</td><td class="mono">19 min</td><td class="mono">2.7 g</td></tr>
-              <tr><td>unibody</td><td class="mono">0.12</td><td class="mono">1 h 18 min</td><td class="mono">7.5 g</td></tr>
-              <tr><td>plate</td><td class="mono">0.20</td><td class="mono">23 min</td><td class="mono">3.1 g</td></tr>
-              <tr><td>light-pipe</td><td class="mono">0.08</td><td class="mono">1 min</td><td class="mono">0.01 g</td></tr>
-              <tr><td><b>A whole Core</b></td><td></td><td class="mono"><b>about 2 h</b></td><td class="mono"><b>10.6 g ≈ ₹16</b></td></tr>
+              <tr><td>fit-coupon</td><td class="mono">0.20</td><td class="mono">13 min</td><td class="mono">1.7 g</td></tr>
+              <tr><td>latch-coupon</td><td class="mono">0.20</td><td class="mono">14 min</td><td class="mono">1.8 g</td></tr>
+              <tr><td>unibody</td><td class="mono">0.12</td><td class="mono">1 h 4 min</td><td class="mono">7.0 g</td></tr>
+              <tr><td>plate</td><td class="mono">0.20</td><td class="mono">22 min</td><td class="mono">3.0 g</td></tr>
+              <tr><td><b>A whole Core</b></td><td></td><td class="mono"><b>about 1 h 30 min</b></td><td class="mono"><b>10.0 g ≈ ₹15</b></td></tr>
             </tbody>
           </table>
         </div>
-        <p><b>Overhang check</b> on the print-ready files: nothing needs supports. The longest unsupported span is the 8 mm roof of the coin notch; the vent roofs are 1 mm bridges; the light pipe has none. Every part is one solid piece with nothing floating.</p>
+        <p><b>Overhang check</b> on the print-ready files: nothing needs supports. The longest unsupported span is the 8.7 mm roof of the latch window; the tab undersides overhang 0.95 mm and the catch faces 0.85 mm; the vent roofs are 1 mm bridges. Every part is one solid piece with nothing floating. Sliced again at 0.28 mm layers, as a coarse shop print would be, every part still slices; only the combined kit-test file draws a "loose extrusions" note at some layer heights, which its parts sliced separately do not.</p>
       </div>
     </div>
     <h3 style="margin-top:6px">Every measurement, and how sure it is</h3>
@@ -479,8 +480,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
           <tr><td>Walls</td><td class="mono">sides 2.0 · front 1.4 (0.8 at the ports) · back 1.8 · lid 1.5 · plate 1.2</td><td>build.mjs</td><td>Exact</td></tr>
           <tr><td>Board clearance</td><td class="mono">0.2 each side · 1.4 under · front edge is the datum · 0.15 to the rear stops</td><td>build.mjs</td><td>Exact</td></tr>
           <tr><td>Port windows</td><td class="mono">9.44 × 3.76 mm, socket + 0.25 all round</td><td>build.mjs</td><td>Exact</td></tr>
-          <tr><td>Pegs and sockets</td><td class="mono">socket Ø2.6 × 4.6 deep · ribs +0.08 mm · peg 3.8 long</td><td>build.mjs</td><td>Tune with the gauge</td></tr>
-          <tr><td>Fits</td><td class="mono">plate 0.25 · tongue 0.15 · light pipe 0.1</td><td>build.mjs</td><td>Set for FDM printing</td></tr>
+          <tr><td>Latch</td><td class="mono">beams 7.4 × 1.2 mm · 2.3% strain · clicks at ~11 N · opens at ~6 N · catches hold ~90 N</td><td>build.mjs, cantilever formulas</td><td>Medium: feel it on the latch coupon</td></tr>
+          <tr><td>Fits</td><td class="mono">every mating gap 0.3 · plate edge 0.25</td><td>build.mjs, measured on the meshes by tests/static/test_shell_print.py</td><td>Set for a coarse FDM print</td></tr>
           <tr><td>Thinnest features</td><td class="mono">vent ribs 0.71 · port panel 0.8 · corner wall 1.29 · lettering 1.6 mm caps</td><td>Build checks</td><td>All print as two lines or more</td></tr>
         </tbody>
       </table>
@@ -526,18 +527,17 @@ $('plugchecks').innerHTML = checks.filter(c => /plug|receptacle|port panel|web b
 $('s-c').innerHTML = `${shown.filter(c => c.ok).length} / ${shown.length}<small>pass</small>`;
 for (const v of ['core', 'sense', 'go']) { const d = manifest.variants[v].dims; $('d-' + v).textContent = `${d.L} × ${d.W} × ${d.H.toFixed(1)}`; }
 const P = manifest.parts;
-const CORE_PARTS = ['fit-coupon', 'peg-gauge', 'unibody', 'plate', 'plate-feet', 'light-pipe', 'trim-guide'];
+const CORE_PARTS = ['fit-coupon', 'latch-coupon', 'unibody', 'plate', 'plate-feet', 'trim-guide'];
 const printRows = [
   ['unibody', 'PETG matte (ASA if it lives in sun or a car)', 'Top face down on textured PEI', '0.12 mm layers, 5 walls, no supports, elephant-foot compensation 0.15 mm, seam at the rear, full cooling for the 40° vent slopes'],
   ['fit-coupon', 'Any PETG or PLA', 'As supplied', 'Print this first: the port end only, to check the sockets and your thickest cable'],
-  ['peg-gauge', 'Same PETG as the plate', 'As supplied', 'Second: three pegs at three tightnesses, to pick the grip that suits your printer'],
+  ['latch-coupon', 'Same PETG as the plate', 'As supplied', 'With the fit coupon: the back end, to clip a plate into before printing the shell'],
   ['plate', 'Same filament as the unibody', 'Bottom face down on textured PEI', '0.16 mm, no supports'],
   ['plate-feet', 'Same filament as the unibody', 'Bottom face down', 'Optional instead of plate.stl: four pockets for silicone feet'],
   ['plate-open', 'Any PETG (hidden inside)', 'Flat', '0.2 mm, no supports'],
   ['tub-sense', 'Unibody filament', 'Floor down on textured PEI', '0.12 mm (its walls show), no supports'],
   ['tub-go', 'Unibody filament', 'Floor down on textured PEI', '0.12 mm, no supports; the screw beam bridges 11.5 mm'],
   ['door-go', 'Unibody filament', 'Outer face down', '0.16 mm, no supports'],
-  ['light-pipe', 'Clear or natural PETG', 'Flange down', '0.08 mm, 100% infill; or skip it and use clear hot glue'],
   ['trim-guide', 'Any', 'Flat', '0.2 mm; a tool, not part of the product'],
 ];
 $('printrows').innerHTML = printRows.filter(([n]) => !window.CORE_ONLY || CORE_PARTS.includes(n)).map(([n, m, o, s]) => `<tr><td><span class="mono">${n}.stl</span><br><span style="font-weight:400;color:var(--muted)">${P[n].grams} g</span></td><td>${m}</td><td>${o}</td><td>${s}</td></tr>`).join('');
@@ -658,12 +658,20 @@ const antGroup = new THREE.Group();
   keep.scale.set(9 + 15, 3 + 15, 15); keep.position.copy(zone.position); antGroup.add(keep);
 }
 antGroup.visible = false; boardGroup.add(antGroup);
-const postGroup = new THREE.Group(), pegGroup = new THREE.Group();   // highlights for the clip-in view
-for (const [x, y] of manifest.features.sockets) {
-  const g = new THREE.CylinderGeometry(2.5, 2.5, 7.5 - 1.22, 40); g.rotateX(Math.PI / 2); g.translate(x, y, (7.5 + 1.22) / 2);
-  postGroup.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#1fffd8', emissive: '#0b5c50', transparent: true, opacity: 0.4, depthWrite: false })));
-  const p = new THREE.CylinderGeometry(1.3, 1.3, 3.8, 32); p.rotateX(Math.PI / 2); p.translate(x, y, 1.2 + 1.9);
-  pegGroup.add(new THREE.Mesh(p, new THREE.MeshStandardMaterial({ color: '#f1ede2', roughness: 0.5 })));
+const postGroup = new THREE.Group(), pegGroup = new THREE.Group();   // highlights for the clip-in view: the shell's slots and window, the plate's tabs and catches
+{
+  const K = manifest.features.closure, cav = manifest.features.cav, out = manifest.features.out;
+  const boxAt = ([x0, y0, z0, x1, y1, z1], mat) => { const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return new THREE.Mesh(g, mat); };
+  const teal = new THREE.MeshStandardMaterial({ color: '#1fffd8', emissive: '#0b5c50', transparent: true, opacity: 0.4, depthWrite: false });
+  const white = new THREE.MeshStandardMaterial({ color: '#f1ede2', roughness: 0.5 });
+  for (const [x0, x1] of K.tab.xs) {
+    postGroup.add(boxAt([x0 - K.fit, K.tab.tip - K.fit, K.tab.z0 - K.fit, x1 + K.fit, K.rib.y1, K.tab.z1 + K.fit], teal));
+    pegGroup.add(boxAt([x0, K.tab.tip, K.tab.z0, x1, K.plateY0 + 0.3, K.tab.z1], white));
+  }
+  const W = K.latch.window;
+  postGroup.add(boxAt([W.x0, cav.y1, W.z0, W.x1, out.y1, W.z1], teal));
+  for (const [x0, x1] of K.beams) pegGroup.add(boxAt([x0, K.beamY[0], 0, x1, K.beamY[1], K.latch.z1], white));
+  for (const [x0, x1] of K.catches) pegGroup.add(boxAt([x0, K.beamY[1], K.latch.catch[0], x1, K.catchTip, K.latch.catch[1]], white));
 }
 pegGroup.visible = false; scene.add(pegGroup);
 postGroup.visible = false; scene.add(postGroup);
@@ -742,8 +750,8 @@ const FEATS = [
   { t: 'Cables plugged in', d: 'Both sockets with slim cables. Switch to Max in the Cables control to see the largest plugs the USB-C spec allows, and the one clash the board itself causes.', cam: [64, -98, 44], tgt: [14, -12, 5], mode: 'assembled', cables: 'slim' },
   { t: 'Antenna in free air', d: 'The antenna is the module\'s bare end, overhanging the board by 6.24 mm, opposite the ports. Only plain plastic sits near it, and there are no screws; plugged into a laptop, it points away from the laptop.', cam: [64, 106, 46], tgt: [14, 60, 4], mode: 'xray', antenna: true },
   { t: 'HID-Fi mark', d: 'Debossed into the right side wall, toward the ports, centred top to bottom. The top stays clean for the vents and the status light; the mark shows when the device sits beside a laptop.', cam: [92, -6, 16], tgt: [30, 16, 4.5], mode: 'assembled' },
-  { t: 'How the base clips in', d: 'No screws. The plate\'s front tongue hooks into the front wall; at the back, two ribbed pegs (white) press up into two sockets moulded in the top shell (teal). To open, lever the back edge out with a coin.', cam: [-30, 92, 16], tgt: [4, 60, 3], mode: 'xray', posts: true },
-  { t: 'One status light', d: 'A clear light pipe over the WS2812 RGB LED, in a light cell so nothing bleeds, in line with the USB socket it reports on.', cam: [-14, -8, 52], tgt: [9, 18.4, 8], mode: 'xray' },
+  { t: 'How the base clips in', d: 'No screws and no press fits. Two thick tabs on the plate (white) hook into slots behind the ports (teal); at the back, two flat spring beams click their catches into the window in the back wall. A fingernail through that window opens it.', cam: [-30, 92, 16], tgt: [14, 60, 2], mode: 'xray', posts: true },
+  { t: 'One status light', d: 'A small cross cut through the lid over the WS2812 RGB LED, inside a light cell so nothing bleeds, in line with the USB socket it reports on. Nothing to buy or glue.', cam: [-14, -8, 52], tgt: [9, 18.4, 8], mode: 'xray' },
   { t: 'Blackout pod', d: 'The power LED is always on and TX/RX flicker with serial traffic. A sealed pod keeps all three dark, so a bedroom never glows red.', cam: [44, -6, 40], tgt: [19.6, 20.2, 5.5], mode: 'xray' },
   { t: 'BOOT and RST pinholes', d: 'Flashing resets the board on its own, so the buttons are for rescue only. Paperclip: front hole BOOT, rear hole RST. Guide tubes land the clip on the button.', cam: [-38, 4, 40], tgt: [19.1, 31, 6], mode: 'section', cut: 19.1 },
   { t: 'Zero play', d: 'Rails below, ribs and the USB-C shells above, the port panel in front and two stops behind. The board has no mounting holes, so it is held by its edges, never by a screw.', cam: [-96, 24, 20], tgt: [14, 30, 4], mode: 'section', cut: 3.0 },

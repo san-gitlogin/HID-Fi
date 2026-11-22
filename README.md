@@ -207,16 +207,17 @@ do test one, please say so, it is the most useful report you can send.
 
 ### A case you can print: HID-Fi Core
 
-A 9 mm shell for the YD-ESP32-S3 board: three printed parts, no screws, no glue,
-about 10.6 g of PETG. **[`kit-all.stl`](hardware/hid-fi-core/print/kit-all.stl)**
+A 9 mm shell for the YD-ESP32-S3 board: two printed parts, no screws, no glue,
+about 10.4 g of PETG. **[`kit-all.stl`](hardware/hid-fi-core/print/kit-all.stl)**
 puts every part on one bed, so a print shop needs only one file.
 
 **[Open the HID-Fi Core build guide](https://san-gitlogin.github.io/HID-Fi/hardware/hid-fi-core/)**:
 an interactive 3D model, print settings, fit check, assembly and every download.
 The page and the files live in [hardware/hid-fi-core](hardware/hid-fi-core).
 
-*First print in progress: the files pass every build check but have not yet been
-test-fitted on a real board.* **Personal, noncommercial use only:** selling
+*Rev C: the first print fitted the board perfectly but its base did not close, so
+the base now clicks shut like a remote's battery cover, with room for a coarse
+print. Rev C is not printed yet: print `kit-test.stl` first.* **Personal, noncommercial use only:** selling
 printed units, kits or the files needs a commercial licence from the author.
 
 ---
