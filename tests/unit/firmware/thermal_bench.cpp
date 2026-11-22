@@ -5,6 +5,7 @@
 //   log                                -> count last_logged_s v1 v2 ...  (oldest first, "-" for a gap)
 //   reset                              -> ok   (a fresh log, as after a restart)
 //   band <0|1> <deci>                  -> the band to read in next
+//   tick <us>                          -> on(1|0) strikes worst_us   (the latency guard, kept across ticks)
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -18,6 +19,7 @@ static std::string d(int16_t v) { return v == thermal::NONE ? "-" : std::to_stri
 
 int main() {
     thermal::Log l;
+    thermal::Guard g;
     std::string line;
     while (std::getline(std::cin, line)) {
         std::istringstream in(line);
@@ -35,7 +37,13 @@ int main() {
             int b, v;
             in >> b >> v;
             std::cout << (int)thermal::nextBand((thermal::Band)b, (int16_t)v) << "\n";
+        } else if (op == "tick") {
+            unsigned long us;
+            in >> us;
+            bool on = thermal::guardTick(g, (uint32_t)us);
+            std::cout << (on ? 1 : 0) << " " << (int)g.strikes << " " << g.worstUs << "\n";
         } else if (op == "reset") {
+            g = thermal::Guard();
             l = thermal::Log();
             std::cout << "ok\n";
         } else if (op == "log") {

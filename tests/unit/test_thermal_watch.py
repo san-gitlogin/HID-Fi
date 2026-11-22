@@ -8,6 +8,7 @@ with sensor noise, the shape a small shell gives.
 """
 import math
 import random
+import re
 import sys
 
 import pytest
@@ -123,6 +124,32 @@ def test_summary_reports_the_range_and_the_peak():
     assert sm["samples"] == len(s) and sm["peak_c"] == 60.2 and sm["min_c"] <= sm["mean_c"] <= sm["max_c"]
 
 
-@pytest.mark.parametrize("argv", [["--hours", "0"], ["--every", "1"]])
+QUIET = {"ws_clients": 0, "ota_step": "idle"}
+
+
+@pytest.mark.parametrize("every, status, ms, cur, want", [
+    (30, QUIET, 40, 30, 30),                                   # the asked-for pace
+    (2, QUIET, 40, 2, W.MIN_EVERY_S),                          # never faster than the floor
+    (30, {"ws_clients": 1, "ota_step": "idle"}, 40, 30, 60),   # someone is using it: a minute
+    (30, {"ws_clients": 0, "ota_step": "downloading"}, 40, 30, 60),   # an update: a minute
+    (30, QUIET, 900, 30, 60),                                  # answering slowly: double...
+    (30, QUIET, 900, 60, 120),                                 # ...and again...
+    (30, QUIET, 900, 300, 300),                                # ...up to five minutes
+    (30, QUIET, 40, 300, 30),                                  # fast again: back to the asked pace
+    (30, None, None, 30, 60),                                  # out of reach: back off too
+])
+def test_the_watcher_backs_off_whenever_the_board_has_better_things_to_do(every, status, ms, cur, want):
+    assert W.next_interval(every, status, ms, cur) == want
+
+
+def test_the_watcher_never_opens_a_websocket_or_sends_input():
+    """A socket holds the radio awake and takes one of eight dashboard slots; the watcher
+    reads /api/status over HTTP and, with a PIN, temp_log - nothing else."""
+    src = (paths.TESTS.parent / "tools" / "thermal_watch.py").read_text(encoding="utf-8")
+    assert "websocket" not in src.lower().replace("never a websocket", "").replace("not a websocket", "")
+    assert set(re.findall(r'"cmd": "(\w+)"', src)) == {"temp_log"}
+
+
+@pytest.mark.parametrize("argv", [["--hours", "0"], ["--every", "1"], ["--every", "9"]])
 def test_a_watch_always_has_an_end(argv):
     assert W.main(argv) == 2

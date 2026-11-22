@@ -95,6 +95,30 @@ inline Band nextBand(Band cur, int16_t deci) {
     return cur;
 }
 
+// The guard: watching the temperature must never cost the board latency (the owner,
+// 2026-11-22: "at any cost should not degrade the performance of the board and the
+// latency"). The reads run in their own low-priority task (hid_fi.ino), so the WiFi
+// tasks may pause one midway: that wall time costs nobody anything, and it comes and
+// goes. A driver that is really slow is slow every time. So a read over TICK_BUDGET_US
+// is a strike, a read inside it clears them, and STRIKES in a row switch the sensor off
+// until the next start (status: temp_off "slow"). The worst read is reported
+// (temp_us_max).
+constexpr uint32_t TICK_BUDGET_US = 1500;
+constexpr uint8_t STRIKES = 3;
+struct Guard {
+    uint32_t worstUs = 0;
+    uint8_t strikes = 0;
+    bool off = false;
+};
+// Returns true while the sensor may still be read.
+inline bool guardTick(Guard& g, uint32_t us) {
+    if (us > g.worstUs) g.worstUs = us;
+    if (us <= TICK_BUDGET_US) g.strikes = 0;
+    else if (g.strikes < 255) g.strikes++;
+    if (g.strikes >= STRIKES) g.off = true;
+    return !g.off;
+}
+
 // The log oldest first into out (LOG_LEN slots); returns how many.
 inline uint16_t unroll(const Log& l, int16_t* out) {
     const uint16_t start = (uint16_t)((l.head + LOG_LEN - l.count) % LOG_LEN);

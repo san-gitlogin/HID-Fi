@@ -383,6 +383,24 @@ doing nothing, and nothing on the board could say how hot. The owner: "How would
 read temperatures?" and "which you shall not assume that the board is under shell
 always, as a human I would remove it or put it back".
 
+*Revised 2026-11-22, the same day:* **watching must never cost latency.** The owner:
+"The watcher at any cost should not degrade the performance of the board and the
+latency... I hope we have automated risk management too." So:
+
+1. The sensor is read by its own task on core 0 at the lowest working priority, never
+   by `loop()` (core 1, the input path); `loop()` and the handlers copy its results
+   under a spinlock held for the copy alone.
+2. Every read is timed. Three reads in a row over 1.5 ms switch the sensor off until
+   the next start (`temp_off: "slow"`); a read paused now and then by WiFi does not.
+   `temp_us_max` reports the slowest.
+3. `tools/thermal_watch.py` reads `/api/status` over HTTP only, never a WebSocket,
+   never faster than every 10 s, a minute or more while a dashboard is open or an
+   update runs, and doubles its interval (to 5 min) while the board answers slowly.
+4. On 09F7C8, A/B against v4.3.1 (no sensor code) on the same board, twice each: the
+   serial round trip 18.0 ms median both; the dashboard's ping 7.8-8.8 ms against
+   8.5-9.0 ms; under a 60 Hz pointer stream 10.6-11.6 ms against 10.1-10.6 ms. With a
+   watcher polling five times harder than the tool may: median 7.73 against 8.18 quiet.
+
 What the numbers mean for the shell (vents in the base, the access point's default)
 waits for the measurements in docs/ROADMAP.md; this entry only makes them possible.
 
@@ -392,5 +410,11 @@ waits for the measurements in docs/ROADMAP.md; this entry only makes them possib
 - `tests/unit/test_thermal.py::test_the_firmware_feeds_the_sensor_into_this_header`
 - `tests/unit/test_thermal_watch.py::test_putting_it_in_a_shell_is_found_without_anyone_saying_so`
 - `tests/unit/test_thermal_watch.py::test_the_radio_waking_is_not_blamed_on_the_shell`
+- `tests/unit/test_thermal.py::test_three_slow_reads_in_a_row_switch_the_sensor_off_for_good`
+- `tests/unit/test_thermal.py::test_a_read_paused_now_and_then_is_not_a_fault`
+- `tests/unit/test_thermal_watch.py::test_the_watcher_backs_off_whenever_the_board_has_better_things_to_do`
+- `tests/unit/test_thermal_watch.py::test_the_watcher_never_opens_a_websocket_or_sends_input`
+- `tests/board/test_thermal_hw.py::test_a_watcher_does_not_slow_the_dashboard`
+- `tests/board/test_thermal_hw.py::test_the_sensors_reads_stay_inside_the_guards_budget`
 - `tests/ui/bdd/features/settings.feature: The device card says how hot the chip runs, and its peak since start`
 - `tests/ui/bdd/features/settings.feature: The radio only really sleeps with the access point off, and the card says which`

@@ -335,6 +335,7 @@ packages above, plug in the board, run `sudo -E python tests/run.py --e2e`.
 | Latency and throughput | | | serial | page timestamps | page timestamps | kernel timestamps | |
 | Chip temperature: readings, peak, four-hour log, gaps, failed sensor | thermal.h on the host + 13 planted bugs (test_thermal.py) | device card, power card | `temp_log` against the model (test_sim_contract.py) | | | | |
 | Heat over hours, shell on or off found by itself | tools/thermal_watch.py on synthetic boards (test_thermal_watch.py) | | `tools/thermal_watch.py` on a real board | | | | |
+| Watching costs no latency: own task, timed reads, the guard, the watcher's back-off | guard + back-off rules, planted bugs | | test_thermal_hw.py: dashboard ping quiet vs a watcher 5x harder than allowed (`tests/support/latency_probe.py`) | | | | |
 | HID-Fi Core print files: every gap measured on the meshes, closed licensed solids, zips | static: test_shell_print.py | | | | | | |
 
 Not automated, and why: absolute-pointer and gamepad **delivery** (switching

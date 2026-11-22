@@ -143,19 +143,50 @@ def test_a_hot_chip_is_read_in_the_high_band_and_a_cool_one_comes_back(bench, ba
     assert ask(bench, [f"band {band} {deci}"]) == [str(want)]
 
 
+def test_fast_reads_keep_the_sensor_on_and_the_worst_is_kept(bench):
+    out = ask(bench, ["tick 40", "tick 1500", "tick 900", "tick 35"])
+    assert out == ["1 0 40", "1 0 1500", "1 0 1500", "1 0 1500"], "the budget itself is not a strike"
+
+
+def test_a_read_paused_now_and_then_is_not_a_fault(bench):
+    """The task can be paused by WiFi mid-read: sporadic slow reads never switch it off."""
+    out = ask(bench, ["tick 2000", "tick 40", "tick 1600", "tick 2400", "tick 40"] * 5)
+    assert all(o.split()[0] == "1" for o in out)
+    assert out[-1].split() == ["1", "0", "2400"]
+
+
+def test_three_slow_reads_in_a_row_switch_the_sensor_off_for_good(bench):
+    out = ask(bench, ["tick 40", "tick 2000", "tick 1600", "tick 5000", "tick 40", "tick 40"])
+    assert [o.split()[0] for o in out] == ["1", "1", "1", "0", "0", "0"], "off stays off"
+    assert out[-1].split()[2] == "5000"
+
+
 def test_the_firmware_feeds_the_sensor_into_this_header():
-    """The glue in hid_fi.ino: the IDF driver read on a timer, never on a hot path, and the
-    fields the dashboard and tools read."""
+    """The glue in hid_fi.ino: the IDF driver read by its own task on core 0, never from
+    loop() (core 1, the input path), timed and guarded, and copied out under a lock."""
     ino = firmware.ino_text()
     assert '#include "thermal.h"' in ino and '#include "driver/temperature_sensor.h"' in ino
     assert "temperature_sensor_install(" in ino and "temperature_sensor_get_celsius(" in ino
-    assert re.search(r"thermal::reading\(", ino) and "thermalTick();" in ino
-    body = ino[ino.index("void thermalTick()"):]
-    body = body[:body.index("\n}\n")]
-    assert "thermal::SAMPLE_MS" in body, "the sensor is read on its own timer, not every pass of loop()"
-    assert "thermal::nextBand(" in body and "TEMPERATURE_SENSOR_CONFIG_DEFAULT(50, 125)" in ino, \
+    task = ino[ino.index("static void thermalTask(void*)"):]
+    task = task[:task.index("\n}\n")]
+    assert "thermal::reading(" in task and "vTaskDelay(pdMS_TO_TICKS(thermal::SAMPLE_MS))" in task
+    assert "thermal::guardTick(thermalGuard, us)" in task and "micros() - t0" in task, \
+        "every read is timed, and the guard can stop it for good (no latency at any cost)"
+    assert "thermal::nextBand(" in task and "TEMPERATURE_SENSOR_CONFIG_DEFAULT(50, 125)" in ino, \
         "a hot chip must be read in the high band (thermal::nextBand)"
-    for f in ('doc["temp_c"]', 'doc["temp_peak_c"]'):
+    assert 'xTaskCreatePinnedToCore(thermalTask, "thermal",' in ino and ", 1, nullptr, 0);" in ino, \
+        "its own task, lowest working priority, on core 0 - away from loop() on core 1"
+    loop = ino[ino.index("void loop() {"):]
+    loop = loop[:loop.index("\n}\n")]
+    assert "temperature_sensor" not in loop and "thermal" not in loop, "loop() - the input path - never reads the sensor"
+    # whatever reads the task's state copies it under the lock, briefly
+    for fn in ("static void thermalSnapshot(", "void handleTempLog() {"):
+        body = ino[ino.index(fn):]
+        body = body[:body.index("\n}\n")]
+        assert "portENTER_CRITICAL(&thermalMux)" in body and "portEXIT_CRITICAL(&thermalMux)" in body
+        crit = body[body.index("portENTER_CRITICAL"):body.index("portEXIT_CRITICAL")]
+        assert "sendJson" not in crit and "temperature_sensor" not in crit, "nothing slow inside the lock"
+    for f in ('doc["temp_c"]', 'doc["temp_peak_c"]', 'doc["temp_us_max"]', 'doc["temp_off"]'):
         assert f in ino, f"status must carry {f}"
     assert 'strcmp(cmd, "temp_log")' in ino
 
@@ -176,6 +207,7 @@ def test_every_planted_bug_is_caught(tmp_path):
         [r(45.0, 0), r(46.0, 10 * PERIOD + 5), r(46.0, 11 * PERIOD), "log"],
         [r(45.0, 0), r(46.0, (LOG_LEN * 3) * PERIOD), "log"],
     ]
+    scenarios.append([f"tick {u}" for u in (40, 1500, 1501, 40, 1600, 1700, 40, 1600, 1700, 9000, 40)])
     scenarios.append([f"band {b} {d}" for b, d in [(0, 749), (0, 750), (1, 551), (1, 550), (0, -32768), (1, -32768)]])
     script = [line for sc in scenarios for line in [*sc, "reset"]]
     want = ask(build(LOGIC), script)

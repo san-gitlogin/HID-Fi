@@ -16,6 +16,11 @@
     {"name": "never moves to the high band", "find": "if (cur == BAND_LOW && deci >= BAND_UP_DECI) return BAND_HIGH;", "replace": ""},
     {"name": "never comes back down", "find": "if (cur == BAND_HIGH && deci <= BAND_DOWN_DECI) return BAND_LOW;", "replace": ""},
     {"name": "a missing reading drops to the low band", "find": "    if (deci == NONE) return cur;\n", "replace": "    if (deci == NONE) return BAND_LOW;\n"},
+    {"name": "the latency budget never strikes", "find": "    else if (g.strikes < 255) g.strikes++;", "replace": ""},
+    {"name": "the budget itself counts as slow", "find": "if (us <= TICK_BUDGET_US) g.strikes = 0;", "replace": "if (us < TICK_BUDGET_US) g.strikes = 0;"},
+    {"name": "a fast read does not clear the strikes", "find": "    if (us <= TICK_BUDGET_US) g.strikes = 0;\n    else if", "replace": "    if"},
+    {"name": "a tripped guard never switches off", "find": "if (g.strikes >= STRIKES) g.off = true;", "replace": ""},
+    {"name": "the worst tick not kept", "find": "if (us > g.worstUs) g.worstUs = us;", "replace": "g.worstUs = us;"},
     {"name": "failures not counted", "find": "        l.errors++;\n", "replace": ""}
   ]
 }

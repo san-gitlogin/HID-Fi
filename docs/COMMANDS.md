@@ -700,6 +700,8 @@ the same text back - a round-trip check for a transport.
   "heap_low": false,
   "temp_c": 47.5,
   "temp_peak_c": 49.2,
+  "temp_us_max": 41,
+  "temp_off": "",
   "hid_ready": true,
   "usb_mounted": true,
   "usb_suspended": false,
@@ -771,6 +773,15 @@ every 2 s; `temp_peak_c` is the hottest reading since the board started. Either 
 It is the die, not the air: a chip at work runs warmer than the air round it, so
 use it to compare (in a shell or out, idle or busy) and to watch a trend. The
 module's own limit is 65 °C of surrounding air (docs/HARDWARE.md, "Heat").
+
+Reading it must never cost the input path anything: the sensor is read by its own
+low-priority task on the other core, never by the loop that carries input. Each read
+is timed: `temp_us_max` is the slowest since start, in microseconds (a few hundred at
+most, most of it the task waiting for WiFi). A read slower than 1.5 ms is a strike, a
+faster one clears them, and three in a row switch the sensor off until the next
+start, `temp_c` becomes `null` and `temp_off` says `"slow"` (`"no_sensor"` if it never
+started; `""` while it works). `tests/board/test_thermal_hw.py` holds a real board to
+this, and measures the dashboard's ping with and without a watcher polling.
 
 `{"cmd":"temp_log"}` returns the last four hours, one point a minute (the mean of
 that minute's readings), oldest first:

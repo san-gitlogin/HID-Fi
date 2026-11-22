@@ -246,7 +246,7 @@ class BoardSim:
         online = self.sta["phase"] == "online"
         return {
             "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up, "reset_reason": "power_on",
-            "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "temp_c": self.temp_c, "temp_peak_c": self.temp_peak_c, "total_psram": 8388608,
+            "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "temp_c": self.temp_c, "temp_peak_c": self.temp_peak_c, "temp_us_max": 41, "temp_off": "", "total_psram": 8388608,
             "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": self.usb_mounted,
             "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
             "ap_auto_off": self.ap_auto_off, "ap_running": self.ap_running,

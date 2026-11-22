@@ -966,17 +966,26 @@ static void broadcastJson(const JsonDocument& doc);
 #include "ota.h"
 
 // ==================== CHIP TEMPERATURE ====================
-// The ESP32-S3's own die sensor, read every thermal::SAMPLE_MS from loop() (a register
-// read, no waiting) and kept by thermal.h: status shows now and the peak since start,
-// temp_log the last four hours a minute at a time. It measures the chip, not the air
-// (thermal.h says why that matters). It starts in the driver's -10..80 °C band and
-// moves to 50..125 °C when the chip nears the top (thermal::nextBand), so a hot chip
-// is never read at a saturated band edge.
+// The ESP32-S3's own die sensor, kept by thermal.h: status shows now and the peak
+// since start, temp_log the last four hours a minute at a time. It measures the chip,
+// not the air (thermal.h says why that matters).
+//
+// Watching it must cost the input path nothing (DECISIONS.md D-13), so it is read by
+// its own task on core 0 at the lowest working priority, never from loop() (core 1,
+// where the pointer stream and the dashboard live). loop() and the handlers only copy
+// what the task left, under a spinlock held for that copy alone. Every read is timed;
+// thermal::guardTick switches the sensor off for good if reads turn slow. The driver
+// starts in its -10..80 °C band and moves to 50..125 °C near the top (thermal::nextBand)
+// so a hot chip is never read at a saturated band edge. Only this task touches the
+// driver (it is not thread safe, per ESP-IDF).
 temperature_sensor_handle_t tempSensor = nullptr;
-thermal::Log thermalLog;
-thermal::Band thermalBand = thermal::BAND_LOW;
+thermal::Log thermalLog;                           // written by the task, under thermalMux
+thermal::Guard thermalGuard;                       // ditto
+thermal::Band thermalBand = thermal::BAND_LOW;     // the task's own
+portMUX_TYPE thermalMux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool thermalSensorUp = false;
 
-void thermalBegin() {
+static void thermalSensorStart() {
     if (tempSensor) {                              // a band change: start the driver again
         temperature_sensor_disable(tempSensor);
         temperature_sensor_uninstall(tempSensor);
@@ -992,28 +1001,59 @@ void thermalBegin() {
     }
 }
 
-void thermalTick() {
-    static uint32_t last = 0;
-    if (last && millis() - last < thermal::SAMPLE_MS) return;
-    last = millis();
-    float c = NAN;
-    const bool ok = tempSensor && temperature_sensor_get_celsius(tempSensor, &c) == ESP_OK;
-    thermal::reading(thermalLog, c, ok, millis() / 1000);
-    const thermal::Band b = thermal::nextBand(thermalBand, thermalLog.nowDeci);
-    if (b != thermalBand) { thermalBand = b; thermalBegin(); }
+static void thermalTask(void*) {
+    thermalSensorStart();
+    thermalSensorUp = tempSensor != nullptr;
+    for (;;) {
+        const uint32_t t0 = micros();
+        float c = NAN;
+        const bool ok = tempSensor && temperature_sensor_get_celsius(tempSensor, &c) == ESP_OK;
+        const uint32_t us = micros() - t0;
+        int16_t now;
+        bool on;
+        portENTER_CRITICAL(&thermalMux);
+        thermal::reading(thermalLog, c, ok, millis() / 1000);
+        on = thermal::guardTick(thermalGuard, us);
+        if (!on) thermalLog.nowDeci = thermal::NONE;
+        now = thermalLog.nowDeci;
+        portEXIT_CRITICAL(&thermalMux);
+        if (!on) {                                 // too slow: never read again until the next start
+            if (tempSensor) { temperature_sensor_disable(tempSensor); temperature_sensor_uninstall(tempSensor); tempSensor = nullptr; }
+            thermalSensorUp = false;
+            vTaskDelete(nullptr);
+        }
+        const thermal::Band b = thermal::nextBand(thermalBand, now);
+        if (b != thermalBand) { thermalBand = b; thermalSensorStart(); thermalSensorUp = tempSensor != nullptr; }
+        vTaskDelay(pdMS_TO_TICKS(thermal::SAMPLE_MS));
+    }
+}
+
+void thermalBegin() {
+    xTaskCreatePinnedToCore(thermalTask, "thermal", 4096, nullptr, 1, nullptr, 0);   // the driver logs, which needs stack
+}
+
+// What the task left, copied in one short critical section.
+static void thermalSnapshot(int16_t& now, int16_t& peak, uint32_t& worstUs, bool& off, uint32_t& errors) {
+    portENTER_CRITICAL(&thermalMux);
+    now = thermalLog.nowDeci; peak = thermalLog.peakDeci; worstUs = thermalGuard.worstUs;
+    off = thermalGuard.off; errors = thermalLog.errors;
+    portEXIT_CRITICAL(&thermalMux);
 }
 
 void handleTempLog() {
     static int16_t pts[thermal::LOG_LEN];
+    portENTER_CRITICAL(&thermalMux);               // 480 bytes copied, nothing else
     const uint16_t n = thermal::unroll(thermalLog, pts);
+    const uint32_t last = thermal::lastLoggedAt(thermalLog), errors = thermalLog.errors;
+    portEXIT_CRITICAL(&thermalMux);
     DynamicJsonDocument doc(512 + 8 * thermal::LOG_LEN);
     doc["status"] = "ok";
     doc["reply"] = "temp_log";
     doc["period_s"] = thermal::LOG_PERIOD_S;
     doc["uptime_sec"] = millis() / 1000;
-    doc["last_s"] = thermal::lastLoggedAt(thermalLog);
-    doc["errors"] = thermalLog.errors;
-    doc["sensor"] = tempSensor != nullptr;
+    doc["last_s"] = last;
+    doc["errors"] = errors;
+    doc["sensor"] = (bool)thermalSensorUp;
     JsonArray t = doc.createNestedArray("tenths");   // oldest first, one per minute; null = no reading that minute
     for (uint16_t i = 0; i < n; i++) {
         if (pts[i] == thermal::NONE) t.add(nullptr);
@@ -1469,7 +1509,6 @@ void loop() {
     otaTick();                     // a new firmware's self-test, once a second, never blocks
     otaService();                  // update checks, a ready update applied when idle - never blocks
     otaDownloadModeTick();         // a cable update over native USB asked for by the Companion
-    thermalTick();                 // the chip's temperature, every 2 s, never blocks
     SEC_END(4)
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds
@@ -4036,11 +4075,17 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["free_heap"] = ESP.getFreeHeap();
     doc["heap_floor"] = ESP.getMinFreeHeap();
     doc["heap_low"] = (ESP.getMinFreeHeap() < HEAP_WARN);
-    // The chip's own temperature (thermal.h): null when the sensor gives nothing.
-    if (thermalLog.nowDeci == thermal::NONE) doc["temp_c"] = nullptr;
-    else doc["temp_c"] = thermalLog.nowDeci / 10.0;
-    if (thermalLog.peakDeci == thermal::NONE) doc["temp_peak_c"] = nullptr;
-    else doc["temp_peak_c"] = thermalLog.peakDeci / 10.0;
+    // The chip's own temperature (thermal.h), as its task left it: null when the sensor gives nothing.
+    {
+        int16_t tn, tp; uint32_t tus, terr; bool toff;
+        thermalSnapshot(tn, tp, tus, toff, terr);
+        if (tn == thermal::NONE) doc["temp_c"] = nullptr;
+        else doc["temp_c"] = tn / 10.0;
+        if (tp == thermal::NONE) doc["temp_peak_c"] = nullptr;
+        else doc["temp_peak_c"] = tp / 10.0;
+        doc["temp_us_max"] = tus;                  // the slowest read since start, in microseconds
+        doc["temp_off"] = toff ? "slow" : (thermalSensorUp ? "" : "no_sensor");
+    }
     doc["total_psram"] = ESP.getPsramSize();
     doc["free_psram"] = ESP.getFreePsram();
     doc["flash_size"] = ESP.getFlashChipSize();

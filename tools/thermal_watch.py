@@ -24,6 +24,13 @@ itself. A shift of the steady temperature that nothing the board reports explain
 is called "likely put in a shell or covered" (up) or "likely taken out or uncovered"
 (down) - always a guess, and labelled as one.
 
+It must never cost the board latency (DECISIONS.md D-13). So it only ever reads
+`/api/status` over plain HTTP - never a WebSocket, which would hold the radio awake and
+take one of the board's eight dashboard slots - no faster than every 10 s, and it backs
+off by itself: to a minute or more while a dashboard is open or an update is running,
+and doubling (up to 5 minutes) while the board answers slowly. `next_interval()` is the
+whole rule, and tests/unit/test_thermal_watch.py holds it.
+
 Exit codes: 0 done | 2 usage | 3 the board could not be found.
 """
 import argparse
@@ -47,6 +54,21 @@ SHIFT_C = 2.5            # a change of the steady temperature this big is an eve
 SMOOTH_S = 300           # ...measured on 5-minute means...
 LOOKBACK_S = 900         # ...against the mean 15 minutes earlier
 EXPLAIN_S = (1200, 300)  # a load change from 20 min before to 5 min after a shift explains it
+MIN_EVERY_S = 10.0       # never ask the board more often than this
+BUSY_EVERY_S = 60.0      # while someone is using it (a dashboard open) or an update runs
+SLOW_MS = 500.0          # a status answer slower than this means the board is busy: back off
+MAX_EVERY_S = 300.0
+
+
+def next_interval(every, status, answer_ms, current):
+    """Seconds until the next status read: the asked-for pace, slowed by anything that
+    says the board has better things to do. Never below MIN_EVERY_S."""
+    want = max(every, MIN_EVERY_S)
+    if status is not None and ((status.get("ws_clients") or 0) > 0 or status.get("ota_step", "idle") not in ("idle", "", None)):
+        want = max(want, BUSY_EVERY_S)
+    if answer_ms is None or answer_ms > SLOW_MS:
+        want = max(want, min(MAX_EVERY_S, max(current, want) * 2))
+    return min(want, MAX_EVERY_S) if want > every else want
 
 
 # ---- what a sample says the board is doing -------------------------------------------------------
@@ -226,7 +248,7 @@ def watch(hours, every, note, out_dir):
     mac = st.get("mac", "board").replace(":", "")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{mac}-{datetime.datetime.now():%Y%m%d-%H%M}.jsonl"
-    state, last_ok, last_up, shown = {}, None, None, set()
+    state, last_ok, last_up, shown, pace = {}, None, None, set(), every
     started = time.time()
     end = started + hours * 3600
     print(f"Watching {board_name(mac)} every {every} s for {hours} h -> {path}")
@@ -241,12 +263,14 @@ def watch(hours, every, note, out_dir):
             t = time.time()
             try:
                 st = get_status(host)
+                answer_ms = (time.time() - t) * 1000
             except (OSError, ValueError, urllib.error.URLError) as e:
                 write({"t": round(t, 1), "unreachable": type(e).__name__})
                 print(f"{datetime.datetime.now():%H:%M:%S}  out of reach ({type(e).__name__}); looking again")
                 new = locate()
                 host = new or host
-                time.sleep(min(every, 30))
+                pace = next_interval(every, None, None, pace)
+                time.sleep(pace)
                 continue
             gap = last_ok is None or t - last_ok > 3 * every
             restarted = last_up is not None and st.get("uptime_sec", 0) < last_up
@@ -270,7 +294,8 @@ def watch(hours, every, note, out_dir):
                 if key not in shown and e["t"] > started - LOOKBACK_S:
                     shown.add(key)
                     print(f"          {e['kind']}: {e['what']}")
-            time.sleep(max(1.0, every - (time.time() - t)))
+            pace = next_interval(every, st, answer_ms, pace)
+            time.sleep(max(1.0, pace - (time.time() - t)))
     return 0
 
 
@@ -318,8 +343,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.action == "report":
         return report(a.files)
-    if a.hours <= 0 or a.every < 2:
-        print("--hours must be above 0 and --every at least 2 s (the board reads its sensor every 2 s)", file=sys.stderr)
+    if a.hours <= 0 or a.every < MIN_EVERY_S:
+        print(f"--hours must be above 0 and --every at least {MIN_EVERY_S:.0f} s (watching must never cost the board latency)", file=sys.stderr)
         return 2
     out = Path(os.environ.get("HIDFI_THERMAL_DIR", Path.home() / "HID-Fi-work" / "thermal"))
     try:

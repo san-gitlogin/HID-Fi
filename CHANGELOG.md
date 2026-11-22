@@ -16,6 +16,11 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   the last four hours, one point a minute, gaps kept as gaps. Settings > Device
   shows it. It is the die, not the air, for comparing and for trends
   (docs/HARDWARE.md, "Heat"). DECISIONS.md D-13.
+- **Watching costs no latency.** The sensor has its own low-priority task on the
+  other core, never the input loop; every read is timed and three slow reads in a
+  row switch it off for good (`temp_us_max`, `temp_off`). Measured against v4.3.1
+  on the same board: serial, dashboard ping and ping under a pointer stream all
+  unchanged.
 
 ### Dashboard
 
@@ -30,7 +35,9 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   the keyboard, reads the board's own log for the time it was not watching, and
   reports by itself when the board was put in its case or taken out, never blaming
   the case for the board's own load (a restart, the radio waking, a dashboard left
-  open). No network names or anything personal in its logs.
+  open). No network names or anything personal in its logs. HTTP only, never a
+  WebSocket, every 10 s at the fastest, slower while the board is in use or
+  answering slowly.
 
 ### HID-Fi Core case (rev C)
 
