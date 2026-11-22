@@ -96,6 +96,40 @@ This also matters for waking a sleeping machine: see
 
 ---
 
+## Heat
+
+The board warms up even doing nothing, and more inside a case. Where it comes from:
+
+- **The radio, all the time, while the access point is on.** Espressif: modem sleep
+  "works in station-only mode" (ESP-IDF stable, ESP32-S3, "Wi-Fi Power-saving Mode",
+  read 2026-11-22). The board runs its own access point beside the home network, so
+  its radio stays awake whatever the power mode says; the dashboard's power card
+  says so. Switching the access point off automatically (Settings) lets it sleep.
+- **The 5 V to 3.3 V regulator** turns the difference into heat: about a third of
+  what the board draws.
+
+How hot: `status` reports `temp_c` and `temp_peak_c`, the dashboard shows them under
+Settings > Device, and `temp_log` keeps the last four hours (docs/COMMANDS.md). It is
+the chip's own die, which runs warmer than the air around it. The module's rating
+is 65 °C of surrounding air: Espressif's ESP32-S3-WROOM-1 datasheet (Table 1-1, read
+2026-11-22) rates the R8 modules, ours included, at -40 to 65 °C, and 85 °C if the
+octal PSRAM's ECC is switched on (which costs 1/16 of the PSRAM). PETG softens near
+75-80 °C, PLA near 55 °C.
+
+To watch it for hours, with no one at the keyboard:
+
+```bash
+python3 tools/thermal_watch.py --hours 8        # logs to ~/HID-Fi-work/thermal
+python3 tools/thermal_watch.py report           # stretches, peaks, and when the shell went on or off
+```
+
+It finds by itself when the board was put in its case or taken out (a shift of the
+steady temperature that nothing the board reports explains) and names the board's
+own causes instead (a restart, the radio waking, a dashboard left open). The plan for
+the case, once measured, is docs/ROADMAP.md item 2.
+
+---
+
 ## The RGB LED needs solder
 
 The board has a WS2812 RGB LED on GPIO48 that **is not connected out of the

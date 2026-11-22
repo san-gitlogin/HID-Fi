@@ -5432,6 +5432,9 @@ function applyStatus(d){
       row('AP clients',d.ap_clients)+row('Socket clients',d.ws_clients);
     $('devInfo').innerHTML=
       row('Firmware',d.firmware)+row('Uptime',upt(d.uptime_sec))+
+      // the die, not the air: for comparing and for a trend (docs/COMMANDS.md, temp_c)
+      (d.temp_c===undefined?'':row('Chip temperature',d.temp_c==null?'not available':
+        d.temp_c.toFixed(1)+' \u00b0C'+(d.temp_peak_c!=null?'  (peak '+d.temp_peak_c.toFixed(1)+' \u00b0C since start)':'')))+
       row('Free heap',bytes(d.free_heap)+(d.heap_floor?'  (lowest '+bytes(d.heap_floor)+')':''))+
       row('PSRAM',bytes(d.free_psram)+' / '+bytes(d.total_psram))+
       row('HID',d.hid_ready?'ready':'not ready')+
@@ -5444,7 +5447,9 @@ function applyStatus(d){
 // which is the honest answer to "why does it feel slow right now".
 function paintPower(d){
   if(d.power_mode||d.mode)$('pwrState').textContent=({performance:'Performance',balanced:'Balanced',saver:'Saver'})[d.power_mode||d.mode]||'Balanced';
-  const bits=[d.radio_awake===false?'Radio sleeping':'Radio awake'];
+  // Espressif: modem sleep works in station-only mode, so while the access point is
+  // on the radio stays awake whatever the mode asks (docs/HARDWARE.md, "Heat").
+  const bits=[d.radio_awake===false?(d.ap_running===false?'Radio sleeping':'Radio stays awake: the access point keeps it on'):'Radio awake'];
   if(d.ap_running===false)bits.push('access point off, hold BOOT to restore');
   $('pwrSub').textContent=bits.join(' \u00b7 ');
   document.querySelectorAll('[data-pwr]').forEach(b=>b.classList.toggle('on',b.dataset.pwr===(d.power_mode||d.mode)));

@@ -23,6 +23,21 @@ def on_home(ctx):
     ctx["sim"].sta.update(phase="online", ssid="HomeNet", ip="192.168.1.77")
 
 
+@given(parsers.parse("the board's chip is at {now:f} °C and has peaked at {peak:f} °C"))
+def chip_temp(ctx, now, peak):
+    ctx["sim"].temp_c, ctx["sim"].temp_peak_c = now, peak
+
+
+@given("the board's temperature sensor gives nothing")
+def no_temp(ctx):
+    ctx["sim"].temp_c = ctx["sim"].temp_peak_c = None
+
+
+@given("the board's access point is off to save power")
+def ap_off(ctx):
+    ctx["sim"].ap_running = False
+
+
 @given("nobody is on the board's access point")
 def no_clients(ctx):
     ctx["sim"].ap_clients = []

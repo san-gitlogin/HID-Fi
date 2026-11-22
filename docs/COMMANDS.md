@@ -698,6 +698,8 @@ the same text back - a round-trip check for a transport.
   "free_heap": 200932,
   "heap_floor": 188104,
   "heap_low": false,
+  "temp_c": 47.5,
+  "temp_peak_c": 49.2,
   "hid_ready": true,
   "usb_mounted": true,
   "usb_suspended": false,
@@ -762,6 +764,29 @@ port, a long or thin cable, or a battery running down.
 (opened by its name, or able to reach it - DECISIONS.md D-10); a page routed in
 from another network is not one of them. The paired computer is reported apart
 (`comp_online`, `comp_routed`).
+
+`temp_c` is the chip's own temperature in °C, from the ESP32-S3's die sensor, read
+every 2 s; `temp_peak_c` is the hottest reading since the board started. Either is
+`null` when the sensor gives nothing (three failed reads in a row clear `temp_c`).
+It is the die, not the air: a chip at work runs warmer than the air round it, so
+use it to compare (in a shell or out, idle or busy) and to watch a trend. The
+module's own limit is 65 °C of surrounding air (docs/HARDWARE.md, "Heat").
+
+`{"cmd":"temp_log"}` returns the last four hours, one point a minute (the mean of
+that minute's readings), oldest first:
+
+```json
+{"status": "ok", "reply": "temp_log", "period_s": 60, "uptime_sec": 14460,
+ "last_s": 14460, "errors": 0, "sensor": true, "tenths": [462, 468, null, 475]}
+```
+
+`tenths` are tenths of a degree (`475` is 47.5 °C); `null` is a minute with no
+reading. The newest point is the minute that ended at `last_s` (seconds since the
+board started), the one before it a minute earlier, and so on - so a tool that was
+not watching can still see what happened, as long as the board was not restarted.
+`errors` counts failed reads since start and `sensor` says whether the sensor
+started at all. Read-only, behind the PIN like every command except the few in
+"The exposure gate"; `tools/thermal_watch.py` reads it.
 
 `heap_floor` is the lowest free heap since boot. Current free heap recovers, so it
 hides a leak that already happened; the floor does not.

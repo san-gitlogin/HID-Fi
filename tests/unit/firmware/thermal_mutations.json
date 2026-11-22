@@ -1,0 +1,21 @@
+{
+  "_about": "Deliberate bugs in hid_fi/thermal.h. tests/unit/test_thermal.py::test_every_planted_bug_is_caught applies each and requires the bench's answers to change. A mutation that survives means the tests have a blind spot. Each 'find' must match the current source exactly once.",
+  "mutations": [
+    {"name": "readings cut to tenths instead of rounded", "find": "inline int16_t toDeci(float c) { return (int16_t)lroundf(c * 10.0f); }", "replace": "inline int16_t toDeci(float c) { return (int16_t)(c * 10.0f); }"},
+    {"name": "the peak follows the latest reading", "find": "if (l.peakDeci == NONE || d > l.peakDeci) l.peakDeci = d;", "replace": "l.peakDeci = d;"},
+    {"name": "a failed minute logs the last value", "find": "const int16_t first = l.accN ? (int16_t)lroundf((float)l.accSum / l.accN) : NONE;", "replace": "const int16_t first = l.accN ? (int16_t)lroundf((float)l.accSum / l.accN) : l.nowDeci;"},
+    {"name": "a dead sensor keeps showing its last reading", "find": "if (l.failRun >= STALE_AFTER) l.nowDeci = NONE;", "replace": ""},
+    {"name": "impossible values accepted", "find": "inline bool plausible(float c) { return !isnan(c) && c >= MIN_C && c <= MAX_C; }", "replace": "inline bool plausible(float c) { return true; }"},
+    {"name": "the driver's failure ignored", "find": "    if (!ok || !plausible(celsius)) {", "replace": "    if (!plausible(celsius)) {"},
+    {"name": "the log count runs past the ring", "find": "if (l.count < LOG_LEN) l.count++;", "replace": "l.count++;"},
+    {"name": "the log read from slot 0, not the oldest", "find": "const uint16_t start = (uint16_t)((l.head + LOG_LEN - l.count) % LOG_LEN);", "replace": "const uint16_t start = 0;"},
+    {"name": "a minute's readings carried into the next", "find": "    l.accSum = 0;\n    l.accN = 0;\n    l.periodStartS += n * LOG_PERIOD_S;", "replace": "    l.periodStartS += n * LOG_PERIOD_S;"},
+    {"name": "a long stall keeps the minute before it", "find": "for (uint32_t i = n - keep; i < n; i++)", "replace": "for (uint32_t i = 0; i < keep; i++)"},
+    {"name": "only one minute closed per reading", "find": "const uint32_t n = (nowS - l.periodStartS) / LOG_PERIOD_S;", "replace": "const uint32_t n = 1;"},
+    {"name": "a good read does not end a run of failures", "find": "    l.failRun = 0;\n    const int16_t d = toDeci(celsius);", "replace": "    const int16_t d = toDeci(celsius);"},
+    {"name": "never moves to the high band", "find": "if (cur == BAND_LOW && deci >= BAND_UP_DECI) return BAND_HIGH;", "replace": ""},
+    {"name": "never comes back down", "find": "if (cur == BAND_HIGH && deci <= BAND_DOWN_DECI) return BAND_LOW;", "replace": ""},
+    {"name": "a missing reading drops to the low band", "find": "    if (deci == NONE) return cur;\n", "replace": "    if (deci == NONE) return BAND_LOW;\n"},
+    {"name": "failures not counted", "find": "        l.errors++;\n", "replace": ""}
+  ]
+}

@@ -350,7 +350,16 @@ Feature: The Settings tab
     And I tap the power mode "saver"
     Then the board receives {"cmd": "power_mode", "mode": "saver"}
     And "#pwrState" reads "Saver"
-    And "#pwrSub" contains "Radio sleeping"
+    And "#pwrSub" contains "Radio stays awake: the access point keeps it on"
+
+  Scenario: The radio only really sleeps with the access point off, and the card says which
+    Given the board's access point is off to save power
+    And the dashboard is open
+    When I open the "Settings" tab
+    And I will answer "yes" to the next question
+    And I tap the power mode "saver"
+    Then "#pwrSub" contains "Radio sleeping"
+    And "#pwrSub" contains "access point off"
 
   Scenario: Switching the access point off automatically asks first, switching it back does not
     Given the dashboard is open
@@ -375,6 +384,21 @@ Feature: The Settings tab
     And "#devInfo" contains "PSRAM"
     And "#colVer" contains "v3.10"
     And "#netInfo" contains "192.168.4.1"
+
+  Scenario: The device card says how hot the chip runs, and its peak since start
+    Given the board's chip is at 61.3 °C and has peaked at 64.0 °C
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#devInfo" contains "Chip temperature"
+    And "#devInfo" contains "61.3 °C"
+    And "#devInfo" contains "peak 64.0 °C since start"
+
+  Scenario: The device card says so when the chip's sensor gives nothing
+    Given the board's temperature sensor gives nothing
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then "#devInfo" contains "Chip temperature"
+    And "#devInfo" contains "not available"
 
   Scenario: Connected clients
     Given the dashboard is open

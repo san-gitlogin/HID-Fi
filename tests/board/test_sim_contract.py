@@ -22,6 +22,7 @@ pytestmark = pytest.mark.board
 
 READ_ONLY = [
     {"cmd": "status"}, {"cmd": "ping"}, {"cmd": "wifi_status"}, {"cmd": "storage_info"}, {"cmd": "clients"},
+    {"cmd": "temp_log"},
     {"cmd": "macro_list"}, {"cmd": "vault_list"}, {"cmd": "pc_list"}, {"cmd": "ui_get"}, {"cmd": "echo", "data": "x"},
     {"cmd": "definitely_not_a_command"}, {"cmd": "media", "key": "nope"}, {"cmd": "mouse_abs", "x": 1, "y": 1},
     {"cmd": "gamepad", "button": 0, "pressed": True}, {"cmd": "macro_run", "slot": 32},

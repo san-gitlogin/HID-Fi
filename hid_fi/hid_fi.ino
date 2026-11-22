@@ -92,6 +92,8 @@
 
 // Dashboard markup lives in web_ui.h (defines WEB_INTERFACE[] in PROGMEM).
 #include "host_detect.h"
+#include "driver/temperature_sensor.h"
+#include "thermal.h"         // the chip's temperature and its four-hour log (host-tested: tests/unit/test_thermal.py)
 #include "web_ui.h"
 
 // Declared here, above everything, because arduino-cli hoists generated function
@@ -876,6 +878,7 @@ bool validUtf8(const char* s, size_t len);
 bool hasControlChars(const char* s, size_t len);
 void handleStorageInfo();
 void handleClients();
+void handleTempLog();
 
 // Mouse / wiggle / LED (Phase 3.2)
 void handleWiggle(const JsonDocument& inDoc);
@@ -961,6 +964,63 @@ uint8_t hidKeyFor(const char* name);
 // Updates: which slot runs, the self-test after an update, rollback (docs/OTA.md).
 static void broadcastJson(const JsonDocument& doc);
 #include "ota.h"
+
+// ==================== CHIP TEMPERATURE ====================
+// The ESP32-S3's own die sensor, read every thermal::SAMPLE_MS from loop() (a register
+// read, no waiting) and kept by thermal.h: status shows now and the peak since start,
+// temp_log the last four hours a minute at a time. It measures the chip, not the air
+// (thermal.h says why that matters). It starts in the driver's -10..80 °C band and
+// moves to 50..125 °C when the chip nears the top (thermal::nextBand), so a hot chip
+// is never read at a saturated band edge.
+temperature_sensor_handle_t tempSensor = nullptr;
+thermal::Log thermalLog;
+thermal::Band thermalBand = thermal::BAND_LOW;
+
+void thermalBegin() {
+    if (tempSensor) {                              // a band change: start the driver again
+        temperature_sensor_disable(tempSensor);
+        temperature_sensor_uninstall(tempSensor);
+        tempSensor = nullptr;
+    }
+    temperature_sensor_config_t low = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+    temperature_sensor_config_t high = TEMPERATURE_SENSOR_CONFIG_DEFAULT(50, 125);
+    temperature_sensor_config_t& cfg = thermalBand == thermal::BAND_HIGH ? high : low;
+    if (temperature_sensor_install(&cfg, &tempSensor) != ESP_OK) { tempSensor = nullptr; return; }
+    if (temperature_sensor_enable(tempSensor) != ESP_OK) {
+        temperature_sensor_uninstall(tempSensor);
+        tempSensor = nullptr;
+    }
+}
+
+void thermalTick() {
+    static uint32_t last = 0;
+    if (last && millis() - last < thermal::SAMPLE_MS) return;
+    last = millis();
+    float c = NAN;
+    const bool ok = tempSensor && temperature_sensor_get_celsius(tempSensor, &c) == ESP_OK;
+    thermal::reading(thermalLog, c, ok, millis() / 1000);
+    const thermal::Band b = thermal::nextBand(thermalBand, thermalLog.nowDeci);
+    if (b != thermalBand) { thermalBand = b; thermalBegin(); }
+}
+
+void handleTempLog() {
+    static int16_t pts[thermal::LOG_LEN];
+    const uint16_t n = thermal::unroll(thermalLog, pts);
+    DynamicJsonDocument doc(512 + 8 * thermal::LOG_LEN);
+    doc["status"] = "ok";
+    doc["reply"] = "temp_log";
+    doc["period_s"] = thermal::LOG_PERIOD_S;
+    doc["uptime_sec"] = millis() / 1000;
+    doc["last_s"] = thermal::lastLoggedAt(thermalLog);
+    doc["errors"] = thermalLog.errors;
+    doc["sensor"] = tempSensor != nullptr;
+    JsonArray t = doc.createNestedArray("tenths");   // oldest first, one per minute; null = no reading that minute
+    for (uint16_t i = 0; i < n; i++) {
+        if (pts[i] == thermal::NONE) t.add(nullptr);
+        else t.add(pts[i]);
+    }
+    sendJson(doc);
+}
 
 // ==================== RECOVERY MODE ====================
 // Why the board will not open recovery now, or nullptr: not while a restart would
@@ -1306,6 +1366,7 @@ void setup() {
     if (recoveryBoot) ledApply(40, 16, 0);
     
     // Initialize WiFi (auto-connect if credentials saved)
+    thermalBegin();
     setupWifi();
     otaStartWorker();   // update checks and installs run on core 0, never in loop()
     
@@ -1408,6 +1469,7 @@ void loop() {
     otaTick();                     // a new firmware's self-test, once a second, never blocks
     otaService();                  // update checks, a ready update applied when idle - never blocks
     otaDownloadModeTick();         // a cable update over native USB asked for by the Companion
+    thermalTick();                 // the chip's temperature, every 2 s, never blocks
     SEC_END(4)
 
     // BOOT button. A quick tap runs the HID test; holding it for two seconds
@@ -3013,6 +3075,9 @@ void processCommand(const String& line, CmdSource src) {
     else if (strcmp(cmd, "storage_info") == 0) {
         handleStorageInfo();
     }
+    else if (strcmp(cmd, "temp_log") == 0) {
+        handleTempLog();
+    }
     else if (strcmp(cmd, "clients") == 0) {
         handleClients();
     }
@@ -3971,6 +4036,11 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["free_heap"] = ESP.getFreeHeap();
     doc["heap_floor"] = ESP.getMinFreeHeap();
     doc["heap_low"] = (ESP.getMinFreeHeap() < HEAP_WARN);
+    // The chip's own temperature (thermal.h): null when the sensor gives nothing.
+    if (thermalLog.nowDeci == thermal::NONE) doc["temp_c"] = nullptr;
+    else doc["temp_c"] = thermalLog.nowDeci / 10.0;
+    if (thermalLog.peakDeci == thermal::NONE) doc["temp_peak_c"] = nullptr;
+    else doc["temp_peak_c"] = thermalLog.peakDeci / 10.0;
     doc["total_psram"] = ESP.getPsramSize();
     doc["free_psram"] = ESP.getFreePsram();
     doc["flash_size"] = ESP.getFlashChipSize();

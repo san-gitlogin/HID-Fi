@@ -156,6 +156,10 @@ class BoardSim:
         self.pc_state = "unknown"
         self.wiggle = None         # {"mode":..., "interval_ms":..., "since":...}
         self.verbose = False
+        self.ap_running = True
+        # The chip's temperature (hid_fi/thermal.h): now, the peak, and the minute log
+        # oldest first in tenths (None = a minute the sensor gave nothing).
+        self.temp_c, self.temp_peak_c, self.temp_log = 47.5, 49.2, [462, 468, None, 475]
         self.ap_clients = [{"ip": "192.168.4.2", "mac": "AA:BB:CC:00:11:22", "rssi": -40,
                             "quality": "excellent", "dashboard": True}]
         self.host_asleep_unarmed = False
@@ -242,10 +246,10 @@ class BoardSim:
         online = self.sta["phase"] == "online"
         return {
             "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up, "reset_reason": "power_on",
-            "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "total_psram": 8388608,
+            "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "temp_c": self.temp_c, "temp_peak_c": self.temp_peak_c, "total_psram": 8388608,
             "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": self.usb_mounted,
             "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
-            "ap_auto_off": self.ap_auto_off, "ap_running": True,
+            "ap_auto_off": self.ap_auto_off, "ap_running": self.ap_running,
             "ap_share": self.ap_share, "ap_share_active": self.ap_share and online, "lan_exposed": online and not self.pin,
             "sta_phase": self.sta["phase"], "sta_error": self.sta["error"], "sta_ip_mode": self.sta["ip_mode"],
             "sta_target": self.sta["ssid"], "cmd_count": self.cmd_count, "wifi_cmd_count": self.cmd_count,
@@ -1496,7 +1500,7 @@ class BoardSim:
                 self.power_mode = m
             if "ap_auto_off" in b:
                 self.ap_auto_off = bool(b["ap_auto_off"])
-            return OK("power_mode", mode=self.power_mode, ap_auto_off=self.ap_auto_off, ap_running=True,
+            return OK("power_mode", mode=self.power_mode, ap_auto_off=self.ap_auto_off, ap_running=self.ap_running,
                       radio_awake=self.power_mode != "saver", idle_after_ms=30000)
         if c == "set_host_os":
             os_ = str(b.get("os", "")).lower()
@@ -1549,6 +1553,10 @@ class BoardSim:
         if c == "set_verbose":
             self.verbose = bool(b.get("on"))
             return OK("verbose_set", verbose=self.verbose)
+        if c == "temp_log":
+            up = int(self.now() - self.t0)
+            return OK("temp_log", period_s=60, uptime_sec=up, last_s=up - up % 60, errors=0, sensor=self.temp_c is not None,
+                      tenths=list(self.temp_log))
         if c == "storage_info":
             return OK("storage_info",
                       nvs={"used_entries": 172, "free_entries": 458, "total_entries": 630, "namespaces": 7, "percent_used": 27},
