@@ -189,7 +189,7 @@ there.
 
 | What you see | What to do |
 |---|---|
-| *This computer is on X, the board is on Y: two networks* (a home with two routers or a separate extender network: the computer and the board each pick one) | Press **Bring the board to this computer's network**: the board moves to this computer's network (it asks first if someone is using it on its own). Or join this computer to Y. If it says the board has never joined this computer's network, add it once: dashboard, Settings, Home network |
+| *This computer is on X, the board is on Y: two networks* (a home whose extender runs a subnet of its own: the computer and the board each pick one) | Press **Bring the board to this computer's network**: the board moves to this computer's network (it asks first if someone is using it on its own). Or join this computer to Y. If it says the board has never joined this computer's network, add it once: dashboard, Settings, Home network |
 | *Not reachable from this computer. The board was last on Y* | This computer is probably on your home's other network: join it to Y, or add this computer's WiFi to the board as below |
 | *Not on this computer's WiFi* (a new place, or a WiFi the board has never joined) | The card shows the steps with the board's own WiFi name: on your phone join `ESP32-HID-XXXXXX`, open `http://192.168.4.1`, Settings, Home network, choose this computer's WiFi. The board remembers it; this computer finds it by itself |
 | "Set an access PIN to share screens" | Dashboard, Settings, Access PIN |

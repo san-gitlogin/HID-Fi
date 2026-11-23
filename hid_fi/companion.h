@@ -380,9 +380,9 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     // on it. The Companion says which local address it used; a request that came from
     // another address was routed in from another network (a router in between), and a
     // computer there cannot reach the board by name. Older Companions send nothing.
-    // D-14 (found on 09F7C8, 2026-11-23): two routers that forward between their
-    // networks without translating addresses deliver the computer's own address, so
-    // "said == came from" held for a Mac on the other router - it was counted right on
+    // D-14 (found on 09F7C8, 2026-11-23): traffic between a main router's subnet and
+    // an extender's own subnet can arrive with the computer's own address (no address
+    // translation on that path), so "said == came from" held for a Mac on the other subnet - it was counted right on
     // the board's network, anchored it there and made "bring" ask about someone using
     // it. Right on its network also means inside the board's own subnet (or its access
     // point).

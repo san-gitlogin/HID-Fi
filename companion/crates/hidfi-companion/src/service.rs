@@ -207,6 +207,8 @@ const USB_CHECK: Duration = Duration::from_secs(3);
 /// How long a board on USB may stay unanswered before the tray says it is not
 /// on this network.
 const NOT_ON_NETWORK_AFTER: Duration = Duration::from_secs(20);
+/// D-14: how long a Bring outcome stays on the card while nothing else changed.
+const BRING_SHOWN: Duration = Duration::from_secs(120);
 
 pub fn capture_allowed() -> bool {
     #[cfg(target_os = "macos")]
@@ -490,8 +492,10 @@ fn run(
     };
     let mut here: BTreeMap<Mac, Here> = BTreeMap::new();
     let mut offline_since: HashMap<Mac, Instant> = HashMap::new();
-    // D-14: what the last "Bring the board here" did, per board, for its card.
-    let mut brought: HashMap<Mac, hidfi_agent::session::Bring> = HashMap::new();
+    // D-14: what the last "Bring the board here" did, per board, for its card: with when,
+    // and the network the board was on then. Shown only while that still holds and for
+    // BRING_SHOWN at most - a move that did not happen gives the button back.
+    let mut brought: HashMap<Mac, (hidfi_agent::session::Bring, Instant, String)> = HashMap::new();
     let mut elsewhere = 0usize;
     let mut next_find = Instant::now();
     let started = Instant::now();
@@ -684,6 +688,35 @@ fn run(
         let boards: Vec<BoardView> = on_usb
             .iter()
             .map(|m| match here.get(m) {
+                // A board whose session lost it and that no finder reaches for as long
+                // as a board never found is given: the same "not on this network", with
+                // the network it was last on - not "Connecting to <its old address>"
+                // for ever (seen 2026-11-23: moved to the extender's own subnet, which
+                // this computer on the main router cannot reach).
+                Some(h)
+                    if h.session.lost()
+                        && offline_since
+                            .get(m)
+                            .is_some_and(|s| s.elapsed() >= NOT_ON_NETWORK_AFTER) =>
+                {
+                    BoardView {
+                        mac: m.hex(),
+                        link: Default::default(),
+                        viewers: 0,
+                        // what it said before it went: which network it was on, and
+                        // which one this computer's address belongs to
+                        net: h.session.net().cloned(),
+                        bring: None,
+                        last_net: h
+                            .session
+                            .net()
+                            .map(|n| n.board.clone())
+                            .filter(|b| !b.is_empty())
+                            .or_else(|| Store::last_net(&state, m)),
+                        board: BoardState::NotOnNetwork,
+                        session: h.session.status().clone(),
+                    }
+                }
                 Some(h) => BoardView {
                     mac: m.hex(),
                     board: BoardState::Found {
@@ -696,7 +729,13 @@ fn run(
                         .as_ref()
                         .map_or(0, |(s, _)| s.watchers.of_board(mac_tag(m))),
                     net: h.session.net().cloned(),
-                    bring: brought.get(m).cloned(),
+                    bring: brought
+                        .get(m)
+                        .filter(|(_, at, was)| {
+                            at.elapsed() < BRING_SHOWN
+                                && h.session.net().is_some_and(|n| n.board == *was)
+                        })
+                        .map(|(b, _, _)| b.clone()),
                     last_net: None,
                 },
                 None => BoardView {
@@ -847,12 +886,13 @@ fn run(
             Ok(Cmd::BringHere { mac, force }) => {
                 if let Some(m) = Mac::parse(&mac) {
                     if let Some(h) = here.get_mut(&m) {
+                        let was = h.session.net().map(|n| n.board.clone()).unwrap_or_default();
                         let r = h.session.bring(env.http.as_ref(), force);
                         log::info!(
                             "bring board {} to this computer's network: {r:?}",
                             short_mac(&m.hex())
                         );
-                        brought.insert(m, r);
+                        brought.insert(m, (r, Instant::now(), was));
                     }
                 }
             }

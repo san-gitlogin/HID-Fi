@@ -1,7 +1,8 @@
-"""D-14 on the real board with the real Companion service: one home, two routers.
+"""D-14 on the real board with the real Companion service: one home, two subnets.
 
-Seen at the owner's home (2026-11-23): "ARVISANTU C6" (192.168.0.x) and "ARVISANTU"
-behind it (192.168.1.x). The Mac and the board each move between them, and the
+Seen at the owner's home (2026-11-23): "ARVISANTU" is the main router (192.168.1.x),
+"ARVISANTU C6" an extender with a subnet of its own (192.168.0.x) behind it. The Mac
+and the board each move between them, and the
 Companion said "not on this computer's WiFi - set it up from the board's own WiFi".
 The story, against the real service (hw_app: real USB listing, network and mDNS):
 
@@ -155,7 +156,26 @@ try:
         sys.exit("SKIP no second saved network on another subnet in range")
     ssid, s2 = moved
     t0 = time.time()
-    b = card(lambda b: (b.get("net") or {}).get("board") == ssid and not b["net"]["here"], f"found again on {ssid}")
+    b = card(lambda b: (b.get("net") or {}).get("board") == ssid and not b["net"]["here"]
+             or b["board"] == "NotOnNetwork", f"found again on {ssid}, or said to be out of reach")
+    if b["board"] == "NotOnNetwork":
+        # This computer cannot route into the board's new network (an extender's own
+        # subnet behind the main router is reachable only from inside it): the card must
+        # say the board left this computer's network - never "Connecting..." for ever,
+        # never "join this computer to" the network it is on (2026-11-23).
+        want = f"Not reachable from this computer. The board was on {home} with this computer, and has left it"
+        check(f"2. out of reach on {ssid}: the card says the board left this computer's network ({time.time() - t0:.0f} s)",
+              b["lines"] and b["lines"][0] == want, b["lines"])
+        check("   and how to bring it back, not to move this computer", any(f"choose {home}" in l for l in b["lines"])
+              and not any("join this computer to" in l for l in b["lines"]), b["lines"])
+        cmd({"cmd": "wifi_prefer", "ssid": home, "now": True, "force": True}, "wifi_prefer")
+        board_on(lambda s: s.get("wifi_ssid") == home and s.get("wifi_connected"), f"back on {home}")
+        t1 = time.time()
+        b = card(lambda b: b["session"] == "Online" and (b.get("net") or {}).get("here"), "together again", 180)
+        check(f"3. moved back over USB: the Companion finds it by itself, the ordinary card ({time.time() - t1:.0f} s)",
+              not any("two networks" in l or "Not reachable" in l for l in b["lines"]), b["lines"])
+        print("SKIP Bring from the Companion: this computer cannot reach the board on", ssid)
+        raise SystemExit(0 if ok else 1)
     check(f"2. the Companion found the board again on the other network by itself ({time.time() - t0:.0f} s)", True,
           b["board"])
     want = f"This computer is on {home}, the board is on {ssid}: two networks"

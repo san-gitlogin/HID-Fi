@@ -1,7 +1,8 @@
 """D-14 on a real board: the paired computer and the board on two networks of one home.
 
-Seen at the owner's home (2026-11-23): "ARVISANTU C6" (192.168.0.x) and "ARVISANTU"
-behind it (192.168.1.x); the Mac and the board each move between them, and the
+Seen at the owner's home (2026-11-23): "ARVISANTU" is the main router (192.168.1.x),
+"ARVISANTU C6" an extender with its own subnet (192.168.0.x) behind it; the Mac and the
+board each move between them, and the
 Companion said "not on this computer's WiFi". A Companion played over real HTTP
 (tests/support/companion_sim.FakeApp, paired with the code over USB):
 
@@ -135,3 +136,30 @@ def test_on_two_networks_the_board_is_named_and_brought_back(board, paired):
     app.board = cs.RealBoardHttp(s3["wifi_ip"])
     n = app.beat(via=app.ip)["net"]
     assert (n["board"], n["here"], n["computer"]) == (home, True, home), n
+
+
+def test_a_newer_choice_cancels_a_move_still_waiting(board):
+    """"Move now" answers first and moves 3 s later (D-14). Asked within those 3 s for
+    the network it is already on, the board stays: the earlier move must not still run
+    and drop its link (code review, 2026-11-23). Over USB, so nothing is cut off."""
+    st = _wait(board, lambda s: s.get("wifi_connected") and s.get("wifi_ip"), "on a home network")
+    home = st["wifi_ssid"]
+    start_pref = st.get("wifi_preferred") or home
+    nets = board.cmd({"cmd": "wifi_networks"}, "wifi_networks").get("networks", [])
+    other = next((n["ssid"] for n in nets if n["ssid"] != home and n.get("proven")), None)
+    if not other:
+        pytest.skip("only one proven saved network: nothing to change its mind about")
+    try:
+        r = board.cmd({"cmd": "wifi_prefer", "ssid": other, "now": True, "force": True}, "wifi_prefer")
+        assert r.get("status") == "ok" and r.get("on_it") is False, r
+        r = board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True, "force": True}, "wifi_prefer")
+        assert r.get("status") == "ok" and r.get("on_it") is True, r
+        end = time.time() + 12                       # well past the 3 s the first move waited
+        while time.time() < end:
+            s = _status(board)
+            assert s.get("wifi_connected") and s.get("wifi_ssid") == home and s.get("wifi_ip") == st["wifi_ip"], \
+                f"the cancelled move still ran: { {k: s.get(k) for k in ('wifi_ssid', 'wifi_connected', 'sta_phase')} }"
+            time.sleep(0.5)
+    finally:
+        if start_pref != home:
+            board.cmd({"cmd": "wifi_prefer", "ssid": start_pref, "force": True}, "wifi_prefer")

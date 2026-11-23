@@ -65,7 +65,7 @@ fn mac_of(w: &str) -> Option<Mac> {
 /// address, not this computer's own; nothing for a subnet over MAX_HOSTS or a /31-/32.
 pub fn hosts(own: Ipv4Addr, mask: Ipv4Addr) -> Vec<Ipv4Addr> {
     let (a, m) = (u32::from(own), u32::from(mask));
-    if m.leading_ones() + m.trailing_zeros() != 32 || m.trailing_zeros() < 2 {
+    if m == 0 || m.leading_ones() + m.trailing_zeros() != 32 || m.trailing_zeros() < 2 {
         return Vec::new(); // not a contiguous mask, or a point-to-point link
     }
     let size = 1u32 << m.trailing_zeros();
@@ -106,9 +106,15 @@ pub fn arp_text() -> String {
     #[cfg(not(target_os = "linux"))]
     {
         let args: &[&str] = if cfg!(windows) { &["-a"] } else { &["-an"] };
-        std::process::Command::new("arp")
-            .args(args)
-            .output()
+        let mut c = std::process::Command::new("arp");
+        c.args(args);
+        #[cfg(windows)]
+        {
+            // the Companion is a windowed app: a console child would flash a window
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        c.output()
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default()
     }
@@ -165,27 +171,20 @@ pub fn tcp_sweep(subnets: &[(Ipv4Addr, Ipv4Addr)], wait: Duration) -> Vec<Ipv4Ad
     v
 }
 
-/// Base URLs for these boards from the ARP table, after a nudge if any is missing.
-pub fn find(macs: &[Mac]) -> Vec<String> {
-    let pick = |table: &[(Mac, Ipv4Addr)]| -> Vec<String> {
-        macs.iter()
-            .filter_map(|m| {
-                table
-                    .iter()
-                    .find(|(tm, _)| tm == m)
-                    .map(|(_, ip)| format!("http://{ip}"))
-            })
-            .collect()
-    };
-    let found = pick(&parse_arp(&arp_text()));
-    if found.len() == macs.len() {
-        return found;
+/// Base URLs for these boards from an ARP table: EVERY address listed for each MAC - a
+/// stale entry for the board's old address can sit beside its new one for minutes, and
+/// the caller asks each one who it is.
+pub fn lookup(macs: &[Mac], table: &[(Mac, Ipv4Addr)]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for m in macs {
+        for (tm, ip) in table {
+            let u = format!("http://{ip}");
+            if tm == m && !out.contains(&u) {
+                out.push(u);
+            }
+        }
     }
-    if nudge(&local_subnets()) == 0 {
-        return found;
-    }
-    std::thread::sleep(Duration::from_millis(1500)); // ARP replies come back within a second
-    pick(&parse_arp(&arp_text()))
+    out
 }
 
 #[cfg(test)]
@@ -205,6 +204,16 @@ mod tests {
         ] {
             assert!(parse_arp(text).contains(&(mac, ip)), "{text}");
         }
+    }
+
+    #[test]
+    fn every_address_listed_for_the_board_is_tried_not_just_the_first() {
+        // a lease changed: the old entry lingers beside the new one
+        let t = parse_arp("? (192.168.0.184) at dc:b4:d9:9:f7:c8 on en0\n? (192.168.0.190) at dc:b4:d9:9:f7:c8 on en0\n? (192.168.0.1) at 0:11:22:33:44:55 on en0");
+        assert_eq!(
+            lookup(&[Mac::parse(BOARD).unwrap()], &t),
+            ["http://192.168.0.184", "http://192.168.0.190"]
+        );
     }
 
     #[test]

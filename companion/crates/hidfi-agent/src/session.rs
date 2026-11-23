@@ -215,11 +215,10 @@ impl Session {
             {
                 Bring::UnknownNetwork
             }
-            Err(CallError::Reply(ReplyError::Refused(Refusal::Other(why))))
-                if why == "Unknown op" || why == "bad_request" =>
-            {
+            // A board without D-14 answers an op it does not know with bad_request.
+            Err(CallError::Reply(ReplyError::Refused(Refusal::Other(why)))) if why == "bad_request" => {
                 Bring::Failed(
-                    "this board's firmware is too old to be moved from here; update it".into(),
+                    "the board did not take the request - its firmware may be too old to be moved from here; update it".into(),
                 )
             }
             // The board leaves its network to do what was asked; an answer can be lost on

@@ -2662,6 +2662,7 @@ void wifiPreferCore(int i, bool now, bool force, int askerWs, JsonDocument& d) {
             return;                                     // nothing changed
         }
     }
+    netMoveTo = "";              // a newer choice replaces a move still waiting to run (D-14)
     netUsed[i] = ++netUseCount;
     for (int k = 0; k < netCount; k++) netAnchor[k] = (k == i);
     netTried[i] = false;
@@ -5259,6 +5260,14 @@ void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t len) {
             lastHidAt = millis();
             commandCount++;
             wifiCommandCount++;
+            // A shortcut still going out (press, combo.h) holds its modifiers: a key, a
+            // click or a scroll arriving now would get them (Ctrl+V, a Ctrl-click, a zoom).
+            // Those finish it first - only when one is queued, which is rare; a plain
+            // pointer move never waits.
+            if (combo::busy(pressQueue) &&
+                (payload[0] == WS_OP_KEY || payload[0] == WS_OP_BTN ||
+                 (payload[0] == WS_OP_MOVE && len >= 7 && (payload[5] || payload[6]))))
+                pressDrain();
             if (payload[0] == WS_OP_MOVE && len >= 7) {
                 hidMouseMove(rdI16(payload + 1), rdI16(payload + 3),
                              (int8_t)payload[5], (int8_t)payload[6]);

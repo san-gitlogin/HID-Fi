@@ -272,7 +272,9 @@ def watch(hours, every, note, out_dir):
                 pace = next_interval(every, None, None, pace)
                 time.sleep(pace)
                 continue
-            gap = last_ok is None or t - last_ok > 3 * every
+            # a gap is measured against the pace it is keeping now: backed off to a
+            # minute, every sample would otherwise count as a gap and read the board's log
+            gap = last_ok is None or t - last_ok > 3 * max(every, pace)
             restarted = last_up is not None and st.get("uptime_sec", 0) < last_up
             if gap or restarted:
                 log = read_board_log(host, state)

@@ -237,8 +237,8 @@ minutes later. DA1A2C, the owner's own board, did exactly that when updated on
 ## D-10 · 2026-11-07 · Reach the board by name: count only devices right on its network
 
 *Revised by D-14 (2026-11-23):* "right on its network" also needs the computer's address
-inside the board's own subnet - two routers that forward without translating made a
-Mac on the other router look right on it.
+inside the board's own subnet - traffic from the extender's subnet arrived with the
+Mac's own address and made a Mac there look right on the board's network.
 
 **Refines D-02.**
 
@@ -423,12 +423,13 @@ waits for the measurements in docs/ROADMAP.md; this entry only makes them possib
 - `tests/ui/bdd/features/settings.feature: The device card says how hot the chip runs, and its peak since start`
 - `tests/ui/bdd/features/settings.feature: The radio only really sleeps with the access point off, and the card says which`
 
-## D-14 · 2026-11-23 · Two networks in one home: named, found, and the board brought over
+## D-14 · 2026-11-23 · Two subnets in one home: named, found, and the board brought over
 
 **Revises D-10's "right on the board's network" and adds to D-02.**
 
-The owner's home has two routers: "ARVISANTU C6" (192.168.0.x) and "ARVISANTU"
-behind it (192.168.1.x). The Mac moves between them by itself (the macOS log shows
+The owner's home: "ARVISANTU" is the main router (192.168.1.x); "ARVISANTU C6" and
+"ARVISANTU EXT" are extenders, and C6 runs a subnet of its own (192.168.0.x) behind the
+main router. The Mac moves between ARVISANTU and C6 by itself (the macOS log shows
 it hop four times in two minutes) and so does the board. The Companion then said
 "not on this computer's WiFi - set it up from the board's own WiFi" while both were
 on saved networks of the same home. The owner: "I have seen this problem many times,
@@ -449,7 +450,12 @@ does not cross from one router's network to the other, and the Mac had moved.
    (`op: "bring"`), done by the dashboard's own rule: it asks first when someone is
    using the board right on its network, and refuses (`unknown_network`) when the
    computer's network is not one the board has saved. A board it cannot reach at all
-   is "last on <network>", not set up from scratch.
+   is "last on <network>", not set up from scratch - after the same 20 s whether it was
+   never found or was online and then lost (that one said "Connecting to <its old
+   address>" for ever, 2026-11-23). When it was last on this computer's own network,
+   the card says the board left it and how to bring it back, never "join this
+   computer to" the network it is already on: from the main router this computer
+   cannot reach the extender's own subnet (the other way it can).
 3. **The Companion finds the board without mDNS:** every address it had (the newest
    four), the OS's ARP table for its MAC after one datagram to each address of this
    computer's subnets (real netmasks, at most a /22), and the subnets of the board's
@@ -457,9 +463,10 @@ does not cross from one router's network to the other, and the Mac had moved.
    this computer's USB that nothing else found. The MAC the address reports decides,
    as for every candidate.
 4. **Right on the board's network** (D-10) now also needs the computer's address inside
-   the board's own subnet (or its access point): two routers that forward without
-   translating deliver the Mac's own address, so "said == came from" held for a Mac on
-   the other router (found on 09F7C8). After the board joins a network nobody counts as
+   the board's own subnet (or its access point): traffic between the main router's
+   subnet and the extender's arrived with the Mac's own address (no address
+   translation on that path), so "said == came from" held for a Mac on the other
+   subnet (found on 09F7C8). After the board joins a network nobody counts as
    right on it until their next heartbeat, and a heartbeat in the moment before an
    asked-for move cannot anchor the network being left.
 5. **A move answers first.** `wifi_prefer now` and `bring` reply, then move 3 s later:

@@ -153,3 +153,10 @@ def test_the_watcher_never_opens_a_websocket_or_sends_input():
 @pytest.mark.parametrize("argv", [["--hours", "0"], ["--every", "1"], ["--every", "9"]])
 def test_a_watch_always_has_an_end(argv):
     assert W.main(argv) == 2
+
+
+def test_a_backed_off_pace_is_not_a_gap_that_reads_the_boards_log():
+    """Backed off to a minute while a dashboard is open, the next sample is not 'a gap':
+    reading temp_log every minute through the PIN is the cost the back-off exists to avoid."""
+    src = (paths.TESTS.parent / "tools" / "thermal_watch.py").read_text(encoding="utf-8")
+    assert "t - last_ok > 3 * max(every, pace)" in src

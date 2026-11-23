@@ -73,12 +73,27 @@ pub fn own_wifi(v: &View) -> String {
 pub fn not_on_network_steps(v: &View) -> Vec<String> {
     // D-14: a board known to be on one of this home's networks is not set up again from
     // scratch: this computer is most likely on the home's other network.
-    if let Some(last) = v
+    let gone = v
         .boards
         .iter()
-        .find(|b| b.board == BoardState::NotOnNetwork)
-        .and_then(|b| b.last_net.clone())
-    {
+        .find(|b| b.board == BoardState::NotOnNetwork);
+    // It was on this computer's own network and left it: this computer is where it
+    // should be - the board is the one to bring back (never "join this computer to"
+    // the network it is already on).
+    if let Some((last, _)) = gone.and_then(|b| {
+        let n = b.net.as_ref()?;
+        (!n.board.is_empty() && n.board == n.computer).then(|| (n.board.clone(), ()))
+    }) {
+        return vec![
+            format!("Not reachable from this computer. The board was on {last} with this computer, and has left it"),
+            "It is probably on another of its saved networks that this computer cannot reach - an extender with a network of its own, for example".into(),
+            format!(
+                "To bring it back: on your phone, join the board's own WiFi {}, open http://192.168.4.1, then Settings, Home network, and choose {last}",
+                own_wifi(v)
+            ),
+        ];
+    }
+    if let Some(last) = gone.and_then(|b| b.last_net.clone()) {
         return vec![
             format!("Not reachable from this computer. The board was last on {last}"),
             format!("If your home has two WiFi networks, this computer is probably on the other one: join this computer to {last}"),
@@ -321,7 +336,10 @@ pub fn two_networks_lines(n: &NetFacts, bring: Option<&Bring>) -> Vec<String> {
             "Someone is using the board on {} right now ({k}); moving it would cut them off",
             n.board
         )),
-        Some(Bring::UnknownNetwork) | None if n.computer.is_empty() => l.push(
+        Some(Bring::UnknownNetwork) => l.push(
+            "The board does not know this computer's WiFi: add it on the dashboard (Settings, Home network), or join this computer to the board's network".into(),
+        ),
+        None if n.computer.is_empty() => l.push(
             "Add this computer's WiFi to the board: dashboard, Settings, Home network, or join this computer to the board's network".into(),
         ),
         Some(Bring::Failed(why)) => l.push(format!("Could not move it: {why}")),
@@ -1146,7 +1164,7 @@ mod tests {
     #[test]
     fn two_networks_are_named_with_a_way_to_bring_the_board_here() {
         // Seen at the owner's home: "not on this computer's WiFi" while the board was on
-        // the other of the home's two routers.
+        // the extender's own subnet of the same home.
         let m = model(&apart("ARVISANTU C6", None));
         assert_eq!(m.icon, Icon::Attention);
         assert!(
@@ -1270,6 +1288,56 @@ mod tests {
             .lines
             .iter()
             .any(|l| l.starts_with("Not on this computer's WiFi")));
+    }
+
+    #[test]
+    fn a_board_that_left_this_computers_network_is_brought_back_not_followed() {
+        // seen 2026-11-23: both on ARVISANTU, the board moved to the extender's own
+        // subnet, which this computer cannot reach - the card said "Connecting..." for ever
+        let mut v = view(BoardState::NotOnNetwork, Status::Reconnecting);
+        v.boards = vec![board(
+            "DCB4D909F7C8",
+            BoardState::NotOnNetwork,
+            Status::Reconnecting,
+        )];
+        v.boards[0].last_net = Some("ARVISANTU".into());
+        v.boards[0].net = Some(NetFacts {
+            board: "ARVISANTU".into(),
+            here: true,
+            computer: "ARVISANTU".into(),
+            subnets: vec![],
+        });
+        let l = not_on_network_steps(&v);
+        assert!(
+            l[0].contains("was on ARVISANTU with this computer, and has left it"),
+            "{l:?}"
+        );
+        assert!(
+            l.iter().all(|x| !x.contains("join this computer to")),
+            "never told to join the network it is on: {l:?}"
+        );
+        assert!(l[2].contains("choose ARVISANTU"), "{l:?}");
+        // last seen on another network than this computer's: the old advice still holds
+        v.boards[0].net = None;
+        v.boards[0].last_net = Some("ARVISANTU C6".into());
+        assert!(not_on_network_steps(&v)[1].contains("join this computer to ARVISANTU C6"));
+    }
+
+    #[test]
+    fn a_board_that_refuses_for_an_unknown_network_says_what_to_do() {
+        // the heartbeat named this computer's network, then the board refused (forgotten meanwhile)
+        let m = model(&apart("ARVISANTU C6", Some(Bring::UnknownNetwork)));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.starts_with("The board does not know this computer's WiFi")),
+            "{:?}",
+            m.lines
+        );
+        assert!(!m
+            .actions
+            .iter()
+            .any(|a| matches!(a.1, Action::BringHere { .. })));
     }
 
     #[test]

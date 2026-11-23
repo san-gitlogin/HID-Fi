@@ -97,6 +97,10 @@ def test_the_firmware_queues_press_and_never_waits_in_it():
     for typer in ('"type"', '"key_down"', '"macro_run"', '"steps"', '"do"'):
         assert typer not in pc[pc.index("NO_TYPING"):pc.index("};", pc.index("NO_TYPING"))], \
             f"{typer} types: it must wait for a queued shortcut"
+    ws = ino[ino.index("            if (payload[0] == WS_OP_MOVE && len >= 7) {") - 700:ino.index("            if (payload[0] == WS_OP_MOVE && len >= 7) {")]
+    assert "combo::busy(pressQueue)" in ws and "pressDrain();" in ws and "WS_OP_KEY" in ws and "WS_OP_BTN" in ws \
+        and "payload[5] || payload[6]" in ws, \
+        "a key, click or scroll on the binary path waits for a queued shortcut (its modifiers are held)"
     kc = ino[ino.index("void pressKeyCombo(const char* comboStr) {"):]
     kc = kc[:kc.index("\n}\n")]
     assert kc.index("pressDrain();") < kc.index("comboKeys("), "macros and steps go after a queued shortcut"

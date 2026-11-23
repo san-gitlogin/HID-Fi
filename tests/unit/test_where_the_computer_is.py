@@ -1,8 +1,9 @@
 """D-14: the board and the paired computer on two networks of one home, named, and the
 board brought to the computer's network from the Companion.
 
-Seen at the owner's home (2026-11-23): two routers, "ARVISANTU C6" (192.168.0.x) and
-"ARVISANTU" behind it (192.168.1.x). The Mac moves between them by itself, so does the
+Seen at the owner's home (2026-11-23): "ARVISANTU" is the main router (192.168.1.x),
+"ARVISANTU C6" an extender with its own subnet (192.168.0.x) behind it. The Mac moves
+between them by itself, so does the
 board, and the Companion said "not on this computer's WiFi - set it up from the
 board's own WiFi" while both were on saved home networks. Here, against the board
 model (tests/support/companion_sim.py, held to the firmware by the board tier):
@@ -75,7 +76,7 @@ def test_a_computer_on_a_network_the_board_never_joined_is_unknown_not_guessed(h
 
 
 def test_a_routed_computer_carrying_its_own_address_is_not_right_on_the_network(home):
-    """Two routers that forward without translating deliver the Mac's own address: seen on
+    """Traffic from the extender's subnet arrived with the Mac's own address: seen on
     09F7C8, "said == came from" held for a Mac on the other router, so it was counted on
     the board's network and "bring" asked about someone using it."""
     app = pair(home, ip="192.168.0.248")
@@ -157,6 +158,8 @@ def test_the_firmware_records_each_networks_mask_and_answers_bring_signed():
     beat = beat[:beat.index("\n}\n")]
     core = ino[ino.index("void wifiPreferCore(int i, bool now, bool force, int askerWs, JsonDocument& d) {"):]
     core = core[:core.index("\n}\n")]
+    assert core.index('netMoveTo = "";') < core.index("netMoveTo = ssid;"), \
+        "a newer choice cancels a move still waiting to run, before deciding its own"
     assert "WiFi.disconnect" not in core and "netMoveTo = ssid;" in core, \
         "the answer leaves before the board moves: a reply after the move never arrived"
     loop = ino[ino.index("void loop() {"):]
