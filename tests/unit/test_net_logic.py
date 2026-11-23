@@ -396,6 +396,13 @@ def oracle_move(k, seen, cur, ms, owner):
         i, r = oracle_best_of(k, p, seen)
         if i is not None and r >= WORKABLE:
             return i, "coming home"
+    if p is not None:                                  # D-15: the preferred one away
+        cur_last = max((x[3] for i, x in enumerate(k) if same(k, i, cur)), default=0)
+        homes = [i for i, x in enumerate(k) if x[3] and x[3] > cur_last and not same(k, i, p) and not same(k, i, cur)]
+        for h in sorted(homes, key=lambda i: -k[i][3]):
+            i, r = oracle_best_of(k, h, seen)
+            if i is not None and r >= WORKABLE:
+                return i, "coming home"
     if any((x[3] or x[4]) and same(k, i, cur) for i, x in enumerate(k)) or ms < LOOK_MS:
         return None, None
     c = [(strongest(k[i][0], seen), -i) for i in range(len(k))
@@ -407,6 +414,10 @@ def oracle_look(k, cur, ms):
     p = oracle_preferred(k)
     if p is not None and not same(k, cur, p) and any(k[i][1] and not k[i][6] and same(k, i, p) for i in range(len(k))):
         return True
+    if p is not None and not same(k, cur, p):          # D-15: a more recently used one may be near
+        cur_last = max((x[3] for i, x in enumerate(k) if same(k, i, cur)), default=0)
+        if any(x[1] and not x[6] and x[3] > cur_last and not same(k, i, p) and not same(k, i, cur) for i, x in enumerate(k)):
+            return True
     if any((x[3] or x[4]) and same(k, i, cur) for i, x in enumerate(k)) or ms < LOOK_MS:
         return False
     return any(k[i][1] and not k[i][5] and not k[i][6] and not same(k, i, cur) for i in range(len(k)))
@@ -484,6 +495,12 @@ MUTATIONS = [   # a planted bug each; the tests above must catch every one
     ("seen[k].rssi > bestRssi) {", "seen[k].rssi >= bestRssi) {"),                    # a tie goes to the older
     ("if (!saved[i].usable || !saved[i].ssid) continue;", "if (!saved[i].ssid) continue;"),   # refused not skipped
     ("seen[k].rssi > bestRssi) {", "(best < 0 || seen[k].rssi < bestRssi)) {"),       # the weakest wins
+    ("if (!k[i].used || k[i].used <= curLast || netSameNet(k, i, p) || netSameNet(k, i, cur)) continue;",
+     "if (!k[i].used || netSameNet(k, i, p) || netSameNet(k, i, cur)) continue;"),     # D-15: toward an older one too
+    ("if (hAt >= 0) { if (why) *why = NET_COMING_HOME; return hAt; }", ""),           # D-15: the hotspot case stays put
+    ("if (at >= 0 && r >= NET_WORKABLE) { h = i; hAt = at; }", "if (at >= 0) { h = i; hAt = at; }"),   # D-15: too weak counts
+    ("if (k[i].usable && !k[i].refused && k[i].used > curLast && !netSameNet(k, i, p) && !netSameNet(k, i, cur)) return true;",
+     ";"),                                                                             # D-15: never scans for it
 ]
 
 
@@ -498,7 +515,8 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
     caught = 0
     d02 = [(test_it_roams_within_one_network_and_never_between_networks, ()), (test_a_changed_password_never_pulls_it_off_a_working_network, ()), (test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
            (test_one_network_on_two_names_roams_to_the_strongest, ()), (test_the_paired_computer_anchors_over_a_phone, ()),
-           (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ())] + [
+           (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ()),
+           (test_with_the_preferred_network_away_the_one_used_last_is_home, ())] + [
            (test_a_preferred_network_too_weak_falls_back_to_the_strongest, a) for a in [(-90, (C6, "strongest"))]]
     checks = d02 + [(test_three_networks_in_one_home, c) for c in [
         ([("ARVISANTU C6", -61), ("ARVISANTU EXT", -44), ("ARVISANTU", -70)], "ARVISANTU EXT"),
@@ -544,3 +562,36 @@ def test_a_mask_is_never_guessed(bench):
 def test_a_router_and_its_extender_on_one_subnet_prefer_the_current_one(bench):
     assert net_for(bench, "192.168.0.50", -1, [SUB_C6, SUB_EXT]) == 0
     assert net_for(bench, "192.168.0.50", 1, [SUB_C6, SUB_EXT]) == 1
+
+
+def test_with_the_preferred_network_away_the_one_used_last_is_home(bench):
+    """D-15. The owner brought the board to a hotspot (now the computer's network), then
+    switched it off and went home to ARVISANTU; the board fell back to C6, the louder
+    network of the home, which the owner's computer on ARVISANTU cannot reach (seen on
+    09F7C8, 2026-11-23). ARVISANTU was used after C6: it is home until the hotspot is back."""
+    HOT = "HIDFI-SIM-B"
+    known = [net(HOT, subnet=0x0A000000, used=9, anchor=True), net(C6, subnet=LAN0, used=4), net(ARV, subnet=LAN1, used=7)]
+    assert move(bench, known, AIR, 1, 0) == (ARV, "coming home"), "at once: nothing to wait for"
+    # never away from someone using the board right there
+    assert move(bench, known, AIR, 1, LOOK_MS, owner_now=True) == (None, None)
+    # only toward a network used MORE recently than the one it is on
+    known_c6_last = [net(HOT, subnet=0x0A000000, used=9, anchor=True), net(C6, subnet=LAN0, used=7), net(ARV, subnet=LAN1, used=4)]
+    assert move(bench, known_c6_last, AIR, 1, LOOK_MS * 9) == (None, None)
+    # the one used last must be in range and workable; otherwise the next most recent
+    assert move(bench, known, [(C6, -48)], 1, LOOK_MS) == (None, None)
+    assert move(bench, known, [(C6, -48), (ARV, -90)], 1, 0) == (None, None), "seen, but too weak to work"
+    known3 = known + [net(EXT, subnet=0x0A010000, used=6)]
+    assert move(bench, known3, [(C6, -48), (EXT, -60)], 1, 0) == (EXT, "coming home")
+    # and it scans for it - also when the preferred one is resting after failed joins
+    # (not usable: on the board that stopped every scan, so nothing was ever decided)
+    resting = [net(HOT, usable=False, subnet=0x0A000000, used=9, anchor=True), net(C6, subnet=LAN0, used=4),
+               net(ARV, subnet=LAN1, used=7)]
+    assert ask(bench, [f"look {kspec(resting)} 1 0"])[0][0] == 1
+    resting_c6_last = [net(HOT, usable=False, subnet=0x0A000000, used=9, anchor=True), net(C6, subnet=LAN0, used=7),
+                       net(ARV, subnet=LAN1, used=4)]
+    assert ask(bench, [f"look {kspec(resting_c6_last)} 1 0"])[0][0] == 0, "on the most recent one: nothing to decide"
+    # the preferred network back in range wins over all of it
+    assert move(bench, known, AIR + [(HOT, -50)], 1, 0) == (HOT, "coming home")
+    # an extender of the network it is on is the same network: no hop between them
+    same = [net(HOT, subnet=0x0A000000, used=9, anchor=True), net(ARV, subnet=LAN1, used=4), net(EXT, subnet=LAN1, used=7)]
+    assert move(bench, same, AIR, 1, 0) == (None, None)

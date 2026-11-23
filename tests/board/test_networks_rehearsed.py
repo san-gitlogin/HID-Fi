@@ -19,14 +19,25 @@ on the real radio: the scans, the joins, the decisions, the marks it saves.
 | weak access point | one 28 dB stronger of the same network | stays while used, roams when not |
 | an extender | another name, same subnet | one network: no "coming home" |
 
-The owner's real Companion on this Mac is the "owner device" (it counts as directly on
-the network). Needs --board, the board on its home network and one free saved-network
-slot (no saved network is ever pushed out). Prints network names and decisions only.
+The owner's computer is played by the test itself: a Companion paired over USB with the
+board's code (tests/support/companion_sim.FakeApp, real signed HTTP), beating from this
+computer, so it counts as directly on the network only where it really is. It used to be
+the owner's real Companion, never checked: when the board started on a network this
+computer does not reach, or the app was not running, the scenarios failed for that
+(2026-11-23). The board is first put on a saved network this computer is on. Needs
+--board, an access PIN on the board and one free saved-network slot (no saved network
+is ever pushed out). Prints network names and decisions only.
 Every test puts back what it changed: test networks off and forgotten, home preferred.
 """
+import ipaddress
+import socket
+import subprocess
+import threading
 import time
 
 import pytest
+
+from support import companion_sim as cs
 
 pytestmark = pytest.mark.board
 
@@ -36,6 +47,14 @@ PASSWORD = "rehearsal-only"     # never sent to any router: a made-up network is
 
 
 def _sim(board, **kw):
+    # A real saved network listed here becomes a made-up one riding the carrier, with a
+    # made-up subnet the board then saves for the real network (it did, 2026-11-23). Only
+    # the carrier - the network the board is on - stays real when listed.
+    if kw.get("nets"):
+        saved, cur = _nets(board), _current(board)
+        bad = [o["ssid"] for o in kw["nets"] if o["ssid"] in saved and not o["ssid"].startswith("HIDFI-SIM")
+               and o["ssid"] != cur]
+        assert not bad, f"net_sim would turn the saved network(s) {bad} into made-up ones: use hide= instead"
     r = board.cmd(dict({"cmd": "net_sim"}, **kw), "net_sim")
     assert r.get("status") == "ok", r
     return r
@@ -64,15 +83,20 @@ def _wait(board, pred, timeout, what):
     end, last = time.time() + timeout, None
     while time.time() < end:
         try:
+            if OWNER:
+                OWNER.track(board)
             last = _nets(board)
             if pred(last):
                 return last
         except Exception:
             pass
         time.sleep(1)
+    # What the board decided, from its own log: a failure without it could not be
+    # explained (2026-11-23: it went to the neighbouring extender, nobody knew why).
     raise AssertionError(f"{what} - not within {timeout}s. Networks: "
                          + ", ".join(f"{k}{[f for f in ('current', 'used', 'computer', 'preferred') if v.get(f)]}"
-                                     for k, v in (last or {}).items()))
+                                     for k, v in (last or {}).items())
+                         + "\nboard log:\n  " + "\n  ".join(list(board.net_log)[-30:]))
 
 
 def _on(name):
@@ -82,6 +106,8 @@ def _on(name):
 def _stays(board, name, secs):
     end = time.time() + secs
     while time.time() < end:
+        if OWNER:
+            OWNER.track(board)
         cur = _current(board)
         assert cur in (name, None), f"moved to {cur} - it must stay on {name}"
         time.sleep(1)
@@ -97,15 +123,100 @@ def _add(board, ssid):
     assert r.get("status") == "ok", r
 
 
+def _this_computer_on(ip):
+    """This computer's own address toward ip, and whether ip is inside that address's
+    subnet by the interface's real mask (macOS: route + ipconfig) - never a guessed /24."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((ip, 80))
+        me = s.getsockname()[0]
+    finally:
+        s.close()
+    try:
+        ifc = next(l.split(":")[1].strip() for l in subprocess.run(["route", "-n", "get", ip], capture_output=True,
+                                                                    text=True).stdout.splitlines() if "interface:" in l)
+        mask = subprocess.run(["ipconfig", "getoption", ifc, "subnet_mask"], capture_output=True, text=True).stdout.strip()
+        return me, ipaddress.ip_address(ip) in ipaddress.ip_network(f"{me}/{mask}", strict=False)
+    except (StopIteration, ValueError):
+        return me, False
+
+
+class _Owner:
+    """The owner's computer: a paired Companion beating every 2 s to wherever the board is."""
+
+    def __init__(self, app):
+        self.app, self.ip, self.stop = app, None, threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self.stop.wait(2):
+            ip = self.ip
+            if not ip:
+                continue
+            try:
+                self.app.board = cs.RealBoardHttp(ip)
+                self.app.ip = _this_computer_on(ip)[0]
+                self.app.beat(via=self.app.ip)
+            except Exception:
+                pass                               # not reachable from here: then it is not here
+
+    def track(self, board):
+        ip = board.status().get("wifi_ip")
+        if ip:
+            self.ip = ip
+
+
+OWNER = None
+
+
+def _pair_owner(board, ip):
+    for p in board.cmd({"cmd": "companion_list"}, "companion_list").get("paired", []):
+        if p.get("name") == "Rehearsal computer":                   # a leftover of this module only
+            board.cmd({"cmd": "companion_unpair", "id": p["id"]}, "companion_unpair")
+    app = cs.FakeApp(cs.RealBoardHttp(ip), name="Rehearsal computer")
+    app.ip = _this_computer_on(ip)[0]
+    assert app.hello()[1].get("state") == "pending"
+    assert board.cmd({"cmd": "companion_pair", "id": app.id}, "companion_pair").get("state") == "confirm"
+    assert app.advance()[1].get("state") == "code_shown"
+    assert board.cmd({"cmd": "companion_pair", "id": app.id, "code": app.code}, "companion_pair").get("state") == "paired"
+    return app
+
+
 @pytest.fixture
 def home(board):
-    """The board on its own network, owner devices counted there; put back afterwards."""
+    """The board on a network this computer is on, the owner's computer (played by the
+    test) right there; put back afterwards."""
+    global OWNER
     end = time.time() + 60
     while time.time() < end and not board.status().get("wifi_connected"):
         time.sleep(1)
     st = board.status()
     if not st.get("wifi_connected"):
         pytest.skip("the board is not on a home network")
+    if not st.get("auth_set"):
+        pytest.skip("the owner's computer is a paired Companion, which needs an access PIN on the board")
+    if not _this_computer_on(st["wifi_ip"])[1]:
+        for ssid, n in _nets(board).items():
+            if ssid.startswith("HIDFI-SIM") or not n.get("proven"):
+                continue
+            board.cmd({"cmd": "wifi_prefer", "ssid": ssid, "now": True, "force": True}, "wifi_prefer")
+            try:
+                _wait(board, _on(ssid), 45, f"on {ssid}")
+                time.sleep(3)
+            except AssertionError:
+                continue
+            if _this_computer_on(board.status().get("wifi_ip") or "0.0.0.0")[1]:
+                break
+        else:
+            pytest.skip("this computer is on none of the board's saved networks: the owner's computer cannot be right there")
+    st = board.status()
+    app = _pair_owner(board, st["wifi_ip"])
+    OWNER = _Owner(app)
+    OWNER.ip = st["wifi_ip"]
+    OWNER.thread.start()
+    end = time.time() + 30
+    while time.time() < end and not (board.status().get("comp_online", 0) and not board.status().get("comp_routed")):
+        time.sleep(1)
     nets = _nets(board)
     home = _current(board)
     if not home or home.startswith("HIDFI-SIM"):
@@ -115,7 +226,11 @@ def home(board):
     _sim(board, off=True)
     for n in [n for n in nets if n.startswith("HIDFI-SIM")]:
         board.cmd({"cmd": "wifi_forget", "ssid": n})
-    yield home
+    try:
+        yield home
+    finally:
+        OWNER.stop.set()
+        board.cmd({"cmd": "companion_unpair", "id": app.id}, "companion_unpair")
     try:
         _sim(board, off=True)
         for n in [n for n in _nets(board) if n.startswith("HIDFI-SIM")]:
@@ -179,6 +294,34 @@ def test_the_owner_moves_and_their_hotspot_goes_it_finds_them_again(board, home)
     _sim(board, nets=[], owners=home)                     # the hotspot is switched off; the owner is home
     _wait(board, lambda n: _on(home)(n) and n[home].get("preferred"), 120,
           f"back on {home}, where the owner is, preferred again")
+
+
+def test_the_hotspot_goes_and_a_stronger_neighbour_does_not_keep_it_from_the_owner(board, home):
+    """As the scenario above, but when the hotspot goes the board falls back to another
+    saved network of the home (an extender with its own subnet, 2 dB to 19 dB louder at
+    the owner's home - it decided the scenario above 2 runs in 3, 2026-11-23). The owner
+    is home: once home is in sight again the board must go there, preferred, not stay on
+    the neighbour the owner's computer cannot reach (D-15; failed on v4.3.1).
+
+    Staged by hiding home from the scans while the hotspot goes, so the fall back to the
+    neighbour is a real join. Never by listing a real network in net_sim: that makes it a
+    made-up one with a made-up subnet, which the board then saved for the real network."""
+    _sim(board, nets=[{"ssid": B, "rssi": -50}], owners=home, speed=SPEED)
+    _add(board, B)
+    _wait(board, _on(home), 90, f"home on {home}")
+    _sim(board, owners=B)
+    board.cmd({"cmd": "wifi_prefer", "ssid": B, "now": True, "force": True}, "wifi_prefer")
+    _wait(board, lambda n: _on(B)(n) and n[B].get("preferred"), 60, f"on {B}, preferred")
+    _sim(board, nets=[], owners=home, hide=home)            # hotspot off, home out of sight for now
+    try:
+        n = _wait(board, lambda n: any(v.get("current") and k not in (home, B) for k, v in n.items()), 120,
+                  "fallen back to another saved network")
+    except AssertionError:
+        pytest.skip("no other saved network in range to fall back to")
+    near = next(k for k, v in n.items() if v.get("current"))
+    _sim(board, hide="")                                     # home in sight again
+    _wait(board, lambda n: _on(home)(n) and n[home].get("preferred"), 150,
+          f"back on {home} where the owner is, preferred - not kept on {near}")
 
 
 def test_brought_to_a_network_out_of_range_it_comes_back(board, home):

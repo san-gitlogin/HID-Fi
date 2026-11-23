@@ -813,6 +813,14 @@ class BoardSim:
             i, r = self._best_of(p)
             if i is not None and r >= self.WORKABLE:
                 return self.nets[i]["ssid"], "coming_home"
+        if p is not None:                              # D-15: the preferred one away
+            cur_last = max((n.get("used", 0) for i, n in enumerate(self.nets) if self._same(i, cur)), default=0)
+            homes = [i for i, n in enumerate(self.nets) if n.get("used", 0) > cur_last
+                     and not self._same(i, p) and not self._same(i, cur)]
+            for h in sorted(homes, key=lambda i: -self.nets[i]["used"]):
+                i, r = self._best_of(h)
+                if i is not None and r >= self.WORKABLE:
+                    return self.nets[i]["ssid"], "coming_home"
         if any(self._same(i, cur) for i in self._users()) or here_s < self.LOOK_S:
             return None, ""
         c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)

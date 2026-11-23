@@ -494,3 +494,37 @@ back with one click. The board test ran 6 of 6 with every answer received.
 - `companion/crates/hidfi-agent/src/locate.rs::a_board_that_moved_to_another_of_its_networks_is_found_in_its_subnets`
 - `companion/crates/hidfi-agent/src/locate.rs::a_board_mdns_cannot_reach_is_found_through_the_arp_table`
 - `tests/ui/companion/features/window.feature: On the home's other network, the board is brought to this computer's network`
+
+## D-15 · 2026-11-23 · With the preferred network away, the one used last is home (revises D-02)
+
+**Seen:** the owner brought the board to a hotspot (it became the computer's network),
+switched the hotspot off and was home on ARVISANTU. The board fell back to the louder
+saved network, ARVISANTU C6 (an extender with its own subnet, 2 dB to 19 dB louder
+where the board sits), and stayed: D-02 counted any network an owner ever used as home,
+so it never looked again - and the owner's computer on ARVISANTU cannot reach C6. The
+rehearsal of exactly that story passed only when ARVISANTU happened to be louder (it
+failed 2 full runs in 3); staged with the neighbour louder it failed every time, on
+v4.3.1 as on v4.4 before this.
+
+**Decision:** when the preferred network (the paired computer's, else the one used
+most recently) is not in range or too weak, home until it is back is the network
+used most recently that is in range and workable. The board moves there - at once,
+as for coming home - only from a network used less recently, never between two
+names of one network, and never away from an owner device using the board right
+there (D-10). The preferred network back in range wins over it. It scans for that
+network while one used more recently than the one it is on could be in range - also
+when the preferred network is resting after failed joins, which had stopped every
+scan, so nothing was ever decided (the first try of this fix, on 09F7C8). On the
+most recently used network already, nothing more is scanned than before.
+
+**Also:** the rehearsal now plays the owner's computer itself (a Companion paired over
+USB, beating from this computer) and first puts the board on a network this computer
+is on. It relied on the owner's real Companion without checking it was there.
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_with_the_preferred_network_away_the_one_used_last_is_home`
+  (with three planted mutations of the new rule, each caught)
+- `tests/unit/test_net_logic.py::test_random_homes_against_the_written_rules`
+- `tests/unit/test_net_logic.py::test_every_planted_bug_is_caught`
+- `tests/board/test_networks_rehearsed.py::test_the_hotspot_goes_and_a_stronger_neighbour_does_not_keep_it_from_the_owner`
+- `tests/board/test_networks_rehearsed.py::test_the_owner_moves_and_their_hotspot_goes_it_finds_them_again`

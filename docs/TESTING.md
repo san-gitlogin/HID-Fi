@@ -538,8 +538,13 @@ tagged `@known_issue:<key>` (reason in `KNOWN_ISSUES`, `tests/ui/bdd/conftest.py
 that runs as a **strict** xfail: the day the bug is fixed the scenario passes, the
 run fails, and the tag has to come off. `run.py` lists them under KNOWN ISSUES.
 
-**There are none open.** Fixed in v3.9, each now an ordinary scenario that keeps
-it fixed:
+Board tests use the same rule with `pytest.mark.xfail(strict=True,
+reason="known_issue:<key> ...")`.
+
+**There are none open.** Found and fixed in v4.4 (D-15): with the preferred network
+out of range, a board stayed on whichever network an owner ever used it landed on.
+
+Fixed in v3.9, each now an ordinary scenario that keeps it fixed:
 
 | Was | Severity | What it was, and the fix |
 |---|---|---|

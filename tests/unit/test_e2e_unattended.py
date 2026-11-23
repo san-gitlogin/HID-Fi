@@ -3,6 +3,7 @@ and must stay as safe as the click it replaced: the board types into whatever ha
 keyboard, so nothing is sent unless the page reports its box focused AND macOS reports
 the test browser in front - and a run whose canary did not arrive never goes on.
 """
+import json
 import sys
 import time
 
@@ -85,3 +86,14 @@ def test_the_browser_is_never_driven_through_playwright():
     code = src[src.index("class AutoPage"):]
     assert "launch(" not in code and "new_page" not in code and "sync_playwright" not in code
     assert "--user-data-dir=" in code
+
+
+def test_a_run_that_loses_a_saved_network_fails_and_never_prints_its_name():
+    """The board-level 'left as found' check covers the owner's saved networks: count
+    and hash only in what people read (tests/conftest.py _redacted)."""
+    import conftest
+    before = {"macros": {}, "saved_networks": ["Home", "Office"], "preferred_network": "Home"}
+    after = dict(before, saved_networks=["Home"])
+    assert before != after                                   # the run's final != snap check fails
+    shown = json.dumps(conftest._redacted(after))
+    assert "1 saved" in shown and "Home" not in shown and "Office" not in shown

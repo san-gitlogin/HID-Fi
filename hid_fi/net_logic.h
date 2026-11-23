@@ -132,6 +132,23 @@ inline int netMoveFrom(const NetKnown* k, int n, int cur, const NetSeen* seen, i
         int r = -1000, i = netBestOfNet(k, n, p, seen, nSeen, &r);
         if (i >= 0 && r >= NET_WORKABLE) { if (why) *why = NET_COMING_HOME; return i; }
     }
+    // D-15: the preferred network is not here (a hotspot switched off, the office seen from
+    // home): until it is, home is the network used most recently that is in range - not
+    // whichever one the board landed on, which the owner's computer may not even reach
+    // (an extender with its own subnet, the louder of two 2 dB apart at the owner's home).
+    // Only toward one used more recently than the network it is on.
+    if (p >= 0) {
+        uint32_t curLast = 0;
+        for (int i = 0; i < n; i++) if (netSameNet(k, i, cur) && k[i].used > curLast) curLast = k[i].used;
+        int h = -1, hAt = -1;
+        for (int i = 0; i < n; i++) {
+            if (!k[i].used || k[i].used <= curLast || netSameNet(k, i, p) || netSameNet(k, i, cur)) continue;
+            if (h >= 0 && k[i].used <= k[h].used) continue;
+            int r = -1000, at = netBestOfNet(k, n, i, seen, nSeen, &r);
+            if (at >= 0 && r >= NET_WORKABLE) { h = i; hAt = at; }
+        }
+        if (hAt >= 0) { if (why) *why = NET_COMING_HOME; return hAt; }
+    }
     bool curUsed = false;
     for (int i = 0; i < n; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, cur)) curUsed = true;
     if (curUsed || msHere < NET_LOOK_MS) return -1;
@@ -155,6 +172,14 @@ inline bool netNeedsLook(const NetKnown* k, int n, int cur, uint32_t msHere, int
     int p = netPreferred(k, n);
     if (p >= 0 && !netSameNet(k, cur, p))
         for (int i = 0; i < n; i++) if (k[i].usable && !k[i].refused && netSameNet(k, i, p)) return true;
+    // D-15: off the preferred network, a network used more recently than this one may be
+    // in range (netMoveFrom). On the most recent one already, nothing to decide.
+    if (p >= 0 && !netSameNet(k, cur, p)) {
+        uint32_t curLast = 0;
+        for (int i = 0; i < n; i++) if (netSameNet(k, i, cur) && k[i].used > curLast) curLast = k[i].used;
+        for (int i = 0; i < n; i++)
+            if (k[i].usable && !k[i].refused && k[i].used > curLast && !netSameNet(k, i, p) && !netSameNet(k, i, cur)) return true;
+    }
     for (int i = 0; i < n; i++) if ((k[i].used || k[i].anchor) && netSameNet(k, i, cur)) return false;
     if (msHere < NET_LOOK_MS) return false;
     for (int i = 0; i < n; i++) if (k[i].usable && !k[i].tried && !k[i].refused && !netSameNet(k, i, cur)) return true;

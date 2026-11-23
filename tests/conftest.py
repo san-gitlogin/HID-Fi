@@ -167,6 +167,10 @@ def _redacted(snap):
     out = dict(snap)
     out["macros"] = {slot: hashlib.sha256(json.dumps(v, sort_keys=True).encode()).hexdigest()[:12]
                      for slot, v in (snap.get("macros") or {}).items()}
+    nets = snap.get("saved_networks") or []
+    out["saved_networks"] = f"{len(nets)} saved, {hashlib.sha256(json.dumps(nets).encode()).hexdigest()[:12]}"
+    if snap.get("preferred_network"):
+        out["preferred_network"] = hashlib.sha256(snap["preferred_network"].encode()).hexdigest()[:12]
     return out
 
 

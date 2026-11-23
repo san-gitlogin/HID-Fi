@@ -149,7 +149,13 @@ class Board:
         st = self.status()
         saved = self.macros()
         macros = [{"slot": s} for s in saved]
+        nets = self.cmd({"cmd": "wifi_networks"}, "wifi_networks").get("networks", [])
         return {
+            # The owner's saved networks: a test that adds one can push the oldest out
+            # (NET_MAX), and one went missing in a run that still "passed" (2026-11-23).
+            # Names only in memory; printed as a count and a hash (conftest._redacted).
+            "saved_networks": sorted(n.get("ssid", "") for n in nets),
+            "preferred_network": next((n.get("ssid") for n in nets if n.get("preferred")), None),
             "macros": saved,
             "unicode_mac": bool(st.get("unicode_mac")),
             "unicode_linux": bool(st.get("unicode_linux")),
@@ -181,6 +187,13 @@ class Board:
             if now.get("macros", {}).get(slot) != (name, steps) and steps:
                 self.cmd({"cmd": "macro_save", "slot": slot, "name": name, "steps": steps}, want="macro_saved")
                 drift.append(f"macro_slot_{slot}_restored")
+        # A preference a test changed goes back (it moves nothing by itself); a saved
+        # network that is gone cannot come back - its password is not known here - so
+        # the run fails on it instead (conftest).
+        pref = snap.get("preferred_network")
+        if pref and now.get("preferred_network") != pref and pref in now.get("saved_networks", []):
+            self.cmd({"cmd": "wifi_prefer", "ssid": pref, "force": True}, "wifi_prefer")
+            drift.append("preferred_network")
         self.cmd({"cmd": "key_release_all"})
         return drift
 

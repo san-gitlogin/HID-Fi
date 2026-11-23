@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.4 - 2026-11-23
 
 ### Firmware
 
@@ -53,6 +53,12 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 - **Fixed: "prefer this network now" lost its own answer,** because the board left
   before the reply did. It answers first and moves 3 s later; a newer choice in
   those 3 s replaces the waiting move.
+- **Fixed: with its preferred network away, the board stayed on the louder one.**
+  Brought to a hotspot that was then switched off, the board fell back to the louder
+  network of the home - an extender with its own subnet, which the owner's computer
+  on the main router cannot reach - and stayed there for good (since v4.3). It now
+  goes to the network used most recently that is in range, never away from someone
+  using it, and the preferred one wins again when it is back. DECISIONS.md D-15.
 - **A board that left this computer's network is said to have left it.** Online and
   then gone where this computer cannot reach (the extender's own subnet, seen from the
   main router), the card said "Connecting to <its old address>..." for ever. After 20 s
@@ -75,6 +81,14 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   open). No network names or anything personal in its logs. HTTP only, never a
   WebSocket, every 10 s at the fastest, slower while the board is in use or
   answering slowly (a slowed pace is not mistaken for a gap that reads the log).
+
+### Dependencies
+
+- Companion: `url` 2.5.9 (RUSTSEC-2026-0592), `cookie` 0.18.3 (RUSTSEC-2026-0594),
+  `rustix` 1.1.6 (RUSTSEC-2026-0486). None is reached as far as we can find - `url`
+  and `cookie` come only through the window toolkit (tao, wry), the Companion never
+  calls `Url::origin()` or uses private cookies, and never touches extended
+  attributes - updated anyway, so nobody has to take that on trust.
 
 ### Tests
 
