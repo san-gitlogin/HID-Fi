@@ -70,6 +70,7 @@ adding a login item - for development and tests.
 | `tests/linux/run.sh` | Linux end to end in Docker: build, tests, the app without a tray, real X11 capture + OpenH264 + WebRTC on two virtual monitors, the window in a browser, a second start opening the running app's window |
 | `tests/multi_monitor_mac.py` | REAL monitors on a one-screen Mac: `tools/vdisplay` makes 3 virtual displays; the real app, board and Chrome show each at its shape, two at once, and an unplugged one falls back (`HIDFI_PIN`) |
 | `tests/hardware.py` | the REAL board and service: pair by code, live picture, four viewers, one PIN (`HIDFI_PIN`) |
+| `tests/two_networks.py` | the REAL board and service in a home with two routers (D-14): the board moves to the other network, the Companion finds it again by itself and names both networks, Bring brings it back (board on COM and USB, `HIDFI_ONLY_BOARD`) |
 
 The last four need Google Chrome and their binaries built first:
 `cargo build --release -p hidfi-stream --example serve -p hidfi-companion --example system_app --example hw_app`.

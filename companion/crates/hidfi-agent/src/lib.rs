@@ -3,5 +3,6 @@
 
 pub mod env;
 pub mod locate;
+pub mod neighbours;
 pub mod real;
 pub mod session;

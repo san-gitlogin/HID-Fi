@@ -10,6 +10,7 @@ rust-version.workspace = true
 getrandom = "0.3.4"
 hex = "0.4.3"
 hidfi-core = { path = "../hidfi-core" }
+if-addrs = "0.15.0"                        # already in the tree through mdns-sd: interface netmasks (neighbours.rs)
 log = "0.4.34"
 mdns-sd = "0.21.6"
 nusb = "0.2.5"

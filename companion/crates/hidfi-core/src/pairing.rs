@@ -124,6 +124,15 @@ pub fn ota_mac(k: &PairKey, id: &str, act: &str, url: &str, chal: &str) -> [u8; 
     hmac(k, ota_message(id, act, url, chal).as_bytes())
 }
 
+/// The exact ASCII a bring request's proof covers (hid_fi/companion.h, compBring; D-14).
+pub fn bring_message(id: &str, via: &str, force: bool, chal: &str) -> String {
+    format!("bring|{id}|{via}|{}|{chal}", u8::from(force))
+}
+
+pub fn bring_mac(k: &PairKey, id: &str, via: &str, force: bool, chal: &str) -> [u8; 32] {
+    hmac(k, bring_message(id, via, force, chal).as_bytes())
+}
+
 /// The exact ASCII a factory reset request's proof covers (hid_fi.ino, compReset).
 pub fn reset_mac(k: &PairKey, id: &str, chal: &str) -> [u8; 32] {
     hmac(k, format!("reset|{id}|{chal}").as_bytes())
@@ -240,6 +249,20 @@ impl Responder {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_bring_proof_covers_exactly_what_the_board_checks() {
+        // hid_fi/companion.h compBring: "bring|%s|%s|%d|%s", id, via, force, chal
+        assert_eq!(
+            bring_message("ab", "192.168.0.248", false, "cd"),
+            "bring|ab|192.168.0.248|0|cd"
+        );
+        assert_eq!(
+            bring_message("ab", "192.168.0.248", true, "cd"),
+            "bring|ab|192.168.0.248|1|cd"
+        );
+    }
+
     use super::*;
 
     fn pair(seed_a: u8, seed_b: u8) -> (Initiator, Responder) {

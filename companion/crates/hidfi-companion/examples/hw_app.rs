@@ -2,7 +2,8 @@
 //! real mDNS - only the screen is a test pattern (so no Screen Recording
 //! permission is needed). For companion/tests/hardware.py. Test tool only.
 //!
-//! args: STORE_DIR        stdout: one JSON line per change; stdin: "quit"
+//! args: STORE_DIR        stdout: one JSON line per change; stdin: "quit",
+//! "bring <MAC>" / "bring-force <MAC>" (D-14, as the card's button does)
 //! HIDFI_ONLY_BOARD=<MAC>: see only that board on USB. The service serves every
 //! board plugged in, as the app does; with the owner's board plugged in too, a test
 //! would otherwise ask that board to pair (2026-11-05: load_all.py did, once).
@@ -94,6 +95,11 @@ fn main() {
             let line = serde_json::json!({
                 "board": format!("{:?}", v.board), "session": format!("{:?}", v.session),
                 "watching": v.watching, "port": v.port, "problem": v.problem,
+                // D-14: each board's networks, what "bring" did, and the card's words
+                "boards": v.boards.iter().map(|b| serde_json::json!({
+                    "mac": b.mac, "board": format!("{:?}", b.board), "session": format!("{:?}", b.session),
+                    "net": b.net, "bring": b.bring, "last_net": b.last_net,
+                    "lines": hidfi_companion::menu::card_lines(&v, &b.mac)})).collect::<Vec<_>>(),
                 "factory": v.factory.iter().map(|r| serde_json::json!({
                     "mac": r.mac, "path": r.path.as_str(), "result": r.result, "note": r.note,
                     "steps": r.steps.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
@@ -113,6 +119,23 @@ fn main() {
         {
             let _ = h.tx.send(Cmd::FactoryReset(mac.trim().to_string()));
             continue;
+        }
+        if let Ok(l) = line.as_deref() {
+            let l = l.trim();
+            if let Some(mac) = l.strip_prefix("bring-force ") {
+                let _ = h.tx.send(Cmd::BringHere {
+                    mac: mac.trim().to_string(),
+                    force: true,
+                });
+                continue;
+            }
+            if let Some(mac) = l.strip_prefix("bring ") {
+                let _ = h.tx.send(Cmd::BringHere {
+                    mac: mac.trim().to_string(),
+                    force: false,
+                });
+                continue;
+            }
         }
         if matches!(line.as_deref().map(str::trim), Ok("quit") | Ok("") | Err(_)) {
             let _ = h.tx.send(Cmd::Quit);

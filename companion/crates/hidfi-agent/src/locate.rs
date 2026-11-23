@@ -176,6 +176,19 @@ pub fn find_all(
     browse: &dyn Browse,
     remembered: &[(Mac, String)],
 ) -> FoundAll {
+    find_all_in(usb, http, browse, remembered, &[])
+}
+
+/// As [`find_all`], with the subnets each board's heartbeat listed (D-14): a board on
+/// this USB that nothing else reached is looked for there, for when it moved to another
+/// of its networks and its old address went stale.
+pub fn find_all_in(
+    usb: &dyn UsbList,
+    http: &dyn Http,
+    browse: &dyn Browse,
+    remembered: &[(Mac, String)],
+    subnets: &[(Mac, Vec<String>)],
+) -> FoundAll {
     let macs = discovery::usb_macs(&usb.list());
     if macs.is_empty() {
         return FoundAll::default();
@@ -201,6 +214,48 @@ pub fn find_all(
                 }
             }
             Err(why) => misses.push((url, why)),
+        }
+    }
+    // D-14: a board on this USB that no address, mDNS or remembered, reached may still
+    // be on this computer's own network: ask the OS's ARP table (after a nudge).
+    let missing: Vec<Mac> = macs
+        .iter()
+        .copied()
+        .filter(|m| !seen.iter().any(|b| b.mac == *m))
+        .collect();
+    if !missing.is_empty() {
+        for url in browse.neighbours(&missing) {
+            match probe_why(http, &url) {
+                Ok(b) if !seen.iter().any(|s| s.mac == b.mac) => seen.push(b),
+                Ok(_) => {}
+                Err(why) => misses.push((url, why)),
+            }
+        }
+    }
+    // Still missing: its saved networks' subnets, swept for port 80 and every answer
+    // asked who it is (the MAC decides, as everywhere).
+    let missing: Vec<Mac> = macs
+        .iter()
+        .copied()
+        .filter(|m| !seen.iter().any(|b| b.mac == *m))
+        .collect();
+    let nets: Vec<String> = subnets
+        .iter()
+        .filter(|(m, _)| missing.contains(m))
+        .flat_map(|(_, s)| s.iter().cloned())
+        .fold(Vec::new(), |mut v, s| {
+            if !v.contains(&s) {
+                v.push(s);
+            }
+            v
+        });
+    if !nets.is_empty() {
+        for url in browse.sweep(&nets) {
+            if let Ok(b) = probe_why(http, &url) {
+                if !seen.iter().any(|s| s.mac == b.mac) {
+                    seen.push(b);
+                }
+            }
         }
     }
     let mut here: Vec<NetBoard> = seen
@@ -276,6 +331,137 @@ mod tests {
     }
 
     const M2: &str = "DCB4D9AABBCC";
+
+    /// D-14: mDNS and the remembered address both fail; the ARP table has it.
+    struct ArpBrowse(Vec<String>, Mutex<Vec<Vec<Mac>>>);
+    impl Browse for ArpBrowse {
+        fn boards(&self) -> Vec<String> {
+            Vec::new()
+        }
+        fn neighbours(&self, macs: &[Mac]) -> Vec<String> {
+            self.1.lock().unwrap().push(macs.to_vec());
+            self.0.clone()
+        }
+    }
+
+    /// D-14: the board moved to the home's other router; nothing local finds it.
+    struct SweepBrowse(Vec<String>, Mutex<Vec<Vec<String>>>);
+    impl Browse for SweepBrowse {
+        fn boards(&self) -> Vec<String> {
+            Vec::new()
+        }
+        fn sweep(&self, subnets: &[String]) -> Vec<String> {
+            self.1.lock().unwrap().push(subnets.to_vec());
+            self.0.clone()
+        }
+    }
+
+    #[test]
+    fn a_board_that_moved_to_another_of_its_networks_is_found_in_its_subnets() {
+        let mut http = FakeHttp::default();
+        http.status.insert(
+            "http://192.168.1.3/api/status".into(),
+            (200, "<html>router</html>".into()),
+        );
+        http.status
+            .insert("http://192.168.1.11/api/status".into(), status(M1));
+        let b = SweepBrowse(
+            vec!["http://192.168.1.3".into(), "http://192.168.1.11".into()],
+            Mutex::new(vec![]),
+        );
+        let m = Mac::parse(M1).unwrap();
+        let subnets = vec![(
+            m,
+            vec![
+                "192.168.0.0/255.255.255.0".to_string(),
+                "192.168.1.0/255.255.255.0".to_string(),
+            ],
+        )];
+        let f = find_all_in(
+            &FakeUsb(vec![usb(M1)]),
+            &http,
+            &b,
+            &[(m, "http://192.168.0.184".into())],
+            &subnets,
+        );
+        assert_eq!(f.here.len(), 1);
+        assert_eq!(
+            f.here[0].url, "http://192.168.1.11",
+            "only the address answering as this board"
+        );
+        assert_eq!(b.1.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_board_found_by_its_old_address_is_never_swept_for() {
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://192.168.1.11/api/status".into(), status(M1));
+        let b = SweepBrowse(vec![], Mutex::new(vec![]));
+        let m = Mac::parse(M1).unwrap();
+        let f = find_all_in(
+            &FakeUsb(vec![usb(M1)]),
+            &http,
+            &b,
+            &[
+                (m, "http://192.168.0.184".into()),
+                (m, "http://192.168.1.11".into()),
+            ],
+            &[(m, vec!["192.168.1.0/255.255.255.0".into()])],
+        );
+        assert_eq!(
+            f.here[0].url, "http://192.168.1.11",
+            "its address on the other network, remembered"
+        );
+        assert!(b.1.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_board_mdns_cannot_reach_is_found_through_the_arp_table() {
+        // Seen at the owner's home: the remembered address went stale when the board
+        // changed network, and mDNS did not reach it.
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://192.168.0.184/api/status".into(), status(M1));
+        let b = ArpBrowse(vec!["http://192.168.0.184".into()], Mutex::new(vec![]));
+        let f = find_all(
+            &FakeUsb(vec![usb(M1)]),
+            &http,
+            &b,
+            &[(Mac::parse(M1).unwrap(), "http://192.168.1.11".into())],
+        );
+        assert_eq!(f.here.len(), 1, "{:?}", f.misses);
+        assert_eq!(f.here[0].url, "http://192.168.0.184");
+        assert_eq!(
+            b.1.lock().unwrap().as_slice(),
+            &[vec![Mac::parse(M1).unwrap()]],
+            "asked only for the missing board"
+        );
+    }
+
+    #[test]
+    fn an_arp_address_that_answers_as_another_board_is_not_taken() {
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://192.168.0.50/api/status".into(), status(M2));
+        let b = ArpBrowse(vec!["http://192.168.0.50".into()], Mutex::new(vec![]));
+        let f = find_all(&FakeUsb(vec![usb(M1)]), &http, &b, &[]);
+        assert!(f.here.is_empty() && f.offline == vec![Mac::parse(M1).unwrap()]);
+    }
+
+    #[test]
+    fn a_board_already_found_never_triggers_a_sweep() {
+        let mut http = FakeHttp::default();
+        http.status
+            .insert("http://esp-hid-09f7c8.local/api/status".into(), status(M1));
+        let b = ArpBrowse(vec![], Mutex::new(vec![]));
+        let f = find_all(&FakeUsb(vec![usb(M1)]), &http, &b, &[]);
+        assert_eq!(f.here.len(), 1);
+        assert!(
+            b.1.lock().unwrap().is_empty(),
+            "the network is not nudged for a board that answered"
+        );
+    }
 
     #[test]
     fn two_boards_on_this_computer_are_both_found() {

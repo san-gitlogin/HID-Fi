@@ -752,6 +752,30 @@ class BoardSim:
     def _users(self):
         return [i for i, n in enumerate(self.nets) if n.get("used") or n.get("computer")]
 
+    def prefer(self, row, now, force, asker):
+        """wifiPreferCore (hid_fi.ino): the dashboard's wifi_prefer and the Companion's bring (D-14)."""
+        OK = lambda reply, **kw: dict({"status": "ok", "reply": reply}, **kw)
+        ssid = row["ssid"]
+        # D-10: moving now cuts off anyone else right on the board's network - asked first.
+        if now and not force:
+            others = sum(1 for k in self.sockets if k is not asker and k["open"] and k.get("authed") and k.get("on_link"))
+            others += self.others_on_link
+            if others:
+                return OK("wifi_prefer", ssid=ssid, busy=True, using=others)
+        self.use_count += 1
+        row["used"] = self.use_count
+        for n in self.nets:
+            n["computer"] = n is row
+        row["tried"] = False
+        cur = next((i for i, n in enumerate(self.nets) if n["ssid"] == self.sta["ssid"]), None)
+        on_it = self.sta["phase"] == "online" and cur is not None and self._same(cur, self.nets.index(row))
+        if not on_it and now and row["ssid"] in self.air:
+            self.sta.update(ssid=row["ssid"])
+            self.net_why = "preferred"
+            for c in self.comp.paired:            # staCameOnline: nobody is right on a new network yet (D-14)
+                c["on_link"] = False
+        return OK("wifi_prefer", ssid=ssid, on_it=on_it)
+
     def net_preferred(self):
         """netPreferred(): the paired computer's network, else the one used most recently."""
         u = self._users()
@@ -1446,23 +1470,7 @@ class BoardSim:
             row = next((n for n in self.nets if n["ssid"] == ssid), None)
             if row is None:
                 return E("Not a saved network")
-            # D-10: moving now cuts off anyone else right on the board's network - asked first.
-            if b.get("now") and not b.get("force"):
-                others = sum(1 for k in self.sockets if k is not sock and k["open"] and k.get("authed") and k.get("on_link"))
-                others += self.others_on_link
-                if others:
-                    return OK("wifi_prefer", ssid=ssid, busy=True, using=others)
-            self.use_count += 1
-            row["used"] = self.use_count
-            for n in self.nets:
-                n["computer"] = n is row
-            row["tried"] = False
-            cur = next((i for i, n in enumerate(self.nets) if n["ssid"] == self.sta["ssid"]), None)
-            on_it = self.sta["phase"] == "online" and cur is not None and self._same(cur, self.nets.index(row))
-            if not on_it and b.get("now") and row["ssid"] in self.air:
-                self.sta.update(ssid=row["ssid"])
-                self.net_why = "preferred"
-            return OK("wifi_prefer", ssid=ssid, on_it=on_it)
+            return self.prefer(row, bool(b.get("now")), bool(b.get("force")), sock)
         if c == "wifi_forget":
             ssid = b.get("ssid", "")
             row = next((n for n in self.nets if n["ssid"] == ssid), None)

@@ -52,6 +52,12 @@ pub struct BoardView {
     pub link: crate::health::Link,
     /// Dashboards watching this screen through this board.
     pub viewers: usize,
+    /// D-14: the board's network and this computer's, as the board names them.
+    pub net: Option<hidfi_core::proto::NetFacts>,
+    /// D-14: what the last "Bring the board here" did.
+    pub bring: Option<hidfi_agent::session::Bring>,
+    /// D-14: the network a board this computer cannot reach was last on.
+    pub last_net: Option<String>,
 }
 
 impl BoardView {
@@ -62,6 +68,9 @@ impl BoardView {
             session,
             link: Default::default(),
             viewers: 0,
+            net: None,
+            bring: None,
+            last_net: None,
         }
     }
 }
@@ -121,6 +130,11 @@ pub enum Cmd {
     FactoryReset(String),
     /// Close a finished factory reset's result.
     FactoryClear(String),
+    /// D-14: move this board (MAC) to this computer's network; force past someone using it.
+    BringHere {
+        mac: String,
+        force: bool,
+    },
     Quit,
 }
 
@@ -476,6 +490,8 @@ fn run(
     };
     let mut here: BTreeMap<Mac, Here> = BTreeMap::new();
     let mut offline_since: HashMap<Mac, Instant> = HashMap::new();
+    // D-14: what the last "Bring the board here" did, per board, for its card.
+    let mut brought: HashMap<Mac, hidfi_agent::session::Bring> = HashMap::new();
     let mut elsewhere = 0usize;
     let mut next_find = Instant::now();
     let started = Instant::now();
@@ -562,11 +578,12 @@ fn run(
         let lost = here.values().any(|h| h.session.lost());
         if (missing || lost) && Instant::now() >= next_find || on_usb.is_empty() && !here.is_empty()
         {
-            let found = locate::find_all(
+            let found = locate::find_all_in(
                 env.usb.as_ref(),
                 env.http.as_ref(),
                 env.browse.as_ref(),
                 &Store::remembered(&state),
+                &Store::subnets(&state),
             );
             elsewhere = found.elsewhere;
             for b in found.here {
@@ -637,6 +654,11 @@ fn run(
             if !h.session.lost() {
                 wait = wait.min(h.session.step(env.http.as_ref(), &SystemClock));
             }
+            if let Some(n) = h.session.net() {
+                if let Err(e) = store.remember_net(&mut state, mac, n) {
+                    log::warn!("could not save state: {e}");
+                }
+            }
             if h.session.key_changed {
                 h.session.key_changed = false;
                 keys_changed = true;
@@ -673,11 +695,17 @@ fn run(
                     viewers: listener
                         .as_ref()
                         .map_or(0, |(s, _)| s.watchers.of_board(mac_tag(m))),
+                    net: h.session.net().cloned(),
+                    bring: brought.get(m).cloned(),
+                    last_net: None,
                 },
                 None => BoardView {
                     mac: m.hex(),
                     link: Default::default(),
                     viewers: 0,
+                    net: None,
+                    bring: None,
+                    last_net: Store::last_net(&state, m),
                     // A fresh install has no address to try, mDNS answers within
                     // a few seconds and a lookup by name can take five on macOS:
                     // look quietly first, then say it is not on this network.
@@ -814,6 +842,18 @@ fn run(
                         name: state.name.clone(),
                         ssid: format!("ESP32-HID-{}", &hex[6..]),
                     });
+                }
+            }
+            Ok(Cmd::BringHere { mac, force }) => {
+                if let Some(m) = Mac::parse(&mac) {
+                    if let Some(h) = here.get_mut(&m) {
+                        let r = h.session.bring(env.http.as_ref(), force);
+                        log::info!(
+                            "bring board {} to this computer's network: {r:?}",
+                            short_mac(&m.hex())
+                        );
+                        brought.insert(m, r);
+                    }
                 }
             }
             Ok(Cmd::FactoryClear(mac)) => {

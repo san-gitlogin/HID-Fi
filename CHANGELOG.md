@@ -35,6 +35,22 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   access point keeps the radio awake whatever the power mode asks; the card now
   says so.
 
+### Companion and firmware: two networks in one home
+
+- **"This computer is on X, the board is on Y: two networks"** instead of "not on this
+  computer's WiFi - set it up", with **Bring the board to this computer's network**
+  (signed with the pairing; it asks first if someone is using the board on its own
+  network). A board the Companion cannot reach at all is "last on Y". DECISIONS.md D-14.
+- **The Companion finds the board without mDNS** - which does not cross from one
+  router's network to another's: the board's last four addresses, the ARP table for
+  its MAC, and the subnets of its saved networks, rate-limited.
+- **Fixed: a computer on the other router counted as right on the board's network**
+  when the routers forward without translating addresses; it anchored the network and
+  made a move ask about "someone using it". Now it must also be inside the board's
+  subnet; after a move nobody counts until their next heartbeat.
+- **Fixed: "prefer this network now" lost its own answer,** because the board left
+  before the reply did. It answers first and moves 3 s later.
+
 ### Tools
 
 - **`tools/thermal_watch.py`** logs a board's temperature for hours with no one at

@@ -131,6 +131,28 @@ Feature: The Companion's window - a card per board
     And I click "Pair again" on "HID-Fi AA0002"
     Then the app is asked "act:pair:DCB4D9AA0002"
 
+  Scenario: On the home's other network, the board is brought to this computer's network
+    When the app shows "two-networks"
+    Then the card "HID-Fi 09F7C8" reads "Other network"
+    And the card "HID-Fi 09F7C8" shows "This computer is on ARVISANTU C6, the board is on ARVISANTU: two networks"
+    When I click "Bring it to this network" on "HID-Fi 09F7C8"
+    Then the app is asked "act:bring:DCB4D909F7C8"
+
+  Scenario: Someone using the board on its network is asked about before it moves
+    When the app shows "two-networks-busy"
+    Then the card "HID-Fi 09F7C8" shows "Someone is using the board on ARVISANTU right now"
+    When I click "Move it anyway" on "HID-Fi 09F7C8"
+    Then the app is asked "act:bring-force:DCB4D909F7C8"
+
+  Scenario: A computer network the board never joined offers no move, only how to add it
+    When the app shows "two-networks-unknown"
+    Then the card "HID-Fi 09F7C8" has no button "Bring it to this network"
+    And the card "HID-Fi 09F7C8" shows "Add this computer's WiFi to the board"
+
+  Scenario: A board last seen on the home's other network is not set up from scratch
+    When the app shows "not-reachable-last-on"
+    Then the card "HID-Fi 09F7C8" shows "The board was last on ARVISANTU C6"
+
   Scenario: Forgetting is under Details and asks first
     When the app shows "one-online"
     Then the card "HID-Fi 0A0BB8" has no button "Forget pairing" in view

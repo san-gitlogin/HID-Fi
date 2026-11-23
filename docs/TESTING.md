@@ -335,6 +335,7 @@ packages above, plug in the board, run `sudo -E python tests/run.py --e2e`.
 | Latency and throughput | | | serial | page timestamps | page timestamps | kernel timestamps | |
 | Chip temperature: readings, peak, four-hour log, gaps, failed sensor | thermal.h on the host + 13 planted bugs (test_thermal.py) | device card, power card | `temp_log` against the model (test_sim_contract.py) | | | | |
 | Heat over hours, shell on or off found by itself | tools/thermal_watch.py on synthetic boards (test_thermal_watch.py) | | `tools/thermal_watch.py` on a real board | | | | |
+| Two networks in one home (D-14): named, found without mDNS, brought over | masks never guessed (test_net_logic.py), heartbeat facts + bring + on-link (test_where_the_computer_is.py), Rust: card, finding, store | Companion window: two-network states | test_where_the_computer_is_hw.py; companion/tests/two_networks.py (the real service) | | | |
 | A shortcut never stalls the pointer (`press` queued) | combo.h on the host + planted bugs (test_combo.py) | | test_press_latency_hw.py: ping with a shortcut 5x a second vs quiet | ordering with typing: test_host_input.py | | | |
 | Watching costs no latency: own task, timed reads, the guard, the watcher's back-off | guard + back-off rules, planted bugs | | test_thermal_hw.py: dashboard ping quiet vs a watcher 5x harder than allowed (`tests/support/latency_probe.py`) | | | | |
 | HID-Fi Core print files: every gap measured on the meshes, closed licensed solids, zips | static: test_shell_print.py | | | | | | |

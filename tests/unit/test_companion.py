@@ -64,7 +64,8 @@ def pair(board, app=None):
 def test_a_computer_pairs_comes_online_and_gets_a_ticket(board):
     app = pair(board)
     assert board.status()["comp_paired"] == 1 and board.status()["comp_online"] == 0
-    assert app.beat() == {"status": "ok"}
+    # D-14: this model board is on no home network, so the computer is not right on it
+    assert app.beat() == {"status": "ok", "net": {"board": "", "here": False, "computer": "", "subnets": []}}
     assert board.status()["comp_online"] == 1
     t = ws(board, cmd="screen_ticket", id=app.id)
     assert t["reply"] == "screen_ticket" and t["ip"] == app.ip and t["port"] == app.port and t["fp"] == app.fp
@@ -140,7 +141,7 @@ def test_a_heartbeat_cannot_be_replayed(board):
     _, r = app._call(op="chal", id=app.id)
     m = cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{r['chal']}")
     beat = dict(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=r["chal"], mac=m)
-    assert app._call(**beat)[1] == {"status": "ok"}
+    assert app._call(**beat)[1]["status"] == "ok"
     assert app._call(**beat)[1]["reply"] == "stale_chal"
 
 
@@ -374,7 +375,7 @@ def test_a_heartbeat_and_an_update_can_overlap(board):
     m2 = cs.mac(app.key, f"ota|{app.id}|check||{r2['chal']}")
     assert app._call(op="ota", id=app.id, act="check", url="", chal=r2["chal"], mac=m2)[1]["status"] == "ok"
     m1 = cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{r1['chal']}")
-    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=r1["chal"], mac=m1)[1] == {"status": "ok"}
+    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=r1["chal"], mac=m1)[1]["status"] == "ok"
 
 
 def test_a_fifth_challenge_replaces_the_oldest(board):
@@ -384,7 +385,7 @@ def test_a_fifth_challenge_replaces_the_oldest(board):
                                 mac=cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{ch}"))[1]
     assert beat(chals[0])["reply"] == "stale_chal", "the oldest went"
     for ch in chals[1:]:
-        assert beat(ch) == {"status": "ok"}
+        assert beat(ch)["status"] == "ok"
         assert beat(ch)["reply"] == "stale_chal", "each one once"
 
 
@@ -394,4 +395,4 @@ def test_a_wrong_challenge_burns_none_of_the_live_ones(board):
     bad = dict(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal="ab" * 16, mac="00" * 32)
     assert app._call(**bad)[1]["reply"] == "stale_chal"
     m = cs.mac(app.key, f"beat|{app.id}|{app.port}|{app.fp}|{'1c' * 16}|{ch}")
-    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=ch, mac=m)[1] == {"status": "ok"}
+    assert app._call(op="beat", id=app.id, port=app.port, fp=app.fp, tn="1c" * 16, chal=ch, mac=m)[1]["status"] == "ok"

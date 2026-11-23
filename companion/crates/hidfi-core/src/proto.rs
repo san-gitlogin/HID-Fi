@@ -74,6 +74,33 @@ pub enum Request {
     ResetRequestStatus {
         request: String,
     },
+    /// D-14 (docs/DECISIONS.md): move the board to the saved network this computer's
+    /// address is on. Proven like an update; `force` moves it even while someone is
+    /// using it right on its network (the board asks first otherwise: `busy`).
+    Bring {
+        id: String,
+        via: String,
+        force: bool,
+        chal: String,
+        mac: String,
+    },
+}
+
+/// D-14: where the board is against where this computer is, from each heartbeat's
+/// answer. `computer` is the board's own saved network holding this computer's
+/// address, "" when it has none there (never a guess).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct NetFacts {
+    #[serde(default)]
+    pub board: String,
+    #[serde(default)]
+    pub here: bool,
+    #[serde(default)]
+    pub computer: String,
+    /// Each saved network's subnet as "a.b.c.d/m.m.m.m": where to look for the board if
+    /// it moves to another of them and its old address goes stale.
+    #[serde(default)]
+    pub subnets: Vec<String>,
 }
 
 impl Request {
@@ -143,6 +170,18 @@ pub struct RawReply {
     /// An update request's answer (op "ota"): what was done, if anything.
     #[serde(default)]
     pub done: Option<String>,
+    /// A heartbeat's answer, from boards with D-14.
+    #[serde(default)]
+    pub net: Option<NetFacts>,
+    /// A bring's answer: the network, and whether it waited for someone using it.
+    #[serde(default)]
+    pub ssid: Option<String>,
+    #[serde(default)]
+    pub busy: Option<bool>,
+    #[serde(default)]
+    pub using: Option<u32>,
+    #[serde(default)]
+    pub here: Option<bool>,
 }
 
 /// Why the board said no, in words the tray can show.

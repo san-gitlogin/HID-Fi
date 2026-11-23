@@ -45,6 +45,19 @@ pub trait UsbList: Send + Sync {
 pub trait Browse: Send + Sync {
     /// Base URLs (`http://a.b.c.d`) of HID-Fi boards seen by mDNS recently.
     fn boards(&self) -> Vec<String>;
+    /// D-14: addresses for these boards (on this computer's USB, not found by any
+    /// other way) from this computer's own network without mDNS - the ARP table, after
+    /// a nudge of its subnets (neighbours.rs). Rate-limited by the implementation.
+    /// Fakes find none unless a test stages them.
+    fn neighbours(&self, _macs: &[Mac]) -> Vec<String> {
+        Vec::new()
+    }
+    /// D-14: addresses answering on port 80 in these subnets (the board's saved
+    /// networks, from its heartbeat), for a board that moved to another of them.
+    /// Rate-limited by the implementation. Fakes find none unless staged.
+    fn sweep(&self, _subnets: &[String]) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 pub trait Clock: Send + Sync {

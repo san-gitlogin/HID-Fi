@@ -178,6 +178,8 @@ class CompanionBoard:
             return self._beat(b, ip)
         if op == "ota":
             return self._ota(b, ip)
+        if op == "bring":
+            return self._bring(b, ip)
         if op == "reset":
             return self._reset(b)
         if op == "reset_request":
@@ -315,12 +317,81 @@ class CompanionBoard:
         # D-02/D-10: it anchors the network only when right on it - the address it says
         # it used is the one the request came from (older Companions send none).
         via = b.get("via", "")
-        c["on_link"] = not via or via == ip
+        c["on_link"] = self._local(ip) and (not via or via == ip)
         if not str(ip).startswith("192.168.4.") and c["on_link"]:
             self.sim.owner_here(computer=True)
         if not was:
             self.sim._push({"event": "companion_online", "name": c["name"]})
-        return 200, {"status": "ok"}
+        return 200, {"status": "ok", "net": self._net_facts(via or ip, c["on_link"])}
+
+    # ---- D-14: where the board is against where the computer is -----------------------------
+    def _local(self, ip):
+        """compBeat: right on the board's network is inside its own subnet, or on its
+        access point - a routed request can carry the computer's own address (two
+        routers that do not translate). The model's routers are /24 unless the current
+        saved network records its mask."""
+        import ipaddress
+        if str(ip).startswith("192.168.4."):
+            return True
+        sta = self.sim.sta
+        if sta.get("phase") != "online" or not sta.get("ip"):
+            return False
+        cur = next((n for n in self.sim.nets if n["ssid"] == sta.get("ssid")), {})
+        try:
+            net = ipaddress.IPv4Network(f'{sta["ip"]}/{cur.get("mask") or "255.255.255.0"}', strict=False)
+            return ipaddress.IPv4Address(ip) in net
+        except ValueError:
+            return False
+
+    def _net_of(self, addr):
+        """compNetFacts / netForAddress: the saved network whose subnet, under its own
+        mask, holds the address - never a guessed mask; the current one wins a tie."""
+        import ipaddress
+        try:
+            a = ipaddress.IPv4Address(addr)
+        except ValueError:
+            return None
+        hits = []
+        for n in self.sim.nets:
+            if n.get("subnet") and n.get("mask"):
+                net = ipaddress.IPv4Network(f'{n["subnet"]}/{n["mask"]}', strict=False)
+                if str(net.network_address) == n["subnet"] and a in net:
+                    hits.append(n)
+        cur = next((n for n in hits if n["ssid"] == self.sim.sta["ssid"] and self.sim.sta["phase"] == "online"), None)
+        return cur or (hits[0] if hits else None)
+
+    def _net_facts(self, computer_ip, on_link):
+        online = self.sim.sta["phase"] == "online"
+        k = self._net_of(computer_ip)
+        subnets = [f'{n["subnet"]}/{n["mask"]}' for n in self.sim.nets if n.get("subnet") and n.get("mask")]
+        return {"board": self.sim.sta["ssid"] if online else "", "here": on_link, "computer": k["ssid"] if k else "",
+                "subnets": subnets}
+
+    def _bring(self, b, ip):
+        """compBring (hid_fi/companion.h): to the saved network the computer's address is on."""
+        import ipaddress
+        via, force = b.get("via", ""), bool(b.get("force", False))
+        try:
+            ipaddress.IPv4Address(via)
+            ok_via = len(via) <= 15
+        except ValueError:
+            ok_via = False
+        if not (hex_ok(b.get("id"), 16) and hex_ok(b.get("chal"), 16) and hex_ok(b.get("mac"), 32) and ok_via):
+            return self._refuse(400, "bad_request", "Malformed request")
+        c = self._find_paired(b["id"])
+        if not c:
+            return self._refuse(404, "unknown_pc", "This computer is not paired")
+        if not self._take_chal(c, b["chal"]):
+            return self._refuse(401, "stale_chal", "Ask for a new challenge")
+        if not hmac.compare_digest(mac(c["key"], f'bring|{b["id"]}|{via}|{1 if force else 0}|{b["chal"]}'), b["mac"]):
+            return self._refuse(401, "bad_mac", "The request proof is wrong")
+        k = self._net_of(via)
+        if not k:
+            return self._refuse(409, "unknown_network", "The board has no saved network on this computer's address: add this computer's WiFi on the dashboard first")
+        if self.sim.sta["phase"] == "online" and self.sim.sta["ssid"] == k["ssid"] and c.get("on_link"):
+            return 200, {"status": "ok", "ssid": k["ssid"], "here": True}
+        r = self.sim.prefer(k, True, force, None)
+        return 200, r
 
     def _ota(self, b, ip):
         """compOta (hid_fi/ota.h): the paired Companion's update request."""
@@ -514,6 +585,14 @@ class FakeApp:
 
     def reset_request_status(self, request):
         return self._call(op="reset_request_status", request=request)[1]
+
+    def bring(self, via, force=False):
+        """D-14: ask the board to this computer's network, proven like an update."""
+        _, r = self._call(op="chal", id=self.id)
+        if r.get("status") != "ok":
+            return r
+        m = mac(self.key, f"bring|{self.id}|{via}|{1 if force else 0}|{r['chal']}")
+        return self._call(op="bring", id=self.id, via=via, force=force, chal=r["chal"], mac=m)[1]
 
     def beat(self, via=None):
         """via: this computer's own address toward the board (D-10); None sends none, as

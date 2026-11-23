@@ -236,6 +236,10 @@ minutes later. DA1A2C, the owner's own board, did exactly that when updated on
 
 ## D-10 · 2026-11-07 · Reach the board by name: count only devices right on its network
 
+*Revised by D-14 (2026-11-23):* "right on its network" also needs the computer's address
+inside the board's own subnet - two routers that forward without translating made a
+Mac on the other router look right on it.
+
 **Refines D-02.**
 
 A board can be on one home network at a time, and its `.local` name only works on
@@ -418,3 +422,68 @@ waits for the measurements in docs/ROADMAP.md; this entry only makes them possib
 - `tests/board/test_thermal_hw.py::test_the_sensors_reads_stay_inside_the_guards_budget`
 - `tests/ui/bdd/features/settings.feature: The device card says how hot the chip runs, and its peak since start`
 - `tests/ui/bdd/features/settings.feature: The radio only really sleeps with the access point off, and the card says which`
+
+## D-14 · 2026-11-23 · Two networks in one home: named, found, and the board brought over
+
+**Revises D-10's "right on the board's network" and adds to D-02.**
+
+The owner's home has two routers: "ARVISANTU C6" (192.168.0.x) and "ARVISANTU"
+behind it (192.168.1.x). The Mac moves between them by itself (the macOS log shows
+it hop four times in two minutes) and so does the board. The Companion then said
+"not on this computer's WiFi - set it up from the board's own WiFi" while both were
+on saved networks of the same home. The owner: "I have seen this problem many times,
+where though I am in same network I was seeing in companion that the board is not the
+same network as MAC. Please handle these" and "STRICTLY NO ASSUMPTIONS".
+
+It was measured, not guessed: the board's mDNS answered a unicast query; mDNS just
+does not cross from one router's network to the other, and the Mac had moved.
+
+1. **The board names both networks.** It records each saved network's mask when it
+   joins (raw, as the router gave it; never guessed - 192.168.1.11 is not on
+   192.168.0.0 just because a /23 would say so). Each Companion heartbeat's answer says
+   which network the board is on, which saved network holds the computer's own address
+   ("" when none), whether they are the same, and each saved network's subnet.
+2. **The Companion says so,** in place of "not on this computer's WiFi": "This computer
+   is on ARVISANTU C6, the board is on ARVISANTU: two networks", with **Bring the board
+   to this computer's network** - a request signed with the pairing like an update
+   (`op: "bring"`), done by the dashboard's own rule: it asks first when someone is
+   using the board right on its network, and refuses (`unknown_network`) when the
+   computer's network is not one the board has saved. A board it cannot reach at all
+   is "last on <network>", not set up from scratch.
+3. **The Companion finds the board without mDNS:** every address it had (the newest
+   four), the OS's ARP table for its MAC after one datagram to each address of this
+   computer's subnets (real netmasks, at most a /22), and the subnets of the board's
+   saved networks swept for port 80 - at most every 2 minutes, and only for a board on
+   this computer's USB that nothing else found. The MAC the address reports decides,
+   as for every candidate.
+4. **Right on the board's network** (D-10) now also needs the computer's address inside
+   the board's own subnet (or its access point): two routers that forward without
+   translating deliver the Mac's own address, so "said == came from" held for a Mac on
+   the other router (found on 09F7C8). After the board joins a network nobody counts as
+   right on it until their next heartbeat, and a heartbeat in the moment before an
+   asked-for move cannot anchor the network being left.
+5. **A move answers first.** `wifi_prefer now` and `bring` reply, then move 3 s later:
+   a reply sent after the move never arrived, and 300 ms and 1.5 s still lost it 1 run
+   in 3 just after a join (one TCP retransmission is ~1 s). A Companion that gets no
+   answer says "moving" and finds the board where it went.
+
+Proven on 09F7C8 with the real Companion service (companion/tests/two_networks.py):
+moved to the other router, found again by itself in 23 s, both networks named, brought
+back with one click. The board test ran 6 of 6 with every answer received.
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_a_mask_is_never_guessed`
+- `tests/unit/test_net_logic.py::test_an_address_is_on_the_saved_network_whose_subnet_holds_it`
+- `tests/unit/test_where_the_computer_is.py::test_the_heartbeat_names_both_networks_when_they_differ`
+- `tests/unit/test_where_the_computer_is.py::test_a_routed_computer_carrying_its_own_address_is_not_right_on_the_network`
+- `tests/unit/test_where_the_computer_is.py::test_after_a_move_nobody_counts_as_right_on_the_new_network_until_they_say_so`
+- `tests/unit/test_where_the_computer_is.py::test_bring_asks_first_when_someone_is_using_the_board_on_its_network`
+- `tests/unit/test_where_the_computer_is.py::test_bring_to_a_network_the_board_does_not_know_moves_nothing`
+- `tests/unit/test_where_the_computer_is.py::test_a_forged_or_replayed_bring_moves_nothing`
+- `tests/unit/test_where_the_computer_is.py::test_the_firmware_records_each_networks_mask_and_answers_bring_signed`
+- `tests/board/test_where_the_computer_is_hw.py::test_on_two_networks_the_board_is_named_and_brought_back`
+- `companion/crates/hidfi-companion/src/menu.rs::two_networks_are_named_with_a_way_to_bring_the_board_here`
+- `companion/crates/hidfi-companion/src/menu.rs::a_board_last_seen_on_another_home_network_is_not_set_up_from_scratch`
+- `companion/crates/hidfi-agent/src/locate.rs::a_board_that_moved_to_another_of_its_networks_is_found_in_its_subnets`
+- `companion/crates/hidfi-agent/src/locate.rs::a_board_mdns_cannot_reach_is_found_through_the_arp_table`
+- `tests/ui/companion/features/window.feature: On the home's other network, the board is brought to this computer's network`

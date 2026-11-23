@@ -5,12 +5,13 @@
 //! something, the next line says exactly what; actions appear only when they
 //! do something in this state.
 
-#[cfg(test)]
 use crate::service::BoardView;
 use crate::service::{BoardState, View};
 use crate::updates::center::{BoardUpd, CompUpd, UpdCmd};
 use crate::updates::{Job, Offer};
+use hidfi_agent::session::Bring;
 use hidfi_agent::session::Status;
+use hidfi_core::proto::NetFacts;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
@@ -47,6 +48,11 @@ pub enum Action {
     FactoryReset(String),
     /// Close a finished factory reset's result.
     FactoryClear(String),
+    /// D-14: move this board (MAC) to this computer's network; force past someone using it.
+    BringHere {
+        mac: String,
+        force: bool,
+    },
 }
 
 /// The board's own WiFi name (`ESP32-HID-` and the last six digits of its MAC) for
@@ -65,6 +71,23 @@ pub fn own_wifi(v: &View) -> String {
 /// "is it on this computer's WiFi?" left people stuck at the one thing they could
 /// not see - how to reach the dashboard when the board is not on their network.
 pub fn not_on_network_steps(v: &View) -> Vec<String> {
+    // D-14: a board known to be on one of this home's networks is not set up again from
+    // scratch: this computer is most likely on the home's other network.
+    if let Some(last) = v
+        .boards
+        .iter()
+        .find(|b| b.board == BoardState::NotOnNetwork)
+        .and_then(|b| b.last_net.clone())
+    {
+        return vec![
+            format!("Not reachable from this computer. The board was last on {last}"),
+            format!("If your home has two WiFi networks, this computer is probably on the other one: join this computer to {last}"),
+            format!(
+                "Or bring the board to this computer's WiFi: on your phone, join the board's own WiFi {}, open http://192.168.4.1, then Settings, Home network",
+                own_wifi(v)
+            ),
+        ];
+    }
     vec![
         "Not on this computer's WiFi. To add this WiFi to the board:".into(),
         format!("1. On your phone, join the board's own WiFi {}", own_wifi(v)),
@@ -261,6 +284,66 @@ fn model_boards(v: &View) -> Model {
     out
 }
 
+/// D-14: the board's network facts when it and this computer are on two different
+/// networks (the board says so in each heartbeat's answer), with that board's view.
+fn net_apart<'a>(v: &'a View, mac: Option<&str>) -> Option<(&'a NetFacts, &'a BoardView)> {
+    let bv = match mac {
+        Some(m) => v.boards.iter().find(|b| b.mac == m),
+        None => v.boards.first(),
+    }?;
+    bv.net
+        .as_ref()
+        .filter(|n| !n.here && !n.board.is_empty())
+        .map(|n| (n, bv))
+}
+
+/// D-14: what the card says when the board and this computer are on two networks -
+/// each one named, never "not on this computer's WiFi" while the board is on one of
+/// this home's networks.
+pub fn two_networks_lines(n: &NetFacts, bring: Option<&Bring>) -> Vec<String> {
+    let mut l = vec![if n.computer.is_empty() {
+        format!(
+            "The board is on {}; this computer is on a network the board has never joined",
+            n.board
+        )
+    } else {
+        format!(
+            "This computer is on {}, the board is on {}: two networks",
+            n.computer, n.board
+        )
+    }];
+    l.push("Screen sharing and the board's name need both on one network".into());
+    match bring {
+        Some(Bring::Moving(s)) if s.is_empty() => l.push("Moving the board to this computer's network\u{2026}".into()),
+        Some(Bring::Moving(s)) => l.push(format!("Moving the board to {s}\u{2026}")),
+        Some(Bring::Here(s)) => l.push(format!("Both are on {s} now")),
+        Some(Bring::Busy(k)) => l.push(format!(
+            "Someone is using the board on {} right now ({k}); moving it would cut them off",
+            n.board
+        )),
+        Some(Bring::UnknownNetwork) | None if n.computer.is_empty() => l.push(
+            "Add this computer's WiFi to the board: dashboard, Settings, Home network, or join this computer to the board's network".into(),
+        ),
+        Some(Bring::Failed(why)) => l.push(format!("Could not move it: {why}")),
+        _ => {}
+    }
+    l
+}
+
+/// One board's lines as its card and the tray show them (for test tools).
+pub fn card_lines(v: &View, mac: &str) -> Vec<String> {
+    let Some(b) = v.boards.iter().find(|b| b.mac == mac) else {
+        return Vec::new();
+    };
+    let one = View {
+        board: b.board.clone(),
+        session: b.session.clone(),
+        boards: vec![b.clone()],
+        ..v.clone()
+    };
+    model_one(&one, Some(mac)).lines
+}
+
 /// The menu for one board (`mac` names it in actions when there are several).
 pub(crate) fn model_one(v: &View, mac: Option<&str>) -> Model {
     let which = mac.map(str::to_string);
@@ -326,6 +409,31 @@ pub(crate) fn model_one(v: &View, mac: Option<&str>) -> Model {
                     icon = Icon::Attention;
                     lines.push("The pairing request was not accepted in time".into());
                     actions.push(("Pair again".into(), Action::PairAgain(which.clone())));
+                }
+                Status::Online if net_apart(v, mac).is_some() => {
+                    // D-14: both on saved networks of one home, but not the same one.
+                    icon = Icon::Attention;
+                    let (n, bv) = net_apart(v, mac).expect("checked");
+                    lines.extend(two_networks_lines(n, bv.bring.as_ref()));
+                    let m = bv.mac.clone();
+                    match bv.bring {
+                        Some(Bring::Busy(_)) => actions.push((
+                            "Move it anyway".into(),
+                            Action::BringHere {
+                                mac: m,
+                                force: true,
+                            },
+                        )),
+                        Some(Bring::Moving(_)) | Some(Bring::UnknownNetwork) => {}
+                        _ if !n.computer.is_empty() => actions.push((
+                            "Bring the board to this computer's network".into(),
+                            Action::BringHere {
+                                mac: m,
+                                force: false,
+                            },
+                        )),
+                        _ => {}
+                    }
                 }
                 Status::Online => {
                     icon = if v.watching > 0 {
@@ -1020,6 +1128,166 @@ mod tests {
         BoardView::new(mac, board, session)
     }
 
+    // ---- D-14: the board and this computer on two networks of one home ----------------------
+    fn apart(computer: &str, bring: Option<Bring>) -> View {
+        let mut v = view(found(), Status::Online);
+        let mut b = board("DCB4D909F7C8", found(), Status::Online);
+        b.net = Some(NetFacts {
+            board: "ARVISANTU".into(),
+            here: false,
+            computer: computer.into(),
+            subnets: vec![],
+        });
+        b.bring = bring;
+        v.boards = vec![b];
+        v
+    }
+
+    #[test]
+    fn two_networks_are_named_with_a_way_to_bring_the_board_here() {
+        // Seen at the owner's home: "not on this computer's WiFi" while the board was on
+        // the other of the home's two routers.
+        let m = model(&apart("ARVISANTU C6", None));
+        assert_eq!(m.icon, Icon::Attention);
+        assert!(
+            m.lines.iter().any(|l| l
+                == "This computer is on ARVISANTU C6, the board is on ARVISANTU: two networks"),
+            "{:?}",
+            m.lines
+        );
+        assert!(!m
+            .lines
+            .iter()
+            .any(|l| l.contains("Ready") || l.contains("not on this computer's WiFi")));
+        assert!(m.actions.iter().any(|a| a.1
+            == Action::BringHere {
+                mac: "DCB4D909F7C8".into(),
+                force: false
+            }));
+    }
+
+    #[test]
+    fn a_computer_network_the_board_never_joined_says_how_to_add_it_and_offers_no_move() {
+        let m = model(&apart("", None));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.contains("a network the board has never joined")),
+            "{:?}",
+            m.lines
+        );
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.contains("Add this computer's WiFi to the board")));
+        assert!(!m
+            .actions
+            .iter()
+            .any(|a| matches!(a.1, Action::BringHere { .. })));
+    }
+
+    #[test]
+    fn someone_using_the_board_is_asked_about_before_it_moves() {
+        let m = model(&apart("ARVISANTU C6", Some(Bring::Busy(1))));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.contains("Someone is using the board on ARVISANTU")),
+            "{:?}",
+            m.lines
+        );
+        assert!(m.actions.iter().any(|a| a.1
+            == Action::BringHere {
+                mac: "DCB4D909F7C8".into(),
+                force: true
+            }));
+        assert!(!m.actions.iter().any(|a| a.1
+            == Action::BringHere {
+                mac: "DCB4D909F7C8".into(),
+                force: false
+            }));
+    }
+
+    #[test]
+    fn a_move_on_its_way_is_said_and_not_offered_again() {
+        let m = model(&apart(
+            "ARVISANTU C6",
+            Some(Bring::Moving("ARVISANTU C6".into())),
+        ));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.starts_with("Moving the board to ARVISANTU C6")),
+            "{:?}",
+            m.lines
+        );
+        assert!(!m
+            .actions
+            .iter()
+            .any(|a| matches!(a.1, Action::BringHere { .. })));
+    }
+
+    #[test]
+    fn a_failed_move_says_why_and_can_be_tried_again() {
+        let m = model(&apart(
+            "ARVISANTU C6",
+            Some(Bring::Failed(
+                "this board's firmware is too old to be moved from here; update it".into(),
+            )),
+        ));
+        assert!(
+            m.lines
+                .iter()
+                .any(|l| l.contains("Could not move it: this board's firmware is too old")),
+            "{:?}",
+            m.lines
+        );
+        assert!(m
+            .actions
+            .iter()
+            .any(|a| matches!(a.1, Action::BringHere { force: false, .. })));
+    }
+
+    #[test]
+    fn a_board_last_seen_on_another_home_network_is_not_set_up_from_scratch() {
+        let mut v = view(BoardState::NotOnNetwork, Status::Connecting);
+        let mut b = board("DCB4D909F7C8", BoardState::NotOnNetwork, Status::Connecting);
+        b.last_net = Some("ARVISANTU C6".into());
+        v.boards = vec![b];
+        let m = model(&v);
+        assert!(
+            m.lines.iter().any(
+                |l| l == "Not reachable from this computer. The board was last on ARVISANTU C6"
+            ),
+            "{:?}",
+            m.lines
+        );
+        assert!(m
+            .lines
+            .iter()
+            .any(|l| l.contains("join this computer to ARVISANTU C6")));
+        assert!(!m
+            .lines
+            .iter()
+            .any(|l| l.starts_with("Not on this computer's WiFi")));
+    }
+
+    #[test]
+    fn together_on_one_network_is_the_ordinary_ready_card() {
+        let mut v = apart("ARVISANTU", None);
+        v.boards[0].net.as_mut().unwrap().here = true;
+        let m = model(&v);
+        assert!(
+            m.lines.iter().any(|l| l.starts_with("Ready")),
+            "{:?}",
+            m.lines
+        );
+        assert!(!m
+            .actions
+            .iter()
+            .any(|a| matches!(a.1, Action::BringHere { .. })));
+    }
+
     #[test]
     fn two_boards_plugged_in_are_both_served_each_with_its_own_actions() {
         // Seen live: a second board on the Mac was never offered to pair.
@@ -1224,6 +1492,9 @@ mod tests {
             session: Status::Online,
             link: Default::default(),
             viewers: 0,
+            net: None,
+            bring: None,
+            last_net: None,
         }];
         v.updates.boards = vec![BoardUpd {
             mac: "B81F3FDA1A2C".into(),
@@ -1390,6 +1661,9 @@ mod tests {
             session: Status::Online,
             link: Default::default(),
             viewers: 0,
+            net: None,
+            bring: None,
+            last_net: None,
         });
         v.updates.companion = CompUpd::Available {
             to: "4.1.0".into(),
@@ -1431,6 +1705,9 @@ mod tests {
             session: Status::Online,
             link: Default::default(),
             viewers: 0,
+            net: None,
+            bring: None,
+            last_net: None,
         });
         let m = model(&v);
         assert!(

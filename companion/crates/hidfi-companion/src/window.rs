@@ -52,6 +52,8 @@ fn id_of(a: &Action) -> String {
         Action::AllowMicrophone => "allow-mic".into(),
         Action::FactoryReset(m) => format!("reset:{m}"),
         Action::FactoryClear(m) => format!("reset-clear:{m}"),
+        Action::BringHere { mac, force: false } => format!("bring:{mac}"),
+        Action::BringHere { mac, force: true } => format!("bring-force:{mac}"),
         Action::Sound {
             system: Some(_), ..
         } => "sound-system".into(),
@@ -126,6 +128,14 @@ fn state_of(b: &BoardView) -> (&'static str, &'static str) {
         BoardState::NotOnNetwork => ("offline", "Not on this network"),
         BoardState::Found { .. } => match &b.session {
             Status::Online if b.link.not_answering() => ("offline", "Not answering"),
+            // D-14: on the home's other network - say so, it is why screen sharing fails
+            Status::Online
+                if b.net
+                    .as_ref()
+                    .is_some_and(|n| !n.here && !n.board.is_empty()) =>
+            {
+                ("attention", "Other network")
+            }
             Status::Online if b.viewers > 0 => ("live", "Live"),
             Status::Online => ("online", "Online"),
             Status::Reconnecting => ("offline", "Reconnecting"),
@@ -205,6 +215,8 @@ fn card_label<'a>(a: &Action, tray: &'a str, upd: Option<&BoardUpd>) -> std::bor
         Action::OpenDashboard(_) => "Open dashboard".into(),
         Action::PairAgain(_) => "Pair again".into(),
         Action::Forget(_) => "Forget pairing".into(),
+        Action::BringHere { force: false, .. } => "Bring it to this network".into(),
+        Action::BringHere { force: true, .. } => "Move it anyway".into(),
         Action::Update(UpdCmd::Update { cable: false, .. }) => format!("Update{}", to()).into(),
         Action::Update(UpdCmd::Update { cable: true, .. })
             if upd.is_some_and(|u| u.resumable.is_some()) =>
@@ -370,11 +382,16 @@ pub fn model(v: &View) -> Window {
             }
             add(id, a.clone());
         }
-        // Online and nobody watching: the state says it all. Not answering: say
+        // Online and nobody watching: the state says it all - unless the board is on
+        // the home's other network (D-14), which the line names. Not answering: say
         // so, not what the last heartbeat said.
+        let apart = b
+            .net
+            .as_ref()
+            .is_some_and(|n| !n.here && !n.board.is_empty());
         let line = if matches!(b.session, Status::Online) && b.link.not_answering() {
             "It stopped answering: it may have lost WiFi, or be restarting.".to_string()
-        } else if matches!(b.session, Status::Online) && b.viewers == 0
+        } else if matches!(b.session, Status::Online) && b.viewers == 0 && !apart
             || matches!(b.session, Status::ShowCode(_))
         {
             // The code box says it, large, with its own hint.

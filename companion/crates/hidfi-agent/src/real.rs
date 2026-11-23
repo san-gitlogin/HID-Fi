@@ -111,7 +111,13 @@ impl UsbList for NusbList {
 pub struct MdnsBrowse {
     seen: Arc<Mutex<HashMap<String, Instant>>>,
     _daemon: Option<mdns_sd::ServiceDaemon>,
+    /// When this computer's subnets were last nudged (neighbours.rs): at most once
+    /// every NUDGE_EVERY, so a board that is truly away costs the network nothing.
+    nudged: Mutex<Option<Instant>>,
+    swept: Mutex<Option<Instant>>,
 }
+
+const NUDGE_EVERY: Duration = Duration::from_secs(120);
 
 const MDNS_FORGET: Duration = Duration::from_secs(300);
 
@@ -125,6 +131,8 @@ impl MdnsBrowse {
                 return MdnsBrowse {
                     seen,
                     _daemon: None,
+                    nudged: Mutex::new(None),
+                    swept: Mutex::new(None),
                 };
             }
         };
@@ -167,6 +175,8 @@ impl MdnsBrowse {
         MdnsBrowse {
             seen,
             _daemon: Some(daemon),
+            nudged: Mutex::new(None),
+            swept: Mutex::new(None),
         }
     }
 }
@@ -182,5 +192,43 @@ impl Browse for MdnsBrowse {
             .collect();
         v.sort_by_key(|e| std::cmp::Reverse(e.1));
         v.into_iter().map(|(k, _)| k).collect()
+    }
+
+    fn neighbours(&self, macs: &[Mac]) -> Vec<String> {
+        {
+            let mut last = self.nudged.lock().unwrap_or_else(|e| e.into_inner());
+            if last.is_some_and(|t| t.elapsed() < NUDGE_EVERY) {
+                // between nudges, the ARP table alone
+                let t = crate::neighbours::parse_arp(&crate::neighbours::arp_text());
+                return macs
+                    .iter()
+                    .filter_map(|m| {
+                        t.iter()
+                            .find(|(tm, _)| tm == m)
+                            .map(|(_, ip)| format!("http://{ip}"))
+                    })
+                    .collect();
+            }
+            *last = Some(Instant::now());
+        }
+        crate::neighbours::find(macs)
+    }
+
+    fn sweep(&self, subnets: &[String]) -> Vec<String> {
+        {
+            let mut last = self.swept.lock().unwrap_or_else(|e| e.into_inner());
+            if last.is_some_and(|t| t.elapsed() < NUDGE_EVERY) {
+                return Vec::new();
+            }
+            *last = Some(Instant::now());
+        }
+        let nets: Vec<_> = subnets
+            .iter()
+            .filter_map(|s| crate::neighbours::parse_subnet(s))
+            .collect();
+        crate::neighbours::tcp_sweep(&nets, Duration::from_millis(400))
+            .into_iter()
+            .map(|ip| format!("http://{ip}"))
+            .collect()
     }
 }

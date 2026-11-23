@@ -450,6 +450,34 @@ pub fn all() -> Vec<(&'static str, View)> {
         ("Erasing over USB", Todo), ("Restarting as new", Todo)],
         "An update is running on the board. Try again when it has finished. Nothing was changed.", Some(false), None)));
 
+    // D-14: the board and this computer on two networks of one home.
+    let apart = |computer: &str, bring: Option<hidfi_agent::session::Bring>| {
+        let mut x = b(bb, found("192.168.1.11"), Status::Online, Some(18), 0);
+        x.net = Some(hidfi_core::proto::NetFacts {
+            board: "ARVISANTU".into(),
+            here: false,
+            computer: computer.into(),
+            subnets: vec![],
+        });
+        x.bring = bring;
+        view(vec![x])
+    };
+    states.push(("two-networks", apart("ARVISANTU C6", None)));
+    states.push(("two-networks-unknown", apart("", None)));
+    states.push((
+        "two-networks-busy",
+        apart("ARVISANTU C6", Some(hidfi_agent::session::Bring::Busy(1))),
+    ));
+    states.push((
+        "two-networks-moving",
+        apart(
+            "ARVISANTU C6",
+            Some(hidfi_agent::session::Bring::Moving("ARVISANTU C6".into())),
+        ),
+    ));
+    let mut last = b(bb, BoardState::NotOnNetwork, Status::Connecting, None, 0);
+    last.last_net = Some("ARVISANTU C6".into());
+    states.push(("not-reachable-last-on", view(vec![last])));
     states
 }
 

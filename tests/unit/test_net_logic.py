@@ -511,3 +511,36 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
         except AssertionError:
             caught += 1
     assert caught, f"the planted bug {new!r} went unnoticed"
+
+
+# ---- D-14: which saved network an address is on ---------------------------------------------
+SUB_C6, SUB_ARV, SUB_EXT = "192.168.0.0/255.255.255.0", "192.168.1.0/255.255.255.0", "192.168.0.0/255.255.255.0"
+
+
+def net_for(bench, ip, current, nets):
+    r = subprocess.run([str(bench)], input=f"netfor {ip} {current} {','.join(nets) or '-'}\n",
+                       capture_output=True, text=True, timeout=30)
+    return int(r.stdout.split()[0])
+
+
+@pytest.mark.parametrize("ip, want", [
+    ("192.168.0.248", 0),          # the Mac on ARVISANTU C6
+    ("192.168.1.105", 1),          # the Mac on ARVISANTU, the router behind it
+    ("192.168.2.7", -1),           # a network the board has never been on
+    ("10.0.0.5", -1),
+])
+def test_an_address_is_on_the_saved_network_whose_subnet_holds_it(bench, ip, want):
+    assert net_for(bench, ip, -1, [SUB_C6, SUB_ARV]) == want
+
+
+def test_a_mask_is_never_guessed(bench):
+    """192.168.1.11 is not on 192.168.0.0 just because a /23 would say so; and a network
+    saved before masks were recorded (mask 0) matches nothing until joined again."""
+    assert net_for(bench, "192.168.1.11", -1, ["192.168.0.0/255.255.255.0"]) == -1
+    assert net_for(bench, "192.168.0.9", -1, ["192.168.0.0/0.0.0.0"]) == -1
+    assert net_for(bench, "192.168.1.11", -1, ["192.168.0.0/255.255.254.0"]) == 0, "the router's own /23 does hold it"
+
+
+def test_a_router_and_its_extender_on_one_subnet_prefer_the_current_one(bench):
+    assert net_for(bench, "192.168.0.50", -1, [SUB_C6, SUB_EXT]) == 0
+    assert net_for(bench, "192.168.0.50", 1, [SUB_C6, SUB_EXT]) == 1

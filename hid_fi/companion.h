@@ -331,6 +331,8 @@ static bool compChalTake(CompPaired& c, const uint8_t chal[16]) {
     return found;
 }
 
+static void compNetFacts(JsonDocument& d, uint32_t computerIp, bool onLink);   // D-14, below
+
 static void compChal(const JsonDocument& in) {
     uint8_t id[16];
     if (!comp_hex_parse(in["id"] | "", id, 16)) { compRefuse(400, "bad_request", "Malformed id"); return; }
@@ -378,9 +380,17 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
     // on it. The Companion says which local address it used; a request that came from
     // another address was routed in from another network (a router in between), and a
     // computer there cannot reach the board by name. Older Companions send nothing.
+    // D-14 (found on 09F7C8, 2026-11-23): two routers that forward between their
+    // networks without translating addresses deliver the computer's own address, so
+    // "said == came from" held for a Mac on the other router - it was counted right on
+    // the board's network, anchored it there and made "bring" ask about someone using
+    // it. Right on its network also means inside the board's own subnet (or its access
+    // point).
     const char* via = in["via"] | "";
     IPAddress said;
-    c.onLink = !via[0] || (said.fromString(via) && (uint32_t)said == ip);
+    const uint32_t sm = (uint32_t)WiFi.subnetMask(), me = (uint32_t)WiFi.localIP();
+    const bool local = clientIsAp(IPAddress(ip)) || (wifiConnected && sm && (ip & sm) == (me & sm));
+    c.onLink = local && (!via[0] || (said.fromString(via) && (uint32_t)said == ip));
     if (!clientIsAp(IPAddress(ip)) && c.onLink) netOwnerHere(true);
     if (!wasOnline) {
         JsonDocument ev;
@@ -389,6 +399,69 @@ static void compBeat(const JsonDocument& in, uint32_t ip) {
         webSocket.broadcastTXT(out);
     }
     JsonDocument d; d["status"] = "ok";
+    compNetFacts(d, via[0] ? (uint32_t)said : ip, c.onLink);
+    compReply(200, d);
+}
+
+// D-14: where the board is against where the computer is, named, for the Companion to
+// say "This Mac is on X, the board is on Y" instead of "not on this WiFi". The
+// computer's network is the saved one whose subnet holds the address the computer says
+// it used (never guessed: unknown when the board has no saved network there).
+static void compNetFacts(JsonDocument& d, uint32_t computerIp, bool onLink) {
+    JsonObject n = d["net"].to<JsonObject>();
+    n["board"] = (wifiConnected && netCurrent >= 0 && netCurrent < netCount) ? netSsid[netCurrent] : String("");
+    n["here"] = onLink;
+    int k = netOfAddress(computerIp);
+    n["computer"] = k >= 0 ? netSsid[k] : String("");
+    // Where to look for the board when it has moved to another of these networks and
+    // its old address is stale: each saved network's subnet, with its own mask (none
+    // for a network whose mask was never recorded). Not secret: no names, no passwords.
+    JsonArray subs = n["subnets"].to<JsonArray>();
+    for (int i = 0; i < netCount; i++) {
+        if (!netNet[i] || !netSmask[i]) continue;
+        char sn[40];
+        IPAddress a(netNet[i]), m(netSmask[i]);
+        snprintf(sn, sizeof(sn), "%u.%u.%u.%u/%u.%u.%u.%u", a[0], a[1], a[2], a[3], m[0], m[1], m[2], m[3]);
+        subs.add(sn);
+    }
+}
+
+// D-14: "Bring the board to this computer's network", from the paired Companion. Signed
+// over a fresh challenge like a heartbeat. The board moves to the saved network the
+// computer's address is on, by the dashboard's own rule (wifiPreferCore): it asks first
+// when someone is using the board right on its network (busy, using) unless force.
+static void compBring(const JsonDocument& in, uint32_t ip) {
+    uint8_t id[16], chal[16], mac[32], want[32];
+    const char* ch = in["chal"] | "";
+    const char* via = in["via"] | "";
+    const bool force = in["force"] | false;
+    IPAddress said;
+    if (!comp_hex_parse(in["id"] | "", id, 16) || !comp_hex_parse(ch, chal, 16) ||
+        !comp_hex_parse(in["mac"] | "", mac, 32) || !via[0] || !said.fromString(via) || strlen(via) > 15) {
+        compRefuse(400, "bad_request", "Malformed request"); return;
+    }
+    int i = compFindPaired(id);
+    if (i < 0) { compRefuse(404, "unknown_pc", "This computer is not paired"); return; }
+    CompPaired& c = compPaired[i];
+    if (!compChalTake(c, chal)) { compRefuse(401, "stale_chal", "Ask for a new challenge"); return; }
+    char msg[160], idh[33];
+    comp_hex(id, 16, idh);
+    snprintf(msg, sizeof(msg), "bring|%s|%s|%d|%s", idh, via, force ? 1 : 0, ch);
+    if (comp_hmac(c.key, msg, want) != 0 || !comp_ct_equal(want, mac, 32)) {
+        compRefuse(401, "bad_mac", "The request proof is wrong"); return;
+    }
+    int k = netOfAddress((uint32_t)said);
+    if (k < 0) {
+        compRefuse(409, "unknown_network", "The board has no saved network on this computer's address: add this computer's WiFi on the dashboard first");
+        return;
+    }
+    JsonDocument d;
+    if (wifiConnected && netCurrent >= 0 && netCurrent < netCount && netSsid[netCurrent] == netSsid[k] && c.onLink) {
+        d["status"] = "ok"; d["ssid"] = netSsid[k]; d["here"] = true;
+        compReply(200, d); return;
+    }
+    wifiPreferCore(k, true, force, -1, d);
+    COM_SERIAL.printf("[COMP] %s asked the board to its network %s\n", c.name, netSsid[k].c_str());
     compReply(200, d);
 }
 
@@ -428,6 +501,7 @@ void handleCompanionHttp() {
     else if (!strcmp(op, "chal"))   compChal(in);
     else if (!strcmp(op, "beat"))   compBeat(in, ip);
     else if (!strcmp(op, "ota"))    compOta(in, ip);        // hid_fi/ota.h
+    else if (!strcmp(op, "bring"))  compBring(in, ip);      // D-14: to the computer's network
     else if (!strcmp(op, "reset"))  compReset(in, ip);      // docs/FACTORY_RESET.md
     else if (!strcmp(op, "reset_request")) compResetRequest(in, ip);
     else if (!strcmp(op, "reset_request_status")) compResetRequestStatus(in, ip);

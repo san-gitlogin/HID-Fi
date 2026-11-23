@@ -120,6 +120,9 @@ pub fn run(handle: &Handle, a: Action) {
         Action::FactoryClear(mac) => {
             let _ = handle.tx.send(Cmd::FactoryClear(mac));
         }
+        Action::BringHere { mac, force } => {
+            let _ = handle.tx.send(Cmd::BringHere { mac, force });
+        }
         Action::AllowMicrophone => {
             #[cfg(target_os = "macos")]
             open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");

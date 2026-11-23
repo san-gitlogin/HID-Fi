@@ -59,6 +59,19 @@ pub struct KnownBoard {
     /// 12 hex digits, upper case.
     pub mac: String,
     pub url: String,
+    /// D-14: the network the board was last on, as its heartbeat named it - so a board
+    /// this computer cannot reach is "last on X", not "set it up from scratch".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_net: Option<String>,
+    /// D-14: addresses it had before, newest first (at most three): a router usually
+    /// gives a board the same address again, so its old address on another network
+    /// finds it when it goes back there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub urls: Vec<String>,
+    /// D-14: its saved networks' subnets, from its heartbeat - where to look when no
+    /// address works.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subnets: Vec<String>,
 }
 
 fn yes() -> bool {
@@ -186,6 +199,9 @@ impl Store {
                     s.boards.push(KnownBoard {
                         mac: mac.hex(),
                         url,
+                        last_net: None,
+                        urls: Vec::new(),
+                        subnets: Vec::new(),
                     });
                 }
             }
@@ -207,20 +223,76 @@ impl Store {
     pub fn remember(&self, s: &mut State, mac: &Mac, url: &str) -> std::io::Result<()> {
         match s.boards.iter_mut().find(|b| b.mac == mac.hex()) {
             Some(b) if b.url == url => return Ok(()),
-            Some(b) => b.url = url.to_string(),
+            Some(b) => {
+                let old = std::mem::replace(&mut b.url, url.to_string());
+                b.urls.retain(|u| u != url && *u != old);
+                b.urls.insert(0, old);
+                b.urls.truncate(3);
+            }
             None => s.boards.push(KnownBoard {
                 mac: mac.hex(),
                 url: url.to_string(),
+                last_net: None,
+                urls: Vec::new(),
+                subnets: Vec::new(),
             }),
         }
         self.save_state(s)
+    }
+
+    /// D-14: the network the board's heartbeat says it is on, kept for when it cannot be reached.
+    pub fn remember_net(
+        &self,
+        s: &mut State,
+        mac: &Mac,
+        n: &hidfi_core::proto::NetFacts,
+    ) -> std::io::Result<()> {
+        let Some(b) = s.boards.iter_mut().find(|b| b.mac == mac.hex()) else {
+            return Ok(());
+        };
+        let net = (!n.board.is_empty())
+            .then(|| n.board.clone())
+            .or(b.last_net.clone());
+        let subnets = if n.subnets.is_empty() {
+            b.subnets.clone()
+        } else {
+            n.subnets.clone()
+        };
+        if b.last_net == net && b.subnets == subnets {
+            return Ok(());
+        }
+        b.last_net = net;
+        b.subnets = subnets;
+        self.save_state(s)
+    }
+
+    /// D-14: each board's saved networks' subnets, for finding it when no address works.
+    pub fn subnets(s: &State) -> Vec<(Mac, Vec<String>)> {
+        s.boards
+            .iter()
+            .filter(|b| !b.subnets.is_empty())
+            .filter_map(|b| Some((Mac::parse(&b.mac)?, b.subnets.clone())))
+            .collect()
+    }
+
+    /// D-14: where a board was last, if a heartbeat ever said.
+    pub fn last_net(s: &State, mac: &Mac) -> Option<String> {
+        s.boards
+            .iter()
+            .find(|b| b.mac == mac.hex())
+            .and_then(|b| b.last_net.clone())
     }
 
     /// The remembered addresses, for finding.
     pub fn remembered(s: &State) -> Vec<(Mac, String)> {
         s.boards
             .iter()
-            .filter_map(|b| Some((Mac::parse(&b.mac)?, b.url.clone())))
+            .filter_map(|b| Some((Mac::parse(&b.mac)?, b)))
+            .flat_map(|(m, b)| {
+                std::iter::once(b.url.clone())
+                    .chain(b.urls.iter().cloned())
+                    .map(move |u| (m, u))
+            })
             .collect()
     }
 }
@@ -299,6 +371,57 @@ mod tests {
         let mut id = [0u8; 8];
         getrandom::fill(&mut id).unwrap();
         Store::open(std::env::temp_dir().join(format!("hidfi-store-{}", hex::encode(id)))).unwrap()
+    }
+
+    #[test]
+    fn a_board_keeps_its_last_addresses_and_networks_newest_first() {
+        // D-14: its old address on the home's other network finds it when it goes back.
+        let s = tmp();
+        let mut st = s.state();
+        let m = Mac::parse("DCB4D909F7C8").unwrap();
+        for u in [
+            "http://192.168.1.11",
+            "http://192.168.0.184",
+            "http://192.168.1.11",
+            "http://10.0.0.5",
+            "http://10.0.0.6",
+            "http://10.0.0.7",
+        ] {
+            s.remember(&mut st, &m, u).unwrap();
+        }
+        let urls: Vec<String> = Store::remembered(&s.state())
+            .into_iter()
+            .map(|(_, u)| u)
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                "http://10.0.0.7",
+                "http://10.0.0.6",
+                "http://10.0.0.5",
+                "http://192.168.1.11"
+            ],
+            "the current first, three before it, no repeats"
+        );
+        let n = hidfi_core::proto::NetFacts {
+            board: "ARVISANTU".into(),
+            here: false,
+            computer: "".into(),
+            subnets: vec!["192.168.1.0/255.255.255.0".into()],
+        };
+        s.remember_net(&mut st, &m, &n).unwrap();
+        assert_eq!(
+            Store::last_net(&s.state(), &m).as_deref(),
+            Some("ARVISANTU")
+        );
+        assert_eq!(
+            Store::subnets(&s.state()),
+            vec![(m, vec!["192.168.1.0/255.255.255.0".to_string()])]
+        );
+        // an older file without these fields still loads
+        fs::write(s.dir().join("state.json"), br#"{"id":"00112233445566778899aabbccddeeff","name":"x","boards":[{"mac":"DCB4D909F7C8","url":"http://192.168.0.184"}]}"#).unwrap();
+        assert_eq!(Store::remembered(&s.state()).len(), 1);
+        fs::remove_dir_all(s.dir()).unwrap();
     }
 
     #[test]

@@ -15,7 +15,7 @@
 
 use crate::env::{Clock, Http, NetError};
 use hidfi_core::pairing::{self, Confirmed, Initiator, PairKey};
-use hidfi_core::proto::{PairState, RawReply, Refusal, ReplyError, Request, PROTOCOL};
+use hidfi_core::proto::{NetFacts, PairState, RawReply, Refusal, ReplyError, Request, PROTOCOL};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -109,6 +109,23 @@ pub struct Session {
     pub nonces: TicketNonces,
     /// Set when the key changed and the store must be updated.
     pub key_changed: bool,
+    /// D-14: the networks as the last heartbeat's answer named them.
+    net: Option<NetFacts>,
+}
+
+/// D-14: what came of asking the board to this computer's network.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub enum Bring {
+    /// It is moving to this saved network.
+    Moving(String),
+    /// Already together on it.
+    Here(String),
+    /// Someone is using it right on its network: ask before forcing.
+    Busy(u32),
+    /// This computer's network is not one the board has saved.
+    UnknownNetwork,
+    /// Older firmware, not paired, or the network failed.
+    Failed(String),
 }
 
 /// This computer's own address on the way to the board at `base` ("http://a.b.c.d"),
@@ -152,6 +169,63 @@ impl Session {
             listener: None,
             nonces: TicketNonces::default(),
             key_changed: false,
+            net: None,
+        }
+    }
+
+    /// D-14: where the board and this computer are, from the last heartbeat.
+    pub fn net(&self) -> Option<&NetFacts> {
+        self.net.as_ref()
+    }
+
+    /// D-14: ask the board to the saved network this computer's address is on.
+    pub fn bring(&mut self, http: &dyn Http, force: bool) -> Bring {
+        let Some(key) = self.identity.key.clone() else {
+            return Bring::Failed("not paired".into());
+        };
+        let via = local_addr_toward(&self.base);
+        if via.is_empty() {
+            return Bring::Failed("no address toward the board".into());
+        }
+        let id = self.id_hex();
+        let chal = match self
+            .call(http, &Request::Chal { id: id.clone() })
+            .map(|r| r.challenge())
+        {
+            Ok(Ok(c)) => hex::encode(c),
+            Ok(Err(e)) => return Bring::Failed(format!("{e}")),
+            Err(e) => return Bring::Failed(format!("{e:?}")),
+        };
+        let mac = hex::encode(pairing::bring_mac(&key, &id, &via, force, &chal));
+        match self.call(
+            http,
+            &Request::Bring {
+                id,
+                via,
+                force,
+                chal,
+                mac,
+            },
+        ) {
+            Ok(r) if r.here == Some(true) => Bring::Here(r.ssid.unwrap_or_default()),
+            Ok(r) if r.busy == Some(true) => Bring::Busy(r.using.unwrap_or(1)),
+            Ok(r) => Bring::Moving(r.ssid.unwrap_or_default()),
+            Err(CallError::Reply(ReplyError::Refused(Refusal::Other(why))))
+                if why == "unknown_network" =>
+            {
+                Bring::UnknownNetwork
+            }
+            Err(CallError::Reply(ReplyError::Refused(Refusal::Other(why))))
+                if why == "Unknown op" || why == "bad_request" =>
+            {
+                Bring::Failed(
+                    "this board's firmware is too old to be moved from here; update it".into(),
+                )
+            }
+            // The board leaves its network to do what was asked; an answer can be lost on
+            // the way out (seen on 09F7C8 just after a join). The next search says where it is.
+            Err(CallError::Net(_)) => Bring::Moving(String::new()),
+            Err(e) => Bring::Failed(format!("{e:?}")),
         }
     }
 
@@ -436,7 +510,7 @@ impl Session {
         let mac = hex::encode(pairing::beat_mac(&key, &id, l.port, &l.fp, &tn, &chal));
         // Announce the nonce before the board can hand out a ticket naming it.
         self.nonces.announce(tn.clone(), clock.now());
-        self.call(
+        let r = self.call(
             http,
             &Request::Beat {
                 id,
@@ -448,6 +522,7 @@ impl Session {
                 via: local_addr_toward(&self.base),
             },
         )?;
+        self.net = r.net;
         self.status = Status::Online;
         Ok(BEAT_EVERY)
     }

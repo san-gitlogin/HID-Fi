@@ -109,6 +109,24 @@ tn and last-seen, in RAM only. It counts as online for 60 s after a beat.
   `declined`, `approved` (held 2.5 s before the restart so the asker sees it) or
   `unknown`. Implemented in `crates/hidfi-companion/src/factory.rs`.
 
+## Two networks in one home (docs/DECISIONS.md D-14)
+
+- Every heartbeat's answer carries `net`: `{board, here, computer, subnets}` - the
+  network the board is on, whether this computer is right on it, the board's saved
+  network that holds this computer's address (`via`; `""` when none - never a guessed
+  mask), and each saved network's subnet `"a.b.c.d/m.m.m.m"` (where to look if the
+  board moves and its address goes stale).
+- `{op:"bring", id, via, force, chal, mac}`, `mac = HMAC-SHA256(K, "bring|" + id + "|"
+  + via + "|" + (force ? "1" : "0") + "|" + chal)`: move the board to the saved network
+  `via` is on. Replies as the dashboard's `wifi_prefer` (`ssid`, `on_it`; `busy` and
+  `using` when someone is using it right on its network and `force` is false), or
+  `{ssid, here: true}` when already together; refused `unknown_network` (409). The
+  board answers first and moves 3 s later; a Companion that gets no answer says
+  "moving" and finds it where it went (`session.rs` `Bring`).
+- Finding a board on this USB without mDNS: its newest four addresses, the ARP table
+  after a nudge of this computer's subnets, and its saved networks' subnets swept for
+  port 80, at most every 2 minutes (`hidfi-agent/src/neighbours.rs`).
+
 ## Update requests (docs/OTA.md)
 
 The Companion acts on updates for the person at this computer with the same

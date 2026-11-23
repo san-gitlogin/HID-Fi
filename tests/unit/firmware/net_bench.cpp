@@ -9,6 +9,7 @@
 //   seed <known>                                                -> index 0
 //   roam <known> <seen> <cur> <curRssi> <ownerHereNow 0|1>      -> index 0
 //   look <known> <cur> <msHere> [curRssi]                      -> 1|0 0
+//   netfor <ip> <current> <net/mask,...|->                      -> index (-1 none)   (D-14; dotted quads)
 // known: hexname:usable:net:used:anchor:tried[:refused],...  (D-02, D-08 in docs/DECISIONS.md)
 #include <cstdio>
 #include <cstdlib>
@@ -61,12 +62,35 @@ static std::vector<Known> parseKnown(const std::string& spec) {
     return v;
 }
 
+static uint32_t dotted(const std::string& d) {          // byte order irrelevant: every value built the same way
+    unsigned p[4] = {0, 0, 0, 0};
+    std::sscanf(d.c_str(), "%u.%u.%u.%u", &p[0], &p[1], &p[2], &p[3]);
+    return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
+}
+
 int main() {
     std::string line;
     while (std::getline(std::cin, line)) {
         std::stringstream in(line);
         std::string op, a, b;
         in >> op >> a >> b;
+        if (op == "netfor") {
+            std::string spec;
+            in >> spec;
+            std::vector<uint32_t> nets, masks;
+            if (spec != "-") {
+                std::stringstream ss(spec);
+                std::string item;
+                while (std::getline(ss, item, ',')) {
+                    size_t sl = item.find('/');
+                    nets.push_back(dotted(item.substr(0, sl)));
+                    masks.push_back(dotted(item.substr(sl + 1)));
+                }
+            }
+            std::cout << netForAddress(nets.data(), masks.data(), (int)nets.size(), dotted(a), std::atoi(b.c_str())) << "\n";
+            std::cout.flush();
+            continue;
+        }
         if (op == "roam") {
             auto kv = parseKnown(a);
             auto sn = parse(b);

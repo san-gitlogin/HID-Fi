@@ -193,3 +193,17 @@ inline int netShouldRoam(const NetKnown* k, int n, int cur, const NetSeen* seen,
     return (best >= 0 && bestRssi >= curRssi + NET_ROAM_GAIN) ? best : -1;
 }
 
+// Which saved network an address belongs to: the one whose recorded subnet contains it,
+// tested with that network's own mask as the router gave it (DECISIONS.md D-14). A network saved before masks were recorded (mask 0), or never joined, matches
+// nothing: no mask is ever guessed - 192.168.1.11 is not on 192.168.0.0 just because a
+// /23 would say so. Several matches (a router and its extender share a subnet): the
+// current one wins, then the first in the list. -1: none.
+inline int netForAddress(const uint32_t* nets, const uint32_t* masks, int count, uint32_t ip, int current) {
+    int found = -1;
+    for (int i = 0; i < count; i++) {
+        if (!nets[i] || !masks[i] || (ip & masks[i]) != nets[i]) continue;
+        if (i == current) return i;
+        if (found < 0) found = i;
+    }
+    return found;
+}
