@@ -93,6 +93,7 @@
 // Dashboard markup lives in web_ui.h (defines WEB_INTERFACE[] in PROGMEM).
 #include "host_detect.h"
 #include "driver/temperature_sensor.h"
+#include "combo.h"           // `press` without stopping the board (host-tested: tests/unit/test_combo.py)
 #include "thermal.h"         // the chip's temperature and its four-hour log (host-tested: tests/unit/test_thermal.py)
 #include "web_ui.h"
 
@@ -815,6 +816,9 @@ void handleWifiStatus();
 void handleWifiDisconnect();
 void handleApConfigure(const JsonDocument& inDoc);
 void pressKeyCombo(const char* comboStr);
+void pressQueued(const char* comboStr);
+void pressTick();
+void pressDrain();
 uint8_t mapKeyName(const String& name);
 int typeString(const char* text);
 void handleSetUnicode(const JsonDocument& inDoc);
@@ -1566,7 +1570,8 @@ void loop() {
         lastButtonState = currentState;
     }
 
-    // Non-blocking background operations (mouse wiggle + LED blink + OS probe)
+    // Non-blocking background operations (a queued shortcut, mouse wiggle, LED blink, OS probe)
+    pressTick();
     updateWiggle();
     updateLedBlink();
     updateHostDetect();
@@ -3068,6 +3073,15 @@ void processCommand(const String& line, CmdSource src) {
     }
     
     // --- Ping / Status need special handling for direct HTTP response ---
+    // A shortcut still going out (press, combo.h) finishes before anything that could
+    // type, so keys never arrive out of order or under a queued modifier. Read-only
+    // commands, and press itself, do not wait for it.
+    static const char* const NO_TYPING[] = {"press", "status", "ping", "temp_log", "wifi_status", "wifi_networks",
+        "storage_info", "clients", "ui_get", "echo", "actions", "macro_list", "vault_list", "pc_list", "ota_status"};
+    bool typing = true;
+    for (const char* c : NO_TYPING) if (!strcmp(cmd, c)) { typing = false; break; }
+    if (typing) pressDrain();
+
     if (strcmp(cmd, "ping") == 0) {
         handlePing(fromWifi);
         return;
@@ -3529,8 +3543,7 @@ void handlePress(const JsonDocument& inDoc) {
         return;
     }
     
-    COM_SERIAL.printf("[PRESS] Pressing: %s\n", keys);
-    pressKeyCombo(keys);
+    pressQueued(keys);               // never waits: pressTick() finishes it from loop()
     
     StaticJsonDocument<256> doc;
     doc["status"] = "ok";
@@ -3540,16 +3553,14 @@ void handlePress(const JsonDocument& inDoc) {
 }
 
 // ==================== KEY COMBO PARSER ====================
-// Two-pass: modifiers first (with delay), then regular keys.
-void pressKeyCombo(const char* comboStr) {
-    usbWakeHost();
+// Two passes: modifiers first, in a report of their own, then the other keys.
+// comboKeys() presses one pass; pressKeyCombo() is the whole combination at once
+// (macros and steps, which wait by design); `press` goes through combo.h instead,
+// so a shortcut never stops the pointer (pressQueue below).
+static int comboTokens(const char* comboStr, String tokens[8]) {
     String combo = String(comboStr);
     combo.toUpperCase();
-    
-    String tokens[8];
-    int tokenCount = 0;
-    int startIdx = 0;
-    
+    int tokenCount = 0, startIdx = 0;
     while (startIdx <= (int)combo.length() && tokenCount < 8) {
         int plusIdx = combo.indexOf('+', startIdx);
         if (plusIdx == -1) {
@@ -3557,29 +3568,27 @@ void pressKeyCombo(const char* comboStr) {
             tokens[tokenCount].trim();
             if (tokens[tokenCount].length() > 0) tokenCount++;
             break;
-        } else {
-            tokens[tokenCount] = combo.substring(startIdx, plusIdx);
-            tokens[tokenCount].trim();
-            if (tokens[tokenCount].length() > 0) tokenCount++;
-            startIdx = plusIdx + 1;
         }
+        tokens[tokenCount] = combo.substring(startIdx, plusIdx);
+        tokens[tokenCount].trim();
+        if (tokens[tokenCount].length() > 0) tokenCount++;
+        startIdx = plusIdx + 1;
     }
-    
-    // Pass 1 — modifiers (0x80–0x87)
+    return tokenCount;
+}
+
+// Presses the modifiers (mods) or the other keys (!mods) of a combination; returns
+// whether there were any modifiers (pass 1 only).
+static bool comboKeys(const char* comboStr, bool mods) {
+    String tokens[8];
+    const int tokenCount = comboTokens(comboStr, tokens);
     bool hasModifier = false;
     for (int i = 0; i < tokenCount; i++) {
         uint8_t keyCode = mapKeyName(tokens[i]);
-        if (keyCode >= 0x80 && keyCode <= 0x87) {
-            Keyboard.press(keyCode);
-            hasModifier = true;
-        }
-    }
-    if (hasModifier) delay(30);  // host must see modifier in its own HID report
-    
-    // Pass 2 — regular keys
-    for (int i = 0; i < tokenCount; i++) {
-        uint8_t keyCode = mapKeyName(tokens[i]);
-        if (keyCode != 0 && !(keyCode >= 0x80 && keyCode <= 0x87)) {
+        const bool isMod = keyCode >= 0x80 && keyCode <= 0x87;
+        if (mods) {
+            if (isMod) { Keyboard.press(keyCode); hasModifier = true; }
+        } else if (keyCode != 0 && !isMod) {
             Keyboard.press(keyCode);
         } else if (keyCode == 0 && tokens[i].length() == 1) {
             char c = tokens[i].charAt(0);
@@ -3587,9 +3596,60 @@ void pressKeyCombo(const char* comboStr) {
             if ((uint8_t)c < 0x80) Keyboard.press(c);  // >= 0x80 is a raw keycode to press()
         }
     }
-    
-    delay(120);  // hold combo
+    return hasModifier;
+}
+
+void pressKeyCombo(const char* comboStr) {
+    pressDrain();                    // a queued shortcut goes out first, in order
+    usbWakeHost();
+    if (comboKeys(comboStr, true)) delay(combo::MOD_MS);  // host must see modifier in its own HID report
+    comboKeys(comboStr, false);
+    delay(combo::HOLD_MS);  // hold combo
     Keyboard.releaseAll();
+}
+
+// `press`: queued, advanced by pressTick() from loop() - same reports, same timing,
+// nothing else waits. A full queue finishes its oldest first: nothing is dropped.
+combo::Q pressQueue;
+
+static void pressAct(combo::Act a, const char* s) {
+    if (a == combo::PRESS_MODS) { usbWakeHost(); comboKeys(s, true); }
+    else if (a == combo::PRESS_KEYS) comboKeys(s, false);
+    else if (a == combo::RELEASE) Keyboard.releaseAll();
+}
+
+void pressTick() {
+    const char* s = nullptr;
+    const combo::Act a = combo::tick(pressQueue, millis(), &s);
+    if (a != combo::NONE) pressAct(a, s);
+}
+
+// Finish everything queued now (before anything else that types), waiting as the
+// old path did. Costs nothing when the queue is empty, which is nearly always.
+void pressDrain() {
+    while (combo::busy(pressQueue)) {
+        pressTick();
+        delay(1);
+    }
+}
+
+static bool comboHasMods(const char* comboStr) {
+    String tokens[8];
+    const int n = comboTokens(comboStr, tokens);
+    for (int i = 0; i < n; i++) { uint8_t k = mapKeyName(tokens[i]); if (k >= 0x80 && k <= 0x87) return true; }
+    return false;
+}
+
+void pressQueued(const char* comboStr) {
+    const bool mods = comboHasMods(comboStr);
+    while (!combo::push(pressQueue, comboStr, mods)) {
+        if (!combo::busy(pressQueue)) { pressKeyCombo(comboStr); return; }   // too long to queue: the old way
+        const char* s = nullptr;                     // full: finish the oldest, then queue
+        combo::Act a;
+        do { a = combo::tick(pressQueue, millis(), &s); if (a != combo::NONE) pressAct(a, s); else delay(1); }
+        while (a != combo::RELEASE);
+    }
+    pressTick();                                     // its modifiers go down now
 }
 
 uint8_t mapKeyName(const String& name) {

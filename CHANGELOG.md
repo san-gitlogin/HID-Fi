@@ -16,6 +16,12 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   the last four hours, one point a minute, gaps kept as gaps. Settings > Device
   shows it. It is the die, not the air, for comparing and for trends
   (docs/HARDWARE.md, "Heat"). DECISIONS.md D-13.
+- **A shortcut no longer freezes the trackpad.** `press` (shortcut buttons, quick
+  actions, knobs, Enter in the text tab) held the board for 150 ms per shortcut;
+  with one five times a second the dashboard's ping went from 8 ms to a 96 ms
+  median. It is queued now and the loop advances it: the host sees the same keys at
+  the same moments, and the ping stays at 8 ms. Anything that types first finishes a
+  queued shortcut, so keys never arrive out of order.
 - **Watching costs no latency.** The sensor has its own low-priority task on the
   other core, never the input loop; every read is timed and three slow reads in a
   row switch it off for good (`temp_us_max`, `temp_off`). Measured against v4.3.1

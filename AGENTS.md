@@ -417,6 +417,12 @@ holds. The first four are enforced - the run fails without them:
   `delay(120)` on every report once a host suspended the bus. It is now rate
   limited and returns immediately; only the explicit `system/wake` command waits,
   because there the user asked for it and has nothing to feel lag in.
+- **A shortcut never waits in loop() either.** `press` (shortcut buttons, quick
+  actions, knobs, the text tab's Enter) used to `delay()` 150 ms per combination and
+  froze the pointer: a 96 ms median ping with a shortcut five times a second. It is
+  queued now (`hid_fi/combo.h`, advanced by `pressTick()`), with the same reports and
+  timing for the host; anything that could type calls `pressDrain()` first so keys
+  never arrive out of order. Macros and `steps` still wait, by design.
 - **Only one mouse object may ever exist.** `USBHIDMouseBase` registers its
   descriptor in its constructor behind a class-wide `static bool`. Relative and
   absolute cannot coexist; the mouse is heap allocated at boot and switching

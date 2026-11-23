@@ -1,0 +1,15 @@
+{
+  "_about": "Deliberate bugs in hid_fi/combo.h. tests/unit/test_combo.py::test_every_planted_bug_is_caught applies each and requires the bench's answers to change. Each 'find' must match the current source exactly once.",
+  "mutations": [
+    {"name": "modifiers never get their own report", "find": "if (q.mods[q.head] && now - q.at < MOD_MS) return NONE;", "replace": ""},
+    {"name": "every combination waits for modifiers", "find": "if (q.mods[q.head] && now - q.at < MOD_MS)", "replace": "if (now - q.at < MOD_MS)"},
+    {"name": "released before the hold", "find": "if (now - q.at < HOLD_MS) return NONE;", "replace": ""},
+    {"name": "the hold one millisecond short", "find": "if (now - q.at < HOLD_MS)", "replace": "if (now - q.at + 1 < HOLD_MS)"},
+    {"name": "the queue takes the newest first", "find": "const uint8_t i = (uint8_t)((q.head + q.count) % QLEN);", "replace": "const uint8_t i = (uint8_t)((q.head + QLEN - 1) % QLEN); q.head = i;"},
+    {"name": "a full queue overwrites", "find": "if (q.count >= QLEN || strlen(s) >= MAXLEN) return false;", "replace": "if (strlen(s) >= MAXLEN) return false;"},
+    {"name": "text too long accepted", "find": " || strlen(s) >= MAXLEN) return false;", "replace": ") return false;"},
+    {"name": "the next combination never starts", "find": "            q.phase = 0;\n            q.head", "replace": "            q.head"},
+    {"name": "the head never moves on", "find": "            q.head = (uint8_t)((q.head + 1) % QLEN);\n", "replace": ""},
+    {"name": "a plain clock compare releases early when the hold crosses the wrap", "find": "if (now - q.at < HOLD_MS) return NONE;", "replace": "if (now < q.at + HOLD_MS) return NONE;"}
+  ]
+}
