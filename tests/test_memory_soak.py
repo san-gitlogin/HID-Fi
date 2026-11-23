@@ -4,6 +4,13 @@ Sends a few thousand commands across every allocating path -- JSON parsing, Stri
 building, status serialisation, oversized frames -- and compares free heap before
 and after, plus the allocator's own low-water mark.
 
+Measured after a warm-up of the same traffic: opening the port restarts the board,
+and right after a boot the WiFi stack, the dashboard's and a Companion's connections
+are still taking the buffers they keep. Measured from the boot, that settling looked
+like a leak (2026-11-23: -3.5 KB free and -11 KB floor on the released v4.3.1 as on
+the new firmware; over 8000 commands the free heap came back to -1.3 KB and the floor
+stopped falling after ~400 rounds). A leak is still caught: it keeps falling after.
+
 Net-zero by construction: every mouse_move is undone by an equal and opposite one,
 so the cursor finishes where it started. Nothing is clicked or typed.
 """
@@ -15,6 +22,7 @@ import serial
 import serial.tools.list_ports
 
 ROUNDS = 400
+WARMUP = 400          # the long run settled by round ~400 (see above)
 
 
 def find_port():
@@ -46,6 +54,15 @@ def send(ser, cmd, timeout=5.0):
     return None
 
 
+def one_round(ser):
+    # Every path that allocates: parse, dispatch, build a reply, serialise.
+    send(ser, {"cmd": "mouse_move", "x": 7, "y": 5}, timeout=2)
+    send(ser, {"cmd": "mouse_move", "x": -7, "y": -5}, timeout=2)
+    send(ser, {"cmd": "echo", "data": "soak" * 30}, timeout=2)
+    send(ser, {"cmd": "status"}, timeout=2)
+    send(ser, {"cmd": "wifi_status"}, timeout=2)
+
+
 def main():
     port = sys.argv[1] if len(sys.argv) > 1 else find_port()
     if not port:
@@ -65,10 +82,15 @@ def main():
     print(f"  Memory soak on {port} - {ROUNDS} rounds")
     print("=" * 60)
 
-    before = send(ser, {"cmd": "status"})
-    if not before:
+    boot = send(ser, {"cmd": "status"})
+    if not boot:
         print("  no status response")
         return 1
+    print(f"  after boot: free={boot['free_heap']} floor={boot['heap_floor']} - warming up {WARMUP} rounds")
+    for _ in range(WARMUP):
+        one_round(ser)
+    time.sleep(2.0)
+    before = send(ser, {"cmd": "status"})
     h0 = before["free_heap"]
     f0 = before["heap_floor"]
     c0 = before["cmd_count"]
@@ -77,12 +99,7 @@ def main():
     t0 = time.perf_counter()
     sent = 0
     for i in range(ROUNDS):
-        # Every path that allocates: parse, dispatch, build a reply, serialise.
-        send(ser, {"cmd": "mouse_move", "x": 7, "y": 5}, timeout=2)
-        send(ser, {"cmd": "mouse_move", "x": -7, "y": -5}, timeout=2)
-        send(ser, {"cmd": "echo", "data": "soak" * 30}, timeout=2)
-        send(ser, {"cmd": "status"}, timeout=2)
-        send(ser, {"cmd": "wifi_status"}, timeout=2)
+        one_round(ser)
         sent += 5
         if (i + 1) % 50 == 0:
             now = send(ser, {"cmd": "status"}, timeout=3)

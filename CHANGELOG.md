@@ -21,7 +21,9 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   with one five times a second the dashboard's ping went from 8 ms to a 96 ms
   median. It is queued now and the loop advances it: the host sees the same keys at
   the same moments, and the ping stays at 8 ms. Anything that types first finishes a
-  queued shortcut, so keys never arrive out of order.
+  queued shortcut, so keys never arrive out of order - and so does a key, a click or
+  a scroll from the dashboard's keyboard or trackpad, which would otherwise get the
+  shortcut's held Ctrl (Ctrl+V for a "v", a Ctrl-click).
 - **Watching costs no latency.** The sensor has its own low-priority task on the
   other core, never the input loop; every read is timed and three slow reads in a
   row switch it off for good (`temp_us_max`, `temp_off`). Measured against v4.3.1
@@ -42,14 +44,27 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   (signed with the pairing; it asks first if someone is using the board on its own
   network). A board the Companion cannot reach at all is "last on Y". DECISIONS.md D-14.
 - **The Companion finds the board without mDNS** - which does not cross from one
-  router's network to another's: the board's last four addresses, the ARP table for
+  subnet to another's: the board's last four addresses, the ARP table for
   its MAC, and the subnets of its saved networks, rate-limited.
-- **Fixed: a computer on the other router counted as right on the board's network**
-  when the routers forward without translating addresses; it anchored the network and
+- **Fixed: a computer on the extender's own subnet counted as right on the board's
+  network** (its traffic arrived with its own address); it anchored the network and
   made a move ask about "someone using it". Now it must also be inside the board's
   subnet; after a move nobody counts until their next heartbeat.
 - **Fixed: "prefer this network now" lost its own answer,** because the board left
-  before the reply did. It answers first and moves 3 s later.
+  before the reply did. It answers first and moves 3 s later; a newer choice in
+  those 3 s replaces the waiting move.
+- **A board that left this computer's network is said to have left it.** Online and
+  then gone where this computer cannot reach (the extender's own subnet, seen from the
+  main router), the card said "Connecting to <its old address>..." for ever. After 20 s
+  it now says "Not reachable from this computer. The board was on X with this
+  computer, and has left it", and how to bring it back from a phone; it never tells
+  the person to join the network this computer is already on.
+- The Companion never stalls finding a board: the ARP nudge and the subnet sweep run
+  on a thread of its own, and every address the ARP table lists for the board is
+  tried (an old lease's entry lingers beside the new one). A "Bring" outcome stays
+  on the card for 2 minutes at most, or until the board's network changes, so a
+  move that did not happen gives the button back. On Windows, reading the ARP table
+  no longer flashes a console window.
 
 ### Tools
 
@@ -59,7 +74,20 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   the case for the board's own load (a restart, the radio waking, a dashboard left
   open). No network names or anything personal in its logs. HTTP only, never a
   WebSocket, every 10 s at the fastest, slower while the board is in use or
-  answering slowly.
+  answering slowly (a slowed pace is not mistaken for a gap that reads the log).
+
+### Tests
+
+- **End-to-end runs with nobody at the Mac.** The run opens the test page in a
+  plain Chromium window, and the board itself clicks it once macOS shows that window
+  in front under the cursor. Every command checks the page's focus and macOS's
+  frontmost app; a canary typed first must arrive exactly, or the run fails - it
+  never passes on a page that received nothing. A browser under Playwright control
+  was tried first and rejected: it emulates focus, and the canary showed keystrokes
+  going elsewhere (docs/TESTING.md).
+- **The memory soak measures after warm-up.** Measured from the boot it called the
+  board's settling a leak, on the released v4.3.1 as on this firmware; over 8000
+  commands the heap came back. It still fails a planted 16-byte-per-command leak.
 
 ### HID-Fi Core case (rev C)
 
@@ -70,6 +98,10 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   click their catches into a window in the back wall; a fingernail through the
   window opens it. 0.3 mm round every fit, so a coarse print still closes.
   DECISIONS.md D-12.
+- **Bigger side vents.** The closed case ran the chip at 57 °C under full load
+  (six screens, trackpad, keyboard); the side gills are 1 mm taller and the base
+  blades a little wider, about 21 to 34 mm² and 87 to 95 mm² of open area. Every
+  fit, overhang and wall check still passes.
 - `kit-test.stl` is both coupons and a plate; `latch-coupon.stl` is new; the peg
   gauge and the light pipe are gone (the light shines through a cross cut in the
   lid).

@@ -75,18 +75,26 @@ def test_memory_soak_script(board_released):
 @pytest.mark.board
 @pytest.mark.slow
 def test_heap_under_sustained_load(board, perf, request):
-    """Minutes of mixed traffic, net zero on the host. Free heap must come back."""
+    """Minutes of mixed traffic, net zero on the host. Free heap must come back.
+    Measured after a warm-up of the same traffic (tests/test_memory_soak.py says why:
+    a board just booted is still settling, which is not a leak)."""
     minutes = request.config.getoption("--soak-minutes")
+
+    def traffic(seconds):
+        end_t, k = time.time() + seconds, 0
+        while time.time() < end_t:
+            board.cmd({"cmd": "status"}, "status")
+            board.cmd({"cmd": "mouse_move", "dx": 3, "dy": 0})
+            board.cmd({"cmd": "mouse_move", "dx": -3, "dy": 0})
+            board.cmd({"cmd": "macro_list"})
+            board.cmd({"cmd": "echo", "data": "x" * 200}, "echo")
+            k += 5
+        return k
+
+    traffic(120)
+    time.sleep(1)
     start = board.status()
-    end_t = time.time() + 60 * minutes
-    n = 0
-    while time.time() < end_t:
-        board.cmd({"cmd": "status"}, "status")
-        board.cmd({"cmd": "mouse_move", "dx": 3, "dy": 0})
-        board.cmd({"cmd": "mouse_move", "dx": -3, "dy": 0})
-        board.cmd({"cmd": "macro_list"})
-        board.cmd({"cmd": "echo", "data": "x" * 200}, "echo")
-        n += 5
+    n = traffic(60 * minutes)
     time.sleep(1)
     endst = board.status()
     lost = start["free_heap"] - endst["free_heap"]
@@ -230,7 +238,8 @@ def test_wifi_pointer_stream_keeps_up(ws, perf, request):
 # ---- several phones at once ------------------------------------------------------------------------
 def _open_signed_in(url, pin):
     websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
-    c = websocket.create_connection(url, timeout=5)
+    from support.board import ws_connect
+    c = ws_connect(url, timeout=5)                   # retried while the board rejoins WiFi
     c.settimeout(0.8)
     try:
         greet = c.recv()
@@ -261,6 +270,11 @@ def test_several_phones_driving_the_pointer_at_once(board, request, perf, phones
     120 ms the single-phone stream is held to."""
     import threading
     from support.board import lan_url
+    # Opening COM restarts the board: measure it on its network, not while it rejoins
+    # (a run that started at once timed out connecting, 2026-11-23).
+    end = time.time() + 60
+    while time.time() < end and not board.status().get("wifi_connected"):
+        time.sleep(1)
     url = lan_url(request.config.getoption("--board-url"), board)
     if not url:
         pytest.skip("needs --board-url ws://<board-ip>:81 and this machine on the board's network")

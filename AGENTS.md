@@ -215,7 +215,8 @@ Rules for agents:
 
 - **Ask before any tier that touches the user's computer.** `--board` moves the
   mouse (net zero) and changes the volume (down then up); `--e2e` types and
-  clicks into a test page and needs the user to click Start and keep hands off.
+  clicks into a test page and needs the user's hands off the keyboard and mouse
+  (on a Mac it opens and starts the page itself; elsewhere the user clicks Start).
   Read a script end to end before running it on someone's desktop - a "safe"
   flag once still pressed the mouse button.
 - **A skip is not a pass.** Report skipped tiers and their reasons, exactly as the

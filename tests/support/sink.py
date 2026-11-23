@@ -58,6 +58,13 @@ async function lock(){
   catch(e){ try{ await t.requestPointerLock(); document.getElementById('warn').textContent='raw (unadjusted) pointer movement not supported here - mouse distances are approximate'; }catch(e2){} }
 }
 go.onclick=()=>{started=true; t.focus(); lock(); post();};
+// Unattended (support/sink_auto.py): the harness puts the cursor on this window and the
+// BOARD clicks - a real click from a real mouse, so it is a user gesture (focus,
+// pointer lock). That one click starts the page; it is not recorded as test input.
+if(new URLSearchParams(location.search).get('auto')==='1'){
+  st.textContent='starting by itself: the board clicks once';
+  document.addEventListener('mousedown',e=>{ if(started) return; started=true; t.focus(); lock(); post(); },true);
+}
 document.addEventListener('pointerlockchange',()=>{locked=!!document.pointerLockElement; post();});
 t.addEventListener('input',e=>{rec({k:'input',ts:now(e),data:e.data,type:e.inputType}); post();});
 for(const ty of ['keydown','keyup']) document.addEventListener(ty,e=>{
@@ -173,6 +180,10 @@ class Sink:
                 why = (f" ({x['k']}; focus went to {x['active'] or 'another window'}"
                        f"{'' if x['hasFocus'] else ', outside the browser'}; last keys before it: {', '.join(keys) or 'none'})")
             raise SinkNotFocused("the test page lost focus - stopped before sending anything" + why)
+        # The second proof, when the harness opened the page itself (support/sink_auto.py):
+        # macOS says the test browser, by process id, is the frontmost application.
+        if getattr(self, "auto", None) is not None and not self.auto.in_front():
+            raise SinkNotFocused("the test browser is not the frontmost application - stopped before sending anything")
 
     def set_mode(self, mode):
         with self.lock:

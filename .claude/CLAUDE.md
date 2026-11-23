@@ -98,8 +98,8 @@ diagnose from the USB device list rather than from serial noise you are causing.
     HID usages - that is how a phone's curly quote typed "2n" and a degree sign
     pressed Enter. Text goes through `typeString()`; see AGENTS.md "Text typing".
 15. **Tests that touch the user's computer need their OK.** `--board` moves the
-    mouse and changes volume (net zero); `--e2e` types into a page they must
-    start. Read a script before running it on someone's desktop. Report skips as
+    mouse and changes volume (net zero); `--e2e` types into a test page (on a
+    Mac the run opens and starts it itself; hands off the keyboard and mouse). Read a script before running it on someone's desktop. Report skips as
     skips, and never edit `tests/golden/` to make a failure pass.
 16. **New behaviour ships with its scenario.** A command is documented, modelled
     in `tests/support/board_sim.py` and sent by a test; a dashboard control has a

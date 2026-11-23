@@ -196,8 +196,12 @@ The rules every tier follows:
 - **Opt in.** Nothing touches the hardware without `--board`, and nothing sends
   input to your computer without `--e2e`.
 - **Focus guard.** End-to-end input goes only into the test page, and every
-  command is preceded by a check that the page still has focus. If a
+  command is preceded by a check that the page still has focus - and, on a Mac,
+  that macOS shows the test browser (by process id) as the frontmost app. If a
   notification steals focus, the run stops before sending anything.
+- **No vacuous pass.** Before any test, a known string typed by the board must
+  arrive in the page exactly, or the run fails ("the canary did not arrive").
+  A run where nothing reached the page never skips and never passes.
 - **Keys a browser cannot block are never sent to a live desktop.** Cmd+Q,
   Alt+F4, the Windows key, F11, PrtSc, Esc and the system keys are only
   exercised on Linux through evdev, where the board's devices are grabbed.
@@ -233,9 +237,21 @@ the tests, **USB** to the computer being tested - usually the same machine.
 python tests/run.py --e2e
 ```
 
-A browser tab opens on the test page. Click **Start**, then leave it in front and
-do not touch the keyboard or mouse until the run finishes. Start also turns on
-pointer lock, which the mouse tests need.
+Nobody has to click anything (`tests/support/sink_auto.py`). The run opens the
+test page in a plain Chromium window of its own (a throwaway profile, the
+Chromium Playwright installed), waits until macOS shows that window in front
+and topmost under the cursor, puts the cursor on it and has the **board** click
+once - a real click, so the page focuses its box and takes pointer lock as a
+person's click would. Then the canary must arrive, and every command checks
+both the page's focus and macOS's frontmost app. Keep hands off the keyboard and
+mouse until it finishes; touching them only stops the run, it cannot pass it.
+
+Why not drive the browser with Playwright: a browser under automation control
+emulates focus - its page said "focused" while the board's keystrokes went to
+another app (2026-11-23). The canary caught it; the plain window fixed it.
+
+`HIDFI_E2E_MANUAL=1` brings back the manual page (open the URL, click
+**Start**); a remote sink (`--sink remote`) is always manual.
 
 Unicode entry tests need *Unicode Hex Input* selected. Let the run do it:
 
@@ -253,7 +269,8 @@ it was not enabled before.
 python tests\run.py --e2e
 ```
 
-Same page, same Start button. Windows has no Unicode entry by design, so those
+The manual page: open the printed URL, click **Start** (unattended start is
+macOS only for now). Windows has no Unicode entry by design, so those
 tests skip; the **PC guard** test runs instead - the board pinned to macOS with
 emoji on, plugged into this PC, must still send only plain characters and refuse
 the macOS Test button.
@@ -861,7 +878,9 @@ the board or the computer.
 | Symptom | Cause and fix |
 |---|---|
 | Every hardware test skipped: "no board found" | The COM cable is not plugged in, or is charge-only. `run.py doctor` shows the ports it sees |
-| e2e skipped: "page was not started" | Open the printed URL and click Start within 4 minutes |
+| e2e skipped: "page was not started" | Manual page only: open the printed URL and click Start within 4 minutes |
+| e2e failed: "the canary did not arrive as typed" | The board's keyboard does not reach the page: its USB port (not COM) must be in this computer; on a Mac check that no password field or secure input has the keyboard |
+| e2e failed: "not the frontmost application" | Something came in front of the test window (a notification, a dialog); rerun with hands off |
 | e2e stops: "lost focus" | A notification or another window took focus. Close it and rerun - nothing was sent after focus was lost |
 | Mouse tests skipped: "pointer lock not active" | Click Start again; some browsers drop pointer lock when the window changes |
 | `board not left as found` | A test changed a setting and could not restore it. `tests/.reports/board_restore.json` says which |

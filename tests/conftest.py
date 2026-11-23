@@ -248,8 +248,38 @@ def sink(request, _board_holder):
     # the other computer before the run starts.
     s = Sink(port=int(os.environ.get("HIDFI_SINK_PORT") or 0), bind="0.0.0.0" if remote else "127.0.0.1")
     url = s.url(remote=remote)
+    s.auto = None
     tw = request.config.get_terminal_writer()
     tw.line("")
+    # On this Mac the harness opens and starts the page itself and proves the focus
+    # before every command (support/sink_auto.py) - nobody has to click anything.
+    if not remote and sys.platform == "darwin" and not os.environ.get("HIDFI_E2E_MANUAL"):
+        from support.sink_auto import AutoPage
+        tw.line(f"  Opening the test page by itself ({url}); keep hands off the keyboard and mouse.", yellow=True)
+        try:
+            s.auto = AutoPage(url, s)
+        except RuntimeError as e:
+            s.close()
+            pytest.fail(f"the end-to-end page could not be opened by itself: {e}", pytrace=False)
+        # The board clicks the page - only once macOS shows it in front and its window
+        # topmost under the cursor - which starts it with a real user gesture.
+        if not s.auto.aim():
+            s.auto.close()
+            s.close()
+            pytest.fail("the test page's window was not in front under the cursor - nothing was clicked", pytrace=False)
+        board.cmd({"cmd": "mouse_click", "button": "left", "count": 1}, None, timeout=10)
+        if not s.wait_ready(timeout=20) or not s.auto.in_front():
+            why = "the page never reported focus" if not s.info()["focused"] else "macOS does not show the test browser in front"
+            s.auto.close()
+            s.close()
+            pytest.fail(f"the end-to-end page could not take the keyboard focus: {why}", pytrace=False)
+        _canary(board, s)
+        s.host_os = {"Darwin": "mac", "Windows": "windows", "Linux": "linux"}.get(platform.system(), "unknown")
+        s.board_view = st
+        yield s
+        s.auto.close()
+        s.close()
+        return
     tw.line("=" * 72, yellow=True)
     if remote:
         tw.line(f"  Open {url} in a browser ON THE COMPUTER THE BOARD'S USB IS PLUGGED INTO,", yellow=True)
@@ -269,6 +299,25 @@ def sink(request, _board_holder):
     s.close()
 
 
+CANARY = "hidfi canary 7Qx"
+
+
+def _canary(board, s):
+    """The whole path - board, USB, the OS, the page - proven once before any test: a
+    known string typed must arrive exactly. A run that saw nothing never passes."""
+    s.set_mode("text")
+    s.clear()
+    s.assert_focused()
+    board.cmd({"cmd": "type", "text": CANARY}, "typed", timeout=30)
+    got, _ = s.settle(quiet=0.6, timeout=15)
+    s.clear()
+    if got != CANARY:
+        s.auto.close()
+        s.close()
+        pytest.fail(f"the canary did not arrive as typed (got {got!r}): the board's keyboard does not reach "
+                    "this page - is its USB port (not COM) plugged into this computer?", pytrace=False)
+
+
 @pytest.fixture
 def host(sink):
     return sink.host_os
@@ -278,7 +327,7 @@ def host(sink):
 def drive(board, sink):
     """drive(cmd, want=None): send one command, but only while the page has focus."""
     def _drive(obj, want=None, timeout=60):
-        sink.assert_focused()
+        sink.assert_focused()          # the page focused AND (opened by the harness) the browser in front
         return board.cmd(obj, want, timeout=timeout)
     return _drive
 

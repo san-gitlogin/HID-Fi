@@ -102,6 +102,11 @@ def env(_board_holder):
         ip = wait_status(board, lambda s: s.get("wifi_connected"), 60, "the board back on its network")["wifi_ip"]
         # The board's own daily check would race the tests' checks (it did: "busy").
         board.cmd({"cmd": "ota_settings", "auto": False}, "ota_settings")
+        # A check the board started at boot is cancelled, as _settle does: where it cannot
+        # reach GitHub it retries four times, ~33 s each - longer than any fixed wait here
+        # (2026-11-23: "no connection ... github.com:443" x4; 90 s failed every scenario).
+        if board.status().get("ota_step") not in ("idle", None):
+            board.cmd({"cmd": "ota_cancel"}, "ota_cancel")
         wait_status(board, lambda s: s.get("ota_step") == "idle", 90, "any check already running finishing")
         r = board.cmd({"cmd": "ota_source", "url": srv.url_for(ip)}, "ota_source")
         assert r["status"] == "ok", r
