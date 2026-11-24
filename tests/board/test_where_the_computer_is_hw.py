@@ -146,12 +146,21 @@ def test_a_newer_choice_cancels_a_move_still_waiting(board):
     home = st["wifi_ssid"]
     start_pref = st.get("wifi_preferred") or home
     nets = board.cmd({"cmd": "wifi_networks"}, "wifi_networks").get("networks", [])
-    other = next((n["ssid"] for n in nets if n["ssid"] != home and n.get("proven")), None)
-    if not other:
+    others = [n["ssid"] for n in nets if n["ssid"] != home and n.get("proven")]
+    if not others:
         pytest.skip("only one proven saved network: nothing to change its mind about")
     try:
-        r = board.cmd({"cmd": "wifi_prefer", "ssid": other, "now": True, "force": True}, "wifi_prefer")
-        assert r.get("status") == "ok" and r.get("on_it") is False, r
+        # A saved network on the same subnet counts as this one (D-02: a router and its
+        # extender) - two homes both on 192.168.0.x do (Bangalore, 2026-11-25): asking for
+        # it moves nothing. Take one the board counts as another network.
+        for other in others:
+            r = board.cmd({"cmd": "wifi_prefer", "ssid": other, "now": True, "force": True}, "wifi_prefer")
+            assert r.get("status") == "ok", r
+            if r.get("on_it") is False:
+                break
+        else:
+            board.cmd({"cmd": "wifi_prefer", "ssid": home, "force": True}, "wifi_prefer")
+            pytest.skip("every other saved network counts as this one here (same subnet): no move to cancel")
         r = board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True, "force": True}, "wifi_prefer")
         assert r.get("status") == "ok" and r.get("on_it") is True, r
         end = time.time() + 12                       # well past the 3 s the first move waited
