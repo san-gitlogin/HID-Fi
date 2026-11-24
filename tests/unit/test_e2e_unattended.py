@@ -97,3 +97,12 @@ def test_a_run_that_loses_a_saved_network_fails_and_never_prints_its_name():
     assert before != after                                   # the run's final != snap check fails
     shown = json.dumps(conftest._redacted(after))
     assert "1 saved" in shown and "Home" not in shown and "Office" not in shown
+
+
+def test_a_hardware_test_whose_computer_changed_network_is_an_error_not_a_verdict():
+    """The 390 ms 'regression' of 2026-11-24 was the Mac hopping networks mid-test."""
+    src = (paths.TESTS / "conftest.py").read_text(encoding="utf-8")
+    f = src[src.index("def _this_computer_stays_on_its_network("):src.index("@pytest.fixture\ndef board(")]
+    assert '("board", "e2e", "perf", "linux")' in f and "stop.wait(1)" in f and "pytest.fail(" in f
+    import conftest
+    assert conftest._this_computers_address() is not None

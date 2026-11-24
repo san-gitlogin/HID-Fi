@@ -174,6 +174,48 @@ def _redacted(snap):
     return out
 
 
+def _this_computers_address():
+    """The address this computer uses on its network now (a UDP connect sends nothing)."""
+    import socket
+    k = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        k.connect(("192.0.2.1", 9))                 # TEST-NET-1: never reached, only routed
+        return k.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        k.close()
+
+
+@pytest.fixture(autouse=True)
+def _this_computer_stays_on_its_network(request):
+    """A hardware test whose computer changed network meanwhile measured the change, not
+    the board: on 2026-11-24 macOS moved this Mac from the extender to the board's own
+    access point and on to the main router in 90 s, mid-run - an update test read 390 ms
+    of input lag, another lost the board, and both looked like firmware bugs. Watched
+    every second; any change makes the test an error that says so."""
+    import threading
+    if not any(k in request.node.keywords for k in ("board", "e2e", "perf", "linux")):
+        yield
+        return
+    seen, stop = [_this_computers_address()], threading.Event()
+
+    def watch():
+        while not stop.wait(1):
+            a = _this_computers_address()
+            if a != seen[-1]:
+                seen.append(a)
+    t = threading.Thread(target=watch, daemon=True)
+    t.start()
+    yield
+    stop.set()
+    t.join(3)
+    if len(seen) > 1:
+        pytest.fail(f"this computer changed network during the test ({' -> '.join(str(a) for a in seen)}): "
+                    "the result says nothing about the board - keep it on one network (macOS: turn off "
+                    "Auto-Join for the board's own WiFi) and run it again", pytrace=False)
+
+
 @pytest.fixture
 def board(_board_holder):
     """The shared serial session. Opens (one reboot) on first use."""
