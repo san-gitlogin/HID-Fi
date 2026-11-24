@@ -38,7 +38,15 @@ if [ -n "${HIDFI_VM_HOME:-}" ]; then
 fi
 
 docker info >/dev/null 2>&1 || { echo "Docker is not running. Start Docker Desktop, or: tests/docker/vm.sh up"; exit 2; }
-docker build -q -t "$IMAGE" -f tests/docker/Dockerfile tests >/dev/null
+# HIDFI_OFFLINE_IMAGE=1: use the image already built, without asking the registry about
+# ubuntu:24.04 first (on a network that stalls that lookup the build hung for an hour,
+# 2026-11-25). Only when the image exists; its inputs are setup_linux.sh,
+# requirements.txt and deps.json - rebuild normally after changing those.
+if [ -n "$HIDFI_OFFLINE_IMAGE" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "== using the existing $IMAGE image (HIDFI_OFFLINE_IMAGE): not rebuilt"
+else
+    docker build -q -t "$IMAGE" -f tests/docker/Dockerfile tests >/dev/null
+fi
 rm -rf "$OUT" && mkdir -p "$OUT"
 echo "== Linux tiers: $TIERS (ubuntu 24.04, $(docker version -f '{{.Server.Arch}}'))"
 set +e
