@@ -59,6 +59,13 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   on the main router cannot reach - and stayed there for good (since v4.3). It now
   goes to the network used most recently that is in range, never away from someone
   using it, and the preferred one wins again when it is back. DECISIONS.md D-15.
+- **A cable update survives a lost reply.** Over the board's own USB port, about one
+  update in five stopped with "no answer from the chip" on the owner's hub, and left
+  the board waiting in update mode until it was unplugged. A lost reply or a port that
+  drops now makes the Companion find the same board again by its MAC and go on where
+  it stopped (the journal; the running firmware is untouched until the switch), up to
+  three tries; if it still fails, the board is sent back to its firmware, never left
+  in update mode.
 - **A board that left this computer's network is said to have left it.** Online and
   then gone where this computer cannot reach (the extender's own subnet, seen from the
   main router), the card said "Connecting to <its old address>..." for ever. After 20 s

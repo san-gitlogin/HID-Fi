@@ -337,6 +337,15 @@ the chip's ROM - never guessed (see *identity* below). For each board:
 | native USB only, no network or firmware broken | guides the person: hold BOOT, tap RESET, release BOOT | BOOT here only enters the ROM bootloader; it never erases anything (AGENTS: no button erases data). |
 | both | COM when the Companion knows it is this board's COM port; otherwise native, with that COM port as the way back | The keyboard and mouse on the native port disappear while flashing; the Companion says so before starting - on DA1A2C that is the Mac's keyboard. |
 
+**Found on 09F7C8 (2026-11-24): a reply lost on the cable.** About one cable
+update in five over the native USB, behind the owner's hub, stopped with "no
+answer from the chip (frame)" after the sync - and the board stayed in update
+mode until unplugged. The Companion now runs the update again where it stopped
+(the journal), the same board found again by its MAC (or over its COM port), up
+to three runs, only for a lost reply or a port that went away; a final failure
+in update mode sends the board back to its firmware
+(`updates/real.rs`, `retry_after`, `leave_forced_download`).
+
 **Found on 09F7C8 (2026-10-28): behind a USB extender the ROM's USB never
 appears.** Asked for update mode, the board restarted into its loader and stayed
 there: the native port did not come back within a minute, and its COM port did

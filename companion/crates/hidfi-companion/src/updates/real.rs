@@ -328,19 +328,7 @@ pub fn cable_job(
             if let Err(e) = l.ota(base, "download_mode", "") {
                 return fail(format!("the board refused update mode: {e}"));
             }
-            let end = Instant::now() + Duration::from_secs(20);
-            let found = loop {
-                if let Some(c) = serial::candidates()
-                    .into_iter()
-                    .find(|c| matches!(&c.kind, Kind::Loader { mac: x } if same_mac(x, mac)))
-                {
-                    break Some(c.path);
-                }
-                if Instant::now() > end {
-                    break None;
-                }
-                std::thread::sleep(Duration::from_millis(250));
-            };
+            let found = find_loader(mac, Duration::from_secs(20));
             match (found, rescue) {
                 (Some(p), _) => (p, Connect::InLoader),
                 // Behind some hubs and extenders the ROM's USB never shows up, and
@@ -360,11 +348,6 @@ pub fn cable_job(
             }
         }
     };
-    let port = match Serial::open(&path, 115_200) {
-        Ok(p) => p,
-        Err(e) => return fail(format!("could not open {path}: {e}")),
-    };
-    let mut f = Flasher::new(port);
     let mut on = |step: Step, n: usize, total: usize| {
         sh.set(Job::Cable {
             step: step_words(step).into(),
@@ -374,17 +357,60 @@ pub fn cable_job(
     };
     let cancel = || sh.cancel.load(Ordering::SeqCst);
     let rel = flash::Release { image, table };
-    let result = flash::run(
-        &mut f,
-        &m,
-        connect,
-        &rel,
-        journal,
-        Progress {
-            cancel: &cancel,
-            on: &mut on,
-        },
-    );
+    // A reply lost on the cable (a hub, the chip's own USB re-enumerating) stopped the
+    // whole update about 1 in 5 over 09F7C8's native USB, and left the board waiting
+    // in update mode (2026-11-24). Each run resumes from the journal - the running
+    // firmware is untouched until the switch - so a lost reply is tried again where
+    // it stopped, the same board found again by its MAC.
+    let (mut path, mut connect, mut tries) = (path, connect, 0usize);
+    let (result, mut f) = loop {
+        let port = match Serial::open(&path, 115_200) {
+            Ok(p) => p,
+            Err(e) => return fail(format!("could not open {path}: {e}")),
+        };
+        let mut f = Flasher::new(port);
+        let r = flash::run(
+            &mut f,
+            &m,
+            connect,
+            &rel,
+            journal,
+            Progress {
+                cancel: &cancel,
+                on: &mut on,
+            },
+        );
+        tries += 1;
+        let again = matches!(&r, Err(e) if retry_after(e, tries));
+        if !again {
+            break (r, f);
+        }
+        log::warn!(
+            "cable update: {} - going on where it stopped (try {tries})",
+            r.as_ref().err().unwrap()
+        );
+        sh.set(Job::Cable {
+            step: "a reply was lost on the cable - going on where it stopped".into(),
+            bytes: 0,
+            total: 0,
+        });
+        drop(f);
+        std::thread::sleep(Duration::from_millis(500));
+        if connect == Connect::InLoader {
+            match (find_loader(mac, Duration::from_secs(10)), &plan) {
+                (Some(p), _) => path = p,
+                (None, CablePlan::Native { rescue: Some(com) }) => {
+                    (path, connect) = (com.clone(), Connect::Reset);
+                }
+                (None, _) => {}
+            }
+        }
+    };
+    // Failed in update mode: never leave the board waiting there - it starts its
+    // firmware again (the one it ran, unless the switch was already made).
+    if result.is_err() && connect == Connect::InLoader {
+        let _ = f.leave_forced_download();
+    }
     // Past the preflight, the MAC read on this COM port was this board's: remember
     // the port, so the next cable update takes it first.
     if connect == Connect::Reset && matches!(result, Ok(_) | Err(flash::UpdateError::Cancelled)) {
@@ -421,6 +447,36 @@ pub fn cable_job(
         }
         Err(flash::UpdateError::Cancelled) => sh.set(Job::Stopped),
         Err(e) => fail(e.to_string()),
+    }
+}
+
+/// Cable updates: a run that failed on a lost reply or a port that went away is tried
+/// again (resumed from the journal), up to CABLE_TRIES runs in all; nothing else is.
+const CABLE_TRIES: usize = 3;
+
+fn retry_after(e: &flash::UpdateError, tries: usize) -> bool {
+    use hidfi_flash::flasher::FlashError;
+    tries < CABLE_TRIES
+        && matches!(
+            e,
+            flash::UpdateError::Flash(FlashError::Timeout(_) | FlashError::Port(_))
+        )
+}
+
+/// The board, waiting in update mode on this computer's USB, found by its MAC.
+fn find_loader(mac: &str, within: Duration) -> Option<String> {
+    let end = Instant::now() + within;
+    loop {
+        if let Some(c) = serial::candidates()
+            .into_iter()
+            .find(|c| matches!(&c.kind, Kind::Loader { mac: x } if same_mac(x, mac)))
+        {
+            return Some(c.path);
+        }
+        if Instant::now() > end {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(250));
     }
 }
 
@@ -490,6 +546,26 @@ fn kept(v: &Value, to: &str) -> Option<bool> {
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[test]
+    fn a_lost_reply_on_the_cable_is_tried_again_and_nothing_else_is() {
+        use hidfi_flash::flasher::FlashError;
+        let lost = flash::UpdateError::Flash(FlashError::Timeout("frame"));
+        let gone = flash::UpdateError::Flash(FlashError::Port("unplugged".into()));
+        assert!(retry_after(&lost, 1) && retry_after(&lost, 2) && retry_after(&gone, 1));
+        assert!(
+            !retry_after(&lost, CABLE_TRIES),
+            "bounded: three runs in all"
+        );
+        for e in [
+            flash::UpdateError::WrongBoard("x".into()),
+            flash::UpdateError::Cancelled,
+            flash::UpdateError::BadRelease,
+            flash::UpdateError::Flash(FlashError::Refused("write", 1, 2)),
+        ] {
+            assert!(!retry_after(&e, 1), "{e} is never tried again");
+        }
+    }
 
     #[test]
     fn the_relay_serves_its_files_with_range_and_nothing_else() {

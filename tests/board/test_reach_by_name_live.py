@@ -11,7 +11,7 @@ the board's counting are all real.
 | by name | resolves | counted as using the board, no banner |
 | by IP | resolves | the page says net_here: counted, no banner |
 | by IP | does not | the banner, not counted; both buttons work |
-| Bring here | busy | the person is asked first; yes moves the board (staged network) |
+| Bring here | busy (a Companion the test pairs) | the person is asked first; yes moves the board (staged network) |
 
 "Counted" is read from the board itself: status `ws_onlink`, the signed-in pages
 right on its network (the Companion, which comes and goes on its own heartbeat, is
@@ -165,8 +165,22 @@ def test_bring_the_board_here_asks_first_when_someone_is_using_it(live, browsers
     board, home = live["board"], live["home"]
     if live["slots"] >= 5:
         pytest.skip("all 5 saved-network slots are in use")
-    if _using(board, home) == 0:
-        pytest.skip("nobody else is using the board right now (the Companion is not running): nothing to ask about")
+    # The person using the board right there is a Companion this test pairs itself
+    # (it used to be the owner's real app, there or not - the test skipped or raced it).
+    from board.test_networks_rehearsed import _Owner, _pair_owner, _this_computer_on
+    if not _this_computer_on(live["ip"])[1]:
+        pytest.skip("this computer is not on the board's network: it cannot be the one using it there")
+    owner = _Owner(_pair_owner(board, live["ip"]))
+    owner.ip = live["ip"]
+    owner.thread.start()
+
+    def someone_using(within):
+        end = time.time() + within
+        while time.time() < end:
+            if _using(board, home):
+                return True
+            time.sleep(2)
+        return False
     board.cmd({"cmd": "net_sim", "nets": [{"ssid": SIM, "rssi": -50}], "owners": home}, "net_sim")
     board.cmd({"cmd": "wifi_configure", "ssid": SIM, "password": "rehearsal-only"})
     board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True, "force": True}, "wifi_prefer")
@@ -175,6 +189,10 @@ def test_bring_the_board_here_asks_first_when_someone_is_using_it(live, browsers
         while time.time() < end and not next((n for n in board.cmd({"cmd": "wifi_networks"}, "wifi_networks")["networks"]
                                               if n.get("current") and n["ssid"] == home), None):
             time.sleep(1)
+        # Back on home after joining the staged network, nobody counts as right there until
+        # their next heartbeat (D-14): wait for it rather than race it.
+        owner.track(board)
+        assert someone_using(45), "the Companion this test paired never counted as using the board on its network"
         ctx, page = _open(browsers["routed"], live, f"http://{live['ip']}/")
         try:
             asked = []
@@ -204,6 +222,8 @@ def test_bring_the_board_here_asks_first_when_someone_is_using_it(live, browsers
         finally:
             ctx.close()
     finally:
+        owner.stop.set()
+        board.cmd({"cmd": "companion_unpair", "id": owner.app.id}, "companion_unpair")
         board.cmd({"cmd": "net_sim", "off": True}, "net_sim")
         board.cmd({"cmd": "wifi_forget", "ssid": SIM})
         board.cmd({"cmd": "wifi_prefer", "ssid": home, "now": True, "force": True}, "wifi_prefer")
