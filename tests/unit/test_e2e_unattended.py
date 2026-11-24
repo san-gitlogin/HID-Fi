@@ -106,3 +106,14 @@ def test_a_hardware_test_whose_computer_changed_network_is_an_error_not_a_verdic
     assert '("board", "e2e", "perf", "linux")' in f and "stop.wait(1)" in f and "pytest.fail(" in f
     import conftest
     assert conftest._this_computers_address() is not None
+
+
+def test_hardware_tests_reach_the_board_before_judging_it():
+    """macOS calls a host 'down' for 20 s after a failed lookup: a board just restarted
+    reports online before this computer can reach it. Every direct socket retries."""
+    import re
+    assert "REACH_S = 45" in (paths.TESTS / "support" / "board.py").read_text(encoding="utf-8")
+    for f in ["board/test_ota_download.py", "perf/test_perf.py", "board/test_press_latency_hw.py",
+              "board/test_reach_by_name_live.py"]:
+        src = (paths.TESTS / f).read_text(encoding="utf-8")
+        assert not re.search(r"websocket\.create_connection\(", src), f"{f} connects without retrying"

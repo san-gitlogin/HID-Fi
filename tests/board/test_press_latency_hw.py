@@ -23,7 +23,8 @@ def _host(board, wait=40):
     while time.time() < end:
         st = board.cmd({"cmd": "status"}, "status")
         if st.get("wifi_connected") and st.get("wifi_ip"):
-            return st["wifi_ip"], st.get("auth_set")
+            from support.board import reachable
+            return reachable(st["wifi_ip"]), st.get("auth_set")
         time.sleep(2)
     pytest.skip("the board is not on a home network this computer shares")
 

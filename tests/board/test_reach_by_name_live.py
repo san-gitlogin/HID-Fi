@@ -42,6 +42,8 @@ def live(request, _board_holder):
     pin = request.config.getoption("--board-pin")
     if st.get("auth_set") and not pin:
         pytest.skip("the board has an access PIN: give it in HIDFI_PIN")
+    from support.board import reachable
+    reachable(st["wifi_ip"])
     nets = board.cmd({"cmd": "wifi_networks"}, "wifi_networks")["networks"]
     home = next(n["ssid"] for n in nets if n.get("current"))
     return {"board": board, "ip": st["wifi_ip"], "name": st["mdns"], "pin": pin or "", "home": home,

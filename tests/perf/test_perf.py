@@ -173,8 +173,9 @@ def ws(request, board):
     url = lan_url(request.config.getoption("--board-url"), board)
     if not url:
         pytest.skip("WiFi tests need --board-url ws://<board-ip>:81 and this machine on the board's network")
-    websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
-    conn = websocket.create_connection(url, timeout=5)
+    pytest.importorskip("websocket", reason="pip install websocket-client")
+    from support.board import ws_connect
+    conn = ws_connect(url, timeout=5)                # retried while macOS still calls a restarted board down
     # A board with a PIN greets every new socket with auth_required and then
     # silently ignores pointer frames until auth succeeds.
     conn.settimeout(0.8)

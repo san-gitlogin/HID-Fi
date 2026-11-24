@@ -313,7 +313,8 @@ def _ws(board, request):
     websocket = pytest.importorskip("websocket", reason="pip install websocket-client")
     if not ip:
         return None
-    c = websocket.create_connection(f"ws://{ip}:81/", timeout=5)
+    from support.board import ws_connect
+    c = ws_connect(f"ws://{ip}:81/", timeout=5)      # retried: macOS may still call a just-restarted board down
     c.settimeout(1.0)
     try:
         greet = c.recv()

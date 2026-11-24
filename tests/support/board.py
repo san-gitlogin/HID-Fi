@@ -226,7 +226,29 @@ def lan_url(url, board):
     return url
 
 
-def ws_connect(url, timeout=5, wait=20):
+REACH_S = 45   # macOS keeps a host it failed to find "down" for 20 s (net.link.ether.inet.host_down_time)
+
+
+def reachable(ip, port=80, wait=REACH_S):
+    """Wait until this computer really reaches the board at ip (a TCP connect), not only
+    until the board says it is online: right after a restart the board reports its
+    address while macOS still answers "Host is down" for it - four tests failed in 3 s
+    that way, straight after the rollback tests restarted it (2026-11-24). Fails, never
+    skips: a board online and unreachable for this long is something to look at."""
+    import socket
+    import time
+    end, err = time.time() + wait, None
+    while time.time() < end:
+        try:
+            socket.create_connection((ip, port), timeout=3).close()
+            return ip
+        except OSError as e:
+            err = e
+            time.sleep(1)
+    raise AssertionError(f"the board says it is online at {ip}, but this computer has not reached it in {wait} s: {err}")
+
+
+def ws_connect(url, timeout=5, wait=REACH_S):
     """A WebSocket to the board, retried while it comes up: opening the COM port
     resets the board, and the serial tests that run first leave it rejoining
     WiFi - a WiFi test that connects at once timed out (seen in a full run)."""
