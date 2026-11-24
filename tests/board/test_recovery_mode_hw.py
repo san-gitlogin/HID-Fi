@@ -77,7 +77,10 @@ class Link:
     """The recovery link. DTR raised: the board's USB serial only answers then."""
 
     def __init__(self, device, dtr=True, baud=115200):
-        self.s = serial.Serial()
+        # Exclusive: macOS lets two programs open one port and split its replies between
+        # them - the owner's Companion probing the link once got this test a reply to
+        # its own "status" (2026-11-24).
+        self.s = serial.Serial(exclusive=True)
         self.s.port, self.s.baudrate, self.s.timeout = device, baud, 0.2
         self.s.dtr, self.s.rts = dtr, False
         # The Companion, when running, opens a new recovery link once to ask what it is
@@ -95,14 +98,19 @@ class Link:
         time.sleep(0.2)
         self.s.reset_input_buffer()
 
-    def cmd(self, body, secs=3.0):
+    def cmd(self, body, secs=3.0, any_reply=False):
+        """The answer to this command (its reply named after it), or any answer with
+        any_reply - never someone else's."""
         self.s.write((json.dumps(body) + "\n").encode())
         end = time.time() + secs
         while time.time() < end:
             line = self.s.readline().decode(errors="ignore").strip()
             if line.startswith("{"):
-                d = json.loads(line)
-                if "status" in d and not d.get("event"):
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "status" in d and not d.get("event") and (any_reply or d.get("reply") == body["cmd"]):
                     return d
         return None
 
@@ -209,11 +217,19 @@ def test_eight_seconds_says_ready_before_letting_go(board, mac):
         board.ser.dtr = False
     link = _wait(lambda: _links(mac), LINK_WAIT_S)
     assert link, "letting go after 8 s did not open recovery"
-    lk = Link(link[0].device)
-    assert lk.cmd({"cmd": "recovery_exit"})["reply"] == "recovery_exit"
-    lk.close()
-    assert _wait(lambda: not _links(mac), 15)
-    _pump(board, 9.0)
+    try:
+        lk = Link(link[0].device)
+        try:
+            r = lk.cmd({"cmd": "recovery_exit"})
+        finally:
+            lk.close()
+        assert r and r["reply"] == "recovery_exit", r
+        assert _wait(lambda: not _links(mac), 15)
+    finally:
+        if _links(mac):                                       # never leave recovery open for the next test
+            board.cmd({"cmd": "recovery_exit"})
+            _wait(lambda: not _links(mac), 15)
+        _pump(board, 9.0)
 
 
 def test_the_link_answers_as_the_com_port_does(board, recovery):
@@ -224,7 +240,7 @@ def test_the_link_answers_as_the_com_port_does(board, recovery):
         assert st["hid_ready"] is True
         ap = link.cmd({"cmd": "ap_password"})                 # USB only: allowed here, never printed
         assert ap["status"] == "ok" and {"ssid", "password", "open", "generated"} <= set(ap)
-        assert link.cmd({"cmd": "definitely_not_a_command"})["message"] == "Unknown command"
+        assert link.cmd({"cmd": "definitely_not_a_command"}, any_reply=True)["message"] == "Unknown command"
     finally:
         link.close()
 
