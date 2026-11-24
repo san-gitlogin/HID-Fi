@@ -117,3 +117,18 @@ def test_hardware_tests_reach_the_board_before_judging_it():
               "board/test_reach_by_name_live.py"]:
         src = (paths.TESTS / f).read_text(encoding="utf-8")
         assert not re.search(r"websocket\.create_connection\(", src), f"{f} connects without retrying"
+
+
+def test_a_board_behind_usb_hubs_is_found_on_the_native_usb():
+    """13 recovery-mode tests skipped 'not plugged into this computer' for a board that
+    was - behind two hubs, nested in the IORegistry, where only the top was looked at."""
+    import sys
+    sys.path.insert(0, str(paths.TESTS / "board"))
+    import test_recovery_mode_hw as t
+    board = {"IOObjectClass": "IOUSBHostDevice", "USB Serial Number": "DCB4D909F7C8", "IORegistryEntryID": 7,
+             "idVendor": 0x303A, "IORegistryEntryChildren": [{"IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3}]}
+    hub = lambda kids, i: {"IOObjectClass": "IOUSBHostDevice", "USB Product Name": "USB2.0 HUB",
+                           "IORegistryEntryID": i, "IORegistryEntryChildren": kids}
+    tree = [hub([hub([board], 2)], 1)]
+    assert t._usb_identity("DCB4D909F7C8", tree), "a board two hubs deep is plugged in"
+    assert not t._usb_identity("B81F3FDA1A2C", tree)

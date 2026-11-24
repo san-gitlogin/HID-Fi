@@ -80,7 +80,18 @@ class Link:
         self.s = serial.Serial()
         self.s.port, self.s.baudrate, self.s.timeout = device, baud, 0.2
         self.s.dtr, self.s.rts = dtr, False
-        self.s.open()
+        # The Companion, when running, opens a new recovery link once to ask what it is
+        # (recovery.rs) - for a moment the port is busy. Wait that out; anything longer
+        # is a real failure (2026-11-24: "Resource busy" left recovery open for 7 tests).
+        end = time.time() + 10
+        while True:
+            try:
+                self.s.open()
+                break
+            except serial.SerialException as e:
+                if "busy" not in str(e).lower() or time.time() > end:
+                    raise
+                time.sleep(0.3)
         time.sleep(0.2)
         self.s.reset_input_buffer()
 
@@ -99,12 +110,13 @@ class Link:
         self.s.close()
 
 
-def _usb_identity(mac):
+def _usb_identity(mac, tree=None):
     """macOS: the HID side of the board's USB identity, read passively from the
     IORegistry (no request reaches the board, so host-OS detection is undisturbed)."""
     import plistlib
-    tree = plistlib.loads(subprocess.run(["ioreg", "-l", "-a", "-w0", "-r", "-c", "IOUSBHostDevice"],
-                                         capture_output=True, check=True).stdout)
+    if tree is None:
+        tree = plistlib.loads(subprocess.run(["ioreg", "-l", "-a", "-w0", "-r", "-c", "IOUSBHostDevice"],
+                                             capture_output=True, check=True).stdout)
     roots = tree if isinstance(tree, list) else [tree]
     found = {}
 
@@ -117,7 +129,16 @@ def _usb_identity(mac):
         for c in n.get("IORegistryEntryChildren", []):
             walk(c, dev)
 
-    for r in roots:
+    # Every device in the tree, not only the top level: a board behind a USB hub is
+    # nested under it (six levels deep on the owner's desk) - looking at the top only
+    # made 13 tests skip "not plugged into this computer" while it was (2026-11-24).
+    def devices(n):
+        if n.get("IOObjectClass") == "IOUSBHostDevice":
+            yield n
+        for c in n.get("IORegistryEntryChildren", []):
+            yield from devices(c)
+
+    for r in (d for root in roots for d in devices(root)):
         if r.get("USB Serial Number", "").replace(":", "").upper() == mac and r.get("IORegistryEntryID") not in found:
             dev = {"interfaces": [], "product": r.get("idProduct"), "vendor": r.get("idVendor")}
             walk(r, dev)
@@ -149,8 +170,10 @@ def recovery(board, mac):
             link.cmd({"cmd": "recovery_exit"})
             link.close()
         except serial.SerialException:
-            pass
-        _wait(lambda: not _links(mac), 15)
+            board.cmd({"cmd": "recovery_exit"})       # over COM, when the link cannot be had
+        if not _wait(lambda: not _links(mac), 15):
+            board.cmd({"cmd": "recovery_exit"})
+            assert _wait(lambda: not _links(mac), 15), "recovery mode could not be closed after the test"
         _pump(board, 9.0)
 
 
