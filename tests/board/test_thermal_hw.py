@@ -89,6 +89,15 @@ def test_a_watcher_does_not_slow_the_dashboard(board, request):
     # WiFi tails swing between identical runs (tests/perf/test_perf.py measured 3x), so the
     # difference is judged on the median, the tail on the product budget.
     assert l["p50"] <= q["p50"] + 2.0, f"a watcher raised the dashboard's median ping: {detail}"
+    # The 80 ms tail is the product budget on a usable network. Where the network's own
+    # quiet tail is already over it, the tail judges the network, not the watcher: on the
+    # Bangalore WiFi (2026-11-25) quiet/loaded p95 read 150/150 and then 137/163 ms with
+    # the same medians - swings bigger than any margin. Then the tail is reported as not
+    # judged (a skip, never a pass); the median check above has run either way.
+    qp95 = pct(r["quiet"], 95)
+    if qp95 > 80:
+        pytest.skip(f"tail not judged: this network's quiet p95 is {qp95:.0f} ms, over the 80 ms budget "
+                    f"(median quiet {q['p50']} ms, under a watcher {l['p50']} ms - checked)")
     assert pct(r["loaded"], 95) <= 80, f"the dashboard's p95 ping left its 80 ms budget under a watcher: {detail}"
     assert _status(board)["temp_off"] == ""
 

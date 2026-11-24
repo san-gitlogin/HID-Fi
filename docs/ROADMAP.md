@@ -36,6 +36,23 @@ module's 65 °C rating is about.
 Also waiting on the rev C print: the coupons (tabs in with no force, a click, 20
 open/close cycles), then the shell; the drop and pocket tests on the build guide.
 
+## 2b. Found while releasing v4.4 (2026-11-25), next in v4.4.1
+
+- **A network's identity is its subnet alone.** Two homes on the same default
+  192.168.0.x (the owner's hometown extender C6 and the Bangalore ACT router) count
+  as one network (D-02: "same subnet = router + extender"). Harmless while they are
+  never in range together, but two different routers on one default subnet in one
+  place would be treated as one. Identify a network by its gateway's MAC as well,
+  learned after joining; a new decision entry, rule tests, a board scenario.
+- **"Not plugged in" for a board whose USB carries no data.** DA1A2C showed "Not
+  plugged in" with its cable in: the board itself reported `usb_mounted: false`
+  (charge-only cable or a hub port without data). The Companion should say exactly
+  that ("on, but no data reaches this computer through its USB cable - try another
+  cable or port"), which needs `usb_mounted` in the paired heartbeat; with a test.
+- **Guide people off Auto-Join for the board's own WiFi.** A Mac that set the board
+  up over its WiFi keeps it as a known network ranked above the home's, and moved to
+  it by itself mid-session. Dashboard and setup docs should say to turn Auto-Join off.
+
 ## 3. Jev / Laya: say what you want, the board does it
 
 **Decision (2026-10-23):** the **board calls the decision model itself** - no

@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## v4.4 - 2026-11-23
+## v4.4 - 2026-11-25
 
 ### Firmware
 
