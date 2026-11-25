@@ -81,9 +81,10 @@ pub struct Remembered {
     pub mac: String,
     /// Where it last answered.
     pub url: Option<String>,
-    /// What the board says of its own USB, asked over the network (usb_mounted): Some(false)
-    /// - no computer gets data from its cable (a charge-only cable, a hub port without data);
-    /// Some(true) - it is on another computer's USB; None - not asked, or no answer.
+    /// What the board says of its own USB, asked over the network (usb_mounted):
+    /// `Some(false)` no computer gets data from its cable (a charge-only cable, a hub port
+    /// without data), `Some(true)` it is on another computer's USB, `None` not asked or no
+    /// answer.
     pub usb: Option<bool>,
 }
 
@@ -94,6 +95,9 @@ pub fn usb_from_status(body: &str) -> Option<bool> {
         .get("usb_mounted")?
         .as_bool()
 }
+
+/// What paired boards not on this USB said of their USB, by MAC, and when asked.
+type UsbProbes = Arc<std::sync::Mutex<HashMap<String, (Instant, Option<bool>)>>>;
 
 /// How often a paired board not on this computer's USB is asked about its USB.
 const USB_PROBE_EVERY: Duration = Duration::from_secs(30);
@@ -513,8 +517,7 @@ fn run(
     let mut here: BTreeMap<Mac, Here> = BTreeMap::new();
     let mut offline_since: HashMap<Mac, Instant> = HashMap::new();
     // What paired boards not on this USB said of their own USB (usb_mounted), and when asked.
-    let usb_probes: Arc<std::sync::Mutex<HashMap<String, (Instant, Option<bool>)>>> =
-        Arc::default();
+    let usb_probes: UsbProbes = Arc::default();
     // D-14: what the last "Bring the board here" did, per board, for its card: with when,
     // and the network the board was on then. Shown only while that still holds and for
     // BRING_SHOWN at most - a move that did not happen gives the button back.
