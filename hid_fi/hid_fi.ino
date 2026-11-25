@@ -212,6 +212,13 @@ CmdSource cmdSource   = SRC_SERIAL;
 int       wsClientNum = -1;
 bool      verboseLog  = false;           // true = echo every source to serial, as v3.3 did
 bool wifiConnected = false;    // STA connected to external network
+// Rehearsals (net_sim, net_fault) move the board between networks in its logic only: the
+// radio stays associated with the real network (D-17). Tests never drop off and rejoin the
+// owner's router - it lost its internet during a rehearsal run once (2026-11-25).
+bool     staSimDown = false;     // down in the board's logic while the radio is still up
+uint32_t staSimUpAt = 0;         // a rehearsed join completes then; 0: none that can
+uint32_t staRadioJoins = 0;      // real joins (WiFi.begin) since start - status radio_joins
+uint32_t staRadioDrops = 0;      // real disconnects asked for since start - status radio_drops
 bool wifiEnabled = false;       // STA attempted / in use
 String wifiIP = "";             // STA IP
 String apIP = "192.168.4.1";   // AP IP (always this)
@@ -286,6 +293,10 @@ uint32_t netMoveAt = 0;
 #define NET_MOVE_DELAY_MS 3000              // the answer must be sent and acknowledged before the link drops: 300 ms lost it 1 in 3, 1.5 s still 1 in 3 just after a join (one TCP retransmission is ~1 s)
 uint32_t netSmask[NET_MAX];           // that subnet's mask, raw as the router gave it; 0 not recorded yet (D-14)
 uint32_t netNet[NET_MAX];             // the subnet it was on when joined (address & mask); 0 never
+uint32_t netRouter[NET_MAX];          // its router: an id of the gateway's MAC (D-16); 0 not learned yet
+uint32_t netRouterAt = 0;             // next try at learning the current network's router
+uint8_t  netRouterTries = 0;          // tries since the last join (gives up until the next one)
+bool     netRouterDone = true;
 uint32_t netUsed[NET_MAX];            // when an owner device last reached the board over it; 0 never
 bool     netAnchor[NET_MAX];          // the paired computer last reached it over this one
 bool     netTried[NET_MAX];           // since start: joined, and no owner device came (not saved)
@@ -330,7 +341,7 @@ String   netFaultSsid = "";           // vanish one network only (empty: all of 
 // owner's devices are on: on any other they do not count, as if behind another router.
 // speed runs the 5-minute and 2-minute timers that much faster. RAM only; it survives
 // only the restart net_sim itself asks for (RTC memory, software restart).
-struct NetSimNet { char ssid[33]; int8_t rssi; bool sameNet; };
+struct NetSimNet { char ssid[33]; int8_t rssi; bool sameNet; bool otherRouter; };   // otherRouter: same subnet, another router (D-16)
 struct NetSimState {
     uint32_t magic;
     uint8_t n; NetSimNet v[4];
@@ -340,7 +351,7 @@ struct NetSimState {
     uint8_t speed;                // 1..60
     char carrier[33];
 };
-#define NET_SIM_MAGIC 0x5e7511a1u
+#define NET_SIM_MAGIC 0x5e7511a2u      // a2: NetSimNet gained otherRouter (an old layout is never read as this one)
 RTC_NOINIT_ATTR NetSimState netSimRtc;
 NetSimState netSim = {};
 inline bool netSimOn() { return netSim.magic == NET_SIM_MAGIC; }
@@ -841,6 +852,8 @@ void staCameOnline(const String& ip);
 void netOwnerHere(bool computer);
 bool netSimRides(const String& ssid);
 uint32_t netSimSubnet(const String& ssid, uint32_t real);
+uint32_t netSimRouter(const String& ssid, uint32_t real);
+void netRouterTick();
 bool netSimOwnersAway();
 uint32_t netSimMs(uint32_t ms);
 uint32_t netSimMsHere(uint32_t ms);
@@ -1512,6 +1525,7 @@ void loop() {
         webServer.handleClient();
         SEC_END(2)
         netMoveTick();             // a move asked for now, once its answer has left
+        netRouterTick();           // D-16: which router this network is behind
         updateStaJoin();           // advances a join in progress, never blocks
         checkWifiConnection();
         updatePower();
@@ -2001,6 +2015,40 @@ const char* wlStatusStr(int s) {
     }
 }
 
+// D-17: the radio is associated with a network and has an address.
+bool radioOnline() { return WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0; }
+
+// A rehearsal is on: net_sim, a staged absence (net_fault), or a rehearsed drop pending.
+bool staRehearsing() { return netSimOn() || netFaultUntil || staSimDown; }
+
+// The link as the board's logic sees it: the radio's, unless a rehearsal has it down.
+bool staLinkUp() {
+    if (staSimDown) {
+        if (!staSimUpAt || (long)(millis() - staSimUpAt) < 0 || !radioOnline()) return false;
+        staSimDown = false;
+        staSimUpAt = 0;
+    }
+    return radioOnline();
+}
+
+// Leave the current network. In a rehearsal with the radio up, only in the board's logic.
+void staDrop() {
+    if (staRehearsing() && radioOnline()) { staSimDown = true; staSimUpAt = 0; return; }
+    staRadioDrops++;
+    WiFi.disconnect(false);   // keep the AP running
+}
+
+// In a rehearsal, can this network be "joined" without the radio: it is the one the
+// radio is on (or a made-up one riding it), and nothing staged says it is not there.
+bool staSimReachable(const String& ssid) {
+    if (!radioOnline()) return false;
+    if (netSimOn() && netSim.hide[0] && ssid == netSim.hide) return false;
+    if (netFaultUntil && (!netFaultSsid.length() || ssid == netFaultSsid)) return false;
+    if (netSimRides(ssid)) return true;
+    if (ssid != WiFi.SSID()) return false;
+    return true;
+}
+
 // Starts a join and returns immediately. useStatic applies staWantIp if one is
 // set; the fallback path calls this again with false.
 void staBeginJoin(const String& ssid, const String& pass, bool useStatic) {
@@ -2009,6 +2057,21 @@ void staBeginJoin(const String& ssid, const String& pass, bool useStatic) {
     staPhase = STA_CONNECTING;
     staPhaseAt = millis();
 
+    // D-17: in a rehearsal the radio never leaves the network it is on. Joining that one, or
+    // a made-up one riding it, completes after a moment; anything else - a real network
+    // elsewhere, or one staged as not there - never does and times out like any join (a
+    // rehearsal once really tried an out-of-range saved network and dropped the router).
+    if (staRehearsing() && radioOnline()) {
+        staStaticTried = false;
+        staIpMode = "dhcp";
+        staSimDown = true;
+        staSimUpAt = staSimReachable(ssid) ? (millis() + 800) | 1 : 0;
+        COM_SERIAL.printf("[STA] Joining %s (rehearsed, the radio stays on %s)...\n", ssid.c_str(), WiFi.SSID().c_str());
+        return;
+    }
+    staSimDown = false;
+    staSimUpAt = 0;
+    staRadioJoins++;
     WiFi.disconnect(false);   // drop any previous association, keep the AP up
 
     staStaticTried = false;
@@ -2052,7 +2115,7 @@ void staBeginJoin(const String& ssid, const String& pass, bool useStatic) {
 void updateStaJoin() {
     if (staPhase != STA_CONNECTING) return;
 
-    if (WiFi.status() == WL_CONNECTED) {
+    if (staLinkUp()) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
 
@@ -2095,7 +2158,7 @@ void updateStaJoin() {
     if (!staDownSince) staDownSince = millis();
     // Decide on the router's reason before our own disconnect replaces it.
     staScheduleRetry();
-    WiFi.disconnect(false);   // keep the AP running no matter what
+    staDrop();                // keep the AP running no matter what (D-17: a rehearsed join: no radio)
 }
 
 // The router told us why it let go. Runs on the WiFi task: store, nothing else.
@@ -2190,7 +2253,8 @@ void staCameOnline(const String& ip) {
     if (netCurrent >= 0 && netCurrent < netCount) {
         netPwRefused[netCurrent] = false;            // it took the password after all
         uint32_t sn = netSimSubnet(netSsid[netCurrent], (uint32_t)WiFi.localIP() & (uint32_t)WiFi.subnetMask());
-        if (sn && sn != netNet[netCurrent]) { netNet[netCurrent] = sn; netDirty = true; }
+        if (sn && sn != netNet[netCurrent]) { netNet[netCurrent] = sn; netRouter[netCurrent] = 0; netDirty = true; }
+        netRouterDone = false; netRouterTries = 0; netRouterAt = millis() + 1500;   // D-16: learn its router
         uint32_t sm = (uint32_t)WiFi.subnetMask();
         if (sn && sm && sm != netSmask[netCurrent]) { netSmask[netCurrent] = sm; netDirty = true; }
     }
@@ -2307,8 +2371,8 @@ void checkWifiConnection() {
     // A join in flight owns the radio; updateStaJoin() resolves it.
     if (staPhase == STA_CONNECTING) return;
 
-    bool up = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0 &&
-              !(netFaultUntil && (!netFaultSsid.length() || WiFi.SSID() == netFaultSsid));
+    const String logical = (netCurrent >= 0 && netCurrent < netCount) ? netSsid[netCurrent] : WiFi.SSID();
+    bool up = staLinkUp() && !(netFaultUntil && (!netFaultSsid.length() || logical == netFaultSsid));
     if (up) {
         String ip = WiFi.localIP().toString();
         if (!wifiConnected || ip != wifiIP) staCameOnline(ip);
@@ -2386,7 +2450,7 @@ void netKnown(NetKnown* k) {
         bool staged = netFaultUntil && (!netFaultSsid.length() || netSsid[i] == netFaultSsid);   // staged absence
         bool cooling = netCoolUntil[i] && (long)(millis() - netCoolUntil[i]) < 0;
         k[i] = {netSsid[i].c_str(), !staged && !netBad[i] && !cooling, netNet[i], netUsed[i], netAnchor[i], netTried[i],
-                netPwRefused[i]};
+                netPwRefused[i], netSimRouter(netSsid[i], netRouter[i])};
     }
 }
 
@@ -2429,7 +2493,7 @@ void netMaybeMove() {
         StaticJsonDocument<192> ev;
         ev["event"] = "wifi_moving"; ev["from"] = netSsid[netCurrent]; ev["to"] = netSsid[to]; ev["why"] = netWhyName(why);
         broadcastJson(ev);
-        WiFi.disconnect(false);
+        staDrop();
         staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
         return;
     }
@@ -2504,17 +2568,19 @@ void netToFront(int i) {
     if (i <= 0) return;
     String s = netSsid[i], p = netPass[i], ip = netIp[i], gw = netGw[i], m = netMask[i], d = netDns[i];
     bool ok = netOk[i], bad = netBad[i]; uint32_t cool = netCoolUntil[i];
-    uint32_t sn = netNet[i], sm = netSmask[i], us = netUsed[i]; bool an = netAnchor[i], tr = netTried[i], pr = netPwRefused[i];
+    uint32_t sn = netNet[i], sm = netSmask[i], us = netUsed[i], rt = netRouter[i]; bool an = netAnchor[i], tr = netTried[i], pr = netPwRefused[i];
     for (int k = i; k > 0; k--) {
         netSsid[k] = netSsid[k-1]; netPass[k] = netPass[k-1]; netIp[k] = netIp[k-1]; netGw[k] = netGw[k-1];
         netMask[k] = netMask[k-1]; netDns[k] = netDns[k-1]; netOk[k] = netOk[k-1]; netBad[k] = netBad[k-1];
         netCoolUntil[k] = netCoolUntil[k-1];
         netNet[k] = netNet[k-1]; netSmask[k] = netSmask[k-1]; netUsed[k] = netUsed[k-1]; netAnchor[k] = netAnchor[k-1]; netTried[k] = netTried[k-1];
+        netRouter[k] = netRouter[k-1];
         netPwRefused[k] = netPwRefused[k-1];
     }
     netSsid[0] = s; netPass[0] = p; netIp[0] = ip; netGw[0] = gw; netMask[0] = m; netDns[0] = d;
     netOk[0] = ok; netBad[0] = bad; netCoolUntil[0] = cool;
     netNet[0] = sn; netSmask[0] = sm; netUsed[0] = us; netAnchor[0] = an; netTried[0] = tr; netPwRefused[0] = pr;
+    netRouter[0] = rt;
     if (netCurrent == i) netCurrent = 0; else if (netCurrent >= 0 && netCurrent < i) netCurrent++;
 }
 
@@ -2524,11 +2590,13 @@ void netRemove(int i) {
         netMask[k] = netMask[k+1]; netDns[k] = netDns[k+1]; netOk[k] = netOk[k+1]; netBad[k] = netBad[k+1];
         netCoolUntil[k] = netCoolUntil[k+1];
         netNet[k] = netNet[k+1]; netSmask[k] = netSmask[k+1]; netUsed[k] = netUsed[k+1]; netAnchor[k] = netAnchor[k+1]; netTried[k] = netTried[k+1];
+        netRouter[k] = netRouter[k+1];
         netPwRefused[k] = netPwRefused[k+1];
     }
     netCount--;
     netSsid[netCount] = netPass[netCount] = "";
-    netNet[netCount] = netSmask[netCount] = netUsed[netCount] = 0; netAnchor[netCount] = netTried[netCount] = netPwRefused[netCount] = false;
+    netNet[netCount] = netSmask[netCount] = netUsed[netCount] = netRouter[netCount] = 0;
+    netAnchor[netCount] = netTried[netCount] = netPwRefused[netCount] = false;
     if (netCurrent == i) netCurrent = -1; else if (netCurrent > i) netCurrent--;
 }
 
@@ -2547,6 +2615,7 @@ void netSave() {
         if (netIp[i].length()) { d["ip"] = netIp[i]; d["gw"] = netGw[i]; d["mask"] = netMask[i]; d["dns"] = netDns[i]; }
         if (netNet[i]) d["sn"] = netNet[i];
         if (netSmask[i]) d["sm"] = netSmask[i];      // older firmware ignores it: no format change
+        if (netRouter[i]) d["rt"] = netRouter[i];    // D-16; older firmware ignores it too
         if (netUsed[i]) d["us"] = netUsed[i];
         if (netAnchor[i]) d["an"] = true;
         String out; serializeJson(d, out);
@@ -2582,6 +2651,7 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netMask[netCount] = d["mask"] | ""; netDns[netCount] = d["dns"] | "";
         netBad[netCount] = false; netCoolUntil[netCount] = 0;
         netNet[netCount] = d["sn"] | 0u; netSmask[netCount] = d["sm"] | 0u; netUsed[netCount] = d["us"] | 0u; netAnchor[netCount] = d["an"] | false;
+        netRouter[netCount] = d["rt"] | 0u;
         netTried[netCount] = netPwRefused[netCount] = false;
         if (netUsed[netCount] > netUseCount) netUseCount = netUsed[netCount];
         netCount++;
@@ -2592,7 +2662,7 @@ void netLoad(const String& legacySsid, const String& legacyPass) {
         netSsid[0] = legacySsid; netPass[0] = legacyPass; netOk[0] = legacyOk;
         netIp[0] = staWantIp; netGw[0] = staWantGw; netMask[0] = staWantMask; netDns[0] = staWantDns;
         netBad[0] = false; netCoolUntil[0] = 0;
-        netNet[0] = netSmask[0] = netUsed[0] = 0; netAnchor[0] = netTried[0] = netPwRefused[0] = false;
+        netNet[0] = netSmask[0] = netUsed[0] = netRouter[0] = 0; netAnchor[0] = netTried[0] = netPwRefused[0] = false;
         netCount = 1;
         netSave();
         COM_SERIAL.printf("[WIFI] Saved network %s carried over from the single-network settings\n", legacySsid.c_str());
@@ -2629,6 +2699,7 @@ void handleWifiNetworks() {
         if (netPwRefused[i]) o["password_changed"] = true;   // D-08: worked, now refused
         if (netUsed[i]) o["used"] = true;                     // D-02: an owner device reached the board over it
         if (netAnchor[i]) o["computer"] = true;               // the paired computer did
+        if (netRouter[i]) o["router_known"] = true;           // D-16: which router it is behind is known (never the address)
         if (i == prefIdx) o["preferred"] = true;
     }
     sendJson(d);
@@ -2691,7 +2762,7 @@ void netMoveTick() {
     netMoveTo = "";
     const int i = netFind(ssid);
     if (i < 0) return;                             // forgotten meanwhile
-    if (wifiConnected) WiFi.disconnect(false);
+    if (wifiConnected) staDrop();
     // A join still on its way (a network just added) finishes even after a disconnect -
     // the driver completes the association - and the board then sat on the wrong network,
     // thinking it was the one it had been joining, until the next look 2 minutes on.
@@ -2726,7 +2797,7 @@ void handleWifiForget(const JsonDocument& inDoc) {
     if (wasCurrent) {
         // Off this one; the supervisor looks for another saved network at once.
         staSavedSsid = staSavedPass = ""; staProven = false;
-        if (wifiConnected) WiFi.disconnect(false);
+        if (wifiConnected) staDrop();
         staRetryAt = millis(); if (!staRetryAt) staRetryAt = 1;
     }
     d["status"] = "ok"; d["reply"] = "wifi_forgotten"; d["ssid"] = ssid; d["left"] = netCount;
@@ -2748,7 +2819,8 @@ void handleNetFault(const JsonDocument& inDoc) {
     const char* kind = inDoc["kind"] | "";
     uint32_t secs = constrain((uint32_t)(inDoc["s"] | 30), 5u, 600u);
     if (!strcmp(kind, "drop")) {
-        WiFi.disconnect(false);
+        if (radioOnline()) { staSimDown = true; staSimUpAt = 0; }   // D-17: the router's "let go", rehearsed
+        else WiFi.disconnect(false);
     } else if (!strcmp(kind, "vanish")) {
         if (inDoc["at_boot"] | false) {
             rtcFaultMagic = NET_FAULT_MAGIC; rtcFaultSecs = secs;
@@ -2756,7 +2828,8 @@ void handleNetFault(const JsonDocument& inDoc) {
         } else {
             netFaultUntil = millis() + secs * 1000UL;
             netFaultSsid = String(inDoc["ssid"] | "");     // one network, or all of them
-            if (!netFaultSsid.length() || WiFi.SSID() == netFaultSsid) WiFi.disconnect(false);
+            if (!netFaultSsid.length() || (netCurrent >= 0 && netCurrent < netCount && netSsid[netCurrent] == netFaultSsid))
+                staDrop();
         }
     } else if (!strcmp(kind, "ap_off")) {
         stopAP();                                   // as auto-off would, without the 10 minute wait
@@ -2794,9 +2867,54 @@ void netScanResults(int n, std::vector<String>& names, std::vector<int>& rssi) {
 }
 
 // A made-up network has a subnet of its own (10.66.<n>.0), unless it is the carrier's.
+// A made-up network has a router of its own too, unless it is the carrier's (D-16).
+uint32_t netSimRouter(const String& ssid, uint32_t real) {
+    int i = netSimIndex(ssid);
+    if (i < 0 || (netSim.v[i].sameNet && !netSim.v[i].otherRouter) || ssid == netSim.carrier) return real;
+    return 0x5A000000u | (uint32_t)(i + 1);
+}
+
+// D-16: which router the current network is behind - its gateway's MAC, from the ARP
+// table, read under the network stack's lock. Asked for once if the entry is not there
+// yet; tried every 2 s for ~30 s after a join, then left until the next join. Not a
+// secret and never printed: only an id of it is kept.
+void netRouterTick() {
+    if (netRouterDone || !wifiConnected || netCurrent < 0 || netCurrent >= netCount) return;
+    if ((long)(millis() - netRouterAt) < 0) return;
+    netRouterAt = millis() + 2000;
+    if (++netRouterTries > 15) { netRouterDone = true; return; }
+    ip4_addr_t gw; gw.addr = (uint32_t)WiFi.gatewayIP();
+    const uint32_t me = (uint32_t)WiFi.localIP();
+    if (!gw.addr || !me) return;
+    uint8_t mac[6]; bool found = false;
+    LOCK_TCPIP_CORE();
+    for (size_t e = 0; e < ARP_TABLE_SIZE && !found; e++) {
+        ip4_addr_t* eip = nullptr; struct netif* eif = nullptr; struct eth_addr* eth = nullptr;
+        if (etharp_get_entry(e, &eip, &eif, &eth) && eip && eth && eip->addr == gw.addr) {
+            memcpy(mac, eth->addr, 6);
+            found = true;
+        }
+    }
+    if (!found) {
+        struct netif* n = nullptr;
+        NETIF_FOREACH(n) {
+            if (netif_ip4_addr(n)->addr == me) { etharp_request(n, &gw); break; }
+        }
+    }
+    UNLOCK_TCPIP_CORE();
+    if (!found) return;
+    netRouterDone = true;
+    const uint32_t id = netGwId(mac);
+    if (id != netRouter[netCurrent]) {
+        netRouter[netCurrent] = id;
+        netSave();
+        COM_SERIAL.printf("[NET] %s: its router is known now\n", netSsid[netCurrent].c_str());
+    }
+}
+
 uint32_t netSimSubnet(const String& ssid, uint32_t real) {
     int i = netSimIndex(ssid);
-    if (i < 0 || netSim.v[i].sameNet || ssid == netSim.carrier) return real;
+    if (i < 0 || netSim.v[i].sameNet || netSim.v[i].otherRouter || ssid == netSim.carrier) return real;
     return (uint32_t)IPAddress(10, 66, (uint8_t)(i + 1), 0);
 }
 
@@ -2830,6 +2948,11 @@ void handleNetSim(const JsonDocument& in) {
         // nothing asked: only say how things stand
     } else if (in["off"] | false) {
         bool on = netSimOn();
+        // D-17: on a made-up network when it ends, the board goes back to the real one in
+        // its logic first - its next join is then of the network the radio is on: no radio.
+        if (on && radioOnline() && netCurrent >= 0 && netCurrent < netCount && netSsid[netCurrent] != WiFi.SSID()) {
+            staSimDown = true; staSimUpAt = 0;
+        }
         netSim = {}; netSimRtc.magic = 0;
         if (on) { COM_SERIAL.println("[NET] Test networks off"); staRetryAt = millis(); }
     } else {
@@ -2847,10 +2970,11 @@ void handleNetSim(const JsonDocument& in) {
                 strlcpy(v.ssid, o["ssid"] | "", sizeof v.ssid);
                 v.rssi = (int8_t)constrain((int)(o["rssi"] | -60), -100, -1);
                 v.sameNet = o["same_net"] | false;
+                v.otherRouter = o["other_router"] | false;   // the carrier's subnet behind another router (D-16)
             }
             // A made-up network that has gone: if the board is on it, it is off it now.
             if (wifiConnected && netCurrent >= 0 && netCurrent < netCount && netSimIndex(netSsid[netCurrent]) < 0 &&
-                netSsid[netCurrent] != netSim.carrier) WiFi.disconnect(false);
+                netSsid[netCurrent] != netSim.carrier) staDrop();
         }
         if (!in["owners"].isNull()) strlcpy(netSim.owners, in["owners"] | "", sizeof netSim.owners);
         if (!in["hide"].isNull()) strlcpy(netSim.hide, in["hide"] | "", sizeof netSim.hide);
@@ -2864,7 +2988,7 @@ void handleNetSim(const JsonDocument& in) {
         d["carrier"]=netSim.carrier; d["owners"]=netSim.owners; d["hide"]=netSim.hide;
         d["link_rssi"]=netSim.curRssi; d["speed"]=netSim.speed;
         JsonArray a = d.createNestedArray("nets");
-        for (int i = 0; i < netSim.n; i++) { JsonObject o = a.createNestedObject(); o["ssid"]=netSim.v[i].ssid; o["rssi"]=netSim.v[i].rssi; o["same_net"]=netSim.v[i].sameNet; }
+        for (int i = 0; i < netSim.n; i++) { JsonObject o = a.createNestedObject(); o["ssid"]=netSim.v[i].ssid; o["rssi"]=netSim.v[i].rssi; o["same_net"]=netSim.v[i].sameNet; o["other_router"]=netSim.v[i].otherRouter; }
     }
     if (wifiConnected && netCurrent >= 0 && netCurrent < netCount) d["network"] = netSsid[netCurrent];
     sendJson(d);
@@ -4233,6 +4357,8 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["sta_away"] = staAway && !wifiConnected;
     doc["sta_scans"] = staScans;
     doc["sta_drops"] = staDrops;
+    doc["radio_joins"] = staRadioJoins;      // D-17: real joins since start (rehearsed ones are not)
+    doc["radio_drops"] = staRadioDrops;      // D-17: real disconnects asked for since start
     if (staDownSince) doc["sta_down_s"] = (millis() - staDownSince) / 1000;
     if (staRetryAt && !wifiConnected) doc["sta_retry_in_s"] = (long)(staRetryAt - millis()) > 0 ? (staRetryAt - millis()) / 1000 : 0;
     if (staLastReason && !wifiConnected) doc["sta_reason"] = WiFi.STA.disconnectReasonName((wifi_err_reason_t)staLastReason);

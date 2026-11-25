@@ -39,7 +39,7 @@ import pytest
 
 from support import companion_sim as cs
 
-pytestmark = pytest.mark.board
+pytestmark = [pytest.mark.board, pytest.mark.rehearsal]   # D-17: zero real joins, checked by conftest
 
 SPEED = 15                      # 5 min -> 20 s, the 2-minute look -> 8 s
 B, E = "HIDFI-SIM-B", "HIDFI-SIM-E"
@@ -297,31 +297,22 @@ def test_the_owner_moves_and_their_hotspot_goes_it_finds_them_again(board, home)
 
 
 def test_the_hotspot_goes_and_a_stronger_neighbour_does_not_keep_it_from_the_owner(board, home):
-    """As the scenario above, but when the hotspot goes the board falls back to another
-    saved network of the home (an extender with its own subnet, 2 dB to 19 dB louder at
-    the owner's home - it decided the scenario above 2 runs in 3, 2026-11-23). The owner
-    is home: once home is in sight again the board must go there, preferred, not stay on
-    the neighbour the owner's computer cannot reach (D-15; failed on v4.3.1).
+    """Home drops away for a minute and the board falls back to another saved network,
+    louder than home (an extender with its own subnet decided this 2 runs in 3 at the
+    owner's home, 2026-11-23). Home back, the owner there: the board must go home and stay
+    there preferred, not stay on the louder neighbour (D-02, D-15).
 
-    Staged by hiding home from the scans while the hotspot goes, so the fall back to the
-    neighbour is a real join. Never by listing a real network in net_sim: that makes it a
-    made-up one with a made-up subnet, which the board then saved for the real network."""
-    _sim(board, nets=[{"ssid": B, "rssi": -50}], owners=home, speed=SPEED)
+    All rehearsed (D-17): the neighbour is made up, home's absence is staged, the radio
+    never leaves the real network. One made-up network only - the owner's saved networks
+    leave one free slot, and a second would push one of them out."""
+    _sim(board, nets=[{"ssid": B, "rssi": -35}], owners=home, speed=SPEED)
     _add(board, B)
     _wait(board, _on(home), 90, f"home on {home}")
-    _sim(board, owners=B)
-    board.cmd({"cmd": "wifi_prefer", "ssid": B, "now": True, "force": True}, "wifi_prefer")
-    _wait(board, lambda n: _on(B)(n) and n[B].get("preferred"), 60, f"on {B}, preferred")
-    _sim(board, nets=[], owners=home, hide=home)            # hotspot off, home out of sight for now
-    try:
-        n = _wait(board, lambda n: any(v.get("current") and k not in (home, B) for k, v in n.items()), 120,
-                  "fallen back to another saved network")
-    except AssertionError:
-        pytest.skip("no other saved network in range to fall back to")
-    near = next(k for k, v in n.items() if v.get("current"))
-    _sim(board, hide="")                                     # home in sight again
+    r = board.cmd({"cmd": "net_fault", "kind": "vanish", "ssid": home, "s": 60}, "net_fault")
+    assert r.get("status") == "ok", r
+    _wait(board, _on(B), 60, f"fallen back to {B} while {home} is away")
     _wait(board, lambda n: _on(home)(n) and n[home].get("preferred"), 150,
-          f"back on {home} where the owner is, preferred - not kept on {near}")
+          f"back on {home} where the owner is, preferred - not kept on the louder {B}")
 
 
 def test_brought_to_a_network_out_of_range_it_comes_back(board, home):
@@ -389,3 +380,17 @@ def test_asked_to_move_during_a_join_it_goes_where_asked(board, home):
     assert r.get("status") == "ok", r
     _wait(board, _on(home), 30, f"on {home}, as asked while the join to {B} was on its way")
     _stays(board, home, 20)
+
+
+def test_two_homes_on_one_subnet_are_two_networks(board, home):
+    """D-16. A made-up network on the home's own subnet behind another router - the owner's
+    hometown extender and his Bangalore router are both 192.168.0.x (2026-11-25). It is
+    another network: with nobody there, the board comes home. (The extender scenario
+    above, same subnet and same router, is one network: it stays.)"""
+    _wait(board, lambda n: n.get(home, {}).get("router_known"), 45, f"the router of {home} learned")
+    _sim(board, nets=[{"ssid": B, "rssi": -35, "other_router": True}], owners=home, speed=SPEED)
+    _add(board, B)
+    _wait(board, _on(B), 40, f"on {B}")
+    since = len(board.events)
+    _wait(board, _on(home), 90, f"home again on {home} - {B} is another network (another router), nobody there")
+    assert any(m.get("why") == "coming_home" for m in _moves(board, since)), _moves(board, since)

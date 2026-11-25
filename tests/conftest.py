@@ -7,6 +7,7 @@ snapshotted first and restored at the end.
 """
 import importlib.util
 import json
+import time
 import os
 import platform
 import shutil
@@ -214,6 +215,49 @@ def _this_computer_stays_on_its_network(request):
         pytest.fail(f"this computer changed network during the test ({' -> '.join(str(a) for a in seen)}): "
                     "the result says nothing about the board - keep it on one network (macOS: turn off "
                     "Auto-Join for the board's own WiFi) and run it again", pytrace=False)
+
+
+# D-17: the owner's router is never stressed by tests. Rehearsals move the board in its
+# logic only (zero real joins - checked); every other real join is rationed.
+ROUTER_JOINS_PER_10_MIN = 10
+_router_joins = []          # times of real joins this session (board's radio_joins, restarts included)
+
+
+def _radio(board):
+    st = board.status()
+    return st.get("radio_joins"), st.get("radio_drops"), st.get("uptime_sec", 0)
+
+
+@pytest.fixture(autouse=True)
+def _the_router_is_spared(request):
+    if "board" not in request.fixturenames or not any(k in request.node.keywords for k in ("board", "e2e", "perf")):
+        yield
+        return
+    b = request.getfixturevalue("board")
+    j0, d0, up0 = _radio(b)
+    if j0 is None:                              # firmware before D-17: nothing to read
+        yield
+        return
+    now = time.time()
+    _router_joins[:] = [t for t in _router_joins if now - t < 600]
+    if len(_router_joins) >= ROUTER_JOINS_PER_10_MIN:
+        wait = 600 - (now - _router_joins[0]) + 1
+        print(f"\n  pausing {wait:.0f} s: {len(_router_joins)} real joins of the router in 10 minutes (D-17 budget)")
+        time.sleep(wait)
+    yield
+    try:
+        j1, d1, up1 = _radio(b)
+    except Exception:
+        return
+    restarted = (up1 or 0) < up0
+    joins = j1 if restarted else j1 - j0                  # restarted: everything since the boot
+    drops = d1 if restarted else d1 - d0
+    _router_joins.extend([time.time()] * max(0, joins))
+    # A restart joins once at boot (the radio starts off): that one is the restart's, not the
+    # rehearsal's. Anything beyond it is.
+    if "rehearsal" in request.node.keywords and (joins - (1 if restarted else 0) > 0 or drops):
+        pytest.fail(f"a rehearsal touched the real router: {joins} real join(s), {drops} real disconnect(s) - "
+                    "it must move the board in its logic only (D-17)", pytrace=False)
 
 
 @pytest.fixture

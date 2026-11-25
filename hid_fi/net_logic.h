@@ -57,6 +57,8 @@ struct NetKnown {          // one saved network and what the board remembers abo
     bool tried;            // joined since start, and no owner device came within NET_LOOK_MS
     bool refused;          // has worked, but its router refused the saved password since start
                            // (it changed?) - never a reason to move, tried only when nothing else is
+    uint32_t gw = 0;       // its router: an id of the gateway's MAC, learned after joining (D-16);
+                           // 0 not learned yet
 };
 
 enum NetWhy { NET_NONE = 0, NET_PREFERRED = 1, NET_STRONGEST = 2, NET_COMING_HOME = 3, NET_LOOKING = 4, NET_ROAMING = 5 };
@@ -72,10 +74,22 @@ inline int netPreferred(const NetKnown* k, int n) {
     return p;
 }
 
-// One network: the same saved network, or two on the same subnet (a router and its
-// extender). A network never joined has no subnet yet and is only itself.
+// One network: the same saved network, or two on the same subnet behind the same router
+// (a router and its extender share both). Two homes on one default subnet - the owner's
+// hometown extender and his Bangalore router are both 192.168.0.x - are two networks: their
+// routers differ (D-16). A router not learned yet (saved before D-16, or just joined) does
+// not split a subnet: the same as before. A network never joined is only itself.
 inline bool netSameNet(const NetKnown* k, int a, int b) {
-    return a == b || (k[a].net && k[a].net == k[b].net);
+    if (a == b) return true;
+    if (!k[a].net || k[a].net != k[b].net) return false;
+    return !k[a].gw || !k[b].gw || k[a].gw == k[b].gw;
+}
+
+// The router id saved for a network, from its gateway's MAC: never 0 (0 is "not learned").
+inline uint32_t netGwId(const uint8_t mac[6]) {
+    uint32_t h = 2166136261u;                       // FNV-1a
+    for (int i = 0; i < 6; i++) { h ^= mac[i]; h *= 16777619u; }
+    return h ? h : 1;
 }
 
 inline int netStrongestSeen(const NetKnown& k, const NetSeen* seen, int nSeen) {

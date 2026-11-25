@@ -525,7 +525,7 @@ as one network, so the strongest of those wins. The rules and why:
 | Command | Parameters | Reply |
 |---|---|---|
 | `wifi_configure` | `ssid`, `password`, optional fixed IP | adds the network (or updates it) at the front and joins it. With five saved, the oldest is forgotten |
-| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `password_changed` (it has worked, but its router refuses the saved password now - enter the new one; the board never moves to it meanwhile, DECISIONS.md D-08), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first). Never a password. `max`: 5 |
+| `wifi_networks` | - | `networks`: `ssid`, `proven` (has worked), `static`, `current` (connected now), `refused` (wrong password - enter it again), `password_changed` (it has worked, but its router refuses the saved password now - enter the new one; the board never moves to it meanwhile, DECISIONS.md D-08), `used` (an owner device reached the board over it), `computer` (the paired computer did), `preferred` (the one the board joins first), `router_known` (which router it is behind is learned - two networks on one subnet are told apart by it, DECISIONS.md D-16; the address itself is never given). Never a password. `max`: 5 |
 | `wifi_forget` | `ssid` | `wifi_forgotten` with `left`. Forgetting the connected one leaves it, and the board looks for another |
 | `net_here` | - | A page opened by address that can reach the board's `.local` name too: it is right on the board's network and counts as using it (DECISIONS.md D-10). `auth` also takes `host`, the page's own address bar - the board's `.local` name counts at once |
 | `wifi_prefer` | `ssid`, optional `now`, `force` | `wifi_prefer` with `on_it`. With `now` while someone else is using the board right on its network: `busy: true` and `using`, nothing changed - `force: true` moves anyway. Makes it the preferred network, ranked as the paired computer's would be. The board moves there when nobody is using it on the network it is on, or with `now: true` 3 s after it answers (the answer first: a reply after the move never arrived - D-14) |
@@ -567,6 +567,7 @@ drives the radio.
 | `sta_last_ip` | the last address held, kept while offline and across restarts |
 | `sta_prev_ip` | the address before that, once it changed |
 | `sta_ip_changes` / `sta_drops` | since the board started |
+| `radio_joins` / `radio_drops` | real joins and disconnects since the board started: a rehearsal (`net_sim`, `net_fault`) moves the board in its logic only while the radio stays on the real network (DECISIONS.md D-17), so it adds none - the tests check that |
 | `sta_down_s` | seconds without the home network, while it is away |
 | `sta_retry_in_s` | seconds to the next attempt |
 | `sta_reason` | why the router let the board go, e.g. `BEACON_TIMEOUT` (router gone) or `AUTH_FAIL` |
@@ -623,7 +624,9 @@ and D-10 run on the real board with no second router and nobody walking about.
 `tests/board/test_networks_rehearsed.py` and `test_reach_by_name_live.py` use
 it. A made-up network is joined over the real network the board was on when
 the rehearsal began (the `carrier`), and counts as a network of its own (its own
-subnet) unless `same_net` says it is the same network, like an extender. Memory
+subnet) unless `same_net` says it is the same network, like an extender.
+`other_router` puts it on the carrier's subnet behind another router - two homes on
+one default subnet, which are two networks (DECISIONS.md D-16). Memory
 only: a restart ends it, except the one it asks for itself.
 
 ```json

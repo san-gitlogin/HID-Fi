@@ -255,6 +255,7 @@ class BoardSim:
             "sta_target": self.sta["ssid"], "cmd_count": self.cmd_count, "wifi_cmd_count": self.cmd_count,
             "wifi_connected": online, "wifi_ip": self.sta["ip"],
             "sta_last_ip": self.net["last_ip"], "sta_ip_changes": self.net["changes"], "sta_drops": self.net["drops"],
+            "radio_joins": self.net.get("radio_joins", 0), "radio_drops": 0,
             "sta_known": len(self.nets), "sta_away": self.away and not online, "sta_scans": self.scans,
             **({"sta_prev_ip": self.net["prev_ip"]} if self.net["prev_ip"] else {}),
             **({"sta_down_s": int(self.now() - self.net["down_since"])} if self.net["down_since"] is not None else {}),
@@ -782,7 +783,13 @@ class BoardSim:
         return max(u, key=lambda i: (bool(self.nets[i].get("computer")), self.nets[i].get("used", 0), -i)) if u else None
 
     def _same(self, a, b):
-        return a == b or (self.nets[a].get("subnet", 0) != 0 and self.nets[a].get("subnet") == self.nets[b].get("subnet"))
+        """netSameNet: one subnet and one router (D-16; a router not learned splits nothing)."""
+        if a == b:
+            return True
+        A, B = self.nets[a], self.nets[b]
+        if not A.get("subnet") or A.get("subnet") != B.get("subnet"):
+            return False
+        return not A.get("gw") or not B.get("gw") or A.get("gw") == B.get("gw")
 
     def _best_of(self, p):
         c = [(self.air[n["ssid"]], -i) for i, n in enumerate(self.nets)
@@ -1119,7 +1126,8 @@ class BoardSim:
                     sim = {"carrier": self.sta.get("ssid", ""), "owners": "", "hide": "", "link_rssi": 0, "speed": 1, "nets": []}
                 if "nets" in b:
                     sim["nets"] = [{"ssid": n.get("ssid", ""), "rssi": max(-100, min(-1, int(n.get("rssi", -60)))),
-                                    "same_net": bool(n.get("same_net"))} for n in b["nets"][:4]]
+                                    "same_net": bool(n.get("same_net")),
+                                    "other_router": bool(n.get("other_router"))} for n in b["nets"][:4]]
                 for k in ("owners", "hide"):
                     if k in b:
                         sim[k] = str(b[k])
@@ -1462,6 +1470,8 @@ class BoardSim:
                     o["used"] = True
                 if n.get("computer"):
                     o["computer"] = True
+                if n.get("gw"):
+                    o["router_known"] = True              # D-16 (never the address)
                 nets.append(o)
             p = self.net_preferred()
             if p is not None:

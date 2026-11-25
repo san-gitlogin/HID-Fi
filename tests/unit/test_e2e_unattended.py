@@ -132,3 +132,17 @@ def test_a_board_behind_usb_hubs_is_found_on_the_native_usb():
     tree = [hub([hub([board], 2)], 1)]
     assert t._usb_identity("DCB4D909F7C8", tree), "a board two hubs deep is plugged in"
     assert not t._usb_identity("B81F3FDA1A2C", tree)
+
+
+def test_rehearsals_touch_no_radio():
+    """D-17: in the firmware every leave/join of a rehearsal goes through staDrop/the
+    rehearsed join; the radio is disconnected only on the real paths."""
+    ino = (paths.TESTS.parent / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
+    assert ino.count("WiFi.disconnect(false)") == 4, "a new direct disconnect: route it through staDrop()"
+    begin = ino[ino.index("void staBeginJoin("):]
+    assert begin.index("if (staRehearsing() && radioOnline()) {") < begin.index("staRadioJoins++") < begin.index("WiFi.begin(")
+    conf = (paths.TESTS / "conftest.py").read_text(encoding="utf-8")
+    assert '"rehearsal" in request.node.keywords and (joins - (1 if restarted else 0) > 0 or drops)' in conf
+    assert "ROUTER_JOINS_PER_10_MIN = 10" in conf
+    reh = (paths.TESTS / "board" / "test_networks_rehearsed.py").read_text(encoding="utf-8")
+    assert "pytest.mark.rehearsal" in reh

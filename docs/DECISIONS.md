@@ -528,3 +528,42 @@ is on. It relied on the owner's real Companion without checking it was there.
 - `tests/unit/test_net_logic.py::test_every_planted_bug_is_caught`
 - `tests/board/test_networks_rehearsed.py::test_the_hotspot_goes_and_a_stronger_neighbour_does_not_keep_it_from_the_owner`
 - `tests/board/test_networks_rehearsed.py::test_the_owner_moves_and_their_hotspot_goes_it_finds_them_again`
+
+## D-16 · 2026-11-25 · One network is one subnet behind one router (revises D-02)
+
+**Seen:** the owner's hometown extender ARVISANTU C6 and his Bangalore router ACT are both
+192.168.0.x. D-02 counted "same subnet" as one network (a router and its extender), so the
+board treated two homes 350 km apart as one: asked for C6 in Bangalore it answered "on it".
+
+**Decision:** two saved networks are one network when they share a subnet **and** a router.
+After each join the board learns its router - an id of the gateway's MAC, read from its own
+ARP table under the network stack's lock (one ARP request if missing), saved with the network
+(`rt`), never shown (status `router_known` only says it is learned). A router not learned
+yet - networks saved before this, until their next join - splits nothing: D-02 as before. A
+router and its extender share the router and stay one network. Nothing is asked of anyone.
+
+**Guarded by:**
+- `tests/unit/test_net_logic.py::test_two_homes_on_one_default_subnet_are_two_networks`
+- `tests/unit/test_net_logic.py::test_random_homes_against_the_written_rules`
+- `tests/unit/test_net_logic.py::test_every_planted_bug_is_caught`
+- `tests/board/test_networks_rehearsed.py::test_two_homes_on_one_subnet_are_two_networks`
+
+## D-17 · 2026-11-25 · Tests never drop off or rejoin the owner's router
+
+**Seen:** during the network rehearsal module the owner's router lost its internet and had to
+be restarted by hand. Every rehearsed move had really disconnected from and rejoined it - a
+made-up network "rode" the real one by a real join - dozens of associations and address
+requests in minutes. The cause was not proven; the risk is not acceptable: the owner may be
+away (Remote Control) and the session itself runs over that router.
+
+**Decision:** in a rehearsal (`net_sim`, `net_fault`) with the radio associated, leaving a
+network and joining the real one or a made-up one riding it happen in the board's logic only:
+the link reads down, the supervisor scans, chooses and "joins" exactly as for real, and the
+join completes after a moment - or times out if staged as not there. The radio stays
+associated. Real joins remain where a test is about a real network; status counts them
+(`radio_joins`, `radio_drops`). The test harness fails a rehearsal test that causes any, and
+rations all others to 10 real joins in any 10 minutes, pausing instead of pressing on.
+
+**Guarded by:**
+- `tests/conftest.py::_the_router_is_spared` (every rehearsal test: zero real joins or drops)
+- `tests/unit/test_e2e_unattended.py::test_rehearsals_touch_no_radio`

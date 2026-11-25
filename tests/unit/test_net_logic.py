@@ -120,7 +120,8 @@ def test_the_board_model_chooses_as_the_firmware_does(bench):
     for n, (known, air, cur, here, owner) in enumerate(cases):
         s = BoardSim(pin="")
         s.nets = [{"ssid": k[0], "password": "p", "proven": True, "static": False, "refused": not k[1],
-                   "subnet": k[2], "used": k[3], "computer": k[4], "tried": k[5], "pw_refused": k[6]} for k in known]
+                   "subnet": k[2], "used": k[3], "computer": k[4], "tried": k[5], "pw_refused": k[6],
+                   "gw": k[7] if len(k) > 7 else 0} for k in known]
         s.air = dict(air)
         c, m = got[2 * n], got[2 * n + 1]
         assert s.net_choose() == ((c[0], c[1]) if c[0] >= 0 else (None, "")), ("choose", known, air)
@@ -140,7 +141,8 @@ LAN1, LAN0 = 0xC0A80100, 0xC0A80000         # 192.168.1.0 (EXT and ARVISANTU), 1
 
 
 def kspec(known):
-    return ",".join(f"{n.encode().hex()}:{int(u)}:{net}:{used}:{int(a)}:{int(t)}:{int(r)}" for n, u, net, used, a, t, r in known) or "-"
+    return ",".join(f"{x[0].encode().hex()}:{int(x[1])}:{x[2]}:{x[3]}:{int(x[4])}:{int(x[5])}:{int(x[6])}"
+                    + (f":{x[7]}" if len(x) > 7 and x[7] else "") for x in known) or "-"
 
 
 def ask(bench, lines):
@@ -158,8 +160,8 @@ def move(bench, known, seen, cur, ms_here=0, owner_now=False):
     return (known[i][0] if i >= 0 else None), why
 
 
-def net(name, usable=True, subnet=0, used=0, anchor=False, tried=False, refused=False):
-    return (name, usable, subnet, used, anchor, tried, refused)
+def net(name, usable=True, subnet=0, used=0, anchor=False, tried=False, refused=False, gw=0):
+    return (name, usable, subnet, used, anchor, tried, refused) + ((gw,) if gw else ())
 
 
 # The owner's home on 2026-11-06: C6 is another router (192.168.0.x); EXT and ARVISANTU
@@ -360,7 +362,13 @@ def oracle_preferred(k):
 
 
 def same(k, a, b):
-    return a == b or (k[a][2] != 0 and k[a][2] == k[b][2])
+    """D-16: one subnet and one router (a router not learned yet does not split it)."""
+    if a == b:
+        return True
+    if not k[a][2] or k[a][2] != k[b][2]:
+        return False
+    ga, gb = (k[a][7] if len(k[a]) > 7 else 0), (k[b][7] if len(k[b]) > 7 else 0)
+    return not ga or not gb or ga == gb
 
 
 def strongest(name, seen):
@@ -449,7 +457,8 @@ def random_home(rng):
     known = []
     for n in names:
         known.append(net(n, rng.random() > 0.15, rng.choice(subnets), rng.choice([0, 0, 0, 1, 2, 3, 7]),
-                         rng.random() < 0.15, rng.random() < 0.2, rng.random() < 0.15))
+                         rng.random() < 0.15, rng.random() < 0.2, rng.random() < 0.15,
+                         gw=rng.choice([0, 0, 11, 22])))          # D-16: router unknown, or one of two
     seen = []
     for n in rng.sample(pool, rng.randint(0, len(pool))):
         for _ in range(rng.choice([1, 1, 1, 2])):          # some on two access points
@@ -485,7 +494,8 @@ MUTATIONS = [   # a planted bug each; the tests above must catch every one
     ("if (!k[i].usable || k[i].refused || !netSameNet(k, i, p)) continue;",
      "if (!k[i].usable || !netSameNet(k, i, p)) continue;"),                       # comes home to a changed password
     ("(pass == 1 || (!k[i].tried && !k[i].refused))", "(pass == 1 || !k[i].tried)"),   # a changed password first                                       # the computer does not anchor
-    ("return a == b || (k[a].net && k[a].net == k[b].net);", "return a == b;"),     # no roaming within a network
+    ("if (!k[a].net || k[a].net != k[b].net) return false;", "if (!k[a].net) return false;"),  # subnet ignored
+    ("return !k[a].gw || !k[b].gw || k[a].gw == k[b].gw;", "return true;"),          # D-16: router ignored     # no roaming within a network
     ("if (cur < 0 || cur >= n || ownerHereNow) return -1;", "if (cur < 0 || cur >= n) return -1;"),   # moves away from a user
     ("if (curUsed || msHere < NET_LOOK_MS) return -1;", "if (curUsed) return -1;"),                 # looks at once
     ("if (k[i].usable && !k[i].tried && !k[i].refused && !netSameNet(k, i, cur)) return true;",
@@ -516,7 +526,8 @@ def test_every_planted_bug_is_caught(bench, tmp_path, old, new):
     d02 = [(test_it_roams_within_one_network_and_never_between_networks, ()), (test_a_changed_password_never_pulls_it_off_a_working_network, ()), (test_it_scans_only_when_there_is_something_to_decide, ()), (test_the_network_you_use_wins_over_a_stronger_one, ()),
            (test_one_network_on_two_names_roams_to_the_strongest, ()), (test_the_paired_computer_anchors_over_a_phone, ()),
            (test_a_board_nobody_uses_looks_for_its_people, ()), (test_it_comes_home_but_never_away_from_someone_using_it, ()),
-           (test_with_the_preferred_network_away_the_one_used_last_is_home, ())] + [
+           (test_with_the_preferred_network_away_the_one_used_last_is_home, ()),
+           (test_two_homes_on_one_default_subnet_are_two_networks, ())] + [
            (test_a_preferred_network_too_weak_falls_back_to_the_strongest, a) for a in [(-90, (C6, "strongest"))]]
     checks = d02 + [(test_three_networks_in_one_home, c) for c in [
         ([("ARVISANTU C6", -61), ("ARVISANTU EXT", -44), ("ARVISANTU", -70)], "ARVISANTU EXT"),
@@ -595,3 +606,24 @@ def test_with_the_preferred_network_away_the_one_used_last_is_home(bench):
     # an extender of the network it is on is the same network: no hop between them
     same = [net(HOT, subnet=0x0A000000, used=9, anchor=True), net(ARV, subnet=LAN1, used=4), net(EXT, subnet=LAN1, used=7)]
     assert move(bench, same, AIR, 1, 0) == (None, None)
+
+
+def test_two_homes_on_one_default_subnet_are_two_networks(bench):
+    """D-16. The owner's hometown extender C6 and his Bangalore router ACT are both
+    192.168.0.x (seen 2026-11-25): one subnet, two routers - two networks. A router and its
+    extender share the router, so they stay one; a router not learned yet splits nothing."""
+    ACT, R1, R2 = "ACT102704289533", 1111, 2222
+    # In Bangalore, on ACT, asked for C6: C6 is not "the network it is already on"
+    k = [net(ACT, subnet=LAN0, used=9, anchor=True, gw=R2), net(C6, subnet=LAN0, used=4, gw=R1)]
+    assert not same(k, 0, 1)
+    # the preferred ACT away and C6 in sight: it is a different network, so coming home to
+    # the one used most recently (D-15) can go there - before D-16 it never could
+    assert move(bench, k, [(C6, -50)], 1, 0) == (None, None), "C6 is where it is: nothing to do"
+    assert move(bench, k, [(ACT, -60), (C6, -50)], 1, 0) == (ACT, "coming home"), \
+        "on C6, the preferred ACT in sight: home is ACT - before D-16 it counted as already there"
+    # a router and its extender: one router, one network - no hop between their names
+    ext = [net(ARV, subnet=LAN1, used=9, anchor=True, gw=R1), net(EXT, subnet=LAN1, used=4, gw=R1)]
+    assert move(bench, ext, AIR, 1, 0) == (None, None)
+    # a network saved before D-16 (router not learned) keeps the old meaning
+    old = [net(ACT, subnet=LAN0, used=9, anchor=True, gw=R2), net(C6, subnet=LAN0, used=4)]
+    assert move(bench, old, [(ACT, -60), (C6, -50)], 1, 0) == (None, None)
