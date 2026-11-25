@@ -108,6 +108,20 @@ pub fn all() -> Vec<(&'static str, View)> {
     let mut v = view(vec![]);
     v.board = BoardState::Looking;
     states.push(("looking", v));
+    // A paired board elsewhere, as it says of its own USB (service::usb_from_status).
+    for (name, usb) in [
+        ("remembered-no-usb-data", Some(false)),
+        ("remembered-on-another-computer", Some(true)),
+    ] {
+        let mut v = view(vec![]);
+        v.board = BoardState::NotPluggedIn { elsewhere: 0 };
+        v.remembered = vec![Remembered {
+            mac: c.into(),
+            url: Some("http://192.168.0.116".into()),
+            usb,
+        }];
+        states.push((name, v));
+    }
     let mut v = view(vec![]);
     v.board = BoardState::NotPluggedIn { elsewhere: 2 };
     states.push(("not-plugged", v));
@@ -206,6 +220,7 @@ pub fn all() -> Vec<(&'static str, View)> {
     v.remembered = vec![Remembered {
         mac: "DCB4D9BEEF01".into(),
         url: Some("http://192.168.0.160".into()),
+        usb: None,
     }];
     v.updates.boards = vec![
         upd(a, offer("4.2", false, true), Job::Idle),

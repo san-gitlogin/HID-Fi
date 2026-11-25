@@ -257,6 +257,7 @@ fn what_needs_the_person_comes_first_then_live_online_connecting_offline_and_awa
     v.remembered = vec![Remembered {
         mac: C.into(),
         url: Some("http://192.168.0.130".into()),
+        usb: None,
     }];
     let w = model(&v);
     let order: Vec<&str> = w.json["boards"]
@@ -294,6 +295,7 @@ fn a_paired_board_not_plugged_in_is_shown_offline_and_can_be_forgotten() {
     v.remembered = vec![Remembered {
         mac: C.into(),
         url: Some("http://192.168.0.130".into()),
+        usb: None,
     }];
     let w = model(&v);
     let c = card(&w, C);

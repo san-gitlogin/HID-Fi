@@ -81,7 +81,22 @@ pub struct Remembered {
     pub mac: String,
     /// Where it last answered.
     pub url: Option<String>,
+    /// What the board says of its own USB, asked over the network (usb_mounted): Some(false)
+    /// - no computer gets data from its cable (a charge-only cable, a hub port without data);
+    /// Some(true) - it is on another computer's USB; None - not asked, or no answer.
+    pub usb: Option<bool>,
 }
+
+/// usb_mounted from a board's /api/status reply; None when it is not there to read.
+pub fn usb_from_status(body: &str) -> Option<bool> {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()?
+        .get("usb_mounted")?
+        .as_bool()
+}
+
+/// How often a paired board not on this computer's USB is asked about its USB.
+const USB_PROBE_EVERY: Duration = Duration::from_secs(30);
 
 /// Everything the tray shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,6 +195,11 @@ pub struct Env {
     pub sound: Option<hidfi_stream::audio::Opener>,
     /// Asks each board `/api/ping` while a window is open; None: no latency.
     pub probe: Option<crate::health::Probe>,
+    /// For a paired board not on this computer's USB: ask it (its status, over the network)
+    /// whether its USB carries data - "Not plugged in" while its cable is in was a charge-only
+    /// cable (DA1A2C, 2026-11-24). Its own client: it runs on a thread of its own, never the
+    /// service loop. None: not asked (tests that do not model it).
+    pub usb_probe: Option<Arc<dyn Http>>,
     /// Recovery mode's ports (the real ones in the app); None: no recovery worker.
     pub recovery: Option<Box<dyn crate::recovery::Ports>>,
     /// Factory reset's network and ports (the real ones in the app); None: none.
@@ -492,6 +512,9 @@ fn run(
     };
     let mut here: BTreeMap<Mac, Here> = BTreeMap::new();
     let mut offline_since: HashMap<Mac, Instant> = HashMap::new();
+    // What paired boards not on this USB said of their own USB (usb_mounted), and when asked.
+    let usb_probes: Arc<std::sync::Mutex<HashMap<String, (Instant, Option<bool>)>>> =
+        Arc::default();
     // D-14: what the last "Bring the board here" did, per board, for its card: with when,
     // and the network the board was on then. Shown only while that still holds and for
     // BRING_SHOWN at most - a move that did not happen gives the button back.
@@ -766,17 +789,45 @@ fn run(
             && pipeline
                 .last_error()
                 .is_some_and(|e| e.contains("Screen Recording"));
-        // Paired, not plugged in here: shown as offline, with where it last was.
+        // Paired, not plugged in here: shown as offline, with where it last was - and, asked
+        // in the background, what it says of its own USB.
         let remembered: Vec<Remembered> = paired
             .iter()
             .filter(|(m, _)| !on_usb.contains(m))
-            .map(|(m, _)| Remembered {
-                mac: m.hex(),
-                url: state
+            .map(|(m, _)| {
+                let url = state
                     .boards
                     .iter()
                     .find(|k| k.mac.eq_ignore_ascii_case(&m.hex()))
-                    .map(|k| k.url.clone()),
+                    .map(|k| k.url.clone());
+                let mut probes = usb_probes.lock().unwrap_or_else(|e| e.into_inner());
+                let due = probes
+                    .get(&m.hex())
+                    .is_none_or(|(at, _)| at.elapsed() >= USB_PROBE_EVERY);
+                if let (true, Some(http), Some(u)) = (due, env.usb_probe.as_ref(), url.as_ref()) {
+                    let prev = probes.get(&m.hex()).and_then(|(_, v)| *v);
+                    probes.insert(m.hex(), (Instant::now(), prev));
+                    let (http, u, key, store) = (
+                        http.clone(),
+                        format!("{}/api/status", u.trim_end_matches('/')),
+                        m.hex(),
+                        usb_probes.clone(),
+                    );
+                    std::thread::spawn(move || {
+                        let v = http.get(&u).ok().and_then(|(code, body)| {
+                            (code == 200).then(|| usb_from_status(&body)).flatten()
+                        });
+                        store
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .insert(key, (Instant::now(), v));
+                    });
+                }
+                Remembered {
+                    mac: m.hex(),
+                    url,
+                    usb: probes.get(&m.hex()).and_then(|(_, v)| *v),
+                }
             })
             .collect();
         set(&|v| {
@@ -940,4 +991,29 @@ pub fn short_mac(mac: &str) -> String {
     mac.get(mac.len().saturating_sub(6)..)
         .unwrap_or(mac)
         .to_uppercase()
+}
+
+#[cfg(test)]
+mod usb_probe_tests {
+    use super::usb_from_status;
+
+    #[test]
+    fn a_boards_own_word_on_its_usb_is_read_and_nothing_else() {
+        assert_eq!(
+            usb_from_status(r#"{"status":"ok","usb_mounted":false,"mac":"x"}"#),
+            Some(false)
+        );
+        assert_eq!(usb_from_status(r#"{"usb_mounted":true}"#), Some(true));
+        assert_eq!(
+            usb_from_status(r#"{"status":"ok"}"#),
+            None,
+            "an older board that does not say"
+        );
+        assert_eq!(
+            usb_from_status(r#"{"usb_mounted":"yes"}"#),
+            None,
+            "never guessed from a wrong type"
+        );
+        assert_eq!(usb_from_status("<html>login</html>"), None);
+    }
 }

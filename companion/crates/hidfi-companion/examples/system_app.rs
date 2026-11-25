@@ -82,6 +82,7 @@ fn main() {
     let env = Env {
         usb: Box::new(FakeUsb(boards.clone())),
         http: Box::new(UreqHttp::new(Duration::from_secs(2))),
+        usb_probe: None,
         browse: Box::new(NoBrowse),
         source: {
             let f = fake.clone();

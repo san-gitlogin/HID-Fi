@@ -151,6 +151,7 @@ fn main() {
     let env = Env {
         usb: usb(),
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
+        usb_probe: Some(Arc::new(UreqHttp::new(Duration::from_secs(3)))),
         browse: Box::new(MdnsBrowse::start()),
         source: Arc::new(service::real_source),
         displays: Arc::new(hidfi_stream::display::list),

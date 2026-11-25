@@ -689,9 +689,23 @@ fn remembered_card(r: &Remembered, add: &mut impl FnMut(String, Action)) -> Valu
     let a = Action::Forget(Some(r.mac.clone()));
     let id = id_of(&a);
     add(id.clone(), a.clone());
+    // What the board says of its own USB, when it could be asked (service::usb_from_status).
+    let (label, line) = match r.usb {
+        Some(false) => (
+            "No data on its USB",
+            "On and on the network, but no computer gets data from its USB cable. If it is plugged in here, \
+             the cable may only charge - try another cable, or another port.",
+        ),
+        Some(true) => (
+            "On another computer",
+            "Paired with this computer, and in use on another computer's USB now. Plug it in here to share \
+             this screen through it.",
+        ),
+        None => ("Not plugged in", "Paired with this computer. Plug it in here to share this screen through it."),
+    };
     json!({
-        "mac": r.mac, "name": name, "state": "away", "label": "Not plugged in",
-        "line": "Paired with this computer. Plug it in here to share this screen through it.",
+        "mac": r.mac, "name": name, "state": "away", "label": label,
+        "line": line,
         "notes": [], "update_notes": [], "code": null, "url": null,
         "ip": r.url.as_deref().map(host), "firmware": null, "badge": null, "latency": null,
         "viewers": 0, "here": false, "paired": true,

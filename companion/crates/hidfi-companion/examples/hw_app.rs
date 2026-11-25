@@ -61,6 +61,7 @@ fn main() {
             Err(_) => Box::new(NusbList),
         },
         http: Box::new(UreqHttp::new(Duration::from_secs(7))),
+        usb_probe: Some(std::sync::Arc::new(UreqHttp::new(Duration::from_secs(3)))),
         browse: Box::new(MdnsBrowse::start()),
         source: {
             let f = fake.clone();
