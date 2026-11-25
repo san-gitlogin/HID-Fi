@@ -7,7 +7,7 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.5 - 2026-11-25
 
 ### Firmware and dashboard
 
