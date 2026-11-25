@@ -36,22 +36,27 @@ module's 65 °C rating is about.
 Also waiting on the rev C print: the coupons (tabs in with no force, a click, 20
 open/close cycles), then the shell; the drop and pocket tests on the build guide.
 
-## 2b. Found while releasing v4.4 (2026-11-25), next in v4.4.1
+## 2b. Open after v4.5 (2026-11-25)
 
-- **A network's identity is its subnet alone.** Two homes on the same default
-  192.168.0.x (the owner's hometown extender C6 and the Bangalore ACT router) count
-  as one network (D-02: "same subnet = router + extender"). Harmless while they are
-  never in range together, but two different routers on one default subnet in one
-  place would be treated as one. Identify a network by its gateway's MAC as well,
-  learned after joining; a new decision entry, rule tests, a board scenario.
-- **"Not plugged in" for a board whose USB carries no data.** DA1A2C showed "Not
-  plugged in" with its cable in: the board itself reported `usb_mounted: false`
-  (charge-only cable or a hub port without data). The Companion should say exactly
-  that ("on, but no data reaches this computer through its USB cable - try another
-  cable or port"), which needs `usb_mounted` in the paired heartbeat; with a test.
-- **Guide people off Auto-Join for the board's own WiFi.** A Mac that set the board
-  up over its WiFi keeps it as a known network ranked above the home's, and moved to
-  it by itself mid-session. Dashboard and setup docs should say to turn Auto-Join off.
+The three items found while releasing v4.4 shipped in v4.5 (D-16 router identity, the
+"No data on its USB" card, the Auto-Join tip). Still open, owner's call 2026-11-25:
+"keep it as TODO" while Wi-Live starts.
+
+- **Typing pace for macros.** The same Typing speed controls, per macro, with every
+  default kept exactly as now. A macro runs inside one call today, so a slow pace
+  would hold the board's loop: it needs the macro runner moved onto typer.h's
+  one-character-per-tick engine (D-18), and `macro_done` sent when the last step
+  ends instead of in the reply. Rule tests, a planted-bug set and an e2e timing test
+  like `tests/e2e/test_typing_pace.py`.
+- **Screen tab: playout delay 0/0 (found building Wi-Live, its D-07).** Chrome smooths
+  WebRTC video by holding decoded frames: measured 28 ms decode-to-display of a 42 ms
+  total at 1080p60, and only 44 of 60 frames shown. str0m can send the RTP
+  playout-delay extension (`writer.playout_delay(ZERO, ZERO)` + `PlayoutDelay` in the
+  extension map); Wi-Live went to p99 28 ms with every frame shown. Port it with
+  Wi-Live's latency probe (a time strip in the test pattern) as the gate.
+- **Layout matrix "sheet macro did not open within 15 s".** Seen only under the full
+  parallel ui tier; alone and module-wide it passes (68/68). Make the wait follow the
+  board model's reply instead of a fixed timeout, then prove it under load.
 
 ## 3. Jev / Laya: say what you want, the board does it
 
