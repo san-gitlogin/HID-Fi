@@ -94,6 +94,9 @@
 #include "host_detect.h"
 #include "driver/temperature_sensor.h"
 #include "combo.h"           // `press` without stopping the board (host-tested: tests/unit/test_combo.py)
+#include <new>               // placement new for the typing engine's state (setup)
+#include "typer.h"           // the text tab at a chosen pace, without stopping it (tests/unit/test_typer.py)
+#define TYPER_COMBO '\x01'   // in the typing stream: a shortcut asked for while text types (see typerAddCombo)
 #include "thermal.h"         // the chip's temperature and its four-hour log (host-tested: tests/unit/test_thermal.py)
 #include "web_ui.h"
 
@@ -834,6 +837,18 @@ void pressKeyCombo(const char* comboStr);
 void pressQueued(const char* comboStr);
 void pressTick();
 void pressDrain();
+extern typer::T* typerQp;
+#define typerQ (*typerQp)            // allocated at the start of setup() - in PSRAM when there is some
+extern uint8_t typeCps;
+extern bool typeRhythm;
+extern int typerSkipped;
+void typerTick();
+void typerFinishChar();
+void typerStop();
+uint16_t typePlanOne(const char* text, uint16_t pos, typer::Op* ops, uint8_t* n, int* skipped);
+void handleTypeSettings(const JsonDocument& inDoc);
+void handleTypePause(const JsonDocument& inDoc);
+void handleTypeStop();
 uint8_t mapKeyName(const String& name);
 int typeString(const char* text);
 void handleSetUnicode(const JsonDocument& inDoc);
@@ -1339,6 +1354,14 @@ void resetRequestTick() {
 
 // ==================== SETUP ====================
 void setup() {
+    // The typing engine's state (~4.3 KB, mostly its text queue) lives in PSRAM when the
+    // board has it - the N16R8 has 8 MB - and in internal RAM otherwise. First, before
+    // anything that could type.
+    {
+        void* tq = heap_caps_malloc(sizeof(typer::T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!tq) tq = malloc(sizeof(typer::T));
+        typerQp = new (tq) typer::T();
+    }
     COM_SERIAL.begin(115200);
     
     unsigned long start = millis();
@@ -1384,8 +1407,11 @@ void setup() {
     apAutoOff      = preferences.getBool("apoff", false);
     hostOsManual   = (HostOS)preferences.getUChar("os", OS_UNKNOWN);
     unicodeHosts   = preferences.getUChar("uni", 0);
+    typeCps        = preferences.getUChar("tcps", 0);
+    typeRhythm     = preferences.getBool("trhy", false);
     preferences.end();
     if (powerMode > PWR_SAVER) powerMode = PWR_BALANCED;   // guard against a bad stored value
+    if (typeCps > typer::CPS_MAX) typeCps = 0;
     if (hostOsManual > OS_LINUX) hostOsManual = OS_UNKNOWN;
 
     preferences.begin("vault", true);
@@ -1592,8 +1618,11 @@ void loop() {
         lastButtonState = currentState;
     }
 
-    // Non-blocking background operations (a queued shortcut, mouse wiggle, LED blink, OS probe)
-    pressTick();
+    // Non-blocking background operations (a queued shortcut, typing, mouse wiggle, LED blink, OS probe)
+    // A shortcut asked for while text is typing goes after the text, in order (never
+    // between its letters). Only here: pressDrain() itself never waits for typing.
+    if (!typer::busy(typerQ)) pressTick();
+    typerTick();
     updateWiggle();
     updateLedBlink();
     updateHostDetect();
@@ -3249,7 +3278,8 @@ void processCommand(const String& line, CmdSource src) {
     // type, so keys never arrive out of order or under a queued modifier. Read-only
     // commands, and press itself, do not wait for it.
     static const char* const NO_TYPING[] = {"press", "status", "ping", "temp_log", "wifi_status", "wifi_networks",
-        "storage_info", "clients", "ui_get", "echo", "actions", "macro_list", "vault_list", "pc_list", "ota_status"};
+        "storage_info", "clients", "ui_get", "echo", "actions", "macro_list", "vault_list", "pc_list", "ota_status",
+        "type_settings", "type_pause", "type_stop"};
     bool typing = true;
     for (const char* c : NO_TYPING) if (!strcmp(cmd, c)) { typing = false; break; }
     if (typing) pressDrain();
@@ -3272,6 +3302,15 @@ void processCommand(const String& line, CmdSource src) {
     }
     else if (strcmp(cmd, "type") == 0) {
         handleType(inDoc);
+    }
+    else if (strcmp(cmd, "type_settings") == 0) {
+        handleTypeSettings(inDoc);
+    }
+    else if (strcmp(cmd, "type_pause") == 0) {
+        handleTypePause(inDoc);
+    }
+    else if (strcmp(cmd, "type_stop") == 0) {
+        handleTypeStop();
     }
     else if (strcmp(cmd, "press") == 0) {
         handlePress(inDoc);
@@ -3676,24 +3715,93 @@ void handleType(const JsonDocument& inDoc) {
     }
     
     bool pressEnter = inDoc["enter"] | false;
-    
-    COM_SERIAL.printf("[TYPE] Typing %d characters\n", strlen(text));
-    int skipped = typeString(text);
-    
-    if (pressEnter) {
-        delay(100);
-        Keyboard.press(KEY_RETURN);
-        delay(50);
-        Keyboard.releaseAll();
+    const size_t len = strlen(text);
+    if (len > typer::TEXT) {
+        StaticJsonDocument<160> doc;
+        doc["status"] = "error"; doc["reply"] = "typed"; doc["error"] = "too_long";
+        doc["message"] = "Too long to type at once: up to 4096 bytes";
+        sendJson(doc);
+        return;
     }
-    
+
+    // What cannot be typed is counted first, so the answer says it at once; the text then
+    // types from loop() at the chosen pace (typer.h) - the board answers everything else
+    // meanwhile. More text while typing goes after it.
+    int skipped = 0;
+    {
+        typer::Op scratch[typer::PLAN]; uint8_t n = 0;
+        for (uint16_t i = 0; i < len && i < typer::TEXT; ) {
+            if (text[i] == '\n' || text[i] == TYPER_COMBO) { i++; continue; }
+            i = typePlanOne(text, i, scratch, &n, &skipped);
+        }
+    }
+    const bool fresh = !typer::busy(typerQ);
+    // The marker byte of a shortcut in the typing stream never comes from text (a control
+    // character the board typed as nothing anyway): add() leaves it out.
+    if (!typer::add(typerQ, text, (uint16_t)len, pressEnter, TYPER_COMBO)) {
+        StaticJsonDocument<224> doc;
+        doc["status"] = "error"; doc["reply"] = "typed"; doc["error"] = "too_much";
+        doc["left"] = typerQ.total - typerQ.typed;
+        doc["message"] = "Still typing the text before - wait for it, or stop it";
+        sendJson(doc);
+        return;
+    }
+    if (fresh) typerSkipped = 0;
+    typer::pace(typerQ, typeCps, typeRhythm, esp_random());
+    usbWakeHost();
+    COM_SERIAL.printf("[TYPE] Typing %u characters (%u cps)\n", (unsigned)len, (unsigned)typeCps);
+
     StaticJsonDocument<256> doc;
     doc["status"] = "ok";
     doc["reply"] = "typed";
-    doc["length"] = strlen(text);
+    doc["length"] = len;
     doc["skipped"] = skipped;
     doc["enter"] = pressEnter;
+    doc["queued"] = typerQ.total - typerQ.typed;      // characters still to type, this text included
+    doc["cps"] = typeCps;
     sendJson(doc);
+    typerTick();                                      // its first key goes now
+}
+
+// Typing pace (keyboard view, Advanced): cps 0 (the board's own pace) or 1..60 characters a
+// second, and rhythm - each gap varied a little. Saved; applies to what is still typing.
+void handleTypeSettings(const JsonDocument& inDoc) {
+    StaticJsonDocument<192> d;
+    if (!inDoc["cps"].isNull()) {
+        const int c = inDoc["cps"] | -1;
+        if (!inDoc["cps"].is<int>() || c < 0 || c > typer::CPS_MAX) {
+            d["status"] = "error"; d["reply"] = "type_settings";
+            d["message"] = "cps is 0 (the board's own pace) or 1 to 60";
+            sendJson(d); return;
+        }
+        typeCps = (uint8_t)c;
+    }
+    if (!inDoc["rhythm"].isNull()) typeRhythm = inDoc["rhythm"] | false;
+    preferences.begin("hid_cfg", false);
+    preferences.putUChar("tcps", typeCps);
+    preferences.putBool("trhy", typeRhythm);
+    preferences.end();
+    typer::pace(typerQ, typeCps, typeRhythm, esp_random());
+    d["status"] = "ok"; d["reply"] = "type_settings"; d["cps"] = typeCps; d["rhythm"] = typeRhythm;
+    sendJson(d);
+}
+
+// Pause or go on (between characters - never with a key down).
+void handleTypePause(const JsonDocument& inDoc) {
+    typerQ.paused = typer::busy(typerQ) && (inDoc["on"] | true);   // only while something types
+    StaticJsonDocument<160> d;
+    d["status"] = "ok"; d["reply"] = "type_pause"; d["paused"] = typerQ.paused;
+    d["left"] = typer::busy(typerQ) ? typerQ.total - typerQ.typed : 0;
+    sendJson(d);
+}
+
+// Stop: what is left is not typed; the engine's keys are lifted.
+void handleTypeStop() {
+    const int left = typer::busy(typerQ) ? typerQ.total - typerQ.typed : 0;
+    typerStop();
+    StaticJsonDocument<128> d;
+    d["status"] = "ok"; d["reply"] = "type_stop"; d["dropped"] = left;
+    sendJson(d);
 }
 
 // ==================== PRESS ====================
@@ -3771,7 +3879,135 @@ static bool comboKeys(const char* comboStr, bool mods) {
     return hasModifier;
 }
 
+// ---- the text tab at a chosen pace (typer.h) ------------------------------------
+// `type` queues its text here and loop() types it one character at a time - the same
+// keys and waits typeString would send, plus the pace's gap. Settings: type_settings.
+typer::T* typerQp = nullptr;         // ~4.3 KB: allocated in setup(), PSRAM first (static RAM budget)
+uint8_t typeCps = 0;                 // characters a second; 0: the board's own pace (the default)
+bool    typeRhythm = false;          // vary each gap a little, as a person types
+static uint8_t typerHeld[8];         // keys the engine has down now: stop releases exactly these
+static uint8_t typerHeldN = 0;
+int            typerSkipped = 0;     // what could not be typed, for type_done
+// A shortcut asked for while text is typing takes its place in the text, in order: a
+// marker byte (TYPER_COMBO) in the stream, its keys here. Before, type then press then type
+// went out in that order because each call waited; now nothing waits, so the order is kept
+// this way (a shortcut must never land between the letters of a text sent before it).
+static String  typerCombos[8];
+static uint8_t typerComboHead = 0, typerComboCount = 0;
+
+bool typerAddCombo(const char* s) {
+    if (typerComboCount >= 8) return false;
+    const char m = TYPER_COMBO;
+    if (!typer::add(typerQ, &m, 1, false)) return false;
+    typerCombos[(typerComboHead + typerComboCount) % 8] = s;
+    typerComboCount++;
+    return true;
+}
+
+// The keys of a shortcut, planned as comboKeys/pressKeyCombo press them: modifiers in a
+// report of their own, 30 ms, the keys, held 120 ms; then lifted - exactly those keys,
+// keys before modifiers (releaseAll would also drop a key the person is holding).
+static uint8_t comboPlan(const char* s, typer::Op* ops) {
+    String tokens[8];
+    const int nt = comboTokens(s, tokens);
+    uint8_t n = 0, held[8], nh = 0, mods[8], nm = 0;
+    for (int i = 0; i < nt; i++) {
+        const uint8_t k = mapKeyName(tokens[i]);
+        if (k >= 0x80 && k <= 0x87) { ops[n++] = {typer::PRESS, k}; mods[nm++] = k; }
+    }
+    if (nm) ops[n++] = {typer::WAIT, (uint16_t)combo::MOD_MS};
+    for (int i = 0; i < nt; i++) {
+        const uint8_t k = mapKeyName(tokens[i]);
+        uint8_t key = 0;
+        if (k != 0 && !(k >= 0x80 && k <= 0x87)) key = k;
+        else if (k == 0 && tokens[i].length() == 1) {
+            char c = tokens[i].charAt(0);
+            if (c >= 'A' && c <= 'Z') c += 32;
+            if ((uint8_t)c < 0x80) key = (uint8_t)c;
+        }
+        if (key) { ops[n++] = {typer::PRESS, key}; held[nh++] = key; }
+    }
+    ops[n++] = {typer::WAIT, (uint16_t)combo::HOLD_MS};
+    while (nh) ops[n++] = {typer::RELEASE, held[--nh]};
+    while (nm) ops[n++] = {typer::RELEASE, mods[--nm]};
+    return n;
+}
+
+static void typerKey(const typer::Op& o) {
+    if (o.k == typer::PRESS) {
+        Keyboard.press((uint8_t)o.v);
+        if (typerHeldN < sizeof typerHeld) typerHeld[typerHeldN++] = (uint8_t)o.v;
+    } else {
+        Keyboard.release((uint8_t)o.v);
+        for (uint8_t i = 0; i < typerHeldN; i++)
+            if (typerHeld[i] == (uint8_t)o.v) { typerHeld[i] = typerHeld[--typerHeldN]; break; }
+    }
+}
+
+// Plan the character at typerQ.pos. A newline - the Enter option, or a line break in the
+// text - is pressed as the Enter button always pressed it: 100 ms after the text, held 50.
+static void typerPlan() {
+    typer::Op ops[typer::PLAN];
+    uint8_t n = 0;
+    if (typerQ.text[typerQ.pos] == TYPER_COMBO) {
+        String s = typerComboCount ? typerCombos[typerComboHead] : String("");
+        if (typerComboCount) { typerComboHead = (typerComboHead + 1) % 8; typerComboCount--; }
+        usbWakeHost();
+        typer::setPlan(typerQ, ops, comboPlan(s.c_str(), ops), typerQ.pos + 1, millis());
+        return;
+    }
+    if (typerQ.text[typerQ.pos] == '\n') {
+        ops[0] = {typer::WAIT, 100}; ops[1] = {typer::PRESS, KEY_RETURN};
+        ops[2] = {typer::WAIT, 50};  ops[3] = {typer::RELEASE, KEY_RETURN};
+        typer::setPlan(typerQ, ops, 4, typerQ.pos + 1, millis());
+        return;
+    }
+    int sk = 0;
+    const uint16_t next = typePlanOne(typerQ.text, typerQ.pos, ops, &n, &sk);
+    typerSkipped += sk;
+    typer::setPlan(typerQ, ops, n, next, millis());
+}
+
+void typerTick() {
+    for (int guard = 0; guard < 8; guard++) {
+        typer::Op o{};
+        const typer::Act a = typer::tick(typerQ, millis(), &o);
+        if (a == typer::IDLE) return;
+        if (a == typer::NEED_PLAN) { typerPlan(); continue; }
+        if (a == typer::DONE) {
+            StaticJsonDocument<128> ev;
+            ev["event"] = "type_done"; ev["typed"] = typerQ.typed; ev["skipped"] = typerSkipped;
+            broadcastJson(ev);
+            return;
+        }
+        typerKey(o);
+    }
+}
+
+// Before anything typed directly (typeString, a combination pressed in place): a character
+// the engine is halfway through is finished at once - a few tens of ms - so no key is ever
+// left down under it. The rest of the text goes on afterwards.
+void typerFinishChar() {
+    while (typerQ.planned) {
+        typer::Op o{};
+        const typer::Act a = typer::tick(typerQ, millis(), &o);
+        if (a == typer::DO_PRESS || a == typer::DO_RELEASE) typerKey(o);
+        else if (a == typer::IDLE && typerQ.planned) delay(1);
+        else break;
+    }
+}
+
+// Forget the rest, and lift exactly the keys the engine has down (a key the person holds
+// stays held).
+void typerStop() {
+    typer::stop(typerQ);
+    typerComboHead = typerComboCount = 0;
+    for (uint8_t i = 0; i < typerHeldN; i++) Keyboard.release(typerHeld[i]);
+    typerHeldN = 0;
+}
+
 void pressKeyCombo(const char* comboStr) {
+    typerFinishChar();               // never under a key the typing engine has down
     pressDrain();                    // a queued shortcut goes out first, in order
     usbWakeHost();
     if (comboKeys(comboStr, true)) delay(combo::MOD_MS);  // host must see modifier in its own HID report
@@ -3813,6 +4049,8 @@ static bool comboHasMods(const char* comboStr) {
 }
 
 void pressQueued(const char* comboStr) {
+    // While text is typing, the shortcut goes after it, in the same stream (in order).
+    if (typer::busy(typerQ) && typerAddCombo(comboStr)) return;
     const bool mods = comboHasMods(comboStr);
     while (!combo::push(pressQueue, comboStr, mods)) {
         if (!combo::busy(pressQueue)) { pressKeyCombo(comboStr); return; }   // too long to queue: the old way
@@ -3897,7 +4135,18 @@ uint8_t mapKeyName(const String& name) {
 }
 
 // ==================== TYPE STRING ====================
-// Text arrives as UTF-8, but Keyboard.press() reads every byte >= 0x88 as a raw
+// Every key action and wait below goes through kbPress/kbRelease/kbWait. Typed directly
+// (typeString) they go out at once, as always. For the typing engine (typer.h, the text
+// tab at a chosen pace) one character's actions are recorded instead (typePlanOne) and
+// loop() plays them back - the same keys and the same waits, so nothing about how a
+// character is typed changes with the pace.
+static typer::Op* kbRec = nullptr;
+static uint8_t kbRecN = 0;
+static void kbOp(uint8_t k, uint16_t v) { if (kbRecN < typer::PLAN) kbRec[kbRecN++] = {k, v}; }
+static void kbPress(uint8_t c)   { if (kbRec) kbOp(typer::PRESS, c);   else Keyboard.press(c); }
+static void kbRelease(uint8_t c) { if (kbRec) kbOp(typer::RELEASE, c); else Keyboard.release(c); }
+static void kbWait(uint16_t ms)  { if (kbRec) kbOp(typer::WAIT, ms);   else delay(ms); }
+// Text arrives as UTF-8, but kbPress() reads every byte >= 0x88 as a raw
 // HID keycode and 0x80-0x87 as a modifier. Fed a phone's smart quote (E2 80 99)
 // it typed Keypad-2, tapped Ctrl, then 'n' - and a degree sign (C2 B0) pressed
 // F1 then Enter. So no byte >= 0x80 may ever reach press(): decode the text,
@@ -3928,10 +4177,10 @@ static const char* asciiFold(uint32_t cp) {
 }
 
 static void typeAscii(char c) {
-    Keyboard.press(c);
-    delay(CHAR_DELAY);
-    Keyboard.release(c);
-    delay(CHAR_DELAY);
+    kbPress(c);
+    kbWait(CHAR_DELAY);
+    kbRelease(c);
+    kbWait(CHAR_DELAY);
 }
 
 // Unicode entry through the host's own input method. Only macOS and Linux have
@@ -3964,8 +4213,8 @@ static void typeHex(uint32_t v, int digits) {
 
 static void typeUnicode(uint32_t cp, HostOS os) {
     if (os == OS_MAC) {
-        Keyboard.press(KEY_LEFT_ALT);
-        delay(CHAR_DELAY);
+        kbPress(KEY_LEFT_ALT);
+        kbWait(CHAR_DELAY);
         if (cp > 0xFFFF) {
             uint32_t v = cp - 0x10000;
             typeHex(0xD800 + (v >> 10), 4);
@@ -3973,71 +4222,86 @@ static void typeUnicode(uint32_t cp, HostOS os) {
         } else {
             typeHex(cp, 4);
         }
-        Keyboard.release(KEY_LEFT_ALT);   // the character commits on release
-        delay(CHAR_DELAY);
+        kbRelease(KEY_LEFT_ALT);   // the character commits on release
+        kbWait(CHAR_DELAY);
     } else {
         // Caps Lock stops IBus taking Ctrl+Shift+U, so lift it for the entry
         // and put it back (QMK does the same). Release only what was pressed
         // here - releaseAll() would also drop a key the user is holding.
         bool caps = ledStateBits & 0x02;
-        if (caps) { Keyboard.press(KEY_CAPS_LOCK); delay(CHAR_DELAY); Keyboard.release(KEY_CAPS_LOCK); delay(CHAR_DELAY); }
-        Keyboard.press(KEY_LEFT_CTRL);
-        Keyboard.press(KEY_LEFT_SHIFT);
-        Keyboard.press('u');
-        delay(CHAR_DELAY);
-        Keyboard.release('u');
-        Keyboard.release(KEY_LEFT_SHIFT);
-        Keyboard.release(KEY_LEFT_CTRL);
-        delay(CHAR_DELAY);
+        if (caps) { kbPress(KEY_CAPS_LOCK); kbWait(CHAR_DELAY); kbRelease(KEY_CAPS_LOCK); kbWait(CHAR_DELAY); }
+        kbPress(KEY_LEFT_CTRL);
+        kbPress(KEY_LEFT_SHIFT);
+        kbPress('u');
+        kbWait(CHAR_DELAY);
+        kbRelease('u');
+        kbRelease(KEY_LEFT_SHIFT);
+        kbRelease(KEY_LEFT_CTRL);
+        kbWait(CHAR_DELAY);
         typeHex(cp, cp > 0xFFFF ? (cp > 0xFFFFF ? 6 : 5) : 4);
         typeAscii(' ');                   // commits the character
-        if (caps) { Keyboard.press(KEY_CAPS_LOCK); delay(CHAR_DELAY); Keyboard.release(KEY_CAPS_LOCK); delay(CHAR_DELAY); }
+        if (caps) { kbPress(KEY_CAPS_LOCK); kbWait(CHAR_DELAY); kbRelease(KEY_CAPS_LOCK); kbWait(CHAR_DELAY); }
     }
+}
+
+// The character at s[i]: typed (or counted in *skipped); returns where the next starts.
+static size_t typeOneAt(const uint8_t* s, size_t i, int* skipped) {
+    uint8_t c = s[i];
+    if (c < 0x80) { typeAscii((char)c); return i + 1; }
+
+    // Well-formed UTF-8 only (Unicode Table 3-7). The bounds on the second
+    // byte reject overlong forms, UTF-16 surrogates and anything past
+    // U+10FFFF - JSON can carry a lone "\ud800", and typed through a
+    // host's hex entry it would land as a broken character. Each
+    // ill-formed run counts once, as its maximal subpart.
+    size_t n; uint32_t cp; uint8_t lo = 0x80, hi = 0xBF;
+    if      (c >= 0xC2 && c <= 0xDF) { n = 1; cp = c & 0x1F; }
+    else if (c >= 0xE0 && c <= 0xEF) { n = 2; cp = c & 0x0F;
+                                       if (c == 0xE0) lo = 0xA0;
+                                       if (c == 0xED) hi = 0x9F; }
+    else if (c >= 0xF0 && c <= 0xF4) { n = 3; cp = c & 0x07;
+                                       if (c == 0xF0) lo = 0x90;
+                                       if (c == 0xF4) hi = 0x8F; }
+    else { (*skipped)++; return i + 1; }        // C0, C1, F5-FF, stray continuation
+    size_t k = 1;
+    for (; k <= n; k++) {
+        uint8_t b = s[i + k];
+        if (b < lo || b > hi) break;            // also stops at the NUL
+        cp = (cp << 6) | (b & 0x3F);
+        lo = 0x80; hi = 0xBF;
+    }
+    if (k <= n) { (*skipped)++; return i + k; }  // ill-formed or truncated
+    i += n + 1;
+
+    // The host can take the real character, so give it exactly what was
+    // typed - curly quotes included - rather than an ASCII stand-in.
+    if (unicodeReady()) { typeUnicode(cp, hostOs()); return i; }
+
+    const char* fold = asciiFold(cp);
+    if (!fold) { (*skipped)++; return i; }
+    for (; *fold; fold++) typeAscii(*fold);
+    return i;
 }
 
 // Returns how many characters could not be typed and were skipped.
 int typeString(const char* text) {
+    typerFinishChar();                    // a character the engine is halfway through goes first
     usbWakeHost();
     int skipped = 0;
     const uint8_t* s = (const uint8_t*)text;
     size_t i = 0;
-    while (s[i]) {
-        uint8_t c = s[i];
-        if (c < 0x80) { typeAscii((char)c); i++; continue; }
-
-        // Well-formed UTF-8 only (Unicode Table 3-7). The bounds on the second
-        // byte reject overlong forms, UTF-16 surrogates and anything past
-        // U+10FFFF - JSON can carry a lone "\ud800", and typed through a
-        // host's hex entry it would land as a broken character. Each
-        // ill-formed run counts once, as its maximal subpart.
-        size_t n; uint32_t cp; uint8_t lo = 0x80, hi = 0xBF;
-        if      (c >= 0xC2 && c <= 0xDF) { n = 1; cp = c & 0x1F; }
-        else if (c >= 0xE0 && c <= 0xEF) { n = 2; cp = c & 0x0F;
-                                           if (c == 0xE0) lo = 0xA0;
-                                           if (c == 0xED) hi = 0x9F; }
-        else if (c >= 0xF0 && c <= 0xF4) { n = 3; cp = c & 0x07;
-                                           if (c == 0xF0) lo = 0x90;
-                                           if (c == 0xF4) hi = 0x8F; }
-        else { skipped++; i++; continue; }          // C0, C1, F5-FF, stray continuation
-        size_t k = 1;
-        for (; k <= n; k++) {
-            uint8_t b = s[i + k];
-            if (b < lo || b > hi) break;            // also stops at the NUL
-            cp = (cp << 6) | (b & 0x3F);
-            lo = 0x80; hi = 0xBF;
-        }
-        if (k <= n) { skipped++; i += k; continue; } // ill-formed or truncated
-        i += n + 1;
-
-        // The host can take the real character, so give it exactly what was
-        // typed - curly quotes included - rather than an ASCII stand-in.
-        if (unicodeReady()) { typeUnicode(cp, hostOs()); continue; }
-
-        const char* fold = asciiFold(cp);
-        if (!fold) { skipped++; continue; }
-        for (; *fold; fold++) typeAscii(*fold);
-    }
+    while (s[i]) i = typeOneAt(s, i, &skipped);
     return skipped;
+}
+
+// For the typing engine: the key actions of the character at text[pos], recorded, not
+// sent; returns where the next character starts. *skipped counts one that cannot be typed.
+uint16_t typePlanOne(const char* text, uint16_t pos, typer::Op* ops, uint8_t* n, int* skipped) {
+    kbRec = ops; kbRecN = 0;
+    const size_t next = typeOneAt((const uint8_t*)text, pos, skipped);
+    *n = kbRecN;
+    kbRec = nullptr;
+    return (uint16_t)next;
 }
 
 // ==================== LOCK ====================
@@ -4326,6 +4590,11 @@ void buildStatusDoc(JsonDocument& doc) {
     doc["usb_suspended"] = tud_suspended();
     // Power. radio_awake is the honest answer to "why does it feel slow".
     doc["power_mode"] = powerModeStr();
+    doc["type_cps"] = typeCps;                 // typing pace: 0 the board's own, else characters a second
+    doc["type_rhythm"] = typeRhythm;
+    doc["typing"] = typer::busy(typerQ);       // text still typing (type_left characters), maybe paused
+    doc["type_left"] = typer::busy(typerQ) ? typerQ.total - typerQ.typed : 0;
+    doc["type_paused"] = typer::busy(typerQ) && typerQ.paused;
     doc["radio_awake"] = radioAwake;
     doc["ap_auto_off"] = apAutoOff;
     doc["ap_running"] = apRunning;

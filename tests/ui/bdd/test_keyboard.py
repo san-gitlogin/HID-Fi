@@ -175,3 +175,41 @@ def macro_lines(ctx, name, n, a, b, c):
 def macro_ran(ctx, a, b, c):
     _wait(ctx["ui"], lambda: ctx["sim"].macro_ran == [("text", a), ("key", b), ("text", c)],
           f"the macro ran {ctx['sim'].macro_ran}")
+
+
+
+# ---- typing speed (Advanced) and Pause/Stop ----------------------------------------
+@then(parsers.parse('the "#{el_id}" area is hidden'))
+def area_hidden(ctx, el_id):
+    assert ctx["ui"].page.locator(f"#{el_id}").is_hidden(), f"#{el_id} is visible"
+
+
+@then(parsers.parse('the "#{el_id}" area is shown'))
+def area_shown(ctx, el_id):
+    ctx["ui"].page.locator(f"#{el_id}").wait_for(state="visible", timeout=3000)
+
+
+@then(parsers.parse('the "#{el_id}" control is disabled'))
+def control_disabled(ctx, el_id):
+    assert ctx["ui"].page.locator(f"#{el_id}").is_disabled(), f"#{el_id} can be tapped"
+
+
+@when(parsers.parse("I set the pace slider to {n:d}"))
+def pace_slider(ctx, n):
+    ctx["ui"].page.evaluate("""n => { const s = document.getElementById('sCps'); s.value = n;
+        s.dispatchEvent(new Event('input', {bubbles: true})); s.dispatchEvent(new Event('change', {bubbles: true})); }""", n)
+
+
+@given(parsers.parse("the board types at {n:d} characters a second"))
+def board_pace(ctx, n):
+    ctx["sim"].type_cps = n
+
+
+@given(parsers.parse("the board is typing {n:d} characters"))
+def board_typing(ctx, n):
+    ctx["sim"].typing = {"total": n, "bytes": n, "paused": False, "skipped": 0}
+
+
+@when("the board finishes typing")
+def board_finishes(ctx):
+    ctx["sim"].finish_typing()

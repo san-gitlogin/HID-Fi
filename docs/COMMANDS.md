@@ -84,7 +84,10 @@ seconds of connecting (while a PIN is set) is closed. See
 
 | Command | Parameters | Notes |
 |---|---|---|
-| `type` | `text`, `enter` | Types a string; `enter` presses Return afterwards. The reply's `skipped` counts characters that could not be typed (see below) |
+| `type` | `text`, `enter` | Types a string; `enter` presses Return afterwards. Answers at once and types from the board's loop at the typing pace (`type_settings`), so the board answers everything else meanwhile; more text while typing goes after it. The reply's `skipped` counts characters that could not be typed (see below), `queued` the characters still to type (this text included), `cps` the pace. When everything is typed the board sends the event `{"event":"type_done","typed":N,"skipped":N}`. Refused with `error: "too_much"` (and `left`) when it does not fit behind the text still typing, `error: "too_long"` above 4096 bytes. A `press` while text is typing goes after it, in order - never between its letters |
+| `type_settings` | `cps`, `rhythm` (both optional) | The typing pace, saved: `cps` 0 (the board's own pace, about 50 a second - the default) or 1 to 60 characters a second; `rhythm` varies each gap by up to 30%, as a person types (only with a pace). A character never takes less than its own keys take (a Unicode entry is longer). Applies to text still typing. Error: `cps is 0 (the board's own pace) or 1 to 60`. Status carries `type_cps`, `type_rhythm`, `typing` (text still typing), `type_left` (characters) and `type_paused` |
+| `type_pause` | `on` | Pauses (`true`, the default) or resumes typing - between characters, never with a key down. Reply: `paused`, `left` |
+| `type_stop` | - | Stops typing: what is left is not typed, and exactly the keys the typing had down are lifted (a key held by hand stays held). Reply: `dropped` |
 | `press` | `keys` | A combo such as `CTRL+SHIFT+ESC` |
 | `key_down` | `key` | Holds a key down |
 | `key_up` | `key` | Releases it |

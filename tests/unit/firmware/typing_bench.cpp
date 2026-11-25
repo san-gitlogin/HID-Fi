@@ -62,6 +62,8 @@ static HostOS hostOsDetected = OS_UNKNOWN;
 static volatile uint8_t ledStateBits = 0;
 
 namespace fw {
+#include "typer.h"                 // the typing section records for the engine through it
+static void typerFinishChar() {}   // the engine lives outside the section: nothing half-typed here
 #include "gen_type.inc"
 }
 

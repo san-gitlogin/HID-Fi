@@ -7,6 +7,25 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+### Firmware and dashboard
+
+- **Typing speed.** Keyboard tab, "Typing speed" (closed until you open it): Fastest (the
+  board's own pace, as before), Quick, Natural, Slow, or any pace from 1 to 60 characters a
+  second, and an optional natural rhythm. While a paced text types, Pause and Stop appear
+  under the text box. The text now types from the board's loop, so the trackpad and the
+  dashboard stay responsive through a long text, and a shortcut sent meanwhile goes after
+  the text, never inside it. Shortcuts, macros and saved passwords keep full speed.
+  Commands `type_settings`, `type_pause`, `type_stop`; event `type_done`. DECISIONS.md D-18.
+- **Two homes on one subnet are two networks.** The board tells saved networks apart by
+  subnet and router (it learns each router after joining), so the owner's hometown
+  extender and his Bangalore router - both 192.168.0.x - are no longer taken for one.
+  Nothing is asked of anyone. DECISIONS.md D-16.
+- **Tests never drop off the home router.** Rehearsed network moves happen in the board's
+  logic while the radio stays connected; status counts real joins (`radio_joins`,
+  `radio_drops`) and the test run fails a rehearsal that causes any. DECISIONS.md D-17.
+
 ## v4.4 - 2026-11-25
 
 ### Firmware

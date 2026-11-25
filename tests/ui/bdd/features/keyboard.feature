@@ -216,3 +216,91 @@ Feature: The Keyboard tab
     Given the dashboard is open on a wide desktop
     When I tap the "#btnDeck" control
     Then the deck keyboard is the "ansi" layout
+
+  # ---- Typing speed (Advanced, closed by default) and Pause/Stop while it types ----
+
+  Scenario: Typing speed stays out of the way until opened
+    Then "#typeAdvSum" reads "Fastest"
+    And the "#typeAdvBody" area is hidden
+    When I tap the "#typeAdvBtn" control
+    Then the "#typeAdvBody" area is shown
+    When I tap the "#typeAdvBtn" control
+    Then the "#typeAdvBody" area is hidden
+
+  Scenario: Choosing a pace saves it on the board and the heading says it
+    When I tap the "#typeAdvBtn" control
+    And I tap "Natural"
+    Then the board receives {"cmd": "type_settings", "cps": 12, "rhythm": false}
+    And "#typeAdvSum" reads "12/s"
+    When I tap "Fastest"
+    Then the board receives {"cmd": "type_settings", "cps": 0, "rhythm": false}
+    And "#typeAdvSum" reads "Fastest"
+
+  Scenario: A custom pace from the slider
+    When I tap the "#typeAdvBtn" control
+    And I set the pace slider to 20
+    Then the board receives {"cmd": "type_settings", "cps": 20, "rhythm": false}
+    And "#vCps" reads "20/s"
+
+  Scenario: Natural rhythm needs a pace
+    When I tap the "#typeAdvBtn" control
+    Then the "#tRhythm" control is disabled
+    When I tap "Slow"
+    And I tap the "#tRhythm" control
+    Then the board receives {"cmd": "type_settings", "cps": 5, "rhythm": true}
+    And "Natural rhythm" is switched on
+
+  Scenario: The board refusing a pace is said, not hidden
+    Given the board will refuse the next "type_settings" with "cps is 0 (the board's own pace) or 1 to 60"
+    When I tap the "#typeAdvBtn" control
+    And I tap "Quick"
+    Then I see the message "cps is 0 (the board's own pace) or 1 to 60"
+    And "#typeAdvSum" reads "Fastest"
+
+  Scenario: At a chosen pace the text shows its progress, with Pause and Resume
+    Given the board types at 5 characters a second
+    When I reload the dashboard
+    And I type "hello" into "#typeText"
+    And I tap the "#btnType" control
+    Then the board receives {"cmd": "type", "text": "hello", "enter": false}
+    And the "#typeProg" area is shown
+    And "#typeProgTx" contains "5 characters to go"
+    When I tap the "#btnTypePause" control
+    Then the board receives {"cmd": "type_pause", "on": true}
+    And "#typeProgTx" contains "Paused"
+    And "#btnTypePause" reads "Resume"
+    When I tap the "#btnTypePause" control
+    Then the board receives {"cmd": "type_pause", "on": false}
+    And "#btnTypePause" reads "Pause"
+    When the board finishes typing
+    Then the "#typeProg" area is hidden
+
+  Scenario: Stop drops what is left and says how much
+    Given the board types at 5 characters a second
+    When I reload the dashboard
+    And I type "stop me" into "#typeText"
+    And I tap the "#btnType" control
+    And I tap the "#btnTypeStop" control
+    Then the board receives {"cmd": "type_stop"}
+    And I see the message "Stopped: 7 characters were not typed"
+    And the "#typeProg" area is hidden
+
+  Scenario: At the board's own pace no progress row appears
+    When I type "quick" into "#typeText"
+    And I tap the "#btnType" control
+    Then the board receives {"cmd": "type", "text": "quick", "enter": false}
+    And the "#typeProg" area is hidden
+
+  Scenario: The board refusing the text is said
+    Given the board will refuse the next "type" with "Still typing the text before - wait for it, or stop it"
+    When I type "more" into "#typeText"
+    And I tap the "#btnType" control
+    Then I see the message "Still typing the text before"
+
+  Scenario: Opened while text is typing, the dashboard shows it
+    Given the board types at 5 characters a second
+    And the board is typing 40 characters
+    When I reload the dashboard
+    Then the "#typeProg" area is shown
+    And "#typeProgTx" contains "40 characters to go"
+    And "#typeAdvSum" reads "5/s"

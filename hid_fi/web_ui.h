@@ -883,7 +883,13 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .frbig{width:100%;min-height:52px;font-size:16px}
 .netaway{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 14px 0;padding:12px 14px;border-radius:var(--r);
   background:rgba(255,176,46,.10);border:1px solid rgba(255,176,46,.32)}
-.netaway[hidden]{display:none}     /* display:flex above would otherwise beat the hidden attribute */
+.netaway[hidden]{display:none}
+/* Typing at a chosen pace (keyboard view): the progress row shows only while it types */
+.typeprog{align-items:center;margin-top:10px}
+.typeprog[hidden]{display:none}
+.typeprog .hint{flex:1 1 150px;margin:0;font-variant-numeric:tabular-nums}
+.tadv{display:none;padding:12px 13px 13px}
+.scg.open .tadv{display:block}     /* display:flex above would otherwise beat the hidden attribute */
 .netaway .tx{flex:1 1 260px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
 .netaway .tx span{color:var(--fg2)}
 .netawaybtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -1614,6 +1620,7 @@ L.ms=Date.now()-t0;
 <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5.5v13L8.5 12zM5.5 5.5v13"/></symbol>
 <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5.5v13L15.5 12zM18.5 5.5v13"/></symbol>
 <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></symbol>
 <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 1.6v3.4M12 19v3.4M1.6 12h3.4M19 12h3.4M4.4 4.4l2.4 2.4M17.2 17.2l2.4 2.4M4.4 19.6l2.4-2.4M17.2 6.8l2.4-2.4"/></symbol>
 <symbol id="i-sundim" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 3.3v1.7M12 19v1.7M3.3 12h1.7M19 12h1.7M5.85 5.85l1.2 1.2M16.95 16.95l1.2 1.2M5.85 18.15l1.2-1.2M16.95 7.05l1.2-1.2"/></symbol>
 <symbol id="i-scrollnat" viewBox="0 0 24 24"><path d="M8 20.5V4.5M4.5 8 8 4.5 11.5 8"/><path d="M16 20.5V4.5M12.5 8 16 4.5 19.5 8"/></symbol>
@@ -1859,6 +1866,11 @@ L.ms=Date.now()-t0;
             <button class="btn" style="flex:1 1 90px" id="btnType">Send</button>
             <button class="btn ok" style="flex:1 1 100px" id="btnTypeEnter"><svg class="ic ic-sm"><use href="#i-enter"/></svg>Enter</button>
           </div>
+          <div class="row typeprog" id="typeProg" hidden>
+            <p class="hint" id="typeProgTx" aria-live="polite"></p>
+            <button class="btn sm" id="btnTypePause" aria-pressed="false"><svg class="ic ic-sm"><use href="#i-pause"/></svg><span>Pause</span></button>
+            <button class="btn sm bad" id="btnTypeStop"><svg class="ic ic-sm"><use href="#i-stop"/></svg><span>Stop</span></button>
+          </div>
           <div class="kbd" id="kbd"></div>
           <div class="row" style="margin-top:11px">
             <input id="customKeys" placeholder="Custom combo e.g. CTRL+SHIFT+ESC" style="flex:3 1 200px;min-height:44px;padding:11px 12px;border-radius:10px;background:rgba(0,0,0,.32);border:1px solid var(--line);font-size:16px">
@@ -1873,6 +1885,25 @@ L.ms=Date.now()-t0;
           </div>
           <div class="tiles" id="macroTiles"></div>
           <p class="hint" id="macroHint" style="margin-top:10px"></p>
+        </div>
+
+        <div class="card span">
+          <div class="scg" id="typeAdv">
+            <button class="scgh" id="typeAdvBtn" aria-expanded="false" aria-controls="typeAdvBody"><svg class="ic"><use href="#i-clock"/></svg><h2>Typing speed</h2><span class="cnt" id="typeAdvSum">Fastest</span><svg class="ic ic-sm chev"><use href="#i-down"/></svg></button>
+            <div class="tadv" id="typeAdvBody">
+              <div class="seg" id="typePaceSeg" style="width:100%">
+                <button data-cps="0" style="flex:1 1 0">Fastest</button>
+                <button data-cps="30" style="flex:1 1 0">Quick</button>
+                <button data-cps="12" style="flex:1 1 0">Natural</button>
+                <button data-cps="5" style="flex:1 1 0">Slow</button>
+              </div>
+              <div class="slider" style="margin-top:12px"><label>Pace</label><input type="range" id="sCps" min="1" max="60" step="1" aria-label="Characters a second"><span class="v" id="vCps"></span></div>
+              <div class="chips" style="margin-top:10px">
+                <button class="chip" id="tRhythm" aria-pressed="false"><svg class="ic ic-sm"><use href="#i-hand"/></svg>Natural rhythm</button>
+              </div>
+              <p class="hint" style="margin-top:10px">How fast the board types the text you send from this tab, in characters a second. Fastest is the board's own pace, about 50 a second. A slower pace suits screen recordings and apps that miss fast typing; Natural rhythm varies each gap a little, as a person types. While it types, Pause and Stop appear under the text box. Shortcuts, macros and saved passwords always go at full speed.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -2429,6 +2460,7 @@ function connect(){
       else if(m.event==='ap_restored')toast('The board\'s own WiFi is back on: '+(m.ap_ssid||''),'ok');
       // D-02: it moves to where it is used - never while someone signed in over the
       // home network is on it, so this reaches pages on its own WiFi.
+      else if(m.event==='type_done')showTyping(0,false);
       else if(m.event==='wifi_moving')toast((m.why==='looking'?'Nobody used the board on '+(m.from||'')+' - trying ':'Moving to the network it is used over: ')+(m.to||''),'ok');
       else if(m.event==='companion_pending'){toast((m.name||'A computer')+' wants to share its screen','ok');scrList();}
       else if(m.event==='companion_online')scrList();
@@ -5312,6 +5344,7 @@ function otaSheetShow(a){
 }
 
 function applyStatus(d){
+  if('type_cps' in d){applyTypePace(d.type_cps,d.type_rhythm);if(TYPE_CPS||!d.typing)showTyping(d.typing?d.type_left:0,d.type_paused);}
   if(d.ap_share!==undefined)paintShare(d.ap_share,d.ap_share_active,d.wifi_connected?'the access point':'the home network');
   if(d.mdns)MDNS_NAME=d.mdns;
   if(d.ap_ssid)AP_SSID=d.ap_ssid;
@@ -5652,6 +5685,24 @@ function bindAll(){
 
   $('btnType').onclick=()=>doType(false);
   $('btnTypeEnter').onclick=()=>doType(true);
+  // Typing speed (Advanced, closed by default) and Pause/Stop while it types.
+  $('typeAdvBtn').onclick=()=>{
+    const on=!$('typeAdv').classList.contains('open');
+    $('typeAdv').classList.toggle('open',on);$('typeAdvBtn').setAttribute('aria-expanded',on);buzz(6);
+  };
+  document.querySelectorAll('[data-cps]').forEach(b=>b.onclick=()=>{setTypePace(+b.dataset.cps,TYPE_RHY);buzz(8);});
+  $('sCps').oninput=()=>{$('vCps').textContent=$('sCps').value+'/s';};
+  $('sCps').onchange=()=>setTypePace(+$('sCps').value,TYPE_RHY);
+  $('tRhythm').onclick=()=>{if(TYPE_CPS)setTypePace(TYPE_CPS,!TYPE_RHY);buzz(8);};
+  $('btnTypePause').onclick=()=>{
+    send({cmd:'type_pause',on:!TYPE_PAUSED},r=>{if(r&&r.status==='ok')showTyping(r.left,r.paused);});buzz(8);
+  };
+  $('btnTypeStop').onclick=()=>{
+    send({cmd:'type_stop'},r=>{
+      showTyping(0,false);
+      if(r&&r.dropped>0)toast('Stopped: '+r.dropped+' character'+(r.dropped>1?'s were':' was')+' not typed','ok');
+    });buzz(10);
+  };
   // The phone's own Go key should do the obvious thing rather than nothing.
   $('typeText').addEventListener('keydown',e=>{
     if(e.key==='Enter'){e.preventDefault();doType(true);}
@@ -5985,6 +6036,34 @@ function loadStorage(){
   });
 }
 const item=(i,t,d)=>'<div class="item">'+ico(i)+'<div class="tx"><b>'+esc(t)+'</b><span style="white-space:normal">'+esc(d)+'</span></div></div>';
+// ---- typing speed (keyboard view, Advanced) ------------------------------------
+let TYPE_CPS=0,TYPE_RHY=false,TYPE_PAUSED=false;
+function applyTypePace(cps,rhy){
+  TYPE_CPS=cps|0;TYPE_RHY=!!rhy;
+  $('typeAdvSum').textContent=TYPE_CPS?TYPE_CPS+'/s':'Fastest';
+  document.querySelectorAll('[data-cps]').forEach(b=>b.classList.toggle('on',(+b.dataset.cps)===TYPE_CPS));
+  if(TYPE_CPS)$('sCps').value=TYPE_CPS;
+  $('vCps').textContent=TYPE_CPS?TYPE_CPS+'/s':'Fastest';
+  $('tRhythm').classList.toggle('on',TYPE_RHY&&TYPE_CPS>0);
+  $('tRhythm').setAttribute('aria-pressed',TYPE_RHY&&TYPE_CPS>0);
+  $('tRhythm').disabled=!TYPE_CPS;      // a rhythm needs a pace
+}
+function setTypePace(cps,rhy){
+  send({cmd:'type_settings',cps:cps,rhythm:!!rhy},r=>{
+    if(r&&r.status==='ok')applyTypePace(r.cps,r.rhythm);
+    else if(r)toast(r.message||'The board did not take the typing speed','bad');
+  });
+}
+// The progress row: shown while text types at a chosen pace, with Pause and Stop.
+function showTyping(left,paused){
+  TYPE_PAUSED=!!paused&&left>0;
+  const p=$('typeProg');p.hidden=!(left>0);
+  if(!(left>0))return;
+  $('typeProgTx').textContent=(TYPE_PAUSED?'Paused - ':'Typing - ')+left+' character'+(left===1?'':'s')+' to go';
+  $('btnTypePause').querySelector('span').textContent=TYPE_PAUSED?'Resume':'Pause';
+  $('btnTypePause').querySelector('use').setAttribute('href',TYPE_PAUSED?'#i-play':'#i-pause');
+  $('btnTypePause').setAttribute('aria-pressed',TYPE_PAUSED);
+}
 function doType(withEnter,srcId){
   const el=$(srcId||'typeText');
   const v=el.value;
@@ -5997,7 +6076,10 @@ function doType(withEnter,srcId){
   // The board types US-layout ASCII. It folds smart quotes and dashes back to
   // plain ones itself, and says how many characters it had to leave out.
   send({cmd:'type',text:v,enter:withEnter},r=>{
+    if(r&&r.status==='error')return toast(r.message||'The board did not type it','bad');
     if(r&&r.skipped>0)toast(r.skipped+(r.skipped>1?' characters were':' character was')+' skipped. For emoji, see Settings \u2192 Emoji and symbols','bad');
+    // At a chosen pace the text takes a while: say so, with Pause and Stop.
+    if(r&&r.status==='ok'&&r.cps>0&&r.queued>0)showTyping(r.queued,TYPE_PAUSED);
   });
   el.value='';
   buzz(8);

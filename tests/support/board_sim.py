@@ -144,6 +144,8 @@ class BoardSim:
         self.usb_mounted = True       # False: the USB port is in no computer (only COM, or a charger)
         self.unicode = {"mac": False, "linux": False}
         self.power_mode, self.ap_auto_off = "balanced", False
+        self.type_cps, self.type_rhythm = 0, False            # typing pace (type_settings)
+        self.typing = None                                    # text still typing: total/bytes/paused
         # v3.10: a board that was never given a password makes its own at first start.
         self.ap_ssid, self.ap_pass, self.ap_open = "ESP32-HID-DA1A2C", "k7m2-x9qp-4tre", False
         self.ap_genpw = self.ap_pass       # the password this board made (apGenPassword)
@@ -248,7 +250,10 @@ class BoardSim:
             "status": "ok", "reply": "status", "chip": "ESP32-S3", "firmware": self.firmware, "uptime_sec": up, "reset_reason": "power_on",
             "free_heap": 225000, "heap_floor": 220000, "heap_low": False, "temp_c": self.temp_c, "temp_peak_c": self.temp_peak_c, "temp_us_max": 41, "temp_off": "", "total_psram": 8388608,
             "free_psram": 8371508, "flash_size": 16777216, "hid_ready": True, "usb_mounted": self.usb_mounted,
-            "usb_suspended": False, "power_mode": self.power_mode, "radio_awake": self.power_mode != "saver",
+            "usb_suspended": False, "power_mode": self.power_mode,
+            "type_cps": self.type_cps, "type_rhythm": self.type_rhythm, "typing": self.typing is not None,
+            "type_left": self.typing["total"] if self.typing else 0,
+            "type_paused": bool(self.typing and self.typing["paused"]), "radio_awake": self.power_mode != "saver",
             "ap_auto_off": self.ap_auto_off, "ap_running": self.ap_running,
             "ap_share": self.ap_share, "ap_share_active": self.ap_share and online, "lan_exposed": online and not self.pin,
             "sta_phase": self.sta["phase"], "sta_error": self.sta["error"], "sta_ip_mode": self.sta["ip_mode"],
@@ -622,6 +627,8 @@ class BoardSim:
         self.host_manual = None
         self.unicode = {"mac": False, "linux": False}
         self.power_mode, self.ap_auto_off = "balanced", False
+        self.type_cps, self.type_rhythm = 0, False            # typing pace (type_settings)
+        self.typing = None                                    # text still typing: total/bytes/paused
         self.pointer_mode, self.gamepad, self.verbose, self.ap_share = "relative", False, False, False
         self.ap_ssid = self.ap_ssid_own
         if len(self.ap_genpw) >= 8:
@@ -883,6 +890,12 @@ class BoardSim:
         return best["ssid"]
 
     # ---- the home network having a bad night (scenarios drive these) -----------------
+    def finish_typing(self):
+        """The text still typing is all typed: type_done, as typer.h's DONE."""
+        if self.typing:
+            job, self.typing = self.typing, None
+            self._push({"event": "type_done", "typed": job["total"], "skipped": job["skipped"]})
+
     def _push(self, ev):
         for k in list(self.sockets):
             if k["open"]:
@@ -1084,7 +1097,43 @@ class BoardSim:
             from support.corpus import expect
             off, osk, _on, nsk = expect(t.encode())
             uni = self.unicode.get(self.host_os(), False)
-            return OK("typed", length=len(t.encode()), skipped=nsk if uni else osk, enter=bool(b.get("enter")))
+            skipped = nsk if uni else osk
+            enter = bool(b.get("enter"))
+            # typer.h: answered at once, typed from loop() at the pace; more text goes after it
+            job = self.typing or {"total": 0, "bytes": 0, "paused": False, "skipped": 0}
+            nbytes = len(t.encode()) + (1 if enter else 0)
+            if len(t.encode()) > 4096:
+                return {"status": "error", "reply": "typed", "error": "too_long",
+                        "message": "Too long to type at once: up to 4096 bytes"}
+            if job["bytes"] + nbytes > 4096:
+                return {"status": "error", "reply": "typed", "error": "too_much", "left": job["total"],
+                        "message": "Still typing the text before - wait for it, or stop it"}
+            job["total"] += len(t) + (1 if enter else 0)
+            job["bytes"] += nbytes
+            job["skipped"] += skipped
+            self.typing = job
+            r = OK("typed", length=len(t.encode()), skipped=skipped, enter=enter, queued=job["total"], cps=self.type_cps)
+            if not self.type_cps:
+                self.finish_typing()                          # the board's own pace: done at once
+            return r
+        if c == "type_settings":
+            if "cps" in b:
+                v = b["cps"]
+                if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 60:
+                    return {"status": "error", "reply": "type_settings", "message": "cps is 0 (the board's own pace) or 1 to 60"}
+                self.type_cps = v
+            if "rhythm" in b:
+                self.type_rhythm = bool(b["rhythm"])
+            return OK("type_settings", cps=self.type_cps, rhythm=self.type_rhythm)
+        if c == "type_pause":
+            on = bool(b.get("on", True)) and self.typing is not None       # only while something types
+            if self.typing:
+                self.typing["paused"] = on
+            return OK("type_pause", paused=on, left=self.typing["total"] if self.typing else 0)
+        if c == "type_stop":
+            left = self.typing["total"] if self.typing else 0
+            self.typing = None
+            return OK("type_stop", dropped=left)
         if c == "press":
             k = b.get("keys", "")
             return OK("pressed", keys=k) if k else E("No keys specified")

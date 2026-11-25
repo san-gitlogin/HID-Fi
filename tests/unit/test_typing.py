@@ -47,8 +47,9 @@ def build_bench(type_src=None, tag="typing_bench"):
     (gen / "gen_core.inc").write_text(core, encoding="utf-8")
     (gen / "gen_layout.inc").write_text(lay, encoding="utf-8")
     (gen / "gen_type.inc").write_text(type_src or firmware.section(firmware.TYPE_BEGIN, firmware.TYPE_END), encoding="utf-8")
-    exe = firmware.build_host(tag, BENCH_CPP, include_dirs=[gen],
-                              extra_inputs=[gen / "gen_core.inc", gen / "gen_layout.inc", gen / "gen_type.inc"])
+    exe = firmware.build_host(tag, BENCH_CPP, include_dirs=[gen, paths.TESTS.parent / "hid_fi"],
+                              extra_inputs=[gen / "gen_core.inc", gen / "gen_layout.inc", gen / "gen_type.inc",
+                                            paths.TESTS.parent / "hid_fi" / "typer.h"])
     return exe, ver
 
 

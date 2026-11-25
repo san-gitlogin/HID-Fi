@@ -567,3 +567,29 @@ rations all others to 10 real joins in any 10 minutes, pausing instead of pressi
 **Guarded by:**
 - `tests/conftest.py::_the_router_is_spared` (every rehearsal test: zero real joins or drops)
 - `tests/unit/test_e2e_unattended.py::test_rehearsals_touch_no_radio`
+
+## D-18 · 2026-11-25 · Text types at a chosen pace, from the loop, in order
+
+**Asked:** a viewer of the demo video: "the typing speed is much fast, can't we control
+it somehow". The owner: under the keyboard, in an advanced section of its own (like the
+trackpad's), out of the way of anyone who just types; modular; tested very carefully.
+
+**Decision:** `type` answers at once and the text types from loop() through typer.h, one
+character at a time: the very same keys and waits as before (the typing section records a
+character's actions instead of sending them - its real-core golden recordings are
+unchanged), plus the pace's gap. Pace 0 is the board's own (the default, exactly the old
+timing); 1-60 characters a second otherwise, never faster than a character's own keys; an
+optional rhythm varies each gap by up to 30%. Pause and stop act between characters only;
+stop lifts exactly the keys typing had down. A `press` while text types joins the stream
+after it - type, press, type keep their order now that nothing waits. A newline types as
+the Enter button always did (100 ms after, held 50). Shortcuts, macros and the vault keep
+full speed. Dashboard: keyboard view, "Typing speed", closed by default; Pause and Stop
+appear only while a paced text types.
+
+**Guarded by:**
+- `tests/unit/test_typer.py::test_the_boards_own_pace_is_exactly_the_old_one`
+- `tests/unit/test_typer.py::test_every_planted_bug_is_caught`
+- `tests/unit/test_typing.py::test_bench_catches_planted_bugs`
+- `tests/e2e/test_typing_pace.py::test_a_pace_of_ten_puts_characters_a_tenth_of_a_second_apart`
+- `tests/e2e/test_typing_pace.py::test_a_shortcut_sent_while_typing_goes_after_the_text`
+- `tests/e2e/test_typing_pace.py::test_stop_leaves_a_prefix_and_no_key_held`

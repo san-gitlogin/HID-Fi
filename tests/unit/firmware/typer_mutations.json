@@ -1,0 +1,23 @@
+{
+  "_about": "Deliberate bugs in hid_fi/typer.h. tests/unit/test_typer.py::test_every_planted_bug_is_caught applies each and requires the bench's answers to change. Each 'find' must match the current source exactly once.",
+  "mutations": [
+    {"name": "waits inside a character are skipped", "find": "if (o.k == WAIT) { t.nextAt = now + o.v; t.hold = true; return IDLE; }", "replace": "if (o.k == WAIT) continue;"},
+    {"name": "the gap ignores the time the keys took", "find": "return period > spent ? period - spent : 0;", "replace": "return period;"},
+    {"name": "a character can be shorter than its keys", "find": "return period > spent ? period - spent : 0;", "replace": "return period > 20 ? period - 20 : 0;"},
+    {"name": "the rhythm is not applied", "find": "period = period * (100u - RHYTHM_PCT + r) / 100u;", "replace": ""},
+    {"name": "the rhythm goes beyond 30%", "find": "const uint32_t r = (t.seed >> 16) % (2u * RHYTHM_PCT + 1u);", "replace": "const uint32_t r = (t.seed >> 16) % (4u * RHYTHM_PCT + 1u);"},
+    {"name": "pause stops mid character", "find": "        t.hold = false;\n    }\n    if (t.planned) {", "replace": "        t.hold = false;\n    }\n    if (t.paused && t.planned && t.at > 0) return IDLE;\n    if (t.planned) {"},
+    {"name": "pause is ignored", "find": "return t.paused ? IDLE : NEED_PLAN;", "replace": "return NEED_PLAN;"},
+    {"name": "stop leaves the plan running", "find": "    t.planned = false;\n    t.n = t.at = 0;\n    t.paused = false;", "replace": "    t.paused = false;"},
+    {"name": "Enter is lost", "find": "if (enter) t.text[t.len++] = '\\n';", "replace": ""},
+    {"name": "too much text is cut, not refused", "find": "if ((uint32_t)t.len + need > TEXT) return false;", "replace": "if ((uint32_t)t.len + need > TEXT) { n = (uint16_t)(TEXT - t.len); enter = false; }"},
+    {"name": "typed text never makes room", "find": "if (t.pos > 0 && (uint32_t)t.len + need > TEXT) {", "replace": "if (false) {"},
+    {"name": "the clock wrap sticks", "find": "if ((int32_t)(now - t.nextAt) < 0) return IDLE;", "replace": "if (now < t.nextAt) return IDLE;"},
+    {"name": "time 0 counts as a wait", "find": "    if (t.hold) {\n        if ((int32_t)(now - t.nextAt) < 0) return IDLE;\n        t.hold = false;\n    }", "replace": "    if ((int32_t)(now - t.nextAt) < 0) return IDLE;"},
+    {"name": "a boundary costs a tick", "find": "        if (gap) { t.nextAt = now + gap; t.hold = true; return IDLE; }", "replace": "        t.nextAt = now + gap; t.hold = true; return IDLE;"},
+    {"name": "done is reported twice", "find": "if (!t.done) { t.done = true; return DONE; }", "replace": "if (true) { return DONE; }"},
+    {"name": "a pause left on holds back the next text", "find": "t.typed = t.total = 0; t.paused = false; }", "replace": "t.typed = t.total = 0; }"},
+    {"name": "the marker byte comes through from text", "find": "if (!drop || s[i] != drop) t.text[t.len++] = s[i];", "replace": "t.text[t.len++] = s[i];"},
+    {"name": "a new pace is ignored", "find": "t.cps = cps > CPS_MAX ? CPS_MAX : cps;", "replace": ""}
+  ]
+}

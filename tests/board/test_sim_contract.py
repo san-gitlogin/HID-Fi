@@ -35,6 +35,8 @@ READ_ONLY = [
     {"cmd": "pointer_mode", "mode": "bogus"}, {"cmd": "unlock"}, {"cmd": "key_down", "key": "NOPE!"},
     {"cmd": "set_unicode", "os": "windows", "on": True}, {"cmd": "unicode_test", "os": "beos"},
     {"cmd": "type", "text": ""}, {"cmd": "set_auth", "token": "12"},
+    {"cmd": "type_settings", "cps": 99}, {"cmd": "type_settings", "cps": True}, {"cmd": "type_settings", "cps": -1},
+    {"cmd": "type_pause", "on": True}, {"cmd": "type_pause", "on": False}, {"cmd": "type_stop"},
     {"cmd": "pc_save", "name": "", "password": ""}, {"cmd": "vault_save", "label": "", "secret": ""},
     {"cmd": "macro_save", "slot": 32, "steps": ["text x"]}, {"cmd": "macro_save", "slot": 0, "steps": []},
     {"cmd": "system", "action": "bogus"},
@@ -116,11 +118,14 @@ def test_stateful_round_trips_reply_like_the_board(board, model):
         {"cmd": "set_verbose", "on": not st.get("verbose", False)},
         {"cmd": "set_verbose", "on": st.get("verbose", False)},
         {"cmd": "set_host_os", "os": st["host_os"] if st.get("host_os_source") == "manual" else "auto"},
+        {"cmd": "type_settings", "cps": 7, "rhythm": True}, {"cmd": "type_settings"},
+        {"cmd": "type_settings", "cps": st.get("type_cps", 0), "rhythm": st.get("type_rhythm", False)},
     ]
     model.pc_state = st.get("pc_state", "unknown")
     model.unicode["mac"] = st["unicode_mac"]
     model.power_mode = st["power_mode"]
     model.verbose = st.get("verbose", False)
+    model.type_cps, model.type_rhythm = st.get("type_cps", 0), st.get("type_rhythm", False)
     diffs = []
     for c in seq:
         real = board.cmd(c, timeout=6)

@@ -14,9 +14,39 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "1400|v-keys|btnTypePause||Pause": [
+  [
+   "J{\"cmd\":\"type_pause\",\"on\":true}"
+  ]
+ ],
+ "1400|v-keys|btnTypeStop||Stop": [
+  [
+   "J{\"cmd\":\"type_stop\"}"
+  ]
+ ],
  "1400|v-keys|macroAdd||Add": [
   [
    "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "1400|v-keys||cps=0|Fastest": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":0,\"rhythm\":false}"
+  ]
+ ],
+ "1400|v-keys||cps=12|Natural": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":12,\"rhythm\":false}"
+  ]
+ ],
+ "1400|v-keys||cps=30|Quick": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":30,\"rhythm\":false}"
+  ]
+ ],
+ "1400|v-keys||cps=5|Slow": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":5,\"rhythm\":false}"
   ]
  ],
  "1400|v-keys||k=#ALT|⌥": [
@@ -1847,9 +1877,39 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "390|v-keys|btnTypePause||Pause": [
+  [
+   "J{\"cmd\":\"type_pause\",\"on\":true}"
+  ]
+ ],
+ "390|v-keys|btnTypeStop||Stop": [
+  [
+   "J{\"cmd\":\"type_stop\"}"
+  ]
+ ],
  "390|v-keys|macroAdd||Add": [
   [
    "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "390|v-keys||cps=0|Fastest": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":0,\"rhythm\":false}"
+  ]
+ ],
+ "390|v-keys||cps=12|Natural": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":12,\"rhythm\":false}"
+  ]
+ ],
+ "390|v-keys||cps=30|Quick": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":30,\"rhythm\":false}"
+  ]
+ ],
+ "390|v-keys||cps=5|Slow": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":5,\"rhythm\":false}"
   ]
  ],
  "390|v-keys||k=#ALT|⌥": [
@@ -3680,9 +3740,39 @@
    "J{\"cmd\":\"press\",\"keys\":\"ENTER\"}"
   ]
  ],
+ "820|v-keys|btnTypePause||Pause": [
+  [
+   "J{\"cmd\":\"type_pause\",\"on\":true}"
+  ]
+ ],
+ "820|v-keys|btnTypeStop||Stop": [
+  [
+   "J{\"cmd\":\"type_stop\"}"
+  ]
+ ],
  "820|v-keys|macroAdd||Add": [
   [
    "J{\"cmd\":\"macro_get\",\"slot\":0}"
+  ]
+ ],
+ "820|v-keys||cps=0|Fastest": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":0,\"rhythm\":false}"
+  ]
+ ],
+ "820|v-keys||cps=12|Natural": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":12,\"rhythm\":false}"
+  ]
+ ],
+ "820|v-keys||cps=30|Quick": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":30,\"rhythm\":false}"
+  ]
+ ],
+ "820|v-keys||cps=5|Slow": [
+  [
+   "J{\"cmd\":\"type_settings\",\"cps\":5,\"rhythm\":false}"
   ]
  ],
  "820|v-keys||k=#ALT|⌥": [
