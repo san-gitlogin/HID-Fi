@@ -201,6 +201,13 @@ The rules every tier follows:
   or disconnects (status `radio_joins`, `radio_drops`) - a restart's one boot join
   aside - or it fails; all other real joins are rationed to 10 in any 10 minutes (the
   run pauses). Moves between real routers run only with `HIDFI_REAL_MOVES=1`.
+- **Do the rehearsals tell the truth?** `tests/board/test_real_router.py`, opt-in with
+  `HIDFI_REAL_ROUTER=1`: a rehearsed drop and a real one must end the same way, and a
+  restart must join the router once - three real actions at most, three minutes apart,
+  so a router never takes it for an attack. Run it on each new router or firmware.
+- **Timed typing tests never poll the board meanwhile.** A status over the serial cable
+  (~2 KB at 115200 baud) holds the board's loop for 100+ ms and shows up as late
+  characters; `tests/e2e/test_typing_pace.py` waits out the text's own duration instead.
 - **Focus guard.** End-to-end input goes only into the test page, and every
   command is preceded by a check that the page still has focus - and, on a Mac,
   that macOS shows the test browser (by process id) as the frontmost app. If a
