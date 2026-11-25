@@ -146,3 +146,14 @@ def test_rehearsals_touch_no_radio():
     assert "ROUTER_JOINS_PER_10_MIN = 10" in conf
     reh = (paths.TESTS / "board" / "test_networks_rehearsed.py").read_text(encoding="utf-8")
     assert "pytest.mark.rehearsal" in reh
+
+
+def test_every_module_that_moves_the_board_is_a_rehearsal():
+    """D-17: a module that stages network moves carries the rehearsal marker, so the
+    harness proves it never touched the router; real moves are opt-in."""
+    for f in ["board/test_networks_rehearsed.py", "board/test_home_network.py", "board/test_reach_by_name_live.py"]:
+        assert "pytest.mark.rehearsal" in (paths.TESTS / f).read_text(encoding="utf-8"), f
+    w = (paths.TESTS / "board" / "test_where_the_computer_is_hw.py").read_text(encoding="utf-8")
+    assert w.count("@pytest.mark.rehearsal") == 3 and 'os.environ.get("HIDFI_REAL_MOVES")' in w
+    two = (paths.TESTS.parent / "companion" / "tests" / "two_networks.py").read_text(encoding="utf-8")
+    assert 'os.environ.get("HIDFI_REAL_MOVES")' in two

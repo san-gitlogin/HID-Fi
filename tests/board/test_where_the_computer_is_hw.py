@@ -73,6 +73,7 @@ def paired(board):
         _wait(board, lambda s: s.get("wifi_ssid") == start_pref and s.get("wifi_connected"), f"back on {start_pref}")
 
 
+@pytest.mark.rehearsal
 def test_together_the_heartbeat_names_the_one_network(paired):
     app, st = paired
     r = app.beat(via=app.ip)
@@ -81,6 +82,7 @@ def test_together_the_heartbeat_names_the_one_network(paired):
     assert any(sn.startswith(st["wifi_ip"].rsplit(".", 1)[0]) for sn in r["net"]["subnets"]), r
 
 
+@pytest.mark.rehearsal
 def test_a_network_the_board_never_joined_is_unknown(paired):
     app, _ = paired
     r = app.beat(via="10.99.0.5")
@@ -90,6 +92,12 @@ def test_a_network_the_board_never_joined_is_unknown(paired):
 
 
 def test_on_two_networks_the_board_is_named_and_brought_back(board, paired):
+    # Real moves between real networks - the one test that has to join the owner's other
+    # router for real (D-14 is about real routing). Never automatic (D-17): with
+    # HIDFI_REAL_MOVES=1, when the owner says so, ideally at home with both routers.
+    import os
+    if not os.environ.get("HIDFI_REAL_MOVES"):
+        pytest.skip("real moves between the owner's routers are opt-in (HIDFI_REAL_MOVES=1, D-17)")
     app, st = paired
     home = st["wifi_ssid"]
     nets = board.cmd({"cmd": "wifi_networks"}, "wifi_networks").get("networks", [])
@@ -138,6 +146,7 @@ def test_on_two_networks_the_board_is_named_and_brought_back(board, paired):
     assert (n["board"], n["here"], n["computer"]) == (home, True, home), n
 
 
+@pytest.mark.rehearsal
 def test_a_newer_choice_cancels_a_move_still_waiting(board):
     """"Move now" answers first and moves 3 s later (D-14). Asked within those 3 s for
     the network it is already on, the board stays: the earlier move must not still run
@@ -149,6 +158,9 @@ def test_a_newer_choice_cancels_a_move_still_waiting(board):
     others = [n["ssid"] for n in nets if n["ssid"] != home and n.get("proven")]
     if not others:
         pytest.skip("only one proven saved network: nothing to change its mind about")
+    # D-17: inside a rehearsal - were the cancel broken, the move it failed to stop would
+    # happen in the board's logic only (and this test would still see it), never the radio.
+    board.cmd({"cmd": "net_sim", "owners": ""}, "net_sim")
     try:
         # A saved network on the same subnet counts as this one (D-02: a router and its
         # extender) - two homes both on 192.168.0.x do (Bangalore, 2026-11-25): asking for
@@ -170,5 +182,6 @@ def test_a_newer_choice_cancels_a_move_still_waiting(board):
                 f"the cancelled move still ran: { {k: s.get(k) for k in ('wifi_ssid', 'wifi_connected', 'sta_phase')} }"
             time.sleep(0.5)
     finally:
+        board.cmd({"cmd": "net_sim", "off": True}, "net_sim")
         if start_pref != home:
             board.cmd({"cmd": "wifi_prefer", "ssid": start_pref, "force": True}, "wifi_prefer")

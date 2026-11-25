@@ -26,7 +26,7 @@ import pytest
 
 from support.board import ws_connect
 
-pytestmark = pytest.mark.board
+pytestmark = [pytest.mark.board, pytest.mark.rehearsal]   # D-17: zero real joins of the router, checked
 
 
 def _online(board):
@@ -261,6 +261,9 @@ def test_a_new_network_out_of_range_falls_back_to_one_that_works(board, home, re
         # Refusing protects the owner's networks: adding two would push one of theirs
         # out. A refusal is a skip, never a failure (docs/TESTING.md, "What the tests do").
         pytest.skip(f"the board already has {len(before)} saved networks - two more would push the owner's out")
+    # D-17: inside a rehearsal, so the join of a network that is not there happens in the
+    # board's logic only - the radio never leaves the owner's router to look for it.
+    board.cmd({"cmd": "net_sim", "owners": ""}, "net_sim")
     try:
         r = board.cmd({"cmd": "wifi_configure", "ssid": FAKE, "password": "not-a-real-network-1"})
         assert r.get("reply") == "wifi_connecting", r
@@ -275,6 +278,7 @@ def test_a_new_network_out_of_range_falls_back_to_one_that_works(board, home, re
         _reachable(request, st["wifi_ip"])
     finally:
         board.cmd({"cmd": "wifi_forget", "ssid": FAKE})
+        board.cmd({"cmd": "net_sim", "off": True}, "net_sim")
     assert [n["ssid"] for n in _saved(board)] == before, "the saved list was not put back"
 
 

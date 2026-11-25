@@ -23,7 +23,7 @@ import time
 
 import pytest
 
-pytestmark = pytest.mark.board
+pytestmark = [pytest.mark.board, pytest.mark.rehearsal]   # D-17: zero real joins of the router, checked
 
 SIM = "HIDFI-SIM-B"
 

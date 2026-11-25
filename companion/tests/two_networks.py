@@ -36,6 +36,9 @@ import serial.tools.list_ports
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 HW_APP = os.environ.get("HW_APP") or str(ROOT / "target/release/examples/hw_app")
 MAC = os.environ.get("HIDFI_ONLY_BOARD", "").replace(":", "").upper() or sys.exit("set HIDFI_ONLY_BOARD to the board's MAC")
+# It moves the board between the owner's real routers: never automatic (DECISIONS.md D-17).
+if not os.environ.get("HIDFI_REAL_MOVES"):
+    sys.exit("SKIP real moves between the owner's routers are opt-in: HIDFI_REAL_MOVES=1 (D-17)")
 ok = True
 
 

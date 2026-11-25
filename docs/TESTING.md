@@ -195,6 +195,12 @@ The rules every tier follows:
 
 - **Opt in.** Nothing touches the hardware without `--board`, and nothing sends
   input to your computer without `--e2e`.
+- **The home router is never stressed (D-17).** Network moves are rehearsed on the
+  board (`net_sim`, `net_fault`): it moves in its logic while the radio stays on the
+  real network. Every rehearsal test (marker `rehearsal`) must cause zero real joins
+  or disconnects (status `radio_joins`, `radio_drops`) - a restart's one boot join
+  aside - or it fails; all other real joins are rationed to 10 in any 10 minutes (the
+  run pauses). Moves between real routers run only with `HIDFI_REAL_MOVES=1`.
 - **Focus guard.** End-to-end input goes only into the test page, and every
   command is preceded by a check that the page still has focus - and, on a Mac,
   that macOS shows the test browser (by process id) as the frontmost app. If a
