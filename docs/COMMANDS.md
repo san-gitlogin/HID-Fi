@@ -628,6 +628,8 @@ and D-10 run on the real board with no second router and nobody walking about.
 it. A made-up network is joined over the real network the board was on when
 the rehearsal began (the `carrier`), and counts as a network of its own (its own
 subnet) unless `same_net` says it is the same network, like an extender.
+`net_fault` `drop` is rehearsed the same way; with `"radio": true` it is a real disconnect
+(counted in `radio_drops`) - only for `tests/board/test_real_router.py`, opt-in and spaced.
 `other_router` puts it on the carrier's subnet behind another router - two homes on
 one default subnet, which are two networks (DECISIONS.md D-16). Memory
 only: a restart ends it, except the one it asks for itself.

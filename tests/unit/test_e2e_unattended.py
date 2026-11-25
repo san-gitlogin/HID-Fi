@@ -139,6 +139,8 @@ def test_rehearsals_touch_no_radio():
     rehearsed join; the radio is disconnected only on the real paths."""
     ino = (paths.TESTS.parent / "hid_fi" / "hid_fi.ino").read_text(encoding="utf-8")
     assert ino.count("WiFi.disconnect(false)") == 4, "a new direct disconnect: route it through staDrop()"
+    fault = ino[ino.index('if (!strcmp(kind, "drop")) {'):][:600]
+    assert 'radioOnline() && !(inDoc["radio"] | false)' in fault and "staRadioDrops++; WiFi.disconnect(false);" in fault
     begin = ino[ino.index("void staBeginJoin("):]
     assert begin.index("if (staRehearsing() && radioOnline()) {") < begin.index("staRadioJoins++") < begin.index("WiFi.begin(")
     conf = (paths.TESTS / "conftest.py").read_text(encoding="utf-8")

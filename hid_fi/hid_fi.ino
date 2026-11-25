@@ -2848,8 +2848,10 @@ void handleNetFault(const JsonDocument& inDoc) {
     const char* kind = inDoc["kind"] | "";
     uint32_t secs = constrain((uint32_t)(inDoc["s"] | 30), 5u, 600u);
     if (!strcmp(kind, "drop")) {
-        if (radioOnline()) { staSimDown = true; staSimUpAt = 0; }   // D-17: the router's "let go", rehearsed
-        else WiFi.disconnect(false);
+        // D-17: the router's "let go", rehearsed - unless radio:true asks for the real thing
+        // (tests/board/test_real_router.py, opt-in, spaced): one real disconnect, counted.
+        if (radioOnline() && !(inDoc["radio"] | false)) { staSimDown = true; staSimUpAt = 0; }
+        else { staRadioDrops++; WiFi.disconnect(false); }
     } else if (!strcmp(kind, "vanish")) {
         if (inDoc["at_boot"] | false) {
             rtcFaultMagic = NET_FAULT_MAGIC; rtcFaultSecs = secs;
