@@ -6232,8 +6232,12 @@ function joinPaint(r){
     const how={static:'Fixed address, exactly as asked.',
                dhcp_fallback:'The fixed address did not work, so this one came from the router.',
                dhcp:'Address assigned by the router.'}[r.sta_ip_mode]||'';
+    // A laptop that joined the board's WiFi to set this up keeps it as a known network, and
+    // can move onto it by itself later - a Mac did, mid-session (2026-11-24): no internet.
     $('joinMsg').textContent=(r.sta_error?r.sta_error+' ':'')+how+
-      ' The board is still running its own access point as well, so both ways in work.';
+      ' The board is still running its own access point as well, so both ways in work.'+
+      ' Set this up from a laptop? In its WiFi settings, turn off Auto-Join (Windows: Connect automatically) for '+
+      (AP_SSID||'the board\'s WiFi')+', so it never moves onto it by itself.';
     toast('Connected as '+r.sta_ip,'ok');
     refresh();loadSavedNets();
   }else if(p==='failed'){

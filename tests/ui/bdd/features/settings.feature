@@ -126,6 +126,7 @@ Feature: The Settings tab
     And "#joinTitle" contains "Joining HomeNet"
     And I see the message "Connected as 192.168.1.77"
     And "#joinMsg" contains "Address assigned by the router"
+    And "#joinMsg" contains "turn off Auto-Join"
 
   Scenario: Entering the new password of a network whose password changed clears it
     Given the router for "HomeNet" no longer takes its saved password
