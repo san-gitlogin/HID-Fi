@@ -5314,7 +5314,9 @@ function otaOutcome(){
       OTA.note='The update to '+otaVer(r.to)+' was not kept: '+(OTA_WHY[r.why]||r.why||'it failed')+'. HID-Fi went back to '+otaVer(r.firmware)+' by itself.';
       paintOta({});
     }
-    if(seen===key)return;
+    // Announced once, and only when it is news: the board says "fresh" in the session
+    // the update ended. A phone opening the dashboard days later is not told again.
+    if(seen===key||r.fresh===false)return;
     try{localStorage.setItem('otaSeen',key);}catch(e){}
     if(r.ota_result==='updated')toast('Updated to '+otaVer(r.to),'ok');
     else toast('The update was not kept - HID-Fi went back to '+otaVer(r.firmware),'bad');

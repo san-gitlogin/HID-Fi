@@ -7,7 +7,10 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
-## Unreleased
+## v4.5.1 - 2026-11-26
+
+A fix release: please take it.
+
 
 - **Screen tab: "Tap for sound" no longer covers the toolbar, and tapping it never
   freezes the picture** (owner, board 09F7C8, 2026-11-26). The button is a pill over the
@@ -18,6 +21,17 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
   picture that a browser pauses (a refused sound, a call) is played on, muted if it must
   be. Five new scenarios, in Chromium and with an iPhone's behaviour simulated.
   `HIDFI_UI_BROWSER=webkit` runs the ui tier's browser fixture in WebKit.
+- **No more confusing update notices** (owner, 2026-11-26). A board running 4.5 could
+  say "the update to 4.5 was not kept - went back to 4.5" (an old rollback record, with
+  4.5 installed again later by cable or another update): such a record is now no news.
+  And a phone opening the dashboard days after an update was told "Updated to 4.5" as if
+  it had just happened: the board now marks an outcome `fresh` only in the session the
+  update ended, and the dashboard announces only that. Rule tests (two new cases and a
+  planted bug), a scenario, and the test helpers now remember every notice the page
+  showed, so "shown once" and "never shown" can no longer pass because a notice faded.
+- **Companion:** `tests/latency_view.py` measures the Screen tab's capture-to-present
+  latency in real Chrome (from Wi-Live); 1080p p50 26 ms, p99 43 ms. Wi-Live's playout
+  delay 0/0 was tried and measured worse here (p50 38 ms), so it is not taken.
 
 ## v4.5 - 2026-11-25
 

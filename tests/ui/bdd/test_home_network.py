@@ -59,7 +59,7 @@ def not_contains(ctx, el_id, text):
 @then(parsers.parse('I never see the message "{text}"'))
 def never_toast(ctx, text):
     ctx["ui"].idle(400)                    # toasts last 2.3 s: anything this event raised is still up
-    assert not any(text in t for t in ctx["ui"].toasts()), ctx["ui"].toasts()
+    assert not any(text in t for t in ctx["ui"].toasts_ever()), ctx["ui"].toasts_ever()
 
 
 @then(parsers.parse('"#{el_id}" links to "{href}"'))

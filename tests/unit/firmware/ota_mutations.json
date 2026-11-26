@@ -245,6 +245,11 @@
       "name": "the name asked again after a TLS error",
       "find": "inline bool otaAskNameAgain(OtaFailStage s) { return",
       "replace": "inline bool otaAskNameAgain(OtaFailStage s) { return s == OTA_FAIL_TLS ||"
+    },
+    {
+      "name": "an old rollback of the version now running is still reported",
+      "find": "        if (r.ok && t.ok && otaCompare(r, t) == 0) return OTA_OUT_NONE;\n        return OTA_OUT_ROLLED_BACK;",
+      "replace": "        return OTA_OUT_ROLLED_BACK;"
     }
   ]
 }

@@ -17,7 +17,23 @@ pub struct Pattern {
     t: u32,
     moving: bool,
     busy: bool,
+    clock: bool,
     drawn: bool,
+}
+
+/// The time strip the latency test reads back (companion/tests/latency_view.py, from
+/// Wi-Live's tests/latency): two rows of [`CLOCK_BITS`] blocks of [`CLOCK_BLOCK`] px -
+/// the wall clock in ms (low 32 bits) when the frame goes to the encoder, and below it
+/// its bitwise inverse, so a block misread under compression is rejected, never counted.
+pub const CLOCK_BITS: u32 = 32;
+pub const CLOCK_BLOCK: u32 = 16;
+
+/// Unix time in ms, low 32 bits: what the strip carries and the viewer compares with.
+pub fn wall_ms() -> u32 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u32)
+        .unwrap_or(0)
 }
 
 impl Pattern {
@@ -29,6 +45,7 @@ impl Pattern {
             t: 0,
             moving: true,
             busy: false,
+            clock: false,
             drawn: false,
         }
     }
@@ -39,6 +56,36 @@ impl Pattern {
     pub fn busy(mut self) -> Self {
         self.busy = true;
         self
+    }
+    /// Draws the time strip into every frame (top left): tests only.
+    pub fn clock(mut self) -> Self {
+        self.clock = true;
+        self
+    }
+    fn draw_clock(&mut self, ms: u32) {
+        let b = CLOCK_BLOCK;
+        let cells = CLOCK_BITS + 2;
+        if self.w < cells * b || self.h < 2 * b {
+            return;
+        }
+        for row in 0..2u32 {
+            let v = if row == 0 { ms } else { !ms };
+            for c in 0..cells {
+                let on = match c {
+                    0 => true,
+                    c if c == cells - 1 => false,
+                    c => (v >> (CLOCK_BITS - c)) & 1 == 1,
+                };
+                let px = if on { 255 } else { 0 };
+                for y in row * b..(row + 1) * b {
+                    let line = (y * self.w) as usize * 4;
+                    for x in c * b..(c + 1) * b {
+                        let i = line + x as usize * 4;
+                        self.buf[i..i + 4].copy_from_slice(&[px, px, px, 255]);
+                    }
+                }
+            }
+        }
     }
     /// Text-like: 6x10 glyph cells of hashed dots, light on dark, scrolling.
     fn draw_busy(&mut self) {
@@ -102,6 +149,9 @@ impl Source for Pattern {
             self.draw();
             self.drawn = true;
         }
+        if self.clock && (changed || force) {
+            self.draw_clock(wall_ms());
+        }
         if changed || force {
             f(&Frame {
                 width: self.w,
@@ -159,6 +209,15 @@ impl FakeDisplays {
     }
     /// A moving pattern at the display's size; `busy` for scrolling text.
     pub fn source(&self, display: Option<u32>, busy: bool) -> Result<Box<dyn Source>, String> {
+        self.source_with(display, busy, false)
+    }
+    /// As [`Self::source`], with the latency test's time strip when `clock`.
+    pub fn source_with(
+        &self,
+        display: Option<u32>,
+        busy: bool,
+        clock: bool,
+    ) -> Result<Box<dyn Source>, String> {
         let l = self.list();
         let d = match display {
             None => l.iter().find(|d| d.main),
@@ -166,6 +225,7 @@ impl FakeDisplays {
         }
         .ok_or("no such display")?;
         let p = Pattern::new(d.width, d.height);
-        Ok(Box::new(if busy { p.busy() } else { p }))
+        let p = if busy { p.busy() } else { p };
+        Ok(Box::new(if clock { p.clock() } else { p }))
     }
 }

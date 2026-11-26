@@ -29,6 +29,8 @@ struct OtaRuntime {
     String slot = "?";             // app0 / app1
     bool pending = false;          // running a new firmware that has not proved itself
     bool abortedOther = false;     // the bootloader rejected the other slot at some point
+    bool fresh = false;            // the outcome happened in this session (the restart that ended an
+                                   // update, or the self-test passing now): news to announce once
     OtaOutcome outcome = OTA_OUT_NONE;
     String from, to, why;          // the record, as read at start
     String recSlot;                // the slot the recorded update went into
@@ -83,6 +85,9 @@ void otaBoot() {
     OtaRecord rec = {step.c_str(), ota.to.c_str(), ota.recSlot.c_str()};
     ota.outcome = otaOutcome(rec, FW_VERSION, ota.slot.c_str(), ota.pending, ota.abortedOther);
 
+    // An update that was on its way ended with this restart (kept or rolled back): news
+    // now. A later restart is not news again - another phone would announce an old update.
+    ota.fresh = otaStepOpen(step.c_str()) && !ota.pending;
     if (ota.pending && !otaStepOpen(step.c_str())) {
         // Installed without a record (over the cable): note it, so a crash before
         // the self-test is reported as this version not starting.
@@ -135,6 +140,7 @@ void otaTick() {
         }
         ota.pending = false;
         ota.outcome = OTA_OUT_UPDATED;
+        ota.fresh = true;
         ota.why = "";
         otaRecord("valid", FW_VERSION, "", ota.slot);
         COM_SERIAL.printf("[OTA] self-test passed - %s is kept\n", FW_VERSION + 7);
@@ -877,6 +883,7 @@ void handleOtaStatus() {
         s["needs_network"] = ota.needNetwork;
     }
     doc["restart_deferred"] = ota.restartDeferred;
+    doc["fresh"] = ota.fresh;
     otaJobFields(doc);
     if (otaMux) {
         xSemaphoreTake(otaMux, portMAX_DELAY);

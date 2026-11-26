@@ -832,7 +832,11 @@ station side — the one your router's DHCP table and any MAC filter will show.
 `{"cmd":"ota_status"}` adds the details: `firmware`, `to` and `from` (the versions
 of the last update, empty when none is recorded), `why` (for `rolled_back`:
 `did_not_start` - a reset before the self-test ended -, `network`, `usb_hid` or
-`test_build`), `restart_deferred` (a restart is waiting for the self-test),
+`test_build`), `fresh` (true only in the session the update ended - the restart that
+kept or rolled it back, or the self-test passing now: the dashboard announces the outcome
+only then, so a phone opening it days later is not told an old update as news; a
+`rolled_back` record whose version runs again is reported as `none`), `restart_deferred`
+(a restart is waiting for the self-test),
 `stack_free` (the update task's least free stack so far, in bytes: TLS, the HTTP
 client and the failure note all run on it), and
 while `pending_verify` a `selftest` object: `waiting_for` (`running`, `network`,

@@ -143,6 +143,13 @@ Feature: Updates - the board tells you about a new version and installs it only 
     And I open the "Settings" tab
     Then the message "Updated to v4.1.0" was shown once
 
+  Scenario: An update from long ago is not announced as news
+    # Owner, 2026-11-26: a board on 4.5 said "Updated to 4.5" to another phone days later.
+    Given the board was updated from "hid_fi_v4.0.4" to "hid_fi_v4.1.0" several restarts ago
+    And the dashboard is open
+    When I open the "Settings" tab
+    Then the message "Updated to v4.1.0" was never shown
+
   Scenario: An update that did not start properly - the board went back and says why
     Given the update to "hid_fi_v4.1.0" was not kept because "did_not_start"
     And the dashboard is open

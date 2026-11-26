@@ -121,7 +121,14 @@ inline OtaOutcome otaOutcome(const OtaRecord& rec, const char* running, const ch
         if (r.ok && t.ok && otaCompare(r, t) == 0) return OTA_OUT_UPDATED;
         return OTA_OUT_ROLLED_BACK;   // the record says an update was on its way, and it is not running
     }
-    if (rec.step && !strcmp(rec.step, "rolled_back")) return OTA_OUT_ROLLED_BACK;
+    if (rec.step && !strcmp(rec.step, "rolled_back")) {
+        // The version that was not kept is the one running now (installed again later,
+        // by cable or by another update): the old rollback is no news. Seen 2026-11-26:
+        // a board on 4.5 said "the update to 4.5 was not kept, went back to 4.5".
+        OtaVersion r = otaParseVersion(running), t = otaParseVersion(rec.to);
+        if (r.ok && t.ok && otaCompare(r, t) == 0) return OTA_OUT_NONE;
+        return OTA_OUT_ROLLED_BACK;
+    }
     if (rec.step && !strcmp(rec.step, "valid")) return OTA_OUT_UPDATED;
     if (aborted_other) return OTA_OUT_ROLLED_BACK;
     return OTA_OUT_NONE;

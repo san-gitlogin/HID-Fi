@@ -120,6 +120,10 @@ OUTCOMES = [
     ("pending hid_fi_v4.1.0 - hid_fi_v4.0.4 app0 0 0", "rolled_back"),
     ("pending garbage - hid_fi_v4.0.4 app0 0 0", "rolled_back"),           # unreadable target: never "updated"
     ("rolled_back hid_fi_v4.1.0 app1 hid_fi_v4.0.4 app0 0 0", "rolled_back"),
+    # The version that was not kept runs now (installed again by cable or a later update):
+    # no news - not "4.5 was not kept, went back to 4.5" (seen on a board, 2026-11-26).
+    ("rolled_back hid_fi_v4.5 app1 hid_fi_v4.5 app0 0 0", "none"),
+    ("rolled_back hid_fi_v4.5 app1 hid_fi_v4.5 app0 0 1", "none"),
     ("valid hid_fi_v4.1.0 app1 hid_fi_v4.1.0 app1 0 0", "updated"),
     ("valid hid_fi_v4.1.0 app1 hid_fi_v4.1.0 app1 0 1", "updated"),          # an old failure does not hide a new success
     ("- - - hid_fi_v4.0.4 app0 0 1", "rolled_back"),                # no record, but the other slot was aborted

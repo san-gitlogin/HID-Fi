@@ -90,12 +90,18 @@ def proving(ctx, fw):
 @given(parsers.parse('the board was updated from "{a}" to "{b}"'))
 def updated(ctx, a, b):
     ctx["sim"].firmware = b
-    ctx["sim"].ota.update(result="updated", slot="app1", to=b, **{"from": a})
+    ctx["sim"].ota.update(result="updated", slot="app1", to=b, fresh=True, **{"from": a})
+
+
+@given(parsers.parse('the board was updated from "{a}" to "{b}" several restarts ago'))
+def updated_long_ago(ctx, a, b):
+    ctx["sim"].firmware = b
+    ctx["sim"].ota.update(result="updated", slot="app1", to=b, fresh=False, **{"from": a})
 
 
 @given(parsers.parse('the update to "{fw}" was not kept because "{why}"'))
 def rolled_back(ctx, fw, why):
-    ctx["sim"].ota.update(result="rolled_back", to=fw, why=why)
+    ctx["sim"].ota.update(result="rolled_back", to=fw, why=why, fresh=True)
 
 
 @given("the board has the single-slot layout")
@@ -147,4 +153,11 @@ def shown_once(ctx, text):
     """After a reload the board still reports the outcome; the page must not say it again."""
     ui = ctx["ui"]
     ui.idle(2500)
-    assert not any(text in t for t in ui.toasts()), f"said again after a reload: {ui.toasts()}"
+    assert not any(text in t for t in ui.toasts_ever()), f"said again after a reload: {ui.toasts_ever()}"
+
+
+@then(parsers.parse('the message "{text}" was never shown'))
+def never_shown(ctx, text):
+    ui = ctx["ui"]
+    ui.idle(2500)
+    assert not any(text in t for t in ui.toasts_ever()), f"an old update announced as news: {ui.toasts_ever()}"

@@ -84,6 +84,13 @@ def _script_len():
     return _SCRIPT_LEN
 
 
+TOAST_LOG_JS = """addEventListener('DOMContentLoaded', () => {
+  window.__toastLog = [];
+  const t = document.getElementById('toasts'); if (!t) return;
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) window.__toastLog.push(n.textContent); }))).observe(t, {childList: true});
+});"""
+
+
 class Dashboard:
     def __init__(self, browser, sim, device="phone", html=None, answers=None, init=(), ip=None, clock=False):
         self.browser, self.sim, self.device = browser, sim, device
@@ -102,6 +109,9 @@ class Dashboard:
         if clock:                        # the page's timers can be fast-forwarded (page.clock.run_for)
             self.page.clock.install()
         self.page.add_init_script(RECORD_JS)
+        # Every notice the page shows, kept after it fades: "shown once" and "never
+        # shown" must not pass because the notice was already gone (found 2026-11-26).
+        self.page.add_init_script(TOAST_LOG_JS)
         for js in init:                  # what this browser is, before the page runs
             self.page.add_init_script(js)
         self.html = html or dashboard.extract_html()
@@ -281,6 +291,10 @@ class Dashboard:
 
     def toasts(self):
         return self.page.locator("#toasts .toast").all_inner_texts()
+
+    def toasts_ever(self):
+        """Every notice shown since this page loaded, faded or not."""
+        return self.page.evaluate("() => window.__toastLog || []")
 
     def wait_toast(self, text, timeout=4000):
         self.page.wait_for_function(

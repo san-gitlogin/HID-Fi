@@ -1666,7 +1666,7 @@ class BoardSim:
                                     "security": r.get("security", False), "risk": r.get("risk", ""),
                                     "installable": bool(o["available"]), "changelog": r.get("changelog", [])}
             return OK("ota_status", **self.ota_fields(), firmware=self.firmware, to=o["to"], **{"from": o["from"]},
-                      why=o["why"], restart_deferred=o["restart_deferred"], stack_free=4200, **extra)
+                      why=o["why"], restart_deferred=o["restart_deferred"], fresh=o.get("fresh", False), stack_free=4200, **extra)
         if c in ("led_set", "led_blink", "led_status"):
             return OK({"led_set": "led_set", "led_blink": "led_blink_started", "led_status": "led_status"}[c],
                       on=False, r=0, g=0, b=0)

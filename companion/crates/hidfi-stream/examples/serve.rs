@@ -54,6 +54,8 @@ fn main() {
     let fps: u32 = a.get(3).and_then(|s| s.parse().ok()).unwrap_or(30);
     let still = a.get(4).is_some_and(|s| s == "still");
     let busy = a.get(4).is_some_and(|s| s == "busy");
+    // HIDFI_CLOCK=1: the time strip the latency test reads (tests/latency_view.py).
+    let clock = std::env::var("HIDFI_CLOCK").is_ok_and(|v| v == "1");
     let key = PairKey::from_bytes([7; 32]);
     let nonces = TicketNonces::default();
     let tn = "1c".repeat(16);
@@ -85,7 +87,7 @@ fn main() {
             } else if still {
                 Ok(Box::new(Pattern::new(w, h).still()))
             } else {
-                f2.source(d, busy)
+                f2.source_with(d, busy, clock)
             }
         },
         hidfi_stream::encoder,
