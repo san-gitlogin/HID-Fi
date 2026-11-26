@@ -923,8 +923,8 @@ def other_window_plays(ctx, name):
 
 def _sound(ctx):
     return ctx["ui"].page.evaluate("""() => { const w = SND.main, b = document.querySelector('#scrSnd [data-snd=btn]');
-        return {muted: w.video.muted, pressed: b.getAttribute('aria-pressed'), dim: b.classList.contains('dim'),
-                hidden: document.getElementById('scrSnd').hidden, track: w.track, volume: w.video.volume,
+        return {muted: w.out.muted, pressed: b.getAttribute('aria-pressed'), dim: b.classList.contains('dim'),
+                hidden: document.getElementById('scrSnd').hidden, track: w.track, volume: w.out.volume,
                 slider: document.querySelector('#scrSnd [data-snd=vol]').value,
                 sliderHidden: document.querySelector('#scrSnd [data-snd=vol]').hidden,
                 tap: document.querySelector('#scrSnd [data-snd=tap]').hidden ? '' : document.querySelector('#scrSnd [data-snd=tap]').textContent,
@@ -1011,3 +1011,59 @@ def wall_one_sound(ctx):
 @when("a moment passes")
 def a_moment(ctx):
     ctx["ui"].idle(2500)        # longer than a slow device's play() takes to settle
+
+
+@when(parsers.parse("the phone is {held}"))
+def phone_held(ctx, held):
+    size = {"upright": (390, 844), "on its side": (844, 390), "a small phone, upright": (320, 568)}[held]
+    ui = ctx["ui"]
+    ui.page.set_viewport_size({"width": size[0], "height": size[1]})
+    ui.idle(400)
+
+
+@then('"Tap for sound" sits over the picture, clear of every control')
+def tap_fits(ctx):
+    ui = ctx["ui"]
+    r = ui.page.evaluate("""() => {
+        const pic = document.getElementById('scrStage').getBoundingClientRect();
+        const bar = document.getElementById('scrTools').getBoundingClientRect();
+        const tap = document.querySelector('#scrSnd [data-snd=tap]').getBoundingClientRect();
+        const others = [...document.querySelectorAll('#scrTools button, #scrTools input, #scrBadge button')]
+            .filter(e => e.offsetParent && e.dataset.snd !== 'tap')
+            .map(e => { const b = e.getBoundingClientRect(); return [e.id || e.dataset.snd, b.left, b.top, b.right, b.bottom]; });
+        const hit = others.filter(o => tap.left < o[3] - 1 && o[1] < tap.right - 1 && tap.top < o[4] - 1 && o[2] < tap.bottom - 1).map(o => o[0]);
+        return {onPicture: tap.left >= pic.left - 1 && tap.right <= pic.right + 1 && tap.top >= pic.top - 1 && tap.bottom <= pic.bottom + 1,
+                centred: Math.abs((tap.left + tap.right) / 2 - (bar.left + bar.right) / 2) <= 2,
+                hit, tap: [Math.round(tap.left), Math.round(tap.top), Math.round(tap.width), Math.round(tap.height)],
+                pic: [Math.round(pic.left), Math.round(pic.top), Math.round(pic.width), Math.round(pic.height)],
+                vw: innerWidth, scroll: document.documentElement.scrollWidth};
+    }""")
+    assert r["onPicture"] and r["centred"] and not r["hit"] and r["tap"][2] >= 44 and r["tap"][3] >= 36, json.dumps(r)
+    assert r["scroll"] <= r["vw"] + 1, f"the page scrolls sideways: {r}"
+    import os
+    if os.environ.get("HIDFI_SHOTS"):   # look at it (tests/.out/tap-<width>.png)
+        ui.page.screenshot(path=f"{os.environ['HIDFI_SHOTS']}/tap-{r['vw']}.png")
+
+
+@then("the picture keeps moving")
+def picture_moves(ctx):
+    ui = ctx["ui"]
+    ui.idle(800)
+    r = ui.page.evaluate("""async () => {
+        const v = document.getElementById('scrVideo'); let n = 0;
+        const cb = () => { n++; v.requestVideoFrameCallback(cb); };
+        v.requestVideoFrameCallback(cb);
+        await new Promise(r => setTimeout(r, 2000));
+        return {frames: n, paused: v.paused};
+    }""")
+    assert not r["paused"] and r["frames"] >= 10, f"the picture stopped: {r}"
+
+
+@then("the sound plays through its own audio, and the picture's video was never unmuted or paused")
+def ios_separate(ctx):
+    r = ctx["ui"].page.evaluate("""() => { const w = SND.main;
+        return {separate: w.out !== w.video, outTag: w.out.tagName, outMuted: w.out.muted, outPaused: w.out.paused,
+                videoMuted: w.video.muted, videoPaused: w.video.paused,
+                tracks: w.out.srcObject ? w.out.srcObject.getAudioTracks().length : 0}; }""")
+    assert r == {"separate": True, "outTag": "AUDIO", "outMuted": False, "outPaused": False,
+                 "videoMuted": True, "videoPaused": False, "tracks": 1}, r

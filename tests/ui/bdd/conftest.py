@@ -92,6 +92,12 @@ BROWSERS = {
     "plays at once": "",
     "starts playing slowly": "(()=>{const p=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){"
         "const r=p.call(this);return new Promise((ok,no)=>setTimeout(()=>r.then(ok,no),2000));};})();",
+    # An iPhone's Safari, as the dashboard detects it (docs/AUDIO.md: sound in its own <audio>).
+    "is an iPhone's Safari": "Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {configurable: true, get(){ return 5; }});"
+        "Object.defineProperty(Navigator.prototype, 'platform', {configurable: true, get(){ return 'MacIntel'; }});",
+    # iOS Safari can refuse an unmuted play() and leave the video paused (owner, 2026-11-26).
+    "refuses sound and pauses the video": "(()=>{const p=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){"
+        "if(!this.muted){this.pause();return Promise.reject(new DOMException('not allowed','NotAllowedError'));}return p.call(this);};})();",
     # iPhone and iPad Safari: the page may mute, the volume is the phone's buttons.
     "cannot set a media element's volume": "Object.defineProperty(HTMLMediaElement.prototype, 'volume', "
         "{configurable: true, get(){ return 1; }, set(v){} });",

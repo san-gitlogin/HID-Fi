@@ -746,6 +746,65 @@ Feature: Screen - seeing the computer's own picture
     When I tap the "#scrSnd [data-snd=tap]" control
     Then the computer's sound is playing
 
+  Scenario Outline: Tap for sound fits the toolbar on a phone, upright and on its side
+    # Owner, 2026-11-26 on board 09F7C8: "a Tap for sound button horribly aligned in
+    # the screen display window".
+    Given this phone's browser has not been touched yet
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" with 2 displays is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the sound control says "Tap for sound"
+    When the phone is <held>
+    Then "Tap for sound" sits over the picture, clear of every control
+
+    Examples:
+      | held                     |
+      | upright                  |
+      | on its side              |
+      | a small phone, upright   |
+
+  Scenario: Tapping for sound never stops the picture
+    # Owner, 2026-11-26: "after I tap that, the screen sharing freezes".
+    Given this phone's browser has not been touched yet
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#scrSnd [data-snd=tap]" control
+    Then the computer's sound is playing
+    And the picture keeps moving
+
+  Scenario: On an iPhone, tapping for sound never touches the picture
+    # iOS froze the picture when its own element was unmuted: the sound plays through
+    # an <audio> of its own there, and the picture's video stays muted and playing.
+    Given this phone's browser is an iPhone's Safari
+    And this phone's browser has not been touched yet
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    And the sound control says "Tap for sound"
+    When I tap the "#scrSnd [data-snd=tap]" control
+    Then the computer's sound is playing
+    And the sound plays through its own audio, and the picture's video was never unmuted or paused
+    And the picture keeps moving
+    When I tap the "#scrSnd [data-snd=btn]" control
+    Then the computer's sound is muted
+    And the picture keeps moving
+
+  Scenario: A browser that refuses the sound and pauses the picture: the picture plays on
+    # iOS Safari can refuse an unmuted play() and leave the video paused.
+    Given this phone's browser has not been touched yet
+    And this phone's browser refuses sound and pauses the video
+    And the dashboard is open and signed in with "4826"
+    And a computer "Studio PC" is paired and running
+    When I open the "Screen" tab
+    Then the screen shows "Studio PC" live
+    When I tap the "#scrSnd [data-snd=tap]" control
+    Then the sound control says "Tap for sound"
+    And the picture keeps moving
+
   Scenario: An iPhone mutes the sound and leaves the volume to its buttons
     Given this phone's browser cannot set a media element's volume
     And the dashboard is open and signed in with "4826"

@@ -1018,8 +1018,14 @@ body.fsmode .tabbar,body.fsmode .topbar{display:none}
 .snd .sndvol{width:88px;accent-color:var(--acc);min-width:0}
 .snd .sndvol[hidden],.snd .sndmic[hidden],.snd .sndtap[hidden]{display:none}
 .snd .sndmic{display:inline-flex;align-items:center;color:var(--warn);padding:0 2px}
-.snd .sndtap{font:600 11.5px/1 inherit;color:var(--bg);background:var(--acc);border:none;border-radius:999px;
-  padding:7px 10px;white-space:nowrap;cursor:pointer;min-height:30px}
+/* "Tap for sound": a pill over the picture, centred just above the toolbar (below a
+   wall tile's bar), never squeezed among the toolbar's buttons (owner, 2026-11-26:
+   "horribly aligned"). */
+.scrtools,.wtile .wtbar{position:relative}
+.snd .sndtap{position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);z-index:4;
+  font:600 13px/1 inherit;color:var(--bg);background:var(--acc);border:none;border-radius:999px;
+  padding:0 16px;min-height:36px;white-space:nowrap;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45)}
+.wtbar .snd .sndtap{bottom:auto;top:calc(100% + 10px)}
 .scrfloat .snd .sndvol{width:60px}
 .wtbar .snd{margin-right:0}
 .wtbar .snd .sndvol{width:64px}
@@ -1061,6 +1067,7 @@ a.btn{color:inherit;text-decoration:none}
   .scrhead{grid-column:1;grid-row:1;height:auto;min-height:32px}
   .scrtools{grid-column:2;grid-row:1;min-height:32px;padding:1px 4px;border-top:none;border-bottom:1px solid var(--line)}
   .scrtools .iconbtn{width:30px;height:30px}
+  .scrtools .snd .sndtap{bottom:auto;top:calc(100% + 10px)}   /* the toolbar is above the picture here */
   .scrstage{grid-column:1/3;grid-row:2;aspect-ratio:auto;height:auto;max-height:none;min-height:0}
   .scrpadslot .padwrap{--padh:calc(100vh - 74px);--padh:calc(100dvh - 74px)}
 }
@@ -6724,22 +6731,41 @@ function sndVolFixed(){
   if(SND.fixed===null){try{const a=document.createElement('audio');a.volume=0.5;SND.fixed=Math.abs(a.volume-0.5)>0.01;}catch(e){SND.fixed=true;}}
   return SND.fixed;
 }
+// iPhone and iPad: the sound plays through an <audio> of its own, and the picture's
+// <video> stays muted and is never played again. Unmuting the picture's element on
+// iOS froze the picture (owner, 2026-11-26, board 09F7C8); WebRTC keeps sound and
+// picture in step itself, whichever element plays them.
+function sndSeparate(){
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+}
+// A live picture never stays paused: a browser may pause it (iOS on a refused sound,
+// on leaving its own player, on a call); this plays it on, muted if it must.
+function keepPlaying(v){
+  v.addEventListener('pause',()=>setTimeout(()=>{
+    if(!v.srcObject||!v.paused||document.hidden)return;
+    const p=v.play();if(p&&p.catch)p.catch(()=>{v.muted=true;try{v.play().catch(()=>{});}catch(e){}});
+  },0));
+}
 function sndMake(el,video,pcId){
   // seq: each attempt to play, and each claim from another window, moves it on -
   // a play that finishes after it has been overtaken changes nothing (seen: the
   // play finished after another window's claim and undid "playing elsewhere").
-  const w={el,video,pcId,comp:null,track:false,blocked:false,elsewhere:false,warned:false,seq:0};
+  // out: the element the sound plays through - the picture's own, or on iOS an <audio>.
+  let out=video;
+  if(sndSeparate()){out=document.createElement('audio');out.muted=true;out.setAttribute('playsinline','');out.hidden=true;el.appendChild(out);}
+  keepPlaying(video);
+  const w={el,video,out,pcId,comp:null,track:false,blocked:false,elsewhere:false,warned:false,seq:0};
   const q=k=>el.querySelector('[data-snd='+k+']');
   q('btn').onclick=()=>sndToggle(w);
   q('tap').onclick=()=>sndUnmute(w,true);
   q('vol').oninput=()=>{
     const v=(+q('vol').value)/100;
-    try{video.volume=v;}catch(e){}
+    try{out.volume=v;}catch(e){}
     const id=pcId(),p=sndPrefs(id);p.vol=v;sndSave(id,p);
-    if(v>0&&video.muted&&w.track)return sndUnmute(w,true);
+    if(v>0&&out.muted&&w.track)return sndUnmute(w,true);
     sndPaint(w);
   };
-  video.addEventListener('volumechange',()=>sndPaint(w));
+  out.addEventListener('volumechange',()=>sndPaint(w));
   SND.all.push(w);
   return w;
 }
@@ -6753,7 +6779,13 @@ function sndOn(w,s){
 }
 function sndReset(w){if(!w)return;w.track=false;w.blocked=false;w.elsewhere=false;w.comp=null;sndPaint(w);}
 function sndStart(w){
-  const p=sndPrefs(w.pcId()),v=w.video;
+  // iOS: hand the sound to its own element; the picture's stays muted.
+  if(w.out!==w.video){
+    const st=w.video.srcObject,a=st&&st.getAudioTracks?st.getAudioTracks():[];
+    if(a.length&&(!w.out.srcObject||w.out.srcObject.getAudioTracks()[0]!==a[0]))w.out.srcObject=new MediaStream(a);
+    w.video.muted=true;
+  }
+  const p=sndPrefs(w.pcId()),v=w.out;
   try{v.volume=typeof p.vol==='number'?Math.min(1,Math.max(0,p.vol)):1;}catch(e){}
   if(p.mute===true){v.muted=true;return;}
   // Browsers refuse to start sound before the person has touched the page:
@@ -6763,7 +6795,8 @@ function sndStart(w){
   sndUnmute(w,false);
 }
 function sndUnmute(w,byTap){
-  const v=w.video,seq=++w.seq;
+  if(w.out!==w.video&&!w.out.srcObject)sndStart(w);
+  const v=w.out,seq=++w.seq;
   v.muted=false;
   const done=()=>{
     if(w.seq!==seq)return;
@@ -6777,8 +6810,8 @@ function sndUnmute(w,byTap){
 }
 function sndToggle(w){
   if(!w.track||sndWhy(w)){toast(sndWhy(w)||'No sound from this computer','warn');return;}
-  if(w.blocked||w.elsewhere||w.video.muted)return sndUnmute(w,true);
-  w.video.muted=true;
+  if(w.blocked||w.elsewhere||w.out.muted)return sndUnmute(w,true);
+  w.out.muted=true;
   const id=w.pcId(),p=sndPrefs(id);p.mute=true;sndSave(id,p);
   sndPaint(w);
 }
@@ -6790,7 +6823,7 @@ function sndWhy(w){
 }
 // The microphone carries the room: a phone playing it near the computer echoes.
 function sndEcho(w){
-  if(w.warned||!w.comp||w.comp.mic!=='on'||w.video.muted)return;
+  if(w.warned||!w.comp||w.comp.mic!=='on'||w.out.muted)return;
   w.warned=true;
   toast('This computer\'s microphone is shared: keep this device away from it, or the sound echoes','warn');
 }
@@ -6798,15 +6831,15 @@ function sndEcho(w){
 // others, and they step aside (two copies a moment apart sound like an echo).
 function sndClaim(w){
   try{SND.bc&&SND.bc.postMessage({pc:w.pcId(),from:SND.me});}catch(e){}
-  SND.all.forEach(x=>{if(x!==w&&x.pcId()===w.pcId()&&x.track&&!x.video.muted){x.seq++;x.video.muted=true;x.elsewhere=true;sndPaint(x);}});
+  SND.all.forEach(x=>{if(x!==w&&x.pcId()===w.pcId()&&x.track&&!x.out.muted){x.seq++;x.out.muted=true;x.elsewhere=true;sndPaint(x);}});
 }
 function sndYield(m){
   if(!m||m.from===SND.me)return;
-  SND.all.forEach(x=>{if(x.pcId()===m.pc&&x.track&&!x.video.muted){x.seq++;x.video.muted=true;x.elsewhere=true;sndPaint(x);}});
+  SND.all.forEach(x=>{if(x.pcId()===m.pc&&x.track&&!x.out.muted){x.seq++;x.out.muted=true;x.elsewhere=true;sndPaint(x);}});
 }
 function sndPaint(w){
   if(!w)return;
-  const el=w.el,v=w.video,c=w.comp,q=k=>el.querySelector('[data-snd='+k+']');
+  const el=w.el,v=w.out,c=w.comp,q=k=>el.querySelector('[data-snd='+k+']');
   // An app from before sound says nothing about it: no control at all.
   el.hidden=!c;
   if(!c)return;

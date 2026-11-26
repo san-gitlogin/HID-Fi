@@ -19,6 +19,9 @@ def pw():
 
 @pytest.fixture(scope="session")
 def browser(pw):
-    b = pw.chromium.launch()
+    # HIDFI_UI_BROWSER=webkit: the same tier in Safari's engine (an iPhone's behaviour
+    # that Chromium does not have - "Tap for sound" froze the picture, 2026-11-26).
+    import os
+    b = pw.webkit.launch() if os.environ.get("HIDFI_UI_BROWSER") == "webkit" else pw.chromium.launch()
     yield b
     b.close()

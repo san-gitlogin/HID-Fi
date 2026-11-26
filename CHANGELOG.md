@@ -7,6 +7,18 @@ The version string reported by `{"cmd":"status"}` is `firmware`, e.g.
 
 ---
 
+## Unreleased
+
+- **Screen tab: "Tap for sound" no longer covers the toolbar, and tapping it never
+  freezes the picture** (owner, board 09F7C8, 2026-11-26). The button is a pill over the
+  picture, centred above the toolbar (below it on a phone on its side; below a wall
+  tile's bar), clear of every control at every size. On iPhone and iPad the sound now
+  plays through an `<audio>` of its own and the picture's `<video>` stays muted and is
+  never played again, so tapping for sound cannot touch the picture; and a live
+  picture that a browser pauses (a refused sound, a call) is played on, muted if it must
+  be. Five new scenarios, in Chromium and with an iPhone's behaviour simulated.
+  `HIDFI_UI_BROWSER=webkit` runs the ui tier's browser fixture in WebKit.
+
 ## v4.5 - 2026-11-25
 
 ### Firmware and dashboard
