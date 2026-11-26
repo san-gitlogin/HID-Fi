@@ -13,6 +13,13 @@ exploded, X-ray and section views.
 > peg snapped when the base came off. Rev C closes like a TV remote's battery
 > cover: two thick front tabs and a click latch at the back, with 0.3 mm round every
 > fit. Rev C is sliced and checked but not printed yet: print `kit-test.stl` first.
+>
+> **Status lights (26 November 2026).** The lid now shows the board's own power (red),
+> TX (blue) and RX (green) lights through one slim rounded light bar, each in its own
+> segment, and the RGB LED through a matching rounded window (it lights only if its pads
+> are soldered). Checked by a light-ray simulation (each colour stays in its own segment)
+> and a strength simulation sliced from the printed shape (the bar's section takes 310 N;
+> the shell's weakest point, unchanged, yields at 187 N - a hard hand press).
 
 ## Print files
 

@@ -12,7 +12,7 @@ Print in this order:
                        compensation 0.15 mm, cooling 100% after the first layers, seam at rear.
   3. plate.stl       - 0.2 mm layers, as supplied (flat side and lettering down). plate-feet.stl instead
                        if you want silicone feet (optional). The plate from step 1 is a real plate.
-  The status light needs no part: it shines through a small cross cut in the lid.
+  The status lights need no part: power (red), and the blue and green data lights, shine through a slim rounded light bar in the lid, each in its own segment.
   trim-guide.stl     - only if your board came with header pins soldered.
 
 Assembly: board into the unibody (sockets first, slide forward). Hook the plate's two front tabs into

@@ -278,8 +278,8 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
           <tr><td>The board</td><td>Use the YD-ESP32-S3 board you already run HID-Fi on. The shell does not touch its firmware or data.</td><td class="mono">₹0</td><td>A new one for a second unit: ₹600–900</td></tr>
           <tr><td>Printing (about 17 g with the test print)</td><td>Your own or a friend's printer: 10.4 g for the Core, plus about 3.5 g for the two coupons (the test print's plate is a real plate).</td><td class="mono">₹20–30</td><td>A print shop or online service: roughly ₹300–700 for the coupon and one set (ask for PETG)</td></tr>
           <tr><td>Screws</td><td>None. The base hooks in at the front and clicks shut at the back, like a remote's battery cover.</td><td class="mono">₹0</td><td>—</td></tr>
-          <tr><td>Status light window</td><td>Nothing to buy: the light shines through a small cross cut in the lid.</td><td class="mono">₹0</td><td>—</td></tr>
-          <tr><td>Status LED solder bridge</td><td>Skip it for the first build; the shell works without it.</td><td class="mono">₹0</td><td>One solder blob, if you have an iron</td></tr>
+          <tr><td>Status light windows</td><td>Nothing to buy: a slim rounded light bar shows the power, TX and RX lights, each in its own segment, beside a matching window for the RGB LED.</td><td class="mono">₹0</td><td>—</td></tr>
+          <tr><td>Status LED solder bridge</td><td>Only for the RGB window: the light bar's power, TX and RX lights need no soldering. Skip it for the first build.</td><td class="mono">₹0</td><td>One solder blob, if you have an iron</td></tr>
           <tr><td>Measuring</td><td>The fit coupon (below) checks the critical fit without any tools.</td><td class="mono">₹0</td><td>A digital caliper: ₹400–800</td></tr>
           <tr><td>Feet</td><td>None: the Core sits flat.</td><td class="mono">₹0</td><td>plate-feet.stl and four Ø6 × 1.2 mm silicone bumpers (₹20–50)</td></tr>
           <tr><td><b>First Core</b></td><td>Own or borrowed printer, your existing board</td><td class="mono"><b>≈ ₹20–40</b></td><td>At a print service, using the two kit files: about two minimum charges (≈ ₹200)</td></tr>
@@ -581,7 +581,7 @@ const mats = {
   pcb: M({ color: '#141414', roughness: 0.55 }), modpcb: M({ color: '#1b1d21', roughness: 0.5 }),
   shield: M({ color: '#c9cdd2', roughness: 0.32, metalness: 1 }), usbc: M({ color: '#d4d7db', roughness: 0.28, metalness: 1 }),
   ic: M({ color: '#24262a', roughness: 0.6 }), rgb: M({ color: '#f4f4f4', roughness: 0.3, emissive: '#1fffd8', emissiveIntensity: 0.5 }),
-  led: M({ color: '#cfd6c9', roughness: 0.4 }), pwr: M({ color: '#ff3b3b', emissive: '#ff2020', emissiveIntensity: 1.2 }),
+  led: M({ color: '#cfd6c9', roughness: 0.4 }), pwr: M({ color: '#ff3b3b', emissive: '#ff2020', emissiveIntensity: 1.2 }), tx: M({ color: '#4d86ff', emissive: '#2f6bff', emissiveIntensity: 1.1 }), rx: M({ color: '#3fe07a', emissive: '#22d066', emissiveIntensity: 1.0 }),
   button: M({ color: '#e7e7e7', roughness: 0.5 }), leg: M({ color: '#c0c4c8', metalness: 1, roughness: 0.35 }),
   stub: M({ color: '#c8a85a', metalness: 1, roughness: 0.35 }), header: M({ color: '#ff6b6b', roughness: 0.5, transparent: true, opacity: 0.9 }),
   sensorpcb: M({ color: '#3b2a8c', roughness: 0.55 }), gasket: M({ color: '#2d3136', roughness: 0.95 }),
@@ -609,7 +609,7 @@ function solid(e) {
   else if (e.stadiumY) { const [cx, cz, w, h, y0, y1] = e.stadiumY; const r = h / 2, s = new THREE.Shape();
     s.absarc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2); s.absarc(-w / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5);
     g = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false, curveSegments: 12 }); g.rotateX(Math.PI / 2); g.translate(cx, y1, cz); }
-  const m = new THREE.Mesh(g, mats[e.kind] || mats.ic); m.castShadow = true; m.receiveShadow = true; return m;
+  const m = new THREE.Mesh(g, e.id === 'tx-led' ? mats.tx : e.id === 'rx-led' ? mats.rx : (mats[e.kind] || mats.ic)); m.castShadow = true; m.receiveShadow = true; return m;
 }
 const boardGroup = new THREE.Group();
 for (const c of manifest.board) boardGroup.add(solid(c));
@@ -749,10 +749,10 @@ const FEATS = [
   { t: 'USB and COM, named', d: 'Engraved above each socket in Barlow Condensed, in the board\'s own words. USB goes to the computer you control. COM is for flashing and serial.', cam: [14, -24, 62], tgt: [14, 6, 9], mode: 'assembled' },
   { t: 'Cables plugged in', d: 'Both sockets with slim cables. Switch to Max in the Cables control to see the largest plugs the USB-C spec allows, and the one clash the board itself causes.', cam: [64, -98, 44], tgt: [14, -12, 5], mode: 'assembled', cables: 'slim' },
   { t: 'Antenna in free air', d: 'The antenna is the module\'s bare end, overhanging the board by 6.24 mm, opposite the ports. Only plain plastic sits near it, and there are no screws; plugged into a laptop, it points away from the laptop.', cam: [64, 106, 46], tgt: [14, 60, 4], mode: 'xray', antenna: true },
-  { t: 'HID-Fi mark', d: 'Debossed into the right side wall, toward the ports, centred top to bottom. The top stays clean for the vents and the status light; the mark shows when the device sits beside a laptop.', cam: [92, -6, 16], tgt: [30, 16, 4.5], mode: 'assembled' },
+  { t: 'HID-Fi mark', d: 'Debossed into the right side wall, toward the ports, centred top to bottom. The top stays clean for the vents and the status lights; the mark shows when the device sits beside a laptop.', cam: [92, -6, 16], tgt: [30, 16, 4.5], mode: 'assembled' },
   { t: 'How the base clips in', d: 'No screws and no press fits. Two thick tabs on the plate (white) hook into slots behind the ports (teal); at the back, two flat spring beams click their catches into the window in the back wall. A fingernail through that window opens it.', cam: [-30, 92, 16], tgt: [14, 60, 2], mode: 'xray', posts: true },
-  { t: 'One status light', d: 'A small cross cut through the lid over the WS2812 RGB LED, inside a light cell so nothing bleeds, in line with the USB socket it reports on. Nothing to buy or glue.', cam: [-14, -8, 52], tgt: [9, 18.4, 8], mode: 'xray' },
-  { t: 'Blackout pod', d: 'The power LED is always on and TX/RX flicker with serial traffic. A sealed pod keeps all three dark, so a bedroom never glows red.', cam: [44, -6, 40], tgt: [19.6, 20.2, 5.5], mode: 'xray' },
+  { t: 'Status lights', d: 'A slim rounded light bar over the board\'s own power (red, always on), TX (blue) and RX (green) lights, which need no soldering. Beside it, a matching window over the RGB LED, which lights only once its RGB pads are soldered. Nothing to buy or glue.', cam: [-6, -10, 50], tgt: [16, 19.6, 8], mode: 'assembled' },
+  { t: 'A cell per light', d: 'Under the bar, each LED sits in its own cell, and thin dividers reach up to the lid, so each colour shows in its own segment. Simulated with 20,000 light rays per LED through the printed shape: 97-98% of each light leaves through its own segment, none through a neighbour\'s.', cam: [12, 4, 34], tgt: [19.6, 20.2, 5.5], mode: 'xray' },
   { t: 'BOOT and RST pinholes', d: 'Flashing resets the board on its own, so the buttons are for rescue only. Paperclip: front hole BOOT, rear hole RST. Guide tubes land the clip on the button.', cam: [-38, 4, 40], tgt: [19.1, 31, 6], mode: 'section', cut: 19.1 },
   { t: 'Zero play', d: 'Rails below, ribs and the USB-C shells above, the port panel in front and two stops behind. The board has no mounting holes, so it is held by its edges, never by a screw.', cam: [-96, 24, 20], tgt: [14, 30, 4], mode: 'section', cut: 3.0 },
   { t: 'The underside', d: 'The LxusBrain mark over HID-Fi, set in Barlow Condensed with open tracking, debossed into the textured bed face. The Core\'s plate is smooth: it needs no feet. An optional plate-feet.stl adds four pockets for silicone bumpers. The build checks every word against every edge, hole and foot.', cam: [14, 66, -96], tgt: [14, 32, 0], mode: 'assembled', only: 'core' },
