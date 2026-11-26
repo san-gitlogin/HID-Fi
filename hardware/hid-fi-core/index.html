@@ -211,6 +211,7 @@ footer { padding-block: 40px 56px; color: var(--faint); font-size: 13px; border-
         <button id="m-exploded" aria-pressed="false">Exploded</button>
         <button id="m-xray" aria-pressed="false">X-ray</button>
         <button id="m-section" aria-pressed="false">Section</button>
+        <button id="m-print" aria-pressed="false">Print</button>
       </div>
       <div class="ctrls">
         <label class="slider" id="cutwrap" for="cut">CUT X <input id="cut" type="range" min="-2.5" max="30.5" step="0.1" value="8.5"><span id="cutv" class="mono">8.5</span></label>
@@ -677,6 +678,30 @@ pegGroup.visible = false; scene.add(pegGroup);
 postGroup.visible = false; scene.add(postGroup);
 
 // ---------- state
+// ---------- the Print view: kit-core.stl (the shell and the plate) exactly as it prints, on a printer bed
+const BED = 220;   // mm, a common bed
+const printGroup = new THREE.Group(); printGroup.visible = false; scene.add(printGroup);
+{
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(BED, BED, 1.2), new THREE.MeshStandardMaterial({ color: '#2a2d31', roughness: 0.9, metalness: 0.2 }));
+  plate.position.z = -0.6; plate.receiveShadow = true; printGroup.add(plate);
+  const grid = new THREE.GridHelper(BED, BED / 10, '#4a5059', '#353a41'); grid.rotation.x = Math.PI / 2; grid.position.z = 0.02; printGroup.add(grid);
+}
+const printMat = new THREE.MeshStandardMaterial({ color: '#1fffd8', roughness: 0.55, metalness: 0, emissive: '#06362f', emissiveIntensity: 0.6 });
+let kitLoad = null;
+function loadKit() {
+  return kitLoad || (kitLoad = (async () => {
+    // GitHub serves the file beside the page; the claude.ai page carries it in print-files.json.
+    let bytes = null;
+    try { const r = await fetch('print/kit-core.stl'); if (r.ok) bytes = await r.arrayBuffer(); } catch (e) {}
+    if (!bytes) { const all = await (await fetch('print-files.json')).json(); bytes = Uint8Array.from(atob(all['kit-core.stl']), ch => ch.charCodeAt(0)).buffer; }
+    const g = loader.parse(bytes); g.computeVertexNormals(); g.computeBoundingBox();
+    const b = g.boundingBox; g.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, -b.min.z);
+    const m = new THREE.Mesh(g, printMat); m.castShadow = true; m.receiveShadow = true; printGroup.add(m);
+    const sz = new THREE.Vector3(); b.getSize(sz); return sz;
+  })());
+}
+const PRINT_VIEW = { cam: [0, -170, 150], tgt: [0, 0, 0] };
+const PRINT_TEXT = 'kit-core.stl, as the printer sees it: the shell (top face down) and the plate, both already turned onto the face they print on, on a 220 mm bed. No supports. PETG, 0.12-0.2 mm layers; upload this one file to a print shop as it is, without rotating anything.';
 const state = { variant: 'core', mode: 'assembled', finish: 'graphite', explode: 0 };
 function applyVariant() {
   const list = manifest.variants[state.variant].parts;
@@ -690,7 +715,18 @@ function applyVariant() {
   renderFeats();
 }
 function applyMode() {
-  for (const m of ['assembled', 'exploded', 'xray', 'section']) $('m-' + m).setAttribute('aria-pressed', m === state.mode);
+  for (const m of ['assembled', 'exploded', 'xray', 'section', 'print']) $('m-' + m).setAttribute('aria-pressed', m === state.mode);
+  const printing = state.mode === 'print';
+  if (printing) {
+    for (const m of Object.values(partMeshes)) m.visible = false;
+    for (const arr of Object.values(extraGroups)) for (const m of arr) m.visible = false;
+    boardGroup.visible = postGroup.visible = pegGroup.visible = false;
+    loadKit().then(sz => { if (state.mode !== 'print') return; printGroup.visible = true;
+      showCaption('Ready to print', `${PRINT_TEXT} Footprint ${sz.x.toFixed(0)} × ${sz.y.toFixed(0)} mm, ${sz.z.toFixed(1)} mm tall.`); })
+      .catch(() => showCaption('Ready to print', 'The print file could not be loaded here. Download kit-core.stl from the list above.'));
+  } else if (printGroup.visible || !boardGroup.visible) {
+    printGroup.visible = false; boardGroup.visible = true; applyVariant();
+  }
   const xray = state.mode === 'xray' || ($('pins').getAttribute('aria-pressed') === 'true' && state.mode !== 'section');
   for (const mat of [shellMat, innerMat]) { mat.transparent = xray; mat.opacity = xray ? 0.16 : 1; mat.depthWrite = !xray; mat.needsUpdate = true; }
   clipList.length = 0; if (state.mode === 'section') clipList.push(clip);
@@ -703,7 +739,8 @@ function applyFinish() {
   for (const f of Object.keys(FINISH)) $('f-' + f).setAttribute('aria-pressed', f === state.finish);
 }
 for (const v of ['core', 'sense', 'go']) $('v-' + v).onclick = () => { state.variant = v; applyVariant(); hideCaption(); };
-for (const m of ['assembled', 'exploded', 'xray', 'section']) $('m-' + m).onclick = () => { state.mode = m; applyMode(); };
+for (const m of ['assembled', 'exploded', 'xray', 'section', 'print']) $('m-' + m).onclick = () => { const was = state.mode; state.mode = m; applyMode();
+  if (m === 'print') flyTo(PRINT_VIEW); else if (was === 'print') { hideCaption(); flyTo(HOME); } };
 for (const f of Object.keys(FINISH)) $('f-' + f).onclick = () => { state.finish = f; applyFinish(); };
 $('cut').oninput = e => { clip.constant = -e.target.value; $('cutv').textContent = (+e.target.value).toFixed(1); };
 $('pins').onclick = () => {
@@ -742,6 +779,7 @@ camera.position.set(...HOME.cam); controls.target.set(...C);
 // ---------- features
 const F = manifest.features;
 const FEATS = [
+  { t: 'Ready to print', d: 'The shell and the plate in one print file, kit-core.stl, on a printer bed: both already turned onto the face they print on, no supports. Upload it to a print shop as it is.', cam: PRINT_VIEW.cam, tgt: PRINT_VIEW.tgt, mode: 'print' },
   { t: 'Recessed nose', d: 'The front face is cut back 0.6 mm across 24.7 mm, full height and open through the top edge. Any plug, however tall its overmould, stops 0.2 mm from the socket. The 0.8 mm panel around each port takes the load.', cam: [30, -70, 26], tgt: [14, 0, 5], mode: 'assembled' },
   { t: 'Blade vents', d: 'Nine blades of composed lengths over the radio shield: tops and bottoms land at different heights, every blade on the same 15° lines, ends cut square, flush with the top. Under each, a hidden 40° slope keeps falling dust out.', cam: [14, 24, 80], tgt: [14, 47, 9], mode: 'assembled' },
   { t: 'Inside a blade', d: 'Cut through the vents: each slot climbs through the lid at 40°, its top opening 1.8 mm to the side of its bottom one. There is no straight line from the room to the board.', cam: [-6, 47, 30], tgt: [12, 47, 8], mode: 'section', cut: 11.0 },
@@ -799,7 +837,7 @@ function frame(now) {
   postGroup.position.z = EXPLODE.top * state.explode;
   pegGroup.position.z = EXPLODE.plate * state.explode;
   const lowest = { core: 0, sense: -5.4, go: -12.3 }[state.variant] + Math.min(0, EXPLODE.door * state.explode, state.variant === 'core' ? EXPLODE.plate * state.explode : EXPLODE.tub * state.explode);
-  ground.position.z = lowest - 0.6;
+  ground.position.z = state.mode === 'print' ? -1.3 : lowest - 0.6;
   pipeMat.emissiveIntensity = reduce ? 1.2 : 0.9 + 0.5 * Math.sin(now / 900);
   if (antGroup.visible) for (const r of antGroup.children) if (r.userData.k) {
     const t = reduce ? r.userData.k / 3 : ((now / 2400) + r.userData.k / 3) % 1, sc = 10 + 26 * t;
